@@ -48,8 +48,25 @@ const ENTIDADES = [
         'read'  => 'all',
         'write' => ROLES_STAFF,
     ],
-    'calificaciones' => [
+    'calificaciones' => [ // ⚠️ OBSOLETA — el front-end actual ya no usa esta entidad, usa "notas_modulos" (ver abajo). Se deja por compatibilidad hacia atrás.
         'table' => 'calificaciones',
+        'read'  => array_merge(ROLES_STAFF, ['Docente', 'Estudiante']),
+        'write' => array_merge(ROLES_STAFF, ['Docente']),
+        'scope_role'  => 'Estudiante',
+        'scope_field' => 'estudiante_id',
+    ],
+    'notas_modulos' => [
+        'table' => 'notas_modulos',
+        // No se puede escopar por estudiante: cada fila es una hoja de
+        // calificación de TODA una cohorte (el JSON "valores" trae la
+        // nota de cada estudiante). Un Estudiante que lea esta entidad
+        // puede ver, dentro del JSON, las notas de sus compañeros de
+        // cohorte — es el mismo alcance que ya tiene hoy en localStorage.
+        'read'  => array_merge(ROLES_STAFF, ['Docente', 'Estudiante']),
+        'write' => array_merge(ROLES_STAFF, ['Docente']),
+    ],
+    'informes_docente' => [
+        'table' => 'informes_docente',
         'read'  => array_merge(ROLES_STAFF, ['Docente', 'Estudiante']),
         'write' => array_merge(ROLES_STAFF, ['Docente']),
         'scope_role'  => 'Estudiante',
@@ -135,5 +152,19 @@ const ENTIDADES = [
         'read'      => 'all',
         'write'     => ROLES_STAFF,
         'singleton' => true,
+    ],
+    // Solo lectura a propósito (write => [] nunca permite POST/PUT/DELETE
+    // por esta vía genérica): deben llenarse desde el propio backend
+    // (auth.php en cada login; el handler de "horarios" en cada cambio de
+    // celda), no aceptar un POST libre del cliente como una entidad más.
+    'auditoria_login' => [
+        'table' => 'auditoria_login',
+        'read'  => ['Superadmin'],
+        'write' => [],
+    ],
+    'auditoria_horario' => [
+        'table' => 'auditoria_horario',
+        'read'  => ['Superadmin'],
+        'write' => [],
     ],
 ];

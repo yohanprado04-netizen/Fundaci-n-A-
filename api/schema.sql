@@ -148,7 +148,14 @@ CREATE TABLE IF NOT EXISTS materiales (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
--- 9. CALIFICACIONES
+-- 9. CALIFICACIONES — ⚠️ OBSOLETA, no la uses.
+--    Esta tabla (estudiante + programa + una sola nota) reflejaba el
+--    modelo de calificación ANTERIOR. El front-end actual (app/app.js)
+--    separa las notas por Docente + Cohorte + MES, con varios criterios
+--    ponderados por estudiante — eso vive en "notas_modulos" (sección 19,
+--    al final de este archivo). Se deja esta tabla solo para no romper
+--    una base de datos que ya la tenga creada; si estás importando este
+--    schema por primera vez, puedes borrar este bloque tranquilamente.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS calificaciones (
     id            CHAR(36) PRIMARY KEY,
@@ -339,6 +346,94 @@ CREATE TABLE IF NOT EXISTS semaforo_overrides (
     motivo         TEXT,
     actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_semaforo_estudiante FOREIGN KEY (estudiante_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------
+-- 19. CALIFICACIONES POR COHORTE + MES — esta es la que SÍ usa el
+--     front-end actual (reemplaza a "calificaciones", sección 9). Un
+--     registro = un Docente calificando una Cohorte en un Mes concreto,
+--     con sus propios criterios ponderados (ej. "Taller 1" 30%, "Quiz"
+--     20%...). El mes más reciente de cada docente+cohorte es el
+--     periodo activo; los anteriores quedan como historial (así lo
+--     muestran tanto renderCalificacionesDocente como
+--     renderCalificacionesEstudiante).
+--     "valores" queda igual que en el front-end: una nota por
+--     ESTUDIANTE (idealmente su id) y por criterio, ej.
+--     { "<estudiante_id>": { "<criterio_id>": 8.5, ... }, ... }.
+--     ⚠️ Ojo si migras: hoy app.js guarda "valores" usando el NOMBRE del
+--     estudiante como llave (no su id), lo cual se rompe si alguien
+--     cambia de nombre. Al conectar esta tabla conviene primero migrar
+--     esas llaves a estudiante_id en el propio front-end.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notas_modulos (
+    id             CHAR(36) PRIMARY KEY,
+    docente_id     CHAR(36) NOT NULL,
+    cohorte_id     CHAR(36) NOT NULL,
+    mes            CHAR(7) NOT NULL,        -- 'YYYY-MM', mismo formato que horarios.mes
+    criterios      JSON NOT NULL,           -- [{ "id": "...", "nombre": "Taller 1", "peso": 30 }, ...]
+    valores        JSON NOT NULL,           -- { "<estudiante>": { "<criterioId>": 8.5, ... }, ... }
+    creado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_notas_docente_cohorte_mes (docente_id, cohorte_id, mes),
+    KEY idx_notas_cohorte (cohorte_id),
+    KEY idx_notas_mes (mes),
+    CONSTRAINT fk_notas_docente FOREIGN KEY (docente_id) REFERENCES usuarios(id)  ON DELETE CASCADE,
+    CONSTRAINT fk_notas_cohorte FOREIGN KEY (cohorte_id) REFERENCES cohortes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------
+-- 20. INFORMES DEL DOCENTE — conclusión + observación por estudiante,
+--     dentro de una cohorte (ver renderInformesDocente / guardarInformeDocente).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS informes_docente (
+    id             CHAR(36) PRIMARY KEY,
+    docente_id     CHAR(36) NOT NULL,
+    estudiante_id  CHAR(36) NOT NULL,
+    cohorte_id     CHAR(36) NOT NULL,
+    materia        VARCHAR(150),
+    fecha          DATE NOT NULL DEFAULT (CURRENT_DATE),
+    asistencia_pct DECIMAL(5,2),
+    promedio       DECIMAL(4,2),
+    cualitativa    VARCHAR(40),
+    conclusion     TEXT,
+    observaciones  TEXT,
+    UNIQUE KEY uq_informe_docente_estudiante_cohorte (docente_id, estudiante_id, cohorte_id),
+    KEY idx_informes_estudiante (estudiante_id),
+    CONSTRAINT fk_informes_docente    FOREIGN KEY (docente_id)    REFERENCES usuarios(id) ON DELETE CASCADE,
+    CONSTRAINT fk_informes_estudiante FOREIGN KEY (estudiante_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    CONSTRAINT fk_informes_cohorte    FOREIGN KEY (cohorte_id)    REFERENCES cohortes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------
+-- 21. AUDITORÍA — solo lectura, panel Superadmin → Sistema → Auditoría.
+--     ⚠️ Estas dos tablas deberían llenarse desde el propio backend
+--     (auth.php al hacer login; el handler PUT de "horarios" al detectar
+--     un cambio de celda), NUNCA aceptar un POST libre del cliente como
+--     las demás entidades — si no, cualquiera podría insertar auditoría
+--     falsa. Por eso NO se agregan como entidad de escritura genérica en
+--     entidades.php: solo como lectura para Superadmin.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS auditoria_login (
+    id        CHAR(36) PRIMARY KEY,
+    fecha     DATE NOT NULL DEFAULT (CURRENT_DATE),
+    hora      TIME NOT NULL,
+    resultado VARCHAR(30) NOT NULL,  -- 'Exitoso' / 'Fallido'
+    email     VARCHAR(150) NOT NULL,
+    KEY idx_auditoria_login_fecha (fecha)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS auditoria_horario (
+    id             CHAR(36) PRIMARY KEY,
+    fecha          DATE NOT NULL DEFAULT (CURRENT_DATE),
+    hora           TIME NOT NULL,
+    autor          VARCHAR(150) NOT NULL,
+    cohorte        VARCHAR(150) NOT NULL,  -- nombre de la cohorte en el momento del cambio (texto libre, no FK: debe sobrevivir aunque la cohorte se borre después)
+    mes            VARCHAR(30) NOT NULL,   -- etiqueta legible, ej. "Agosto 2026" (igual que mesLabel() en el front-end)
+    franja         VARCHAR(60) NOT NULL,   -- ej. "Lunes 08:00–09:50"
+    campo          VARCHAR(30) NOT NULL,   -- 'Materia' o 'Docente'
+    valor_anterior VARCHAR(150) NOT NULL DEFAULT '(vacío)',
+    valor_nuevo    VARCHAR(150) NOT NULL DEFAULT '(vacío)',
+    KEY idx_auditoria_horario_fecha (fecha)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;

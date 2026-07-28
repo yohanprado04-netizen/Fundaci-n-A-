@@ -88,6 +88,58 @@
   let currentDocente = null;
   let currentEstudiante = null;
   let currentAdminRole = null; // 'superadmin' | 'administracion'
+  let currentAdminUser = null; // registro del usuario Coordinador cuando currentAdminRole === 'administracion'
+
+  /* =====================================================================
+     AUDITORÍA — solo lectura, visible únicamente para el Superadmin
+     (panel "Auditoría" bajo Sistema). Dos bitácoras:
+     1) auditoria_login: cada intento (exitoso o fallido) de entrar con el
+        correo registrado como Superadmin.
+     2) auditoria_horario: cada cambio de Materia o Docente en una celda del
+        Horario — quién lo hizo, cuándo, y el valor anterior/nuevo.
+     ===================================================================== */
+  function fechaHoraActual() {
+    const ahora = new Date();
+    return {
+      fecha: ahora.toISOString().slice(0, 10),
+      hora: ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+    };
+  }
+
+  function registrarAuditoriaLogin(resultado, emailIntentado) {
+    const { fecha, hora } = fechaHoraActual();
+    const registros = Store.list('auditoria_login');
+    registros.unshift({ id: uid('al'), fecha, hora, resultado, email: emailIntentado });
+    // Se conservan como máximo los últimos 500 registros para no crecer sin control.
+    Store.save('auditoria_login', registros.slice(0, 500));
+  }
+
+  // Nombre a mostrar de quien está haciendo un cambio administrativo ahora
+  // mismo (Superadmin o el nombre real del Coordinador que inició sesión).
+  function actorAdminActual() {
+    if (currentAdminRole === 'superadmin') return 'Superadmin';
+    if (currentAdminRole === 'administracion' && currentAdminUser) return currentAdminUser.nombre + ' (Administración)';
+    return 'Desconocido';
+  }
+
+  // Traduce la clave interna de una celda del Horario ("Lunes|0") a una
+  // etiqueta legible: "Lunes 08:00–09:50".
+  function celdaLabel(key) {
+    const [dia, bloqueIdxStr] = key.split('|');
+    const bloque = BLOQUES_HORARIO[Number(bloqueIdxStr)];
+    return bloque ? (dia + ' ' + bloque.inicio + '–' + bloque.fin) : key;
+  }
+
+  function registrarAuditoriaHorario(cohorte, mes, key, campo, valorAnterior, valorNuevo) {
+    const { fecha, hora } = fechaHoraActual();
+    const registros = Store.list('auditoria_horario');
+    registros.unshift({
+      id: uid('ah'), fecha, hora, autor: actorAdminActual(),
+      cohorte, mes: mesLabel(mes), franja: celdaLabel(key),
+      campo, valorAnterior: valorAnterior || '(vacío)', valorNuevo: valorNuevo || '(vacío)'
+    });
+    Store.save('auditoria_horario', registros.slice(0, 1000));
+  }
 
   /* =====================================================================
      SEGURIDAD DEL LOGIN — 3 capas
@@ -197,21 +249,29 @@
     // fuente de credenciales, en este orden, y se entra al panel que
     // corresponda con la primera coincidencia.
     const cred = Store.get('superadmin_credentials') || SEED.superadmin_credentials;
-    if (email.toLowerCase() === cred.email.toLowerCase() && password === cred.password) {
-      currentAdminRole = 'superadmin';
-      document.getElementById('siteView').classList.add('hidden');
-      document.getElementById('dashboardView').classList.remove('hidden');
-      applyAdminRoleUI();
-      initAdmin();
-      showPanel('resumen');
-      registrarExito();
-      return;
+    if (email.toLowerCase() === cred.email.toLowerCase()) {
+      // Cualquier intento (correcto o no) contra el correo del Superadmin
+      // queda en la auditoría de logins, visible en Configuración > Auditoría.
+      if (password === cred.password) {
+        registrarAuditoriaLogin('Exitoso', email);
+        currentAdminRole = 'superadmin';
+        currentAdminUser = null;
+        document.getElementById('siteView').classList.add('hidden');
+        document.getElementById('dashboardView').classList.remove('hidden');
+        applyAdminRoleUI();
+        initAdmin();
+        showPanel('resumen');
+        registrarExito();
+        return;
+      }
+      registrarAuditoriaLogin('Fallido', email);
     }
 
     const coordinador = Store.list('usuarios').find(u =>
       u.rol === 'Coordinador' && u.email.toLowerCase() === email.toLowerCase());
     if (coordinador && password === coordinador.password) {
       currentAdminRole = 'administracion';
+      currentAdminUser = coordinador;
       document.getElementById('siteView').classList.add('hidden');
       document.getElementById('dashboardView').classList.remove('hidden');
       applyAdminRoleUI(coordinador);
@@ -318,6 +378,7 @@
   function logout() {
     detenerControlInactividad();
     currentAdminRole = null;
+    currentAdminUser = null;
     document.getElementById('dashboardView').classList.add('hidden');
     document.getElementById('siteView').classList.remove('hidden');
     document.getElementById('loginEmail').value = '';
@@ -436,7 +497,7 @@
   }
   function celdaKey(dia, bloqueIdx) { return dia + '|' + bloqueIdx; }
   function mesLabel(mesValue) {
-    if (!mesValue) return '';
+    if (!mesValue || mesValue === '0000-00') return 'Periodo sin fecha registrada';
     const [y, m] = mesValue.split('-').map(Number);
     return (MESES_ES[m - 1] || '') + ' ' + y;
   }
@@ -495,6 +556,9 @@
     agenda_estudiante: [],
     correos_estudiante: [],
     semaforo_overrides: {},
+    // Auditoría (solo lectura, Superadmin): ver panel "Auditoría" en Sistema.
+    auditoria_login: [],
+    auditoria_horario: [],
     configuracion: {
       nombre: 'Fundación A+',
       ciudad: 'Quibdó',
@@ -1743,6 +1807,22 @@
 
     const registros = Store.list('horarios');
     const idx = registros.findIndex(h => h.cohorte === horarioState.cohorte && h.mes === horarioState.mes);
+    const celdasAnteriores = idx > -1 ? (registros[idx].celdas || {}) : {};
+
+    // ---- Auditoría: compara celda por celda y deja registro de cada
+    // cambio de Materia o Docente (quién, cuándo, valor anterior → nuevo).
+    const todasLasKeys = new Set([...Object.keys(celdasAnteriores), ...Object.keys(celdas)]);
+    todasLasKeys.forEach(key => {
+      const antes = celdasAnteriores[key] || {};
+      const ahora = celdas[key] || {};
+      if ((antes.materia || '') !== (ahora.materia || '')) {
+        registrarAuditoriaHorario(horarioState.cohorte, horarioState.mes, key, 'Materia', antes.materia, ahora.materia);
+      }
+      if ((antes.docente || '') !== (ahora.docente || '')) {
+        registrarAuditoriaHorario(horarioState.cohorte, horarioState.mes, key, 'Docente', antes.docente, ahora.docente);
+      }
+    });
+
     const registro = { id: idx > -1 ? registros[idx].id : uid('ho'), cohorte: horarioState.cohorte, mes: horarioState.mes, incluyeSabado: horarioState.incluyeSabado, celdas };
     if (idx > -1) registros[idx] = registro; else registros.push(registro);
     Store.save('horarios', registros);
@@ -2184,7 +2264,11 @@
     const registros = Store.list('notas_modulos');
     const notasPorProfesor = [];
     docentes.forEach(docenteNombre => {
-      const rec = registros.find(r => r.docente === docenteNombre && r.cohorte === cohorteNombre);
+      // Solo el periodo (mes) vigente de cada docente en esta cohorte —
+      // las notas de meses anteriores quedan como historial y no se
+      // mezclan con el promedio general que ve Administración.
+      const mesActual = mesActualParaDocenteCohorte(docenteNombre, cohorteNombre);
+      const rec = registros.find(r => r.docente === docenteNombre && r.cohorte === cohorteNombre && r.mes === mesActual);
       if (!rec) return;
       const resultado = calcularNotaFinal(rec, estudianteNombre);
       if (resultado && !resultado.pendiente) notasPorProfesor.push(resultado.valor);
@@ -2340,6 +2424,72 @@
   }
 
   // ---------- RENDER: Configuración ----------
+  // ---------- RENDER: Auditoría (solo Superadmin) ----------
+  // Dos bitácoras de solo lectura: intentos de login a la cuenta Superadmin,
+  // y cambios de Materia/Docente en el Horario (quién, cuándo, antes→ahora).
+  function renderAuditoria() {
+    const logins = Store.list('auditoria_login');
+    const cambios = Store.list('auditoria_horario');
+
+    const filasLogin = logins.map(l => `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(l.fecha)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(l.hora)}</td>
+        <td class="py-2.5 px-4 text-sm text-ink font-semibold">${escapeHtml(l.email)}</td>
+        <td class="py-2.5 px-4">${statusPill(l.resultado, { 'Exitoso': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Fallido': { bg: '#F0455C1A', text: '#F0455C' } })}</td>
+      </tr>`).join('');
+
+    const filasCambios = cambios.map(c => `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(c.fecha)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(c.hora)}</td>
+        <td class="py-2.5 px-4 text-sm text-ink font-semibold">${escapeHtml(c.autor)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(c.cohorte)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(c.mes)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(c.franja)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(c.campo)}</td>
+        <td class="py-2.5 px-4 text-sm text-coral">${escapeHtml(c.valorAnterior)}</td>
+        <td class="py-2.5 px-4 text-sm text-turquesa font-semibold">${escapeHtml(c.valorNuevo)}</td>
+      </tr>`).join('');
+
+    document.getElementById('mount-auditoria').innerHTML = `
+      <div class="admin-panel-card p-6 mb-6">
+        <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+          <div>
+            <h2 class="text-lg font-extrabold text-ink">Auditoría de acceso al Superadmin</h2>
+            <p class="text-sm text-slate2 mt-0.5">${logins.length} intento${logins.length === 1 ? '' : 's'} registrado${logins.length === 1 ? '' : 's'} contra la cuenta Superadmin (correctos e incorrectos).</p>
+          </div>
+          <button onclick="exportCSV('auditoria_login')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+        </div>
+        <div class="overflow-x-auto mt-4">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Resultado</th>
+            </tr></thead>
+            <tbody>${filasLogin || emptyRow(4)}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="admin-panel-card p-6">
+        <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+          <div>
+            <h2 class="text-lg font-extrabold text-ink">Auditoría de cambios en el Horario</h2>
+            <p class="text-sm text-slate2 mt-0.5">${cambios.length} cambio${cambios.length === 1 ? '' : 's'} de Materia o Docente registrado${cambios.length === 1 ? '' : 's'}, con quién lo hizo y cuándo.</p>
+          </div>
+          <button onclick="exportCSV('auditoria_horario')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+        </div>
+        <div class="overflow-x-auto mt-4">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Autor</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Mes</th><th class="py-2.5 px-4">Franja</th><th class="py-2.5 px-4">Campo</th><th class="py-2.5 px-4">Antes</th><th class="py-2.5 px-4">Ahora</th>
+            </tr></thead>
+            <tbody>${filasCambios || emptyRow(9)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
   function renderConfiguracion() {
     const cfg = Store.get('configuracion') || SEED.configuracion;
     const cred = Store.get('superadmin_credentials') || SEED.superadmin_credentials;
@@ -2537,6 +2687,7 @@
     calificaciones: renderCalificaciones,
     informesAdmin: renderInformesAdmin,
     encuestas: renderEncuestas,
+    auditoria: renderAuditoria,
     configuracion: renderConfiguracion,
   };
 
@@ -3308,19 +3459,59 @@
   }
 
   // ---------- Calificaciones (docente) — notas de 0.0 a 10.0, ponderadas ----------
-  // Una cohorte + docente = un registro con "criterios" (notas configurables
-  // por el docente: nombre + peso %) y "valores" (nota 0.0–10.0 de cada
-  // estudiante por criterio). Arranca vacío: sin criterios ni notas de ejemplo.
-  let docenteCalifCohorte = null;
+  // Una cohorte + docente + MES = un registro con "criterios" (notas
+  // configurables por el docente: nombre + peso %) y "valores" (nota
+  // 0.0–10.0 de cada estudiante por criterio). Arranca vacío: sin criterios
+  // ni notas de ejemplo.
+  //
+  // Separación por mes: cada vez que se crea un Horario nuevo (nuevo mes)
+  // para una cohorte, el docente asignado ve una hoja de calificación NUEVA
+  // y en blanco para ese mes — las notas de meses anteriores no se tocan ni
+  // se mezclan, quedan disponibles como historial de solo lectura (tanto
+  // para el docente como para el estudiante, ver renderCalificacionesEstudiante).
+  let docenteCalifSeleccion = null; // "cohorte__mes"
 
-  function getNotasModuloRecord(cohorteNombre, crear) {
+  // Mes más reciente en el que un docente tiene una franja de Horario para
+  // una cohorte dada — ese es el "periodo actual" y el único editable.
+  function mesActualParaDocenteCohorte(docenteNombre, cohorteNombre) {
+    const meses = getSlotsDocente(docenteNombre).filter(s => s.cohorte === cohorteNombre).map(s => s.mes).filter(Boolean);
+    if (!meses.length) return null;
+    return meses.reduce((a, b) => (b > a ? b : a));
+  }
+
+  // Migración: asigna un "mes" a cualquier registro de notas_modulos que se
+  // haya creado antes de separar las calificaciones por periodo. Se corre
+  // una sola vez al cargar la página (ver el arranque, al final del archivo).
+  function migrarNotasModulosSinMes() {
+    const registros = Store.list('notas_modulos');
+    let cambiado = false;
+    registros.forEach(r => {
+      if (!r.mes) {
+        r.mes = mesActualParaDocenteCohorte(r.docente, r.cohorte) || '0000-00';
+        cambiado = true;
+      }
+    });
+    if (cambiado) Store.set('notas_modulos', registros);
+  }
+
+  function getNotasModuloRecord(cohorteNombre, mes, crear) {
     const doc = currentDocente || {};
     const registros = Store.list('notas_modulos');
-    let rec = registros.find(r => r.docente === doc.nombre && r.cohorte === cohorteNombre);
+    let rec = registros.find(r => r.docente === doc.nombre && r.cohorte === cohorteNombre && r.mes === mes);
     if (!rec && crear) {
-      rec = { id: uid('nm'), docente: doc.nombre, cohorte: cohorteNombre, criterios: [], valores: {} };
-      registros.push(rec);
-      Store.set('notas_modulos', registros);
+      // Migración suave: si existe un registro de antes de separar las notas
+      // por mes (sin campo "mes") para este mismo docente+cohorte, se adopta
+      // en vez de perder esas calificaciones ya cargadas.
+      const legacy = registros.find(r => r.docente === doc.nombre && r.cohorte === cohorteNombre && !r.mes);
+      if (legacy) {
+        legacy.mes = mes;
+        rec = legacy;
+        Store.set('notas_modulos', registros);
+      } else {
+        rec = { id: uid('nm'), docente: doc.nombre, cohorte: cohorteNombre, mes, criterios: [], valores: {} };
+        registros.push(rec);
+        Store.set('notas_modulos', registros);
+      }
     }
     return rec || null;
   }
@@ -3371,44 +3562,68 @@
     return '#F0455C';
   }
 
-  function renderCalificacionesDocente() {
-    const modulos = docenteModulosActivos();
-    if (!docenteCalifCohorte || !modulos.some(m => m.nombre === docenteCalifCohorte)) {
-      docenteCalifCohorte = modulos.length ? modulos[0].nombre : null;
-    }
-    const moduloSel = modulos.find(m => m.nombre === docenteCalifCohorte) || null;
+  // Opciones para el selector de "Calificar estudiantes": una por cada
+  // combinación real Cohorte+Mes que aparece en el Horario del docente
+  // (no solo por cohorte). Más recientes primero.
+  function docenteCalifOpciones() {
+    const doc = currentDocente || {};
+    if (!doc.nombre) return [];
+    const mapa = new Map();
+    getSlotsDocente(doc.nombre).forEach(s => {
+      const key = s.cohorte + '__' + s.mes;
+      if (!mapa.has(key)) mapa.set(key, { cohorte: s.cohorte, mes: s.mes, materias: new Set() });
+      if (s.materia) mapa.get(key).materias.add(s.materia);
+    });
+    const arr = [...mapa.entries()].map(([key, o]) => ({
+      key, cohorte: o.cohorte, mes: o.mes,
+      materia: [...o.materias].filter(Boolean).join(' / ') || '(sin materia)',
+      esActual: o.mes === mesActualParaDocenteCohorte(doc.nombre, o.cohorte)
+    }));
+    arr.sort((a, b) => b.mes.localeCompare(a.mes) || a.cohorte.localeCompare(b.cohorte));
+    return arr;
+  }
 
-    if (!modulos.length) {
+  function renderCalificacionesDocente() {
+    const opciones = docenteCalifOpciones();
+    if (!docenteCalifSeleccion || !opciones.some(o => o.key === docenteCalifSeleccion)) {
+      docenteCalifSeleccion = opciones.length ? opciones[0].key : null;
+    }
+    const sel = opciones.find(o => o.key === docenteCalifSeleccion) || null;
+
+    if (!opciones.length) {
       document.getElementById('mount-t-calificaciones').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
-        <p class="text-sm text-slate2">Aún no tienes cohortes/módulos asignados. El coordinador debe asignarte uno desde el panel administrativo para poder subir calificaciones.</p>
+        <p class="text-sm text-slate2">Aún no tienes cohortes/módulos asignados. El coordinador debe asignarte uno desde el panel administrativo (Horario) para poder subir calificaciones.</p>
       </div>`;
       return;
     }
 
-    const rec = getNotasModuloRecord(moduloSel.nombre, false) || { criterios: [], valores: {} };
+    const rec = getNotasModuloRecord(sel.cohorte, sel.mes, false) || { criterios: [], valores: {} };
     const pesoTotal = pesoTotalCriterios(rec);
     const pesoOk = pesoTotal === 100;
-    const estudiantes = docenteEstudiantesDeCohorte(moduloSel.nombre);
+    const estudiantes = docenteEstudiantesDeCohorte(sel.cohorte);
+    const editable = sel.esActual;
 
-    const selector = `<select onchange="cambiarCohorteCalifDocente(this.value)" class="rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30">
-      ${modulos.map(m => `<option value="${escapeHtml(m.nombre)}" ${m.nombre === docenteCalifCohorte ? 'selected' : ''}>${escapeHtml(m.nombre)} — ${escapeHtml(m.modulo)}</option>`).join('')}
+    const selector = `<select onchange="cambiarCalifDocente(this.value)" class="rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30">
+      ${opciones.map(o => `<option value="${escapeHtml(o.key)}" ${o.key === docenteCalifSeleccion ? 'selected' : ''}>${escapeHtml(o.cohorte)} — ${escapeHtml(mesLabel(o.mes))} — ${escapeHtml(o.materia)}${o.esActual ? '' : ' (historial)'}</option>`).join('')}
     </select>`;
+
+    const avisoHistorial = !editable ? `<p class="text-xs font-semibold text-morado bg-morado/10 rounded-xl px-4 py-2.5 mb-4">Estás viendo un periodo anterior (${escapeHtml(mesLabel(sel.mes))}). Quedó guardado como historial y ya no se puede editar — el periodo activo para calificar es el mes más reciente que te asignaron en el Horario.</p>` : '';
 
     const criteriosFilas = (rec.criterios || []).map(c => `
       <div class="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-2.5">
-        <input type="text" value="${escapeHtml(c.nombre)}" onchange="actualizarCriterioCalif('${moduloSel.nombre}','${c.id}','nombre', this.value)" class="flex-1 bg-transparent text-sm font-semibold text-ink focus:outline-none" placeholder="Nombre de la nota (ej. Taller 1)" />
+        <input type="text" value="${escapeHtml(c.nombre)}" ${editable ? `onchange="actualizarCriterioCalif('${sel.cohorte}','${sel.mes}','${c.id}','nombre', this.value)"` : 'disabled'} class="flex-1 bg-transparent text-sm font-semibold text-ink focus:outline-none disabled:opacity-60" placeholder="Nombre de la nota (ej. Taller 1)" />
         <div class="flex items-center gap-1.5 shrink-0">
-          <input type="number" min="0" max="100" step="1" value="${c.peso}" onchange="actualizarCriterioCalif('${moduloSel.nombre}','${c.id}','peso', this.value)" class="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-right" />
+          <input type="number" min="0" max="100" step="1" value="${c.peso}" ${editable ? `onchange="actualizarCriterioCalif('${sel.cohorte}','${sel.mes}','${c.id}','peso', this.value)"` : 'disabled'} class="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-right disabled:opacity-60" />
           <span class="text-xs text-slate2 font-semibold">%</span>
         </div>
-        <button onclick="eliminarCriterioCalif('${moduloSel.nombre}','${c.id}')" class="text-coral hover:opacity-70 shrink-0" title="Eliminar nota">
+        ${editable ? `<button onclick="eliminarCriterioCalif('${sel.cohorte}','${sel.mes}','${c.id}')" class="text-coral hover:opacity-70 shrink-0" title="Eliminar nota">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
+        </button>` : ''}
       </div>`).join('');
 
     let tablaNotas;
     if (!rec.criterios || !rec.criterios.length) {
-      tablaNotas = `<p class="text-sm text-slate2 text-center py-8">Agrega al menos una nota (por ejemplo, "Taller 1") para empezar a calificar a tus estudiantes.</p>`;
+      tablaNotas = `<p class="text-sm text-slate2 text-center py-8">${editable ? 'Agrega al menos una nota (por ejemplo, "Taller 1") para empezar a calificar a tus estudiantes.' : 'Este periodo no llegó a tener notas de evaluación definidas.'}</p>`;
     } else if (!estudiantes.length) {
       tablaNotas = `<p class="text-sm text-slate2 text-center py-8">Esta cohorte aún no tiene estudiantes matriculados.</p>`;
     } else {
@@ -3417,9 +3632,9 @@
         const valores = (rec.valores && rec.valores[e.nombre]) || {};
         const celdas = rec.criterios.map(c => `
           <td class="py-2 px-3 text-center">
-            <input type="number" min="0" max="10" step="0.1" value="${valores[c.id] !== undefined ? valores[c.id] : ''}" placeholder="0.0"
-              onchange="guardarNotaCriterio('${moduloSel.nombre}','${e.id}','${c.id}', this.value)"
-              class="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-morado/30" />
+            <input type="number" min="0" max="10" step="0.1" value="${valores[c.id] !== undefined ? valores[c.id] : ''}" placeholder="0.0" ${editable ? '' : 'disabled'}
+              onchange="guardarNotaCriterio('${sel.cohorte}','${sel.mes}','${e.id}','${c.id}', this.value)"
+              class="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-morado/30 disabled:opacity-60" />
           </td>`).join('');
         const resultado = calcularNotaFinal(rec, e.nombre);
         const nota = resultado && !resultado.pendiente ? resultado.valor : null;
@@ -3447,19 +3662,20 @@
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p class="text-sm font-bold text-ink">Calificaciones por cohorte</p>
-            <p class="text-xs text-slate2 mt-0.5">Escala de 0.0 a 10.0. Define cuántas notas subirás y el peso (%) de cada una; el sistema calcula la nota cuantitativa y su equivalente cualitativo automáticamente.</p>
+            <p class="text-sm font-bold text-ink">Calificaciones por cohorte y mes</p>
+            <p class="text-xs text-slate2 mt-0.5">Escala de 0.0 a 10.0. Cada mes/materia asignada en tu Horario tiene su propia hoja de calificación — el mes más reciente es el periodo activo; los anteriores quedan como historial de solo lectura.</p>
           </div>
           ${selector}
         </div>
       </div>
+      ${avisoHistorial}
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
         <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <p class="text-sm font-bold text-ink">Notas de evaluación — ${escapeHtml(moduloSel.modulo)}</p>
+          <p class="text-sm font-bold text-ink">Notas de evaluación — ${escapeHtml(sel.materia)} · ${escapeHtml(mesLabel(sel.mes))}</p>
           <span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${pesoOk ? '#1FC8C01A' : '#F0455C1A'};color:${pesoOk ? '#0f8f89' : '#F0455C'}">Peso total: ${pesoTotal}%${pesoOk ? '' : ' — debe sumar 100%'}</span>
         </div>
-        <div class="space-y-2.5 mb-4">${criteriosFilas || '<p class="text-sm text-slate2">Aún no has definido notas para esta cohorte.</p>'}</div>
-        <button onclick="agregarCriterioCalif('${moduloSel.nombre}')" class="rounded-xl border border-dashed border-gray-300 text-slate2 hover:text-ink hover:border-ink text-sm font-semibold px-4 py-2.5 transition">+ Agregar nota</button>
+        <div class="space-y-2.5 mb-4">${criteriosFilas || '<p class="text-sm text-slate2">Aún no has definido notas para este periodo.</p>'}</div>
+        ${editable ? `<button onclick="agregarCriterioCalif('${sel.cohorte}','${sel.mes}')" class="rounded-xl border border-dashed border-gray-300 text-slate2 hover:text-ink hover:border-ink text-sm font-semibold px-4 py-2.5 transition">+ Agregar nota</button>` : ''}
       </div>
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6">
         <p class="text-sm font-bold text-ink mb-4">Calificar estudiantes</p>
@@ -3467,21 +3683,21 @@
       </div>`;
   }
 
-  function cambiarCohorteCalifDocente(value) {
-    docenteCalifCohorte = value;
+  function cambiarCalifDocente(value) {
+    docenteCalifSeleccion = value;
     renderCalificacionesDocente();
   }
 
-  function agregarCriterioCalif(cohorteNombre) {
-    const rec = getNotasModuloRecord(cohorteNombre, true);
+  function agregarCriterioCalif(cohorteNombre, mes) {
+    const rec = getNotasModuloRecord(cohorteNombre, mes, true);
     rec.criterios = rec.criterios || [];
     rec.criterios.push({ id: uid('cr'), nombre: 'Nota ' + (rec.criterios.length + 1), peso: 0 });
     guardarNotasModuloRecord(rec);
     renderCalificacionesDocente();
   }
 
-  function actualizarCriterioCalif(cohorteNombre, criterioId, campo, valor) {
-    const rec = getNotasModuloRecord(cohorteNombre, true);
+  function actualizarCriterioCalif(cohorteNombre, mes, criterioId, campo, valor) {
+    const rec = getNotasModuloRecord(cohorteNombre, mes, true);
     const c = (rec.criterios || []).find(x => x.id === criterioId);
     if (!c) return;
     if (campo === 'peso') {
@@ -3496,8 +3712,8 @@
     renderCalificacionesDocente();
   }
 
-  function eliminarCriterioCalif(cohorteNombre, criterioId) {
-    const rec = getNotasModuloRecord(cohorteNombre, true);
+  function eliminarCriterioCalif(cohorteNombre, mes, criterioId) {
+    const rec = getNotasModuloRecord(cohorteNombre, mes, true);
     rec.criterios = (rec.criterios || []).filter(c => c.id !== criterioId);
     Object.keys(rec.valores || {}).forEach(est => { if (rec.valores[est]) delete rec.valores[est][criterioId]; });
     guardarNotasModuloRecord(rec);
@@ -3505,7 +3721,7 @@
     renderCalificacionesDocente();
   }
 
-  function guardarNotaCriterio(cohorteNombre, estudianteId, criterioId, valorStr) {
+  function guardarNotaCriterio(cohorteNombre, mes, estudianteId, criterioId, valorStr) {
     const est = Store.list('usuarios').find(u => u.id === estudianteId);
     if (!est) return;
     let n = valorStr === '' ? null : parseFloat(valorStr);
@@ -3514,7 +3730,7 @@
       if (n < 0) n = 0;
       if (n > 10) n = 10;
     }
-    const rec = getNotasModuloRecord(cohorteNombre, true);
+    const rec = getNotasModuloRecord(cohorteNombre, mes, true);
     rec.valores = rec.valores || {};
     rec.valores[est.nombre] = rec.valores[est.nombre] || {};
     if (n === null) delete rec.valores[est.nombre][criterioId];
@@ -4335,7 +4551,14 @@
       return;
     }
 
-    const registros = Store.list('notas_modulos').filter(r => r.cohorte === mod.nombre);
+    // Un bloque por cada registro Docente+Cohorte+MES real —misma separación
+    // que ya usa el docente al calificar (ver renderCalificacionesDocente).
+    // El mes más reciente de cada docente es el periodo activo; los
+    // anteriores quedan visibles como historial de solo lectura, igual que
+    // ya ocurre en el panel del docente.
+    const registros = [...Store.list('notas_modulos')]
+      .filter(r => r.cohorte === mod.nombre && (r.criterios || []).length)
+      .sort((a, b) => (b.mes || '').localeCompare(a.mes || '') || (a.docente || '').localeCompare(b.docente || ''));
 
     if (!registros.length) {
       document.getElementById('mount-s-calificaciones').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
@@ -4347,7 +4570,8 @@
     const compañeros = docenteEstudiantesDeCohorte(mod.nombre);
 
     const bloques = registros.map(rec => {
-      const materias = [...new Set(getSlotsDocente(rec.docente).filter(s => s.cohorte === mod.nombre).map(s => s.materia))];
+      const esActual = rec.mes === mesActualParaDocenteCohorte(rec.docente, mod.nombre);
+      const materias = [...new Set(getSlotsDocente(rec.docente).filter(s => s.cohorte === mod.nombre && s.mes === rec.mes).map(s => s.materia))];
       const materiaLabel = materias.length ? materias.join(', ') : mod.modulo;
 
       const valores = (rec.valores && rec.valores[nombre]) || {};
@@ -4377,10 +4601,15 @@
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden mb-6">
         <div class="px-6 pt-5 pb-3 flex items-center justify-between flex-wrap gap-3">
           <div>
-            <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
+            <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)} · ${escapeHtml(mesLabel(rec.mes))}</p>
             <p class="text-xs text-slate2 mt-0.5">Docente: ${nombrePersonaClicable(rec.docente, 'Docente')}</p>
           </div>
-          ${definitiva !== null ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${colorCualitativa(definitiva)}1A;color:${colorCualitativa(definitiva)}">${calificacionCualitativa(definitiva)}</span>` : ''}
+          <div class="flex items-center gap-2">
+            ${esActual
+              ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-turquesa/10 text-turquesa">Periodo actual</span>`
+              : `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-slate2">Historial</span>`}
+            ${definitiva !== null ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${colorCualitativa(definitiva)}1A;color:${colorCualitativa(definitiva)}">${calificacionCualitativa(definitiva)}</span>` : ''}
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full">
@@ -4401,7 +4630,9 @@
       </div>`;
     }).join('');
 
-    document.getElementById('mount-s-calificaciones').innerHTML = bloques;
+    document.getElementById('mount-s-calificaciones').innerHTML = `
+      <p class="text-xs text-slate2 mb-5">Cada mes y materia que te asignaron tiene su propia hoja de calificación — el periodo más reciente es el actual; los anteriores quedan como historial.</p>
+      ${bloques}`;
   }
 
   function renderAcademicoEstudiante() {
@@ -4811,5 +5042,11 @@
   // en el localStorage de instalaciones anteriores. Se borra para dejar
   // la base de datos local realmente en blanco.
   localStorage.removeItem(DB_PREFIX + 'alumnos_cohorte');
+  // Migración única: las calificaciones (notas_modulos) empezaron a
+  // separarse por mes además de por cohorte/docente. Cualquier registro
+  // guardado antes de este cambio (sin campo "mes") se etiqueta con el mes
+  // más reciente que ese docente tuvo asignado en esa cohorte según el
+  // Horario, para que no se pierda como historial.
+  migrarNotasModulosSinMes();
   renderContactoPublico();
   actualizarBotonesPostular();
