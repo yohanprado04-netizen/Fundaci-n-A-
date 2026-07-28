@@ -69,51 +69,115 @@
     node.style.animationDelay = delay + 's, ' + delay + 's';
     container.appendChild(node);
   }
-  // ---------- Login inline (Calificaciones) — 4 perfiles separados ----------
-  // Cada perfil tiene sus propias credenciales; ya no se "adivina" el rol
-  // probando contra todos los usuarios. El selector de pestañas define qué
-  // credenciales se validan en submitLogin().
+  // ---------- Login inline (Calificaciones) — un solo formulario ----------
+  // Ya no hay pestañas de perfil: el correo y la contraseña ingresados se
+  // comparan automáticamente contra las 4 fuentes de credenciales posibles
+  // (Superadmin, Administración, Docente, Estudiante) y se entra al panel
+  // que corresponda según cuál coincida. Ver submitLogin().
   //
-  // 1) Superadmin: cuenta única y fija (control total de la plataforma).
-  const SUPERADMIN_CREDENTIALS = { email: 'superadmin@aplus.org', password: 'Super2026#' };
-  // 2) Administración: cualquier usuario con rol "Coordinador" en el Store
-  //    (ver SEED.usuarios, ej. diana.rios@aplus.org) + esta contraseña.
-  const ADMIN_DEMO_PASSWORD = 'coordinacion2026';
-  // 3) Profesores: cualquier usuario con rol "Docente" (ej. ovidio.perea@aplus.org).
-  const DOCENTE_DEMO_PASSWORD = 'docente2026';
-  // 4) Estudiantes: cualquier usuario con rol "Estudiante" (ej. loren.restrepo@aplus.org).
-  const ESTUDIANTE_DEMO_PASSWORD = 'estudiante2026';
+  // 1) Superadmin: una única cuenta con control total. Sus credenciales YA
+  //    NO son fijas en el código — se guardan en Store('superadmin_credentials')
+  //    y se pueden cambiar desde Configuración > Seguridad del Superadmin
+  //    (ver guardarCredencialesSuperadmin()). SEED.superadmin_credentials
+  //    define el correo/contraseña iniciales.
+  // 2) Administración, Docentes y Estudiantes: cada usuario tiene su PROPIA
+  //    contraseña (campo "password" en Store 'usuarios'), definida por el
+  //    administrador al crear/editar el usuario. El login siempre es con
+  //    su correo + esa contraseña individual (ver submitLogin()).
 
   let currentDocente = null;
   let currentEstudiante = null;
   let currentAdminRole = null; // 'superadmin' | 'administracion'
-  let loginRole = 'estudiante';
 
-  const LOGIN_ROLE_HINTS = {
-    superadmin: 'Acceso total a la plataforma. Demo: superadmin@aplus.org / Super2026#',
-    administracion: 'Coordinación académica. Demo: diana.rios@aplus.org / coordinacion2026',
-    docente: 'Panel docente. Demo: ovidio.perea@aplus.org / docente2026',
-    estudiante: 'Panel del estudiante. Demo: loren.restrepo@aplus.org / estudiante2026',
-  };
+  /* =====================================================================
+     SEGURIDAD DEL LOGIN — 3 capas
+     1) Bloqueo temporal tras varios intentos fallidos (anti fuerza bruta).
+     2) Cierre de sesión automático por inactividad (ver iniciarControlInactividad).
+     3) Contraseñas con una fortaleza mínima al crearlas (ver validarFortalezaPassword,
+        usado tanto en el modal de Usuarios como en Crear Cohorte + Administrador).
+     ===================================================================== */
 
-  function setLoginRole(role) {
-    loginRole = role;
-    document.querySelectorAll('.login-role-tab').forEach(btn => {
-      const active = btn.dataset.role === role;
-      btn.classList.toggle('bg-ink', active);
-      btn.classList.toggle('text-white', active);
-      btn.classList.toggle('border-ink', active);
-      btn.classList.toggle('border-gray-200', !active);
-      btn.classList.toggle('text-slate2', !active);
-    });
-    document.getElementById('loginRoleHint').textContent = LOGIN_ROLE_HINTS[role] || '';
-    document.getElementById('loginError').classList.add('hidden');
+  function validarFortalezaPassword(pw) {
+    return typeof pw === 'string' && pw.length >= 6 && /[A-Za-z]/.test(pw) && /[0-9]/.test(pw);
   }
 
-  function submitLogin() {
+  // ---- Capa 1: bloqueo por intentos fallidos ----
+  const LOGIN_MAX_INTENTOS = 5;
+  const LOGIN_BLOQUEO_MS = 60000; // 60 segundos
+  let loginIntentosFallidos = 0;
+  let loginBloqueadoHasta = 0;
+
+  function segundosRestantesBloqueo() {
+    return Math.max(0, Math.ceil((loginBloqueadoHasta - Date.now()) / 1000));
+  }
+
+  // ---- Mostrar/ocultar contraseña ----
+  function togglePasswordVisibility(inputId, btnEl) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const mostrando = input.type === 'text';
+    input.type = mostrando ? 'password' : 'text';
+    const open = btnEl.querySelector('.pw-eye-open');
+    const closed = btnEl.querySelector('.pw-eye-closed');
+    if (open) open.classList.toggle('hidden', !mostrando);
+    if (closed) closed.classList.toggle('hidden', mostrando);
+  }
+
+  function toggleLoginPasswordVisibility() {
+    const input = document.getElementById('loginPassword');
+    const mostrando = input.type === 'text';
+    input.type = mostrando ? 'password' : 'text';
+    document.getElementById('loginPwEyeOpen').classList.toggle('hidden', !mostrando);
+    document.getElementById('loginPwEyeClosed').classList.toggle('hidden', mostrando);
+  }
+
+  // ---- Capa 2: cierre de sesión automático por inactividad ----
+  const INACTIVIDAD_LIMITE_MS = 20 * 60 * 1000; // 20 minutos
+  let inactividadTimer = null;
+
+  function iniciarControlInactividad() {
+    detenerControlInactividad();
+    const reiniciar = () => {
+      clearTimeout(inactividadTimer);
+      inactividadTimer = setTimeout(cerrarSesionPorInactividad, INACTIVIDAD_LIMITE_MS);
+    };
+    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(ev => document.addEventListener(ev, reiniciar));
+    inactividadListeners = reiniciar;
+    reiniciar();
+  }
+  let inactividadListeners = null;
+
+  function detenerControlInactividad() {
+    clearTimeout(inactividadTimer);
+    if (inactividadListeners) {
+      ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(ev => document.removeEventListener(ev, inactividadListeners));
+      inactividadListeners = null;
+    }
+  }
+
+  function cerrarSesionPorInactividad() {
+    if (currentAdminRole) logout();
+    else if (currentDocente) logoutDocente();
+    else if (currentEstudiante) logoutEstudiante();
+    else return;
+    toast('Tu sesión se cerró automáticamente por inactividad', 'info');
+  }
+
+
+
+  function submitLogin(event) {
+    if (event && event.preventDefault) event.preventDefault();
+
+    const errorEl = document.getElementById('loginError');
+
+    if (Date.now() < loginBloqueadoHasta) {
+      errorEl.textContent = 'Demasiados intentos fallidos. Espera ' + segundosRestantesBloqueo() + ' segundos antes de volver a intentar.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value.trim();
-    const errorEl = document.getElementById('loginError');
     if (!email || !password) {
       errorEl.textContent = 'Completa tu correo y contraseña para continuar.';
       errorEl.classList.remove('hidden');
@@ -121,66 +185,77 @@
     }
     seedIfEmpty();
 
-    if (loginRole === 'superadmin') {
-      if (email.toLowerCase() === SUPERADMIN_CREDENTIALS.email && password === SUPERADMIN_CREDENTIALS.password) {
-        errorEl.classList.add('hidden');
-        currentAdminRole = 'superadmin';
-        document.getElementById('siteView').classList.add('hidden');
-        document.getElementById('dashboardView').classList.remove('hidden');
-        applyAdminRoleUI();
-        initAdmin();
-        showPanel('resumen');
-        window.scrollTo(0, 0);
-        return;
-      }
-    } else if (loginRole === 'administracion') {
-      const coordinador = Store.list('usuarios').find(u =>
-        u.rol === 'Coordinador' && u.email.toLowerCase() === email.toLowerCase());
-      if (coordinador && password === ADMIN_DEMO_PASSWORD) {
-        errorEl.classList.add('hidden');
-        currentAdminRole = 'administracion';
-        document.getElementById('siteView').classList.add('hidden');
-        document.getElementById('dashboardView').classList.remove('hidden');
-        applyAdminRoleUI(coordinador);
-        initAdmin();
-        showPanel('resumen');
-        window.scrollTo(0, 0);
-        return;
-      }
-    } else if (loginRole === 'docente') {
-      const docente = Store.list('usuarios').find(u =>
-        u.rol === 'Docente' && u.email.toLowerCase() === email.toLowerCase());
-      if (docente && password === DOCENTE_DEMO_PASSWORD) {
-        errorEl.classList.add('hidden');
-        currentDocente = docente;
-        document.getElementById('siteView').classList.add('hidden');
-        document.getElementById('teacherView').classList.remove('hidden');
-        showPanelDocente('resumen');
-        window.scrollTo(0, 0);
-        return;
-      }
-    } else if (loginRole === 'estudiante') {
-      const estudiante = Store.list('usuarios').find(u =>
-        u.rol === 'Estudiante' && u.email.toLowerCase() === email.toLowerCase());
-      if (estudiante && password === ESTUDIANTE_DEMO_PASSWORD) {
-        errorEl.classList.add('hidden');
-        currentEstudiante = estudiante;
-        document.getElementById('siteView').classList.add('hidden');
-        document.getElementById('studentView').classList.remove('hidden');
-        initEstudiante();
-        showPanelEstudiante('resumen');
-        window.scrollTo(0, 0);
-        return;
-      }
+    const registrarExito = () => {
+      loginIntentosFallidos = 0;
+      loginBloqueadoHasta = 0;
+      errorEl.classList.add('hidden');
+      iniciarControlInactividad();
+      window.scrollTo(0, 0);
+    };
+
+    // Sin pestañas de perfil: se prueba el correo/contraseña contra cada
+    // fuente de credenciales, en este orden, y se entra al panel que
+    // corresponda con la primera coincidencia.
+    const cred = Store.get('superadmin_credentials') || SEED.superadmin_credentials;
+    if (email.toLowerCase() === cred.email.toLowerCase() && password === cred.password) {
+      currentAdminRole = 'superadmin';
+      document.getElementById('siteView').classList.add('hidden');
+      document.getElementById('dashboardView').classList.remove('hidden');
+      applyAdminRoleUI();
+      initAdmin();
+      showPanel('resumen');
+      registrarExito();
+      return;
     }
 
-    errorEl.textContent = 'Credenciales incorrectas para el perfil "' + (LOGIN_ROLE_LABELS[loginRole] || loginRole) + '". Verifica el correo y la contraseña.';
+    const coordinador = Store.list('usuarios').find(u =>
+      u.rol === 'Coordinador' && u.email.toLowerCase() === email.toLowerCase());
+    if (coordinador && password === coordinador.password) {
+      currentAdminRole = 'administracion';
+      document.getElementById('siteView').classList.add('hidden');
+      document.getElementById('dashboardView').classList.remove('hidden');
+      applyAdminRoleUI(coordinador);
+      initAdmin();
+      showPanel('resumen');
+      registrarExito();
+      return;
+    }
+
+    const docente = Store.list('usuarios').find(u =>
+      u.rol === 'Docente' && u.email.toLowerCase() === email.toLowerCase());
+    if (docente && password === docente.password) {
+      currentDocente = docente;
+      document.getElementById('siteView').classList.add('hidden');
+      document.getElementById('teacherView').classList.remove('hidden');
+      showPanelDocente('resumen');
+      registrarExito();
+      return;
+    }
+
+    const estudiante = Store.list('usuarios').find(u =>
+      u.rol === 'Estudiante' && u.email.toLowerCase() === email.toLowerCase());
+    if (estudiante && password === estudiante.password) {
+      currentEstudiante = estudiante;
+      document.getElementById('siteView').classList.add('hidden');
+      document.getElementById('studentView').classList.remove('hidden');
+      initEstudiante();
+      showPanelEstudiante('resumen');
+      registrarExito();
+      return;
+    }
+
+    // ---- Intento fallido: cuenta para el bloqueo (Capa 1) ----
+    loginIntentosFallidos++;
+    if (loginIntentosFallidos >= LOGIN_MAX_INTENTOS) {
+      loginBloqueadoHasta = Date.now() + LOGIN_BLOQUEO_MS;
+      loginIntentosFallidos = 0;
+      errorEl.textContent = 'Demasiados intentos fallidos. Espera ' + segundosRestantesBloqueo() + ' segundos antes de volver a intentar.';
+    } else {
+      const restantes = LOGIN_MAX_INTENTOS - loginIntentosFallidos;
+      errorEl.textContent = 'Credenciales incorrectas. Verifica tu correo y contraseña. Te quedan ' + restantes + ' intento' + (restantes === 1 ? '' : 's') + ' antes de un bloqueo temporal.';
+    }
     errorEl.classList.remove('hidden');
   }
-
-  const LOGIN_ROLE_LABELS = {
-    superadmin: 'Superadmin', administracion: 'Administración', docente: 'Profesores', estudiante: 'Estudiantes'
-  };
 
   // Ajusta el panel administrativo según el perfil: Superadmin ve todo;
   // Administración (Coordinador) no gestiona cuentas de usuario ni la
@@ -199,6 +274,21 @@
     }
     document.querySelectorAll('.panel-tab[data-super-only="true"]').forEach(tab => {
       tab.classList.toggle('hidden', !isSuper);
+    });
+    // Superadmin ve un menú reducido (Resumen, Administradores, Usuarios,
+    // Cohortes, Calificaciones, Configuración); Administración conserva el
+    // menú completo (sin el apartado de Administradores).
+    document.querySelectorAll('.panel-tab[data-admin-hide="true"]').forEach(tab => {
+      tab.classList.toggle('hidden', isSuper);
+      if (isSuper && tab.dataset.panel) {
+        const panelEl = document.getElementById('panel-' + tab.dataset.panel);
+        if (panelEl && !panelEl.classList.contains('hidden')) {
+          showPanel('resumen');
+        }
+      }
+    });
+    document.querySelectorAll('[data-admin-hide-group="true"]').forEach(group => {
+      group.classList.toggle('hidden', isSuper);
     });
     const restrictedNote = document.getElementById('adminRestrictedNote');
     if (restrictedNote) restrictedNote.classList.toggle('hidden', isSuper);
@@ -226,6 +316,8 @@
   }
 
   function logout() {
+    detenerControlInactividad();
+    currentAdminRole = null;
     document.getElementById('dashboardView').classList.add('hidden');
     document.getElementById('siteView').classList.remove('hidden');
     document.getElementById('loginEmail').value = '';
@@ -234,6 +326,7 @@
   }
 
   function logoutDocente() {
+    detenerControlInactividad();
     currentDocente = null;
     document.getElementById('teacherView').classList.add('hidden');
     document.getElementById('siteView').classList.remove('hidden');
@@ -243,6 +336,7 @@
   }
 
   function logoutEstudiante() {
+    detenerControlInactividad();
     currentEstudiante = null;
     document.getElementById('studentView').classList.add('hidden');
     document.getElementById('siteView').classList.remove('hidden');
@@ -374,88 +468,49 @@
   }
 
   // ---------- Datos semilla (solo se cargan la primera vez) ----------
+  // La plataforma arranca EN BLANCO: no hay estudiantes, docentes ni
+  // coordinadores/administradores de ejemplo. El ÚNICO acceso inicial es
+  // el Superadmin (superadmin_credentials). Todo lo demás se crea desde
+  // la plataforma (Usuarios, Cohortes, Pensum, etc.) una vez inicias sesión.
   const SEED = {
-    usuarios: [
-      { id: uid('u'), nombre: 'Loren Liseth Restrepo', email: 'loren.restrepo@aplus.org', rol: 'Estudiante', cohorte: 'Cohorte Agosto 2026', estado: 'Activo' },
-      { id: uid('u'), nombre: 'Mateo Córdoba Palacios', email: 'mateo.cordoba@aplus.org', rol: 'Estudiante', cohorte: 'Cohorte Agosto 2026', estado: 'Activo' },
-      { id: uid('u'), nombre: 'Ana Sofía Mosquera', email: 'ana.mosquera@aplus.org', rol: 'Estudiante', cohorte: 'Cohorte Agosto 2026', estado: 'Activo' },
-      { id: uid('u'), nombre: 'Kevin Andrés Mena', email: 'kevin.mena@aplus.org', rol: 'Estudiante', cohorte: 'Cohorte Julio 2026', estado: 'Activo' },
-      { id: uid('u'), nombre: 'Ovidio Perea', email: 'ovidio.perea@aplus.org', rol: 'Docente', cohorte: 'Base de Datos', estado: 'Activo' },
-      { id: uid('u'), nombre: 'Diana Carolina Ríos', email: 'diana.rios@aplus.org', rol: 'Coordinador', cohorte: '—', estado: 'Activo' },
-    ],
-    modulos: [
-      { id: uid('m'), nombre: 'Cohorte Agosto 2026', modulo: 'Fundamentos de Programación', docente: 'Ovidio Perea', fechaInicio: '2026-08-03', fechaFin: '2026-09-25', cupos: 30, inscritos: 24, estado: 'En curso' },
-      { id: uid('m'), nombre: 'Cohorte Julio 2026', modulo: 'Base de Datos', docente: 'Ovidio Perea', fechaInicio: '2026-07-06', fechaFin: '2026-08-14', cupos: 28, inscritos: 26, estado: 'En curso' },
-      { id: uid('m'), nombre: 'Cohorte Mayo 2026', modulo: 'Desarrollo Web', docente: 'Diana Carolina Ríos', fechaInicio: '2026-05-04', fechaFin: '2026-06-26', cupos: 25, inscritos: 25, estado: 'Finalizada' },
-    ],
-    pensum: [
-      { id: uid('p'), modulo: 'Fundamentos de Programación', tema: 'Lógica y algoritmos', horas: 20, docente: 'Ovidio Perea', orden: 1 },
-      { id: uid('p'), modulo: 'Fundamentos de Programación', tema: 'Estructuras de datos', horas: 16, docente: 'Ovidio Perea', orden: 2 },
-      { id: uid('p'), modulo: 'Base de Datos', tema: 'Modelo relacional y SQL', horas: 24, docente: 'Ovidio Perea', orden: 1 },
-      { id: uid('p'), modulo: 'Desarrollo Web', tema: 'HTML, CSS y JavaScript', horas: 30, docente: 'Diana Carolina Ríos', orden: 1 },
-    ],
-    memorandos: [
-      { id: uid('mm'), titulo: 'Actualización de horarios módulo agosto', destinatario: 'Cohorte Agosto 2026', fecha: '2026-07-20', estado: 'Enviado', contenido: 'Se informa el nuevo horario de clases a partir de la próxima semana.' },
-      { id: uid('mm'), titulo: 'Recordatorio de entrega de talleres', destinatario: 'Todos los docentes', fecha: '2026-07-22', estado: 'Enviado', contenido: 'Favor calificar los talleres pendientes antes del viernes.' },
-      { id: uid('mm'), titulo: 'Seguimiento al desempeño en el programa Training de 100 a 1000+', destinatario: 'loren.restrepo@aplus.org', fecha: '2026-07-22', estado: 'Enviado', contenido: 'La Fundación A+, en el marco del programa Training de 100 a 1000+, valora tu participación y el compromiso demostrado durante el proceso de formación integral.\nA la fecha se ha completado aproximadamente el 50% de la primera fase del programa, denominada fase de Fundamentación. En este contexto, consideramos importante y pertinente compartir información particular sobre tu desempeño, así como algunas recomendaciones orientadas a fortalecer tu proceso de aprendizaje y promover tu mejoramiento continuo en búsqueda de la excelencia personal y profesional.' },
-    ],
+    // Credenciales del Superadmin: se guardan en el Store (editables desde
+    // Configuración), ya no son una constante fija en el código.
+    superadmin_credentials: { email: 'superadmin@aplus.org', password: 'Super2026#' },
+    usuarios: [],
+    modulos: [],
+    pensum: [],
+    memorandos: [],
     // PQR: cada solicitud se envía como archivo PDF (la enviaron Docente o
     // Estudiante). estado empieza en 'Pendiente' y pasa a 'Activo' de forma
     // automática la primera vez que el administrador abre/descarga el PDF
     // (ver descargarPqrAdmin). No se edita manualmente.
-    pqr: [
-      { id: uid('pq'), tipo: 'Petición', solicitante: 'Kevin Andrés Mena', remitenteRol: 'Estudiante', asunto: 'Certificado de estudios', fecha: '2026-07-21', estado: 'Pendiente', fechaActivacion: null, archivoNombre: 'peticion-certificado-kevin-mena.pdf', archivoTipo: 'application/pdf', archivoDatos: 'data:application/pdf;base64,JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggMzI4ID4+CnN0cmVhbQpCVCAvRjEgMTYgVGYgNzIgNzYwIFRkIChQZXRpY2lvbiAtIENlcnRpZmljYWRvIGRlIGVzdHVkaW9zKSBUaiBFVApCVCAvRjEgMTEgVGYgNzIgNzIwIFRkIChTb2xpY2l0YW50ZTogS2V2aW4gQW5kcmVzIE1lbmEpIFRqIEVUCkJUIC9GMSAxMSBUZiA3MiA3MDAgVGQgKFRpcG86IFBldGljaW9uKSBUaiBFVApCVCAvRjEgMTEgVGYgNzIgNjgwIFRkIChGZWNoYTogMjAyNi0wNy0yMSkgVGogRVQKQlQgL0YxIDExIFRmIDcyIDY2MCBUZCAoKSBUaiBFVApCVCAvRjEgMTEgVGYgNzIgNjQwIFRkIChTb2xpY2l0byBjZXJ0aWZpY2FkbyBwYXJhIHRyYW1pdGUgbGFib3JhbC4pIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzMTEgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo2OTAKJSVFT0Y=' },
-      { id: uid('pq'), tipo: 'Queja', solicitante: 'Ovidio Perea', remitenteRol: 'Docente', asunto: 'Conectividad en clase virtual', fecha: '2026-07-19', estado: 'Activo', fechaActivacion: '2026-07-20', archivoNombre: 'queja-conectividad-ovidio-perea.pdf', archivoTipo: 'application/pdf', archivoDatos: 'data:application/pdf;base64,JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggMzg2ID4+CnN0cmVhbQpCVCAvRjEgMTYgVGYgNzIgNzYwIFRkIChRdWVqYSAtIENvbmVjdGl2aWRhZCBlbiBjbGFzZSB2aXJ0dWFsKSBUaiBFVApCVCAvRjEgMTEgVGYgNzIgNzIwIFRkIChTb2xpY2l0YW50ZTogT3ZpZGlvIFBlcmVhKSBUaiBFVApCVCAvRjEgMTEgVGYgNzIgNzAwIFRkIChSb2w6IERvY2VudGUpIFRqIEVUCkJUIC9GMSAxMSBUZiA3MiA2ODAgVGQgKFRpcG86IFF1ZWphKSBUaiBFVApCVCAvRjEgMTEgVGYgNzIgNjYwIFRkIChGZWNoYTogMjAyNi0wNy0xOSkgVGogRVQKQlQgL0YxIDExIFRmIDcyIDY0MCBUZCAoKSBUaiBFVApCVCAvRjEgMTEgVGYgNzIgNjIwIFRkIChMYSBzYWxhIHZpcnR1YWwgcHJlc2VudG8gZmFsbGFzIGR1cmFudGUgbGEgc2VzaW9uIGRlbCBtYXJ0ZXMuKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwMzExIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNzQ4CiUlRU9G' },
-    ],
-    reuniones: [
-      { id: uid('r'), titulo: 'Comité académico mensual', fecha: '2026-08-01', hora: '09:00', enlace: 'https://meet.google.com/aplus-comite', participantes: 'Coordinación, Docentes', estado: 'Programada' },
-      { id: uid('r'), titulo: 'Seguimiento estudiantes en riesgo', fecha: '2026-07-29', hora: '15:00', enlace: 'https://meet.google.com/aplus-riesgo', participantes: 'Coordinación, Ovidio Perea', estado: 'Programada' },
-    ],
-    calificaciones: [
-      { id: uid('g'), estudiante: 'Loren Liseth Restrepo', modulo: 'Fundamentos de Programación', nota: 4.9, fecha: '2026-07-18' },
-      { id: uid('g'), estudiante: 'Mateo Córdoba Palacios', modulo: 'Fundamentos de Programación', nota: 4.8, fecha: '2026-07-18' },
-      { id: uid('g'), estudiante: 'Ana Sofía Mosquera', modulo: 'Fundamentos de Programación', nota: 4.7, fecha: '2026-07-18' },
-      { id: uid('g'), estudiante: 'Kevin Andrés Mena', modulo: 'Base de Datos', nota: 2.8, fecha: '2026-07-17' },
-    ],
+    pqr: [],
+    reuniones: [],
+    calificaciones: [],
     // "encuestas" (Encuestas de satisfacción) fue eliminado del sitio: ya no
     // existe en el panel Admin ni en el panel Estudiante.
-    materiales: [
-      { id: uid('mt'), modulo: 'Fundamentos de Programación', tipo: 'PDF', titulo: 'Guía 1 — Lógica y algoritmos', mes: 'Agosto 2026', fecha: '2026-08-04' },
-      { id: uid('mt'), modulo: 'Fundamentos de Programación', tipo: 'Video', titulo: 'Introducción a pseudocódigo', mes: 'Agosto 2026', fecha: '2026-08-05' },
-      { id: uid('mt'), modulo: 'Base de Datos', tipo: 'Taller', titulo: 'Taller de consultas SQL básicas', mes: 'Julio 2026', fecha: '2026-07-10' },
-      { id: uid('mt'), modulo: 'Base de Datos', tipo: 'PDF', titulo: 'Modelo entidad-relación (teoría)', mes: 'Julio 2026', fecha: '2026-07-08' },
-      { id: uid('mt'), modulo: 'Desarrollo Web', tipo: 'Ejercicio', titulo: 'Maquetación con Flexbox', mes: 'Mayo 2026', fecha: '2026-05-12' },
-    ],
-    asistencia: [
-      { id: uid('as'), estudiante: 'Loren Liseth Restrepo', modulo: 'Fundamentos de Programación', fecha: '2026-07-20', estado: 'Presente' },
-      { id: uid('as'), estudiante: 'Loren Liseth Restrepo', modulo: 'Fundamentos de Programación', fecha: '2026-07-21', estado: 'Presente' },
-      { id: uid('as'), estudiante: 'Loren Liseth Restrepo', modulo: 'Fundamentos de Programación', fecha: '2026-07-22', estado: 'Tarde' },
-      { id: uid('as'), estudiante: 'Kevin Andrés Mena', modulo: 'Base de Datos', fecha: '2026-07-20', estado: 'Falla' },
-      { id: uid('as'), estudiante: 'Kevin Andrés Mena', modulo: 'Base de Datos', fecha: '2026-07-21', estado: 'Presente' },
-    ],
-    insignias_estudiantes: [
-      { id: uid('ie'), estudiante: 'Loren Liseth Restrepo', insignia: 'Primeros pasos', fecha: '2026-07-10' },
-      { id: uid('ie'), estudiante: 'Loren Liseth Restrepo', insignia: 'Asistencia perfecta', fecha: '2026-07-24' },
-    ],
-    agenda_estudiante: [
-      { id: uid('ag'), estudiante: 'Loren Liseth Restrepo', titulo: 'Quiz de lógica de programación', tipo: 'Quiz', fecha: '2026-08-06', hora: '10:00', notas: 'Temas 1 y 2 del pensum.' },
-      { id: uid('ag'), estudiante: 'Loren Liseth Restrepo', titulo: 'Entrega taller de algoritmos', tipo: 'Entrega', fecha: '2026-08-10', hora: '23:59', notas: '' },
-    ],
-    correos_estudiante: [
-      { id: uid('co'), estudiante: 'Loren Liseth Restrepo', de: 'Coordinación Académica', asunto: 'Bienvenida a la Cohorte Agosto 2026', fecha: '2026-08-01', leido: false, contenido: 'Te damos la bienvenida al programa. Revisa tu horario y materiales en la plataforma.' },
-      { id: uid('co'), estudiante: 'Loren Liseth Restrepo', de: 'Ovidio Perea', asunto: 'Material de la próxima clase', fecha: '2026-08-03', leido: false, contenido: 'Adjunto encontrarás la guía de lógica y algoritmos para la sesión del lunes.' },
-    ],
+    materiales: [],
+    asistencia: [],
+    insignias_estudiantes: [],
+    agenda_estudiante: [],
+    correos_estudiante: [],
     semaforo_overrides: {},
     configuracion: {
       nombre: 'Fundación A+',
       ciudad: 'Quibdó',
+      direccion: '',
       correo: 'contacto@fundacionaplus.org',
       telefono: '+57 300 000 0000',
       cupoMaximo: 30,
       notasMinimaAprobacion: 3.0,
       asistenciaMinima: 80,
       notificacionesEmail: true,
-      notificacionesIA: true
+      notificacionesIA: true,
+      // Postulación pública: el Superadmin activa/desactiva el botón "Postular"
+      // del sitio y define el link del cuestionario externo (Google Forms, etc.)
+      // donde los interesados dejan sus datos.
+      postulacionHabilitada: false,
+      postulacionUrl: ''
     }
   };
 
@@ -472,10 +527,20 @@
   }
 
   function resetDemoData() {
-    Object.keys(SEED).forEach(key => localStorage.removeItem(DB_PREFIX + key));
+    // Antes solo se borraban las claves listadas explícitamente en SEED, lo
+    // que dejaba residuos de módulos añadidos después (notas_modulos,
+    // horarios, informes_docente, encuestas, agenda_docente, qr_tokens,
+    // administradores, sesiones/asistencia de reuniones, etc.) y la
+    // plataforma no quedaba realmente en blanco. Ahora se borra CUALQUIER
+    // clave de localStorage que pertenezca a esta app (prefijo DB_PREFIX),
+    // sin importar si está o no en SEED, y luego se vuelve a sembrar solo
+    // lo mínimo (Superadmin + Configuración por defecto).
+    Object.keys(localStorage)
+      .filter(k => k.indexOf(DB_PREFIX) === 0)
+      .forEach(k => localStorage.removeItem(k));
     seedIfEmpty();
     Object.keys(RENDERERS).forEach(p => RENDERERS[p]());
-    toast('Datos de demostración restaurados', 'ok');
+    toast('Plataforma reiniciada: todo en blanco, solo queda el Superadmin', 'ok');
   }
 
   // ---------- Toasts ----------
@@ -513,8 +578,13 @@
       fields: [
         { key: 'nombre', label: 'Nombre completo', type: 'text', required: true },
         { key: 'email', label: 'Correo electrónico', type: 'email', required: true },
+        // Contraseña de acceso: el usuario inicia sesión con su correo + esta
+        // contraseña. Al editar, se puede dejar en blanco para conservar la
+        // que ya tenía (ver manejo especial en saveModal).
+        { key: 'password', label: 'Contraseña de acceso', type: 'password' },
         // Las opciones reales de "rol" se calculan en openModal() a partir de
-        // ROLES_CREACION_USUARIO (siempre Estudiante/Docente, al crear Y al editar).
+        // rolesCreacionUsuario(): Estudiante/Docente para Administración, y
+        // además Coordinador ("Administrador") si quien crea es el Superadmin.
         { key: 'rol', label: 'Rol', type: 'select', options: ['Estudiante', 'Docente', 'Coordinador', 'Administrador'], required: true },
         // Las opciones reales de "cohorte" se calculan en openModal() a partir de
         // las cohortes existentes (Store('modulos')) — ver bloque "select" más abajo.
@@ -543,7 +613,7 @@
         { key: 'modulo', label: 'Módulo', type: 'text', required: true },
         { key: 'tema', label: 'Tema / unidad', type: 'text', required: true },
         { key: 'horas', label: 'Horas', type: 'number', default: 8 },
-        { key: 'docente', label: 'Docente responsable', type: 'text' },
+        { key: 'docente', label: 'Docente responsable', type: 'select', options: [] },
         { key: 'orden', label: 'Orden dentro del módulo', type: 'number', default: 1 },
         // Archivo que el estudiante podrá ver/descargar desde su Pensum curricular.
         // Se maneja aparte en openModal()/saveModal() (lee el File y lo guarda como
@@ -581,6 +651,16 @@
     },
     // "calendario" (Calendario institucional) fue eliminado del sitio: ya no
     // existe en el panel Admin ni en el panel Estudiante.
+    encuestas: {
+      label: 'Encuesta de satisfacción', icon: 'Encuestas',
+      fields: [
+        { key: 'titulo', label: 'Título de la encuesta', type: 'text', required: true },
+        { key: 'fecha', label: 'Fecha de publicación', type: 'date', required: true },
+        { key: 'estado', label: 'Estado', type: 'select', options: ['Abierta', 'Cerrada'], default: 'Abierta' },
+        // "respuestas" y "promedio" NO son campos editables: se calculan solo
+        // a partir de lo que respondan los estudiantes (ver renderEncuestas).
+      ]
+    },
     calificaciones: {
       label: 'Calificación', icon: 'Calificaciones',
       fields: [
@@ -598,34 +678,63 @@
   let modalCtx = { entity: null, id: null };
   let deleteCtx = { entity: null, id: null };
 
-  // Roles que el administrador puede asignar al CREAR un usuario nuevo.
-  // Coordinador/Administrador solo se crean por otras vías (p. ej. "Crear Cohorte + Administrador").
-  const ROLES_CREACION_USUARIO = ['Estudiante', 'Docente'];
+  // Roles que se pueden asignar al CREAR/EDITAR un usuario desde el panel
+  // genérico "Usuarios" (Estudiantes y Docentes). Los Administradores ya NO
+  // se crean aquí: tienen su propio apartado exclusivo del Superadmin (ver
+  // panel "Administradores" / renderAdministradores() / openModal(..., 'Coordinador')).
+  function rolesCreacionUsuario() {
+    return ['Estudiante', 'Docente'];
+  }
 
-  function openModal(entity, id) {
+  function openModal(entity, id, forcedRole) {
     const schema = SCHEMAS[entity];
     if (!schema) return;
+    const record0 = id ? Store.list(entity).find(r => r.id === id) : null;
+
+    // Solo el Superadmin puede editar cuentas de Administrador (Coordinador).
+    if (entity === 'usuarios' && record0 && (record0.rol === 'Coordinador' || record0.rol === 'Administrador') && currentAdminRole !== 'superadmin') {
+      toast('Solo el Superadmin puede editar una cuenta de Administrador', 'err');
+      return;
+    }
+
     modalCtx = { entity, id: id || null };
-    const record = id ? Store.list(entity).find(r => r.id === id) : null;
+    const record = record0;
 
     document.getElementById('modalEyebrow').textContent = id ? 'Editar' : 'Crear nuevo';
-    document.getElementById('modalTitle').textContent = schema.label;
+    document.getElementById('modalTitle').textContent = forcedRole === 'Coordinador' ? 'Administrador' : schema.label;
 
     const form = document.getElementById('modalForm');
     form.innerHTML = schema.fields.map(f => {
       const val = record ? record[f.key] : (f.default !== undefined ? f.default : '');
       const idAttr = 'field_' + f.key;
+
+      // Apartado exclusivo de Administradores: el rol ya viene fijo
+      // (Coordinador) y no aplica cohorte, así que esos dos campos se
+      // guardan como ocultos en vez de mostrarse en el formulario.
+      if (entity === 'usuarios' && forcedRole && f.key === 'rol') {
+        return `<input type="hidden" id="${idAttr}" value="${escapeHtml(forcedRole)}" />`;
+      }
+      if (entity === 'usuarios' && forcedRole === 'Coordinador' && f.key === 'cohorte') {
+        return `<input type="hidden" id="${idAttr}" value="" />`;
+      }
+
       if (f.type === 'select') {
-        // El rol solo puede ser Estudiante o Docente, tanto al crear como al editar
-        // (Coordinador/Administrador se crean solo por "Crear Cohorte + Administrador").
+        // El rol disponible depende de quién crea el usuario: ver rolesCreacionUsuario().
         let opciones = f.options;
         if (entity === 'usuarios' && f.key === 'rol') {
-          opciones = ROLES_CREACION_USUARIO;
+          opciones = rolesCreacionUsuario();
         } else if (entity === 'usuarios' && f.key === 'cohorte') {
           // Cohortes existentes, tomadas de las que ya armó el administrador (Store 'modulos').
           opciones = Store.list('modulos').map(m => m.nombre);
           if (val && !opciones.includes(val)) opciones = [val, ...opciones]; // conserva un valor legado que ya no exista
           opciones = ['', ...opciones]; // primera opción = sin asignar
+        } else if (entity === 'pensum' && f.key === 'docente') {
+          // Lista real de docentes (Store 'usuarios'), no texto libre — así el
+          // nombre siempre coincide exactamente con su usuario y su perfil se
+          // puede abrir con un clic desde el Pensum del estudiante.
+          const docentesReales = Store.list('usuarios').filter(u => u.rol === 'Docente').map(u => u.nombre);
+          if (val && !docentesReales.includes(val)) docentesReales.push(val); // conserva un valor legado que ya no exista
+          opciones = ['', ...docentesReales];
         } else if (entity === 'memorandos' && f.key === 'destinatario') {
           // El valor guardado es el CORREO del usuario destinatario (o un grupo).
           // Así el panel del estudiante puede saber con certeza para quién es cada memorando.
@@ -657,8 +766,22 @@
           ${actual}</div>`;
       }
       const step = f.step ? `step="${f.step}"` : '';
+      if (f.type === 'password') {
+        const ayudaPassword = (entity === 'usuarios' && f.key === 'password')
+          ? (record ? 'Déjala en blanco para conservar la contraseña actual. ' : '') + 'Mínimo 6 caracteres, con al menos una letra y un número.'
+          : '';
+        return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
+          <div class="relative">
+            <input id="${idAttr}" type="password" value="" autocomplete="new-password" class="w-full rounded-xl border border-gray-200 pl-3.5 pr-11 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30" />
+            <button type="button" onclick="togglePasswordVisibility('${idAttr}', this)" aria-label="Mostrar u ocultar contraseña" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate2 hover:text-ink transition">
+              <svg class="pw-eye-open w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              <svg class="pw-eye-closed w-4.5 h-4.5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.5a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+            </button>
+          </div>
+          ${ayudaPassword ? `<p class="text-xs text-slate2 mt-1.5">${ayudaPassword}</p>` : ''}</div>`;
+      }
       return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
-        <input id="${idAttr}" type="${f.type}" ${step} value="${escapeHtml(val)}" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30" /></div>`;
+        <input id="${idAttr}" type="${f.type}" ${step} value="${escapeHtml(val)}" autocomplete="new-password" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30" /></div>`;
     }).join('');
 
     // ---- Usuarios: si el registro YA existe y es Docente, permitir asignar
@@ -823,6 +946,30 @@
         continue;
       }
 
+      if (f.key === 'password' && entity === 'usuarios') {
+        const v = el.value;
+        if (v === '') {
+          if (!id) {
+            el.classList.add('ring-2', 'ring-coral');
+            el.focus();
+            toast('Completa el campo "' + f.label + '"', 'err');
+            return;
+          }
+          // Editando y se dejó en blanco: conserva la contraseña que ya tenía.
+          const previo = Store.list(entity).find(r => r.id === id) || {};
+          data.password = previo.password || '';
+        } else {
+          if (!validarFortalezaPassword(v)) {
+            el.classList.add('ring-2', 'ring-coral');
+            el.focus();
+            toast('La contraseña debe tener mínimo 6 caracteres, con al menos una letra y un número', 'err');
+            return;
+          }
+          data.password = v;
+        }
+        continue;
+      }
+
       let v = el.value;
       if (f.type === 'number') v = v === '' ? 0 : parseFloat(v);
       if (f.required && (v === '' || v === null || v === undefined)) {
@@ -832,6 +979,15 @@
         return;
       }
       data[f.key] = v;
+    }
+
+    // ---- Usuarios: el correo es único (es el usuario de login) ----
+    if (entity === 'usuarios' && data.email) {
+      const emailDuplicado = Store.list('usuarios').some(u => u.id !== id && u.email.toLowerCase() === data.email.toLowerCase());
+      if (emailDuplicado) {
+        toast('Ya existe otro usuario con el correo "' + data.email + '"', 'err');
+        return;
+      }
     }
 
     // ---- Usuarios: no permitir matricular un estudiante en una cohorte sin cupos ----
@@ -896,6 +1052,13 @@
   }
 
   function askDelete(entity, id) {
+    if (entity === 'usuarios') {
+      const record = Store.list('usuarios').find(r => r.id === id);
+      if (record && (record.rol === 'Coordinador' || record.rol === 'Administrador') && currentAdminRole !== 'superadmin') {
+        toast('Solo el Superadmin puede eliminar una cuenta de Administrador', 'err');
+        return;
+      }
+    }
     deleteCtx = { entity, id };
     document.getElementById('confirmModal').classList.remove('hidden');
   }
@@ -926,10 +1089,12 @@
      - El Superadmin no filtra nada: siempre ve el listado completo.
      ===================================================================== */
 
-  // Usuario "activo" en la simulación de roles.
-  // role: 'superadmin' -> sin filtro, ve todas las cohortes.
-  // role: 'admin'      -> filtrado estricto por cohorteId.
-  let usuarioSimulado = { role: 'superadmin', cohorteId: null, nombre: 'Superadmin (control total)' };
+  // ---------- Aislamiento de datos por cohorte ----------
+  // Nota: el filtrado real por cohorteId para un Administrador que inicia
+  // sesión de verdad se aplica en cada panel (Usuarios, Calificaciones,
+  // etc.) a partir de `Store.list('administradores')`. El simulador de
+  // roles usado durante el desarrollo (que generaba alumnos de prueba)
+  // fue retirado: ya no hace falta y no debe crear datos ficticios.
 
   /**
    * Crea una Cohorte y, en el mismo flujo, registra el Administrador
@@ -950,7 +1115,7 @@
     // ---- Validaciones básicas ----
     if (!nombreCohorte) { toast('El nombre de la cohorte es obligatorio', 'err'); return null; }
     if (!nombreAdmin || !emailAdmin || !passwordAdmin) { toast('Completa nombre, correo y contraseña del administrador', 'err'); return null; }
-    if (passwordAdmin.length < 4) { toast('La contraseña debe tener al menos 4 caracteres', 'err'); return null; }
+    if (!validarFortalezaPassword(passwordAdmin)) { toast('La contraseña debe tener mínimo 6 caracteres, con al menos una letra y un número', 'err'); return null; }
 
     const admins = Store.list('administradores');
     if (admins.some(a => a.email === emailAdmin)) {
@@ -990,17 +1155,9 @@
     admins.unshift(nuevoAdmin);
     Store.save('administradores', admins);
 
-    // ---- 4) Alumnos demo de la cohorte, SOLO para ilustrar el aislamiento en el simulador ----
-    const alumnosDemo = Store.list('alumnos_cohorte');
-    ['Alumno demo 1', 'Alumno demo 2'].forEach((n, i) => {
-      alumnosDemo.push({ id: uid('al'), cohorteId, nombre: n + ' — ' + nombreCohorte, promedio: (3.5 + i * 0.6).toFixed(1) });
-    });
-    Store.save('alumnos_cohorte', alumnosDemo);
-
     toast('Cohorte "' + nombreCohorte + '" creada con administrador ' + nombreAdmin, 'ok');
 
     if (RENDERERS['modulos']) RENDERERS['modulos']();
-    renderSimuladorRoles();
 
     return { cohorte: nuevaCohorte, admin: nuevoAdmin };
   }
@@ -1025,34 +1182,6 @@
     };
     const resultado = crearCohorteConAdmin(nombreCohorte, datosAdmin);
     if (resultado) cerrarModalCohorteAdmin();
-  }
-
-  // ---------- Reglas de aislamiento: qué ve cada rol ----------
-  // Estas dos funciones son el corazón del "multi-tenant básico": todo
-  // el resto de la UI (tablas, métricas, alumnos, calificaciones...)
-  // debería consultar SIEMPRE a través de funciones como estas, nunca
-  // leer Store.list(...) directo, para que el filtro no se pueda saltar.
-  function getCohortesVisibles() {
-    const todas = Store.list('modulos');
-    if (usuarioSimulado.role === 'superadmin') return todas; // control total
-    return todas.filter(c => c.cohorteId === usuarioSimulado.cohorteId); // SOLO la suya
-  }
-  function getAlumnosVisibles() {
-    const todos = Store.list('alumnos_cohorte');
-    if (usuarioSimulado.role === 'superadmin') return todos;
-    return todos.filter(a => a.cohorteId === usuarioSimulado.cohorteId);
-  }
-
-  // ---------- Simulador de roles (botones de prueba) ----------
-  function simularSuperadmin() {
-    usuarioSimulado = { role: 'superadmin', cohorteId: null, nombre: 'Superadmin (control total)' };
-    renderSimuladorRoles();
-  }
-  function simularAdmin(cohorteId) {
-    const admin = Store.list('administradores').find(a => a.cohorteId === cohorteId);
-    if (!admin) return;
-    usuarioSimulado = { role: 'admin', cohorteId: cohorteId, nombre: admin.nombre };
-    renderSimuladorRoles();
   }
 
   // ---------- Render: consola del Superadmin (listado total cohorte <-> admin) ----------
@@ -1089,65 +1218,6 @@
             </tr></thead>
             <tbody>${filas || '<tr><td colspan="4"><div class="admin-empty-state"><svg class="w-8 h-8 text-slate2/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m5-5.13a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 10-3.87-5"/></svg><p class="text-sm">Aún no hay cohortes con administrador. Crea la primera con el botón de arriba.</p></div></td></tr>'}</tbody>
           </table>
-        </div>
-      </div>
-      <div id="mount-simulador-roles" class="admin-panel-card p-6 mb-6"></div>
-    `;
-
-    renderSimuladorRoles();
-  }
-
-  // ---------- Render: Simulador de roles + vista filtrada en vivo ----------
-  function renderSimuladorRoles() {
-    const mount = document.getElementById('mount-simulador-roles');
-    if (!mount) return; // el panel "Cohortes" aún no se ha montado en el DOM
-
-    const admins = Store.list('administradores');
-
-    const botonSuper = `
-      <button onclick="simularSuperadmin()" class="rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition ${usuarioSimulado.role === 'superadmin' ? 'bg-ink text-white' : 'border border-gray-200 text-slate2 hover:bg-gray-50'}">
-        Superadmin
-      </button>`;
-
-    const botonesAdmins = admins.map(a => {
-      const activo = usuarioSimulado.role === 'admin' && usuarioSimulado.cohorteId === a.cohorteId;
-      return `<button onclick="simularAdmin('${a.cohorteId}')" class="rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition ${activo ? 'bg-morado text-white' : 'border border-gray-200 text-slate2 hover:bg-gray-50'}">
-        Admin: ${escapeHtml(a.nombre)}
-      </button>`;
-    }).join('');
-
-    const cohortesVisibles = getCohortesVisibles();
-    const alumnosVisibles = getAlumnosVisibles();
-
-    const listaCohortes = cohortesVisibles.map(c =>
-      `<li class="py-2 border-b border-gray-50 last:border-0 text-sm text-ink font-medium">${escapeHtml(c.nombre)}</li>`
-    ).join('') || '<li class="py-4 text-sm text-slate2 text-center">No hay cohortes visibles para este rol.</li>';
-
-    const listaAlumnos = alumnosVisibles.map(a =>
-      `<li class="py-2 border-b border-gray-50 last:border-0 text-sm text-slate2 flex justify-between"><span>${escapeHtml(a.nombre)}</span><span class="font-semibold text-ink">${a.promedio}</span></li>`
-    ).join('') || '<li class="py-4 text-sm text-slate2 text-center">No hay alumnos visibles para este rol.</li>';
-
-    mount.innerHTML = `
-      <h2 class="text-lg font-extrabold text-ink mb-1">Simulador de roles</h2>
-      <p class="text-sm text-slate2 mb-4 pb-5 border-b border-gray-100">Cambia de usuario de prueba y verifica que un Administrador Normal SOLO ve los datos de su propia cohorte.</p>
-      <div class="flex flex-wrap gap-2 mb-6">${botonSuper}${botonesAdmins}</div>
-      <div class="rounded-xl bg-morado/5 border border-morado/10 p-4 mb-5">
-        <p class="text-xs font-bold uppercase tracking-wide text-slate2">Sesión simulada actual</p>
-        <p class="text-sm font-semibold text-ink mt-1">
-          ${escapeHtml(usuarioSimulado.nombre)}
-          ${usuarioSimulado.role === 'superadmin'
-            ? '· Ve todas las cohortes (sin filtro)'
-            : '· Filtrado por cohorteId: <span class="font-mono text-xs">' + escapeHtml(usuarioSimulado.cohorteId) + '</span>'}
-        </p>
-      </div>
-      <div class="grid sm:grid-cols-2 gap-6">
-        <div>
-          <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">Cohortes visibles (${cohortesVisibles.length})</p>
-          <ul>${listaCohortes}</ul>
-        </div>
-        <div>
-          <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">Alumnos visibles (${alumnosVisibles.length})</p>
-          <ul>${listaAlumnos}</ul>
         </div>
       </div>
     `;
@@ -1368,7 +1438,7 @@
 
     document.getElementById('mount-resumen').innerHTML = `
       <div class="flex items-center justify-end -mt-2 mb-3">
-        <button onclick="resetDemoData()" class="text-xs font-semibold text-slate2 hover:text-ink transition">Restaurar datos de demostración</button>
+        <button onclick="resetDemoData()" class="text-xs font-semibold text-slate2 hover:text-ink transition">Reiniciar plataforma (dejar todo en blanco)</button>
       </div>
       <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">${cardsHtml}</div>
       <div class="grid lg:grid-cols-2 gap-5 mt-5">
@@ -1399,7 +1469,9 @@
 
   // ---------- RENDER: Usuarios ----------
   function renderUsuarios() {
-    const records = Store.list('usuarios');
+    // Los Administradores (rol Coordinador) ya no aparecen aquí: tienen su
+    // propio apartado exclusivo del Superadmin (ver renderAdministradores()).
+    const records = Store.list('usuarios').filter(u => u.rol !== 'Coordinador' && u.rol !== 'Administrador');
     const rows = records.map(u => {
       let cohorteCell = escapeHtml(u.cohorte || '—');
       if (u.rol === 'Docente') {
@@ -1436,6 +1508,48 @@
       </div>`;
   }
 
+  // ---------- ADMINISTRADORES (apartado exclusivo del Superadmin) ----------
+  // A diferencia de "Usuarios" (Estudiantes/Docentes), este apartado solo
+  // existe para que el Superadmin cree, edite o elimine cuentas con rol
+  // "Coordinador" (mostradas aquí como "Administrador"). Reutiliza el mismo
+  // modal/CRUD de 'usuarios', pero con el rol fijo en 'Coordinador' y sin
+  // mostrar los campos de rol/cohorte (openModal('usuarios', id, 'Coordinador')).
+  function renderAdministradores() {
+    const records = Store.list('usuarios').filter(u => u.rol === 'Coordinador' || u.rol === 'Administrador');
+    const rows = records.map(u => `
+      <tr data-search="${escapeHtml((u.nombre + ' ' + u.email).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(u.nombre)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.email)}</td>
+        <td class="py-3 px-4">${statusPill(u.estado, ESTADO_COLORS)}</td>
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          <button onclick="openModal('usuarios','${u.id}','Coordinador')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
+          <button onclick="askDelete('usuarios','${u.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
+        </td>
+      </tr>`).join('');
+
+    document.getElementById('mount-administradores').innerHTML = `
+      <div class="admin-panel-card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-gray-100">
+          <div>
+            <h2 class="text-lg font-extrabold text-ink">Administradores</h2>
+            <p class="text-sm text-slate2 mt-0.5">${records.length} administrador${records.length === 1 ? '' : 'es'} con acceso al panel de Administración.</p>
+          </div>
+          <button onclick="openModal('usuarios', null, 'Coordinador')" class="rounded-xl bg-ink text-white text-sm font-semibold px-4 py-2 hover:bg-black transition flex items-center gap-1.5 whitespace-nowrap shadow-sm">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Nuevo administrador
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table id="table-administradores" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Nombre</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+            </tr></thead>
+            <tbody>${rows || emptyRow(4)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
   // ---------- HORARIO (antes "Módulos y cohortes") ----------
   // Estado en memoria de la grilla que se está armando/editando.
   let horarioState = { cohorte: null, mes: null, incluyeSabado: false };
@@ -1451,7 +1565,6 @@
       return `
       <tr data-search="${escapeHtml((m.nombre + ' ' + m.modulo + ' ' + docentes.join(' ')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(m.nombre)}</td>
-        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(m.modulo)}</td>
         <td class="py-3 px-4 text-sm text-slate2">${fmtDate(m.fechaInicio)} – ${fmtDate(m.fechaFin)}</td>
         <td class="py-3 px-4 text-sm text-slate2 min-w-[110px]">
           <div class="flex items-center gap-2">
@@ -1504,9 +1617,9 @@
         <div class="overflow-x-auto">
           <table id="table-modulos" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Módulo</th><th class="py-2.5 px-4">Fechas</th><th class="py-2.5 px-4">Cupos</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+              <th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Fechas</th><th class="py-2.5 px-4">Cupos</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
             </tr></thead>
-            <tbody>${rows || emptyRow(7)}</tbody>
+            <tbody>${rows || emptyRow(6)}</tbody>
           </table>
         </div>
       </div>`;
@@ -2132,10 +2245,70 @@
       ${bloquesCohorte || `<div class="admin-panel-card p-8 text-center"><p class="text-sm text-slate2">Aún no hay cohortes registradas.</p></div>`}`;
   }
 
+  // ---------- RENDER: Informes enviados por docentes (agrupados por profesor) ----------
+  function renderInformesAdmin() {
+    // Vista de SOLO LECTURA para Superadmin y Administración: agrupa todos
+    // los informes que los docentes han guardado (ver guardarInformeDocente),
+    // agrupados por profesor, para que el administrador pueda revisarlos
+    // sin tener que entrar cohorte por cohorte.
+    const informes = Store.list('informes_docente');
+
+    const porDocente = {};
+    informes.forEach(i => {
+      (porDocente[i.docente] = porDocente[i.docente] || []).push(i);
+    });
+    const docentesConInformes = Object.keys(porDocente).sort((a, b) => a.localeCompare(b));
+
+    const bloquesDocente = docentesConInformes.map(nombreDocente => {
+      const lista = porDocente[nombreDocente].slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+      const filas = lista.map(i => `
+        <tr class="border-b border-gray-50 last:border-0">
+          <td class="py-3 px-4 text-sm font-semibold text-ink">${nombrePersonaClicable(i.estudiante, 'Estudiante')}</td>
+          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(i.cohorte || '—')}</td>
+          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(i.materia || '—')}</td>
+          <td class="py-3 px-4 text-sm text-slate2">${i.fecha ? fmtDate(i.fecha) : '—'}</td>
+          <td class="py-3 px-4 text-sm text-slate2">${i.asistenciaPct !== null && i.asistenciaPct !== undefined ? i.asistenciaPct + '%' : 'Sin datos'}</td>
+          <td class="py-3 px-4 text-sm">${i.promedio !== null && i.promedio !== undefined
+            ? `<span class="font-bold" style="color:${colorCualitativa(i.promedio)}">${Number(i.promedio).toFixed(1)}</span> <span class="text-[11px] text-slate2">(${escapeHtml(i.cualitativa || '')})</span>`
+            : '<span class="text-slate2 text-xs">Sin datos</span>'}</td>
+          <td class="py-3 px-4 text-sm text-ink max-w-xs">${i.observaciones ? escapeHtml(i.observaciones) : '<span class="text-slate2 italic">Sin observaciones</span>'}</td>
+        </tr>`).join('');
+
+      return `
+      <div class="admin-panel-card p-6 mb-6">
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <p class="text-sm font-bold text-ink">${nombrePersonaClicable(nombreDocente, 'Docente')}</p>
+          <span class="text-xs text-slate2">${lista.length} informe${lista.length !== 1 ? 's' : ''} enviado${lista.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Materia</th><th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Asistencia</th><th class="py-2.5 px-4">Nota</th><th class="py-2.5 px-4">Observaciones</th>
+            </tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('mount-informes-admin').innerHTML = `
+      <div class="mb-5">
+        <h2 class="text-lg font-extrabold text-ink">Informes de docentes</h2>
+        <p class="text-sm text-slate2 mt-0.5">Solo lectura: informes que cada docente ha enviado sobre sus estudiantes, agrupados por profesor.</p>
+      </div>
+      ${bloquesDocente || `<div class="admin-panel-card p-8 text-center"><p class="text-sm text-slate2">Aún no hay informes enviados por los docentes.</p></div>`}`;
+  }
+
   // ---------- RENDER: Encuestas de satisfacción ----------
   function renderEncuestas() {
-    const puedeEditar = currentAdminRole === 'superadmin';
-    const records = Store.list('encuestas');
+    // Tanto Superadmin como Administración pueden crear y editar encuestas.
+    const puedeEditar = true;
+    const respuestasTodas = Store.list('encuestas_respuestas');
+    const records = Store.list('encuestas').map(e => {
+      const propias = respuestasTodas.filter(r => r.encuestaId === e.id);
+      const promedio = propias.length ? propias.reduce((a, r) => a + Number(r.calificacion || 0), 0) / propias.length : 0;
+      return { ...e, respuestas: propias.length, promedio };
+    });
     const rows = records.map(e => `
       <tr data-search="${escapeHtml(e.titulo.toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(e.titulo)}</td>
@@ -2169,6 +2342,30 @@
   // ---------- RENDER: Configuración ----------
   function renderConfiguracion() {
     const cfg = Store.get('configuracion') || SEED.configuracion;
+    const cred = Store.get('superadmin_credentials') || SEED.superadmin_credentials;
+    const seguridadSuperadmin = currentAdminRole === 'superadmin' ? `
+      <div class="admin-panel-card p-6 sm:p-8 max-w-2xl mt-6">
+        <h2 class="text-lg font-extrabold text-ink mb-1">Seguridad del Superadmin</h2>
+        <p class="text-sm text-slate2 mb-6">Cambia el correo y/o la contraseña con los que inicias sesión como Superadmin. Debes confirmar tu contraseña actual para guardar cambios.</p>
+        <form onsubmit="return false;" class="grid gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Correo de acceso</label>
+            <input id="sa_email" type="email" value="${escapeHtml(cred.email)}" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Contraseña actual</label>
+            <input id="sa_actual" type="password" autocomplete="off" placeholder="Requerida para confirmar el cambio" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Nueva contraseña</label>
+            <input id="sa_nueva" type="password" autocomplete="new-password" placeholder="Déjala en blanco para no cambiarla" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30" />
+          </div>
+        </form>
+        <div class="mt-6 pt-5 border-t border-gray-100">
+          <button onclick="guardarCredencialesSuperadmin()" class="rounded-xl bg-ink text-white font-semibold text-sm py-3 px-6 hover:bg-black transition shadow-sm">Guardar credenciales</button>
+        </div>
+      </div>` : '';
+
     document.getElementById('mount-configuracion').innerHTML = `
       <div class="admin-panel-card p-6 sm:p-8 max-w-2xl">
         <h2 class="text-lg font-extrabold text-ink mb-1">Configuración general</h2>
@@ -2181,6 +2378,10 @@
           <div>
             <label class="block text-xs font-semibold text-slate2 mb-1.5">Ciudad (para cartas y memorandos)</label>
             <input id="cfg_ciudad" type="text" value="${escapeHtml(cfg.ciudad || '')}" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Dirección</label>
+            <input id="cfg_direccion" type="text" placeholder="Ej: Calle 10 #5-20, Quibdó" value="${escapeHtml(cfg.direccion || '')}" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30" />
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate2 mb-1.5">Correo de contacto</label>
@@ -2210,13 +2411,60 @@
         <div class="mt-6 pt-5 border-t border-gray-100">
           <button onclick="saveConfiguracion()" class="rounded-xl bg-ink text-white font-semibold text-sm py-3 px-6 hover:bg-black transition shadow-sm">Guardar configuración</button>
         </div>
-      </div>`;
+      </div>
+
+      <div class="admin-panel-card p-6 sm:p-8 max-w-2xl mt-6">
+        <h2 class="text-lg font-extrabold text-ink mb-1">Postulación pública</h2>
+        <p class="text-sm text-slate2 mb-6">Controla el botón "Postular" del sitio público. Pega aquí el link del cuestionario externo (Google Forms u otro) donde los interesados dejan sus datos, y actívalo cuando quieras recibir postulaciones.</p>
+        <form onsubmit="return false;" class="grid gap-4">
+          <label class="flex items-center gap-2 text-sm text-ink">
+            <input id="cfg_postulacionHabilitada" type="checkbox" ${cfg.postulacionHabilitada ? 'checked' : ''} class="rounded" />
+            Habilitar postulación en el sitio público
+          </label>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Link del cuestionario</label>
+            <input id="cfg_postulacionUrl" type="url" placeholder="https://forms.gle/..." value="${escapeHtml(cfg.postulacionUrl || '')}" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30" />
+            <p class="text-xs text-slate2 mt-1.5">Mientras esté deshabilitada, el botón "Postular" del sitio mostrará un aviso de que las postulaciones están cerradas, sin importar el link que hayas guardado aquí.</p>
+          </div>
+        </form>
+        <div class="mt-6 pt-5 border-t border-gray-100">
+          <button onclick="saveConfiguracion()" class="rounded-xl bg-ink text-white font-semibold text-sm py-3 px-6 hover:bg-black transition shadow-sm">Guardar configuración</button>
+        </div>
+      </div>
+      ${seguridadSuperadmin}`;
+  }
+
+  // Cambia el correo y/o la contraseña con los que se inicia sesión como
+  // Superadmin. Exige la contraseña actual para confirmar el cambio; si
+  // "Nueva contraseña" se deja en blanco, conserva la que ya tenía.
+  function guardarCredencialesSuperadmin() {
+    const cred = Store.get('superadmin_credentials') || SEED.superadmin_credentials;
+    const nuevoEmail = document.getElementById('sa_email').value.trim();
+    const actual = document.getElementById('sa_actual').value;
+    const nueva = document.getElementById('sa_nueva').value;
+
+    if (!nuevoEmail) { toast('El correo no puede quedar vacío', 'err'); return; }
+    if (actual !== cred.password) { toast('La contraseña actual no es correcta', 'err'); return; }
+
+    Store.set('superadmin_credentials', { email: nuevoEmail, password: nueva !== '' ? nueva : cred.password });
+    document.getElementById('sa_actual').value = '';
+    document.getElementById('sa_nueva').value = '';
+    toast('Credenciales del Superadmin actualizadas', 'ok');
   }
 
   function saveConfiguracion() {
+    const urlPostulacion = document.getElementById('cfg_postulacionUrl').value.trim();
+    const habilitarPostulacion = document.getElementById('cfg_postulacionHabilitada').checked;
+
+    if (habilitarPostulacion && !urlPostulacion) {
+      toast('Para habilitar la postulación primero pega el link del cuestionario', 'err');
+      return;
+    }
+
     const cfg = {
       nombre: document.getElementById('cfg_nombre').value.trim(),
       ciudad: document.getElementById('cfg_ciudad').value.trim(),
+      direccion: document.getElementById('cfg_direccion').value.trim(),
       correo: document.getElementById('cfg_correo').value.trim(),
       telefono: document.getElementById('cfg_telefono').value.trim(),
       cupoMaximo: parseFloat(document.getElementById('cfg_cupo').value) || 0,
@@ -2224,23 +2472,70 @@
       asistenciaMinima: parseFloat(document.getElementById('cfg_asistencia').value) || 0,
       notificacionesEmail: document.getElementById('cfg_notifEmail').checked,
       notificacionesIA: document.getElementById('cfg_notifIA').checked,
+      postulacionHabilitada: habilitarPostulacion,
+      postulacionUrl: urlPostulacion,
     };
     Store.set('configuracion', cfg);
     toast('Configuración guardada', 'ok');
     renderSemaforo();
     renderResumen();
+    // El sitio público (Contáctanos + botón Postular) vive en el mismo
+    // documento que el panel Admin, así que se actualiza al instante.
+    renderContactoPublico();
+    actualizarBotonesPostular();
+  }
+
+  // ---------- Sitio público: Contáctanos + Postular (alimentados por Configuración) ----------
+
+  /** Pinta el bloque "Contacto" del footer público con los datos reales de la fundación. */
+  function renderContactoPublico() {
+    const el = document.getElementById('contactoPublico');
+    if (!el) return; // el sitio público aún no está en el DOM (no debería pasar, pero por seguridad)
+    const cfg = Store.get('configuracion') || SEED.configuracion;
+
+    const filas = [];
+    if (cfg.correo) filas.push(`<a href="mailto:${escapeHtml(cfg.correo)}" class="flex items-center gap-2 hover:text-ink transition">${escapeHtml(cfg.correo)}</a>`);
+    if (cfg.telefono) filas.push(`<a href="tel:${escapeHtml(cfg.telefono.replace(/\s+/g, ''))}" class="flex items-center gap-2 hover:text-ink transition">${escapeHtml(cfg.telefono)}</a>`);
+    if (cfg.direccion) filas.push(`<span class="flex items-center gap-2">${escapeHtml(cfg.direccion)}${cfg.ciudad ? ', ' + escapeHtml(cfg.ciudad) : ''}</span>`);
+    else if (cfg.ciudad) filas.push(`<span class="flex items-center gap-2">${escapeHtml(cfg.ciudad)}</span>`);
+
+    el.innerHTML = filas.join('') || '<span class="text-slate2">Datos de contacto próximamente.</span>';
+  }
+
+  /** Activa/desactiva y enlaza los botones "Postular" del sitio con el link que definió el Superadmin. */
+  function actualizarBotonesPostular() {
+    const cfg = Store.get('configuracion') || SEED.configuracion;
+    const habilitada = !!(cfg.postulacionHabilitada && cfg.postulacionUrl);
+    document.querySelectorAll('.btn-postular').forEach(btn => {
+      btn.classList.toggle('opacity-50', !habilitada);
+      btn.title = habilitada ? 'Postula al programa' : 'Las postulaciones no están abiertas en este momento';
+    });
+  }
+
+  /** onclick de los botones "Postular": abre el cuestionario externo o avisa que está cerrado. */
+  function abrirPostulacion(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    const cfg = Store.get('configuracion') || SEED.configuracion;
+    if (cfg.postulacionHabilitada && cfg.postulacionUrl) {
+      window.open(cfg.postulacionUrl, '_blank', 'noopener');
+    } else {
+      toast('Las postulaciones no están abiertas en este momento. Vuelve pronto.', 'info');
+    }
   }
 
   const RENDERERS = {
     resumen: renderResumen,
     usuarios: renderUsuarios,
+    administradores: renderAdministradores,
     modulos: renderModulos,
+    codigosqr: renderCodigosQr,
     pensum: renderPensum,
     semaforo: renderSemaforo,
     memorandos: renderMemorandos,
     pqr: renderPqr,
     reuniones: renderReuniones,
     calificaciones: renderCalificaciones,
+    informesAdmin: renderInformesAdmin,
     encuestas: renderEncuestas,
     configuracion: renderConfiguracion,
   };
@@ -2275,6 +2570,104 @@
   }
 
   // ---------- RENDER: Resumen (docente) ----------
+  // ---------- PERFIL (docente) ----------
+  // Foto de perfil y descripción breve, ambas opcionales. La foto se guarda
+  // como data URL (base64) dentro del propio registro de usuario en
+  // localStorage (Store 'usuarios'); no requiere backend de archivos.
+  function renderPerfilDocente() {
+    const doc = currentDocente || {};
+    const iniciales = escapeHtml((doc.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+    const avatarHtml = doc.fotoUrl
+      ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100" />`
+      : `<div class="w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>`;
+
+    document.getElementById('mount-t-perfil').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 sm:p-8 max-w-2xl">
+        <div class="flex items-center gap-5 mb-6">
+          ${avatarHtml}
+          <div>
+            <p class="text-base font-extrabold text-ink">${escapeHtml(doc.nombre || '')}</p>
+            <p class="text-sm text-slate2">${escapeHtml(doc.email || '')}</p>
+            <div class="flex items-center gap-3 mt-1.5">
+              <label class="text-xs font-semibold text-morado hover:underline cursor-pointer">
+                Cambiar foto
+                <input id="perfil_foto_input" type="file" accept="image/*" class="hidden" onchange="subirFotoPerfilDocente(this)" />
+              </label>
+              ${doc.fotoUrl ? `<button onclick="quitarFotoPerfilDocente()" class="text-xs font-semibold text-coral hover:underline">Quitar foto</button>` : ''}
+            </div>
+            <p class="text-[11px] text-slate2 mt-1">Foto opcional · JPG o PNG, máx. 2 MB</p>
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4 mb-6">
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Nombre completo</label>
+            <input id="perfil_nombre" type="text" value="${escapeHtml(doc.nombre || '')}" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-turquesa/30" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Correo electrónico</label>
+            <input type="email" value="${escapeHtml(doc.email || '')}" disabled class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm bg-gray-50 text-slate2" />
+          </div>
+        </div>
+        <div class="mb-6">
+          <label class="block text-xs font-semibold text-slate2 mb-1.5">Descripción breve</label>
+          <textarea id="perfil_descripcion" rows="3" maxlength="280" placeholder="Ej: Docente de Desarrollo Web, apasionado por enseñar buenas prácticas de programación (opcional)" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-turquesa/30 resize-none">${escapeHtml(doc.descripcion || '')}</textarea>
+          <p class="text-[11px] text-slate2 mt-1">Opcional · máx. 280 caracteres</p>
+        </div>
+        <div class="border-t border-gray-100 pt-6">
+          <p class="text-sm font-bold text-ink mb-3">Cambiar contraseña</p>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <input id="perfil_pass1" type="password" placeholder="Nueva contraseña" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-turquesa/30" />
+            <input id="perfil_pass2" type="password" placeholder="Confirmar contraseña" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-turquesa/30" />
+          </div>
+        </div>
+        <button onclick="guardarPerfilDocente()" class="mt-6 rounded-xl bg-ink text-white font-semibold text-sm py-3 px-6 hover:bg-black transition">Guardar cambios</button>
+      </div>`;
+  }
+
+  function actualizarUsuarioDocenteActual(cambios) {
+    const usuarios = Store.list('usuarios').map(u => u.id === currentDocente.id ? { ...u, ...cambios } : u);
+    Store.set('usuarios', usuarios);
+    currentDocente = { ...currentDocente, ...cambios };
+  }
+
+  function subirFotoPerfilDocente(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast('El archivo debe ser una imagen', 'err'); return; }
+    if (file.size > 2 * 1024 * 1024) { toast('La imagen no debe superar 2 MB', 'err'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      actualizarUsuarioDocenteActual({ fotoUrl: reader.result });
+      toast('Foto de perfil actualizada', 'ok');
+      renderPerfilDocente();
+    };
+    reader.onerror = () => toast('No se pudo leer la imagen', 'err');
+    reader.readAsDataURL(file);
+  }
+
+  function quitarFotoPerfilDocente() {
+    actualizarUsuarioDocenteActual({ fotoUrl: '' });
+    toast('Foto de perfil eliminada', 'ok');
+    renderPerfilDocente();
+  }
+
+  function guardarPerfilDocente() {
+    const nombre = document.getElementById('perfil_nombre').value.trim();
+    const descripcion = document.getElementById('perfil_descripcion').value.trim();
+    const p1 = document.getElementById('perfil_pass1').value;
+    const p2 = document.getElementById('perfil_pass2').value;
+    if (p1 || p2) {
+      if (p1.length < 6) { toast('La nueva contraseña debe tener al menos 6 caracteres', 'err'); return; }
+      if (p1 !== p2) { toast('Las contraseñas no coinciden', 'err'); return; }
+    }
+    const cambios = {};
+    if (nombre) cambios.nombre = nombre;
+    cambios.descripcion = descripcion; // opcional: puede quedar vacía
+    actualizarUsuarioDocenteActual(cambios);
+    toast('Perfil actualizado correctamente', 'ok');
+    renderPerfilDocente();
+  }
+
   function renderResumenDocente() {
     const doc = currentDocente || {};
     const modulos = docenteModulosActivos();
@@ -2310,8 +2703,16 @@
         </div>
       </div>
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6">
-        <h2 class="text-base font-extrabold text-ink mb-1">Bienvenido, ${escapeHtml(doc.nombre || 'Docente')}</h2>
-        <p class="text-sm text-slate2 mb-4">${escapeHtml(doc.email || '')} · Este es tu panel docente.</p>
+        <div class="flex items-start gap-4 mb-4">
+          ${doc.fotoUrl
+            ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" class="w-12 h-12 rounded-full object-cover shrink-0 border border-gray-100" />`
+            : `<div class="w-12 h-12 rounded-full grid place-items-center text-sm font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${escapeHtml((doc.nombre || '?').split(' ').slice(0,2).map(w => w[0]).join(''))}</div>`}
+          <div>
+            <h2 class="text-base font-extrabold text-ink mb-1">Bienvenido, ${escapeHtml(doc.nombre || 'Docente')}</h2>
+            <p class="text-sm text-slate2">${escapeHtml(doc.email || '')} · Este es tu panel docente.</p>
+            ${doc.descripcion ? `<p class="text-sm text-slate2 mt-1.5 italic">"${escapeHtml(doc.descripcion)}"</p>` : ''}
+          </div>
+        </div>
         <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">Tus módulos y cohortes</p>
         ${modulosRows || '<p class="text-sm text-slate2 text-center py-6">Aún no tienes módulos asignados. El coordinador puede asignarlos desde el panel administrativo.</p>'}
       </div>`;
@@ -2367,10 +2768,155 @@
       ${gruposHtml}`;
   }
 
-  // ---------- RENDER: Asistencia (QR) — docente ----------
+  // ---------- Códigos QR reales de asistencia (imprimibles y reutilizables) ----------
+  // Cada cohorte tiene DOS códigos QR ESTABLES (se generan una sola vez y no
+  // cambian día a día — se imprimen y listo, "al otro día es lo mismo"):
+  //  - QR del DOCENTE: al abrirlo (escaneándolo con la cámara) activa la
+  //    sesión de asistencia de HOY para esa cohorte.
+  //  - QR del ESTUDIANTE: al abrirlo, pide el correo con el que fue
+  //    registrado en el sistema y aplica su asistencia según la hora.
+  // Ambos códigos codifican una URL real a esta misma página
+  // (?qr=docente|estudiante&t=TOKEN) para que abrirlos con la cámara de un
+  // celular funcione de verdad en cuanto el sitio esté publicado en una URL.
+  function getOrCrearTokenQR(tipo, cohorteNombre, docenteNombre) {
+    const tokens = Store.list('qr_tokens');
+    let rec = tokens.find(t => t.tipo === tipo && t.cohorte === cohorteNombre && t.docente === docenteNombre);
+    if (!rec) {
+      rec = { id: uid('qr'), tipo, cohorte: cohorteNombre, docente: docenteNombre, token: Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4) };
+      tokens.push(rec);
+      Store.set('qr_tokens', tokens);
+    }
+    return rec.token;
+  }
+
+  // La materia/tema que dicta un docente específico dentro de una cohorte,
+  // según la grilla de horarios (celdas con docente asignado). Si el
+  // docente tiene varias celdas, se usa la primera como etiqueta.
+  function materiaDeDocenteEnCohorte(cohorteNombre, docenteNombre) {
+    const horarios = Store.list('horarios').filter(h => h.cohorte === cohorteNombre);
+    for (const h of horarios) {
+      const celdas = Object.values(h.celdas || {});
+      const celda = celdas.find(c => c && c.docente === docenteNombre && c.tema);
+      if (celda) return celda.tema;
+    }
+    return null;
+  }
+
+  function urlQr(tipo, token) {
+    return location.origin + location.pathname + '?qr=' + tipo + '&t=' + token;
+  }
+
+  // Dibuja un QR real (librería qrcodejs, cargada en index.html) dentro de divId.
+  function pintarQrImprimible(divId, texto) {
+    const cont = document.getElementById(divId);
+    if (!cont) return;
+    cont.innerHTML = '';
+    if (typeof QRCode === 'undefined') {
+      cont.innerHTML = '<p class="text-xs text-coral px-2">No se pudo cargar la librería de códigos QR (revisa tu conexión a internet).</p>';
+      return;
+    }
+    new QRCode(cont, { text: texto, width: 152, height: 152, correctLevel: QRCode.CorrectLevel.M });
+  }
+
+  // Abre una ventana lista para imprimir/descargar el QR ya dibujado en divId.
+  function imprimirQr(titulo, subtitulo, divId) {
+    const cont = document.getElementById(divId);
+    const el = cont ? cont.querySelector('img, canvas') : null;
+    const src = el ? (el.tagName === 'CANVAS' ? el.toDataURL('image/png') : el.src) : '';
+    if (!src) { toast('El código QR aún no está listo, espera un momento', 'err'); return; }
+    const win = window.open('', '_blank');
+    if (!win) { toast('Habilita las ventanas emergentes para imprimir el QR', 'err'); return; }
+    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${escapeHtml(titulo)}</title>
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;color:#14181F;text-align:center;padding:60px 20px;}
+      h1{font-size:20px;margin-bottom:4px;} p{color:#5B6472;font-size:13px;margin-top:0;}
+      img{margin:28px 0;width:260px;height:260px;}
+      button{margin-top:10px;border:none;border-radius:9999px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer;background:#14181F;color:#fff;}
+      @media print{button{display:none;}}
+    </style></head><body>
+    <button onclick="window.print()">Descargar / Imprimir</button>
+    <h1>${escapeHtml(titulo)}</h1>
+    <p>${escapeHtml(subtitulo)}</p>
+    <img src="${src}" alt="Código QR" />
+    <p>Fundación A+ — Training de 100 a 1000+</p>
+    </body></html>`);
+    win.document.close();
+  }
+
+  // ---------- Asistencia automatizada por código de sesión (docente + estudiante) ----------
+  // El docente "habilita" el código de la sesión de hoy para su cohorte
+  // (equivalente a mostrar el QR en el salón). A partir de esa hora de
+  // inicio, el sistema calcula el estado de cada estudiante SOLO con el
+  // tiempo transcurrido — nadie marca asistencia manualmente:
+  //   0–20 min desde el inicio   -> Puntual (Presente)
+  //   20–50 min desde el inicio  -> Tarde
+  //   +50 min sin escanear       -> Ausente (Falla), se registra solo
+  const VENTANA_PUNTUAL_MIN = 20;
+  const VENTANA_TARDE_MIN = 50; // 20 + 30 minutos de tolerancia
+
+  function generarCodigoSesion() {
+    return Math.random().toString(36).slice(2, 8).toUpperCase();
+  }
+
+  function sesionAsistenciaHoy(cohorteNombre, docenteNombre) {
+    const hoy = new Date().toISOString().slice(0, 10);
+    return Store.list('sesiones_asistencia').find(s => s.cohorte === cohorteNombre && s.fecha === hoy && s.iniciadaPor === docenteNombre) || null;
+  }
+
+  function minutosTranscurridos(horaInicioISO) {
+    return (Date.now() - new Date(horaInicioISO).getTime()) / 60000;
+  }
+
+  function estadoPorTiempo(mins) {
+    if (mins <= VENTANA_PUNTUAL_MIN) return 'Presente';
+    if (mins <= VENTANA_TARDE_MIN) return 'Tarde';
+    return 'Falla';
+  }
+
+  // Una vez cerrada la ventana (50 min), a quien nunca escaneó se le crea
+  // automáticamente el registro "Falla". Se llama cada vez que se pinta el
+  // panel de asistencia (docente o estudiante), así todo queda al día solo.
+  // Se compara por sesionId (única por docente+cohorte+día), así la
+  // asistencia de cada materia queda completamente separada.
+  function sincronizarAusentesSesion(sesion, estudiantesCohorte) {
+    if (!sesion) return;
+    if (minutosTranscurridos(sesion.horaInicio) <= VENTANA_TARDE_MIN) return;
+    const registros = Store.list('asistencia');
+    let cambiado = false;
+    estudiantesCohorte.forEach(e => {
+      const yaTiene = registros.some(r => r.estudiante === e.nombre && r.sesionId === sesion.id);
+      if (!yaTiene) {
+        registros.push({ id: uid('as'), estudiante: e.nombre, modulo: sesion.modulo, docente: sesion.iniciadaPor, materia: sesion.materia || sesion.modulo, fecha: sesion.fecha, estado: 'Falla', sesionId: sesion.id, automatico: true });
+        cambiado = true;
+      }
+    });
+    if (cambiado) Store.set('asistencia', registros);
+  }
+
+  function estadoVentanaSesion(sesion) {
+    const mins = minutosTranscurridos(sesion.horaInicio);
+    if (mins <= VENTANA_PUNTUAL_MIN) return { texto: `Ventana de puntualidad activa — quedan ${Math.ceil(VENTANA_PUNTUAL_MIN - mins)} min`, color: '#0f8f89' };
+    if (mins <= VENTANA_TARDE_MIN) return { texto: `Ventana de tolerancia (llegada tarde) activa — quedan ${Math.ceil(VENTANA_TARDE_MIN - mins)} min`, color: '#b5790f' };
+    return { texto: 'Sesión cerrada — quien no escaneó quedó automáticamente como ausente', color: '#F0455C' };
+  }
+
+  function estadoActualEstudianteSesion(sesion, estudianteNombreVal) {
+    if (!sesion) return { estado: 'Sin sesión', automatico: false };
+    const registro = Store.list('asistencia').find(r => r.estudiante === estudianteNombreVal && r.sesionId === sesion.id);
+    if (registro) return { estado: registro.estado, automatico: !!registro.automatico };
+    return minutosTranscurridos(sesion.horaInicio) <= VENTANA_TARDE_MIN
+      ? { estado: 'Esperando escaneo', automatico: false }
+      : { estado: 'Falla', automatico: true };
+  }
+
+  // ---------- RENDER: Asistencia (QR automático) — docente ----------
   let docenteAsistCohorte = null;
+  let asistenciaDocenteTimer = null;
 
   function renderAsistenciaDocente() {
+    if (asistenciaDocenteTimer) clearInterval(asistenciaDocenteTimer);
+    const doc = currentDocente || {};
+
     const modulos = docenteModulosActivos();
     if (!docenteAsistCohorte || !modulos.some(m => m.nombre === docenteAsistCohorte)) {
       docenteAsistCohorte = modulos.length ? modulos[0].nombre : null;
@@ -2379,36 +2925,72 @@
 
     if (!modulos.length) {
       document.getElementById('mount-t-asistencia').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
-        <p class="text-sm text-slate2">Aún no tienes cohortes asignadas. El coordinador debe asignarte una desde el panel administrativo para poder tomar asistencia.</p>
+        <p class="text-sm text-slate2">Aún no tienes cohortes asignadas. El coordinador debe asignarte una desde el panel administrativo para poder abrir la asistencia.</p>
       </div>`;
       return;
     }
 
     const estudiantes = docenteEstudiantesDeCohorte(moduloSel.nombre);
-    const hoy = new Date().toISOString().slice(0, 10);
-    const registrosHoy = Store.list('asistencia').filter(a => a.modulo === moduloSel.modulo && a.fecha === hoy);
-    const pillMap = { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'], 'Sin registrar': { bg: '#5B647214', text: '#5B6472' } };
+    const sesion = sesionAsistenciaHoy(moduloSel.nombre, doc.nombre);
+    if (sesion) sincronizarAusentesSesion(sesion, estudiantes);
+
+    const pillMap = { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'], 'Esperando escaneo': { bg: '#5B647214', text: '#5B6472' }, 'Sin sesión': { bg: '#5B647214', text: '#5B6472' } };
 
     const selector = `<select onchange="cambiarCohorteAsistDocente(this.value)" class="rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30">
       ${modulos.map(m => `<option value="${escapeHtml(m.nombre)}" ${m.nombre === docenteAsistCohorte ? 'selected' : ''}>${escapeHtml(m.nombre)} — ${escapeHtml(m.modulo)}</option>`).join('')}
     </select>`;
 
+    const materiaDoc = materiaDeDocenteEnCohorte(moduloSel.nombre, doc.nombre) || moduloSel.modulo;
+    const tokenDocente = getOrCrearTokenQR('docente', moduloSel.nombre, doc.nombre);
+    const tokenEstudiante = getOrCrearTokenQR('estudiante', moduloSel.nombre, doc.nombre);
+
+    const tarjetasQr = `
+      <div class="grid sm:grid-cols-2 gap-5 mb-6">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 text-center">
+          <p class="text-sm font-bold text-ink mb-1">Tu código — actívalo cada día</p>
+          <p class="text-xs text-slate2 mb-4">Este código es solo tuyo, para <strong>${escapeHtml(materiaDoc)}</strong>. Imprímelo una sola vez. Escanéalo al empezar tu clase para activar la ventana de asistencia de hoy; al día siguiente funciona igual.</p>
+          <div id="qrDocenteImg" class="flex justify-center mb-4"></div>
+          <button onclick="imprimirQr('Código del docente — ${escapeHtml(materiaDoc)}','Escanéalo para activar la asistencia de hoy','qrDocenteImg')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 text-center">
+          <p class="text-sm font-bold text-ink mb-1">Código para tus estudiantes</p>
+          <p class="text-xs text-slate2 mb-4">Imprímelo y pégalo en el salón. Solo aplica para <strong>${escapeHtml(materiaDoc)}</strong>: cada estudiante lo escanea, escribe su correo registrado y su asistencia se aplica sola según la hora.</p>
+          <div id="qrEstudianteImg" class="flex justify-center mb-4"></div>
+          <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(materiaDoc)}','Escanéalo e ingresa tu correo institucional','qrEstudianteImg')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+        </div>
+      </div>`;
+
+    let tarjetaSesion;
+    if (!sesion) {
+      tarjetaSesion = `
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <p class="text-sm font-bold text-ink">Asistencia de hoy: sin activar</p>
+            <p class="text-xs text-slate2 mt-1">Actívala escaneando tu código QR de arriba, o con este botón si estás en este mismo dispositivo. Desde ahí, tus estudiantes tendrán ${VENTANA_PUNTUAL_MIN} minutos para llegar puntuales y hasta ${VENTANA_TARDE_MIN} para llegar tarde. Después, quien no escaneó queda ausente solo.</p>
+          </div>
+          <button onclick="habilitarSesionAsistenciaDocente()" class="rounded-full bg-ink text-white font-semibold text-sm py-2.5 px-6 hover:bg-morado transition shrink-0">Activar ahora</button>
+        </div>`;
+    } else {
+      const ventana = estadoVentanaSesion(sesion);
+      tarjetaSesion = `
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+          <p class="text-sm font-bold text-ink">Asistencia de hoy: activa</p>
+          <p class="text-xs text-slate2 mt-1">Activada a las ${new Date(sesion.horaInicio).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}${sesion.iniciadaPor ? ' por ' + escapeHtml(sesion.iniciadaPor) : ''}.</p>
+          <p class="text-xs font-bold mt-2" style="color:${ventana.color}">${ventana.texto}</p>
+        </div>`;
+    }
+
     const filasHoy = estudiantes.length ? estudiantes.map(e => {
-      const reg = registrosHoy.find(r => r.estudiante === e.nombre);
-      const estado = reg ? reg.estado : 'Sin registrar';
+      const info = estadoActualEstudianteSesion(sesion, e.nombre);
+      const etiqueta = info.estado === 'Falla' && info.automatico ? 'Falla (automático)' : info.estado;
       return `<tr class="border-b border-gray-50 last:border-0">
         <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(e.nombre)}</td>
-        <td class="py-3 px-4">${statusPill(estado, pillMap)}</td>
-        <td class="py-3 px-4 text-right whitespace-nowrap">
-          <button onclick="marcarAsistenciaDocente('${e.id}','Presente')" class="text-xs font-semibold text-turquesa hover:underline mr-3">Puntual</button>
-          <button onclick="marcarAsistenciaDocente('${e.id}','Tarde')" class="text-xs font-semibold text-oro hover:underline mr-3">Tarde</button>
-          <button onclick="marcarAsistenciaDocente('${e.id}','Falla')" class="text-xs font-semibold text-coral hover:underline">Ausente</button>
-        </td>
+        <td class="py-3 px-4">${statusPill(info.estado === 'Falla' ? 'Falla' : info.estado, pillMap)}${info.automatico && info.estado === 'Falla' ? '<span class="text-[10px] text-slate2 ml-2">automático</span>' : ''}</td>
       </tr>`;
-    }).join('') : `<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Esta cohorte aún no tiene estudiantes matriculados.</td></tr>`;
+    }).join('') : `<tr><td colspan="2" class="text-sm text-slate2 text-center py-6">Esta cohorte aún no tiene estudiantes matriculados.</td></tr>`;
 
     const historial = estudiantes.map(e => {
-      const regs = Store.list('asistencia').filter(a => a.estudiante === e.nombre && a.modulo === moduloSel.modulo);
+      const regs = Store.list('asistencia').filter(a => a.estudiante === e.nombre && a.modulo === moduloSel.modulo && a.docente === doc.nombre);
       const presentes = regs.filter(r => r.estado === 'Presente').length;
       const pct = regs.length ? Math.round((presentes / regs.length) * 100) : null;
       const color = pct === null ? '#5B6472' : pct >= 80 ? '#0f8f89' : pct >= 60 ? '#b5790f' : '#F0455C';
@@ -2423,16 +3005,17 @@
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p class="text-sm font-bold text-ink">Asistencia de hoy</p>
-            <p class="text-xs text-slate2 mt-0.5">${escapeHtml(moduloSel.modulo)} · ${fmtDate(hoy)} · El código QR de la sesión queda habilitado automáticamente; también puedes marcar el estado manualmente aquí.</p>
+            <p class="text-sm font-bold text-ink">Asistencia de hoy — ${escapeHtml(moduloSel.modulo)}</p>
+            <p class="text-xs text-slate2 mt-0.5">${fmtDate(new Date().toISOString().slice(0, 10))} · Todo se calcula automáticamente por tiempo, sin marcado manual.</p>
           </div>
           ${selector}
         </div>
       </div>
+      ${tarjetaSesion}
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden mb-6">
         <div class="overflow-x-auto">
           <table class="w-full">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Estudiante</th><th class="py-3 px-4">Estado hoy</th><th class="py-3 px-4"></th></tr></thead>
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Estudiante</th><th class="py-3 px-4">Estado hoy</th></tr></thead>
             <tbody>${filasHoy}</tbody>
           </table>
         </div>
@@ -2446,6 +3029,94 @@
           </table>
         </div>
       </div>`;
+
+    asistenciaDocenteTimer = setInterval(() => {
+      const panel = document.getElementById('panel-t-asistencia');
+      if (panel && !panel.classList.contains('hidden')) renderAsistenciaDocente();
+      else clearInterval(asistenciaDocenteTimer);
+    }, 15000);
+  }
+
+  // ---------- RENDER: Códigos QR (admin) ----------
+  // Junta, a partir del Horario, cada combinación real de Docente + Cohorte +
+  // Materia, y genera (o reutiliza) el par de QR estables de cada una — así
+  // el administrador puede imprimirlos todos sin depender de que cada
+  // docente entre primero a su propio panel.
+  function combosDocenteCohorte() {
+    const registros = Store.list('horarios');
+    const vistos = new Set();
+    const combos = [];
+    registros.forEach(h => {
+      Object.values(h.celdas || {}).forEach(c => {
+        if (!c || !c.docente) return;
+        const key = c.docente + '|' + h.cohorte;
+        if (vistos.has(key)) return;
+        vistos.add(key);
+        combos.push({ docente: c.docente, cohorte: h.cohorte, materia: c.tema || h.modulo || h.cohorte });
+      });
+    });
+    combos.sort((a, b) => a.cohorte.localeCompare(b.cohorte) || a.docente.localeCompare(b.docente));
+    return combos;
+  }
+
+  function renderCodigosQr() {
+    const combos = combosDocenteCohorte();
+    const cohortes = Store.list('modulos');
+
+    if (!combos.length) {
+      document.getElementById('mount-codigosqr').innerHTML = `
+        <div class="admin-panel-card p-10 text-center">
+          <p class="font-bold text-ink mb-1.5">Aún no hay códigos QR para generar</p>
+          <p class="text-sm text-slate2">Primero asigna un docente a alguna franja en el panel <span class="font-semibold text-ink">Cohortes → Horario</span>. En cuanto un docente quede asignado a una materia, sus dos códigos (el suyo y el de sus estudiantes) aparecerán aquí listos para imprimir.</p>
+        </div>`;
+      return;
+    }
+
+    const tarjetas = combos.map((combo, i) => {
+      const modulo = cohortes.find(c => c.nombre === combo.cohorte);
+      const tokenDoc = getOrCrearTokenQR('docente', combo.cohorte, combo.docente);
+      const tokenEst = getOrCrearTokenQR('estudiante', combo.cohorte, combo.docente);
+      const idDoc = 'qrAdminDoc_' + i;
+      const idEst = 'qrAdminEst_' + i;
+      return {
+        html: `
+        <div class="admin-panel-card p-6">
+          <div class="flex items-center justify-between gap-2 mb-4 flex-wrap">
+            <div>
+              <p class="text-sm font-bold text-ink">${escapeHtml(combo.cohorte)}</p>
+              <p class="text-xs text-slate2">${escapeHtml(combo.materia)} · ${modulo ? escapeHtml(modulo.modulo) : ''}</p>
+            </div>
+            <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-morado/10 text-morado">${escapeHtml(combo.docente)}</span>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <div class="rounded-2xl border border-gray-100 p-4 text-center">
+              <p class="text-xs font-bold text-ink mb-3">QR del docente</p>
+              <div id="${idDoc}" class="flex justify-center mb-3"></div>
+              <button onclick="imprimirQr('Código del docente — ${escapeHtml(combo.docente)} · ${escapeHtml(combo.materia)}','Escanéalo para activar la asistencia de hoy','${idDoc}')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+            </div>
+            <div class="rounded-2xl border border-gray-100 p-4 text-center">
+              <p class="text-xs font-bold text-ink mb-3">QR de estudiantes</p>
+              <div id="${idEst}" class="flex justify-center mb-3"></div>
+              <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(combo.cohorte)} · ${escapeHtml(combo.materia)}','Escanéalo e ingresa tu correo institucional','${idEst}')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+            </div>
+          </div>
+        </div>`,
+        idDoc, idEst, tokenDoc, tokenEst
+      };
+    });
+
+    document.getElementById('mount-codigosqr').innerHTML = `
+      <div class="admin-panel-card p-6 mb-6">
+        <h2 class="text-lg font-extrabold text-ink">Códigos QR de asistencia</h2>
+        <p class="text-sm text-slate2 mt-1">Un par de códigos estables por cada docente + cohorte, calculados a partir del panel <span class="font-semibold text-ink">Horario</span>. Imprímelos una sola vez y entrégalos: el docente escanea el suyo para activar la clase, los estudiantes escanean el de la cohorte para registrar su asistencia.</p>
+      </div>
+      <div class="grid lg:grid-cols-2 gap-5">${tarjetas.map(t => t.html).join('')}</div>`;
+
+    // El QR se dibuja DESPUÉS de insertar el HTML (necesita el contenedor ya en el DOM).
+    tarjetas.forEach(t => {
+      pintarQrImprimible(t.idDoc, urlQr('docente', t.tokenDoc));
+      pintarQrImprimible(t.idEst, urlQr('estudiante', t.tokenEst));
+    });
   }
 
   function cambiarCohorteAsistDocente(value) {
@@ -2453,19 +3124,150 @@
     renderAsistenciaDocente();
   }
 
-  function marcarAsistenciaDocente(estudianteId, estado) {
-    const est = Store.list('usuarios').find(u => u.id === estudianteId);
+  function habilitarSesionAsistenciaDocente() {
+    const doc = currentDocente || {};
     const moduloSel = docenteModulosActivos().find(m => m.nombre === docenteAsistCohorte);
-    if (!est || !moduloSel) return;
-    const hoy = new Date().toISOString().slice(0, 10);
-    const registros = Store.list('asistencia');
-    const idx = registros.findIndex(r => r.estudiante === est.nombre && r.modulo === moduloSel.modulo && r.fecha === hoy);
-    if (idx >= 0) registros[idx].estado = estado;
-    else registros.push({ id: uid('as'), estudiante: est.nombre, modulo: moduloSel.modulo, fecha: hoy, estado });
-    Store.set('asistencia', registros);
-    toast('Asistencia actualizada: ' + est.nombre, 'ok');
+    if (!moduloSel) return;
+    if (sesionAsistenciaHoy(moduloSel.nombre, doc.nombre)) { toast('Ya hay un código de asistencia activo hoy para tu materia', 'info'); renderAsistenciaDocente(); return; }
+    const sesiones = Store.list('sesiones_asistencia');
+    sesiones.push({
+      id: uid('ses'), cohorte: moduloSel.nombre, modulo: moduloSel.modulo,
+      materia: materiaDeDocenteEnCohorte(moduloSel.nombre, doc.nombre) || moduloSel.modulo, fecha: new Date().toISOString().slice(0, 10),
+      horaInicio: new Date().toISOString(), codigo: generarCodigoSesion(), iniciadaPor: doc.nombre
+    });
+    Store.set('sesiones_asistencia', sesiones);
+    toast('Código habilitado: los estudiantes tienen ' + VENTANA_PUNTUAL_MIN + ' minutos para llegar puntuales', 'ok');
     renderAsistenciaDocente();
   }
+
+  /* =====================================================================
+     ESCANEO REAL DE LOS QR IMPRESOS (?qr=docente|estudiante&t=TOKEN)
+     ---------------------------------------------------------------------
+     Al abrir con la cámara del celular la URL codificada en el QR, esta
+     pantalla (qrView) toma el control ANTES de cualquier login: el token
+     ya identifica sin ambigüedad la cohorte + docente + materia, así que
+     no hace falta iniciar sesión para activar o registrar asistencia.
+     ===================================================================== */
+
+  function qrLandingShell(icono, color, titulo, subtitulo, cuerpoHtml) {
+    return `
+      <div class="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-5" style="background:${color}1A">
+        <span class="text-2xl">${icono}</span>
+      </div>
+      <h1 class="text-xl font-extrabold text-ink mb-1.5">${escapeHtml(titulo)}</h1>
+      <p class="text-sm text-slate2 mb-6">${subtitulo}</p>
+      ${cuerpoHtml}
+      <p class="text-xs text-slate2 mt-8">Fundación A+ — Training de 100 a 1000+</p>`;
+  }
+
+  function manejarQrEnURL() {
+    const params = new URLSearchParams(location.search);
+    const tipo = params.get('qr');
+    const token = params.get('t');
+    if (!tipo || !token) return;
+
+    document.getElementById('siteView').classList.add('hidden');
+    document.getElementById('qrView').classList.remove('hidden');
+
+    const registro = Store.list('qr_tokens').find(r => r.tipo === tipo && r.token === token);
+    if (!registro) {
+      document.getElementById('qrViewCard').innerHTML = qrLandingShell('⚠️', '#F0455C', 'Código no válido',
+        'Este QR no corresponde a ninguna cohorte activa. Pide al docente o al administrador que lo genere de nuevo desde el panel.', '');
+      return;
+    }
+
+    if (tipo === 'docente') renderQrLandingDocente(registro);
+    else renderQrLandingEstudiante(registro);
+  }
+
+  // ---- Landing del QR del DOCENTE: activa la sesión de hoy con un toque ----
+  function renderQrLandingDocente(registro) {
+    const materia = registro.materia || registro.cohorte;
+    let sesion = sesionAsistenciaHoy(registro.cohorte, registro.docente);
+    const recienActivada = !sesion;
+
+    // Activación automática: si aún no había sesión hoy para esta cohorte+docente,
+    // se crea en el momento mismo de abrir el enlace del QR — sin botones ni pasos extra.
+    if (!sesion) {
+      sesion = crearSesionAsistencia(registro);
+    }
+
+    const ventana = estadoVentanaSesion(sesion);
+    const cuerpo = `
+      <div class="rounded-2xl p-4" style="background:#1FC8C01A">
+        <p class="text-sm font-bold text-ink">${recienActivada ? '✅ Asistencia activada' : 'Ya estaba activa hoy'}</p>
+        <p class="text-xs font-semibold mt-1" style="color:${ventana.color}">${ventana.texto}</p>
+      </div>
+      <p class="text-xs text-slate2 mt-4">Tus estudiantes ya pueden escanear su propio código: tienen ${VENTANA_PUNTUAL_MIN} minutos para llegar puntuales y hasta ${VENTANA_TARDE_MIN} para llegar tarde. Puedes cerrar esta ventana.</p>`;
+
+    document.getElementById('qrViewCard').innerHTML = qrLandingShell('👨‍🏫', '#8B5CF6',
+      recienActivada ? 'Asistencia activada — ' + registro.docente : 'Activar asistencia — ' + registro.docente,
+      'Cohorte <strong class="text-ink">' + escapeHtml(registro.cohorte) + '</strong> · ' + escapeHtml(materia), cuerpo);
+  }
+
+  function crearSesionAsistencia(registro) {
+    const modulo = Store.list('modulos').find(m => m.nombre === registro.cohorte);
+    const sesiones = Store.list('sesiones_asistencia');
+    const nueva = {
+      id: uid('ses'), cohorte: registro.cohorte, modulo: modulo ? modulo.modulo : registro.cohorte,
+      materia: registro.materia || (modulo ? modulo.modulo : registro.cohorte), fecha: new Date().toISOString().slice(0, 10),
+      horaInicio: new Date().toISOString(), codigo: generarCodigoSesion(), iniciadaPor: registro.docente
+    };
+    sesiones.push(nueva);
+    Store.set('sesiones_asistencia', sesiones);
+    return nueva;
+  }
+
+
+  // ---- Landing del QR del ESTUDIANTE: pide el correo y aplica su asistencia ----
+  function renderQrLandingEstudiante(registro, mensaje) {
+    const materia = registro.materia || registro.cohorte;
+    const cuerpo = `
+      ${mensaje ? `<p class="text-sm font-semibold mb-4" style="color:${mensaje.color}">${escapeHtml(mensaje.texto)}</p>` : ''}
+      <label class="block text-xs font-semibold text-slate2 mb-1.5 text-left" for="qrEmailInput">Tu correo institucional</label>
+      <input id="qrEmailInput" type="email" placeholder="nombre@aplus.org" class="w-full rounded-xl border border-gray-200 px-3.5 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 mb-4" />
+      <button onclick="registrarAsistenciaDesdeQr('${registro.id}')" class="w-full rounded-xl bg-ink text-white font-semibold text-sm py-3.5 hover:bg-morado transition">Registrar mi asistencia</button>`;
+
+    document.getElementById('qrViewCard').innerHTML = qrLandingShell('🎓', '#1FC8C0',
+      'Registrar asistencia', 'Cohorte <strong class="text-ink">' + escapeHtml(registro.cohorte) + '</strong> · ' + escapeHtml(materia), cuerpo);
+
+    const input = document.getElementById('qrEmailInput');
+    if (input) {
+      input.focus();
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') registrarAsistenciaDesdeQr(registro.id); });
+    }
+  }
+
+  function registrarAsistenciaDesdeQr(registroId) {
+    const registro = Store.list('qr_tokens').find(r => r.id === registroId);
+    if (!registro) return;
+    const email = (document.getElementById('qrEmailInput').value || '').trim().toLowerCase();
+    if (!email) { renderQrLandingEstudiante(registro, { texto: 'Escribe tu correo institucional para continuar.', color: '#F0455C' }); return; }
+
+    const estudiante = Store.list('usuarios').find(u => u.rol === 'Estudiante' && (u.email || '').toLowerCase() === email);
+    if (!estudiante) { renderQrLandingEstudiante(registro, { texto: 'No encontramos ese correo entre los estudiantes registrados.', color: '#F0455C' }); return; }
+    if (estudiante.cohorte !== registro.cohorte) { renderQrLandingEstudiante(registro, { texto: 'Este código es de otra cohorte — no perteneces a "' + registro.cohorte + '".', color: '#F0455C' }); return; }
+
+    const sesion = sesionAsistenciaHoy(registro.cohorte, registro.docente);
+    if (!sesion) { renderQrLandingEstudiante(registro, { texto: 'Tu docente aún no ha activado la asistencia de hoy. Espera a que escanee su código.', color: '#b5790f' }); return; }
+
+    const registros = Store.list('asistencia');
+    const yaExiste = registros.find(r => r.estudiante === estudiante.nombre && r.sesionId === sesion.id);
+    if (yaExiste) {
+      renderQrLandingEstudiante(registro, { texto: 'Ya habías registrado tu asistencia hoy: ' + yaExiste.estado + '.', color: '#5B6472' });
+      return;
+    }
+    const mins = minutosTranscurridos(sesion.horaInicio);
+    if (mins > VENTANA_TARDE_MIN) {
+      renderQrLandingEstudiante(registro, { texto: 'La ventana de asistencia de hoy ya cerró.', color: '#F0455C' });
+      return;
+    }
+    const estado = estadoPorTiempo(mins);
+    registros.push({ id: uid('as'), estudiante: estudiante.nombre, modulo: sesion.modulo, docente: sesion.iniciadaPor, materia: sesion.materia || sesion.modulo, fecha: sesion.fecha, estado, sesionId: sesion.id, automatico: false });
+    Store.set('asistencia', registros);
+    renderQrLandingEstudiante(registro, { texto: '¡Listo, ' + estudiante.nombre.split(' ')[0] + '! Quedaste registrado como: ' + estado + '.', color: estado === 'Presente' ? '#0f8f89' : '#b5790f' });
+  }
+
 
   // ---------- RENDER: Semáforo de riesgo — docente ----------
   function renderRiesgoDocente() {
@@ -2626,7 +3428,7 @@
         // aquí. Esa valoración cualitativa vive únicamente en el Informe que el docente
         // genera para el estudiante/administrador (ver renderInformesDocente).
         return `<tr class="border-b border-gray-50 last:border-0">
-          <td class="py-2.5 px-4 text-sm font-semibold text-ink whitespace-nowrap">${escapeHtml(e.nombre)}</td>
+          <td class="py-2.5 px-4 text-sm font-semibold text-ink whitespace-nowrap">${nombrePersonaClicable(e.nombre, 'Estudiante')}</td>
           ${celdas}
           <td class="py-2.5 px-3 text-center">${cuantHtml}</td>
         </tr>`;
@@ -3003,6 +3805,7 @@
 
   const RENDERERS_DOCENTE = {
     resumen: renderResumenDocente,
+    perfil: renderPerfilDocente,
     asistencia: renderAsistenciaDocente,
     riesgo: renderRiesgoDocente,
     informes: renderInformesDocente,
@@ -3104,7 +3907,6 @@
     const box = document.getElementById('mensajeMotivacional');
     document.getElementById('mensajeMotivacionalTexto').textContent = msg;
     box.classList.remove('hidden');
-    updateCorreoBadge();
     updateMemorandosBadge();
   }
 
@@ -3112,14 +3914,6 @@
     let h = 0;
     for (let i = 0; i < str.length; i++) { h = (h << 5) - h + str.charCodeAt(i); h |= 0; }
     return h;
-  }
-
-  function updateCorreoBadge() {
-    const nombre = estudianteNombre();
-    const noLeidos = Store.list('correos_estudiante').filter(c => c.estudiante === nombre && !c.leido).length;
-    const badge = document.getElementById('correoBadge');
-    if (noLeidos > 0) { badge.textContent = noLeidos; badge.classList.remove('hidden'); }
-    else { badge.classList.add('hidden'); }
   }
 
   function showPanelEstudiante(panel) {
@@ -3143,7 +3937,6 @@
     const asistenciaReg = Store.list('asistencia').filter(a => a.estudiante === nombre);
     const presentes = asistenciaReg.filter(a => a.estado === 'Presente').length;
     const pctAsistencia = asistenciaReg.length ? Math.round((presentes / asistenciaReg.length) * 100) : 100;
-    const insignias = Store.list('insignias_estudiantes').filter(i => i.estudiante === nombre);
     const agenda = [...Store.list('agenda_estudiante')].filter(a => a.estudiante === nombre)
       .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '')).slice(0, 3);
     const califs = Store.list('calificaciones').filter(c => c.estudiante === nombre);
@@ -3158,7 +3951,7 @@
       </div>`).join('');
 
     document.getElementById('mount-s-resumen').innerHTML = `
-      <div class="grid sm:grid-cols-4 gap-5 mb-6">
+      <div class="grid sm:grid-cols-3 gap-5 mb-6">
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
           <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Módulo activo</p>
           <p class="text-base font-extrabold text-ink mt-1">${mod ? escapeHtml(mod.modulo) : 'Sin asignar'}</p>
@@ -3174,16 +3967,11 @@
           <p class="text-2xl font-extrabold text-ink mt-1">${promedio}</p>
           <p class="text-xs text-slate2 mt-1">${califs.length} evaluaciones</p>
         </div>
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
-          <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Insignias</p>
-          <p class="text-2xl font-extrabold text-ink mt-1">${insignias.length}</p>
-          <p class="text-xs text-slate2 mt-1">de ${INSIGNIAS_CATALOGO.length} disponibles</p>
-        </div>
       </div>
       <div class="grid lg:grid-cols-2 gap-6">
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6">
           <h2 class="text-base font-extrabold text-ink mb-1">Bienvenido/a, ${escapeHtml(nombre || 'Estudiante')}</h2>
-          <p class="text-sm text-slate2 mb-4">Este es tu panel personal. Explora el menú lateral para revisar tu asistencia, materiales, agenda y herramientas con IA.</p>
+          <p class="text-sm text-slate2 mb-4">Este es tu panel personal. Explora el menú lateral para revisar tu asistencia, tus materias y tu agenda.</p>
           <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">Próximo en tu agenda</p>
           ${agendaRows || '<p class="text-sm text-slate2 text-center py-4">No tienes eventos próximos en tu agenda personal.</p>'}
         </div>
@@ -3202,16 +3990,26 @@
   // ---------- PERFIL ----------
   function renderPerfilEstudiante() {
     const doc = currentEstudiante || {};
+    const iniciales = escapeHtml((doc.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+    const avatarHtml = doc.fotoUrl
+      ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100" />`
+      : `<div class="w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>`;
+
     document.getElementById('mount-s-perfil').innerHTML = `
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 sm:p-8 max-w-2xl">
         <div class="flex items-center gap-5 mb-6">
-          <div class="w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">
-            ${escapeHtml((doc.nombre || '?').split(' ').slice(0,2).map(w => w[0]).join(''))}
-          </div>
+          ${avatarHtml}
           <div>
             <p class="text-base font-extrabold text-ink">${escapeHtml(doc.nombre || '')}</p>
             <p class="text-sm text-slate2">${escapeHtml(doc.cohorte || '')}</p>
-            <button onclick="toast('La foto de perfil se actualizará al conectar el almacenamiento institucional.', 'info')" class="text-xs font-semibold text-morado mt-1.5 hover:underline">Cambiar foto</button>
+            <div class="flex items-center gap-3 mt-1.5">
+              <label class="text-xs font-semibold text-morado hover:underline cursor-pointer">
+                Cambiar foto
+                <input id="perfil_foto_input" type="file" accept="image/*" class="hidden" onchange="subirFotoPerfilEstudiante(this)" />
+              </label>
+              ${doc.fotoUrl ? `<button onclick="quitarFotoPerfilEstudiante()" class="text-xs font-semibold text-coral hover:underline">Quitar foto</button>` : ''}
+            </div>
+            <p class="text-[11px] text-slate2 mt-1">Foto opcional · JPG o PNG, máx. 2 MB</p>
           </div>
         </div>
         <div class="grid sm:grid-cols-2 gap-4 mb-6">
@@ -3232,6 +4030,11 @@
             ${statusPill(doc.estado || 'Activo', ESTADO_COLORS)}
           </div>
         </div>
+        <div class="mb-6">
+          <label class="block text-xs font-semibold text-slate2 mb-1.5">Descripción breve</label>
+          <textarea id="perfil_descripcion" rows="3" maxlength="280" placeholder="Cuéntale algo breve sobre ti a tus profesores y compañeros (opcional)" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30 resize-none">${escapeHtml(doc.descripcion || '')}</textarea>
+          <p class="text-[11px] text-slate2 mt-1">Opcional · máx. 280 caracteres</p>
+        </div>
         <div class="border-t border-gray-100 pt-6">
           <p class="text-sm font-bold text-ink mb-3">Cambiar contraseña</p>
           <div class="grid sm:grid-cols-2 gap-4">
@@ -3243,25 +4046,134 @@
       </div>`;
   }
 
+  function actualizarUsuarioEstudianteActual(cambios) {
+    const usuarios = Store.list('usuarios').map(u => u.id === currentEstudiante.id ? { ...u, ...cambios } : u);
+    Store.set('usuarios', usuarios);
+    currentEstudiante = { ...currentEstudiante, ...cambios };
+  }
+
+  function subirFotoPerfilEstudiante(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast('El archivo debe ser una imagen', 'err'); return; }
+    if (file.size > 2 * 1024 * 1024) { toast('La imagen no debe superar 2 MB', 'err'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      actualizarUsuarioEstudianteActual({ fotoUrl: reader.result });
+      toast('Foto de perfil actualizada', 'ok');
+      renderPerfilEstudiante();
+    };
+    reader.onerror = () => toast('No se pudo leer la imagen', 'err');
+    reader.readAsDataURL(file);
+  }
+
+  function quitarFotoPerfilEstudiante() {
+    actualizarUsuarioEstudianteActual({ fotoUrl: '' });
+    toast('Foto de perfil eliminada', 'ok');
+    renderPerfilEstudiante();
+  }
+
   function guardarPerfilEstudiante() {
     const nombre = document.getElementById('perfil_nombre').value.trim();
+    const descripcion = document.getElementById('perfil_descripcion').value.trim();
     const p1 = document.getElementById('perfil_pass1').value;
     const p2 = document.getElementById('perfil_pass2').value;
     if (p1 || p2) {
       if (p1.length < 6) { toast('La nueva contraseña debe tener al menos 6 caracteres', 'err'); return; }
       if (p1 !== p2) { toast('Las contraseñas no coinciden', 'err'); return; }
     }
-    if (nombre) {
-      const usuarios = Store.list('usuarios').map(u => u.id === currentEstudiante.id ? { ...u, nombre } : u);
-      Store.set('usuarios', usuarios);
-      currentEstudiante = { ...currentEstudiante, nombre };
-    }
+    const cambios = {};
+    if (nombre) cambios.nombre = nombre;
+    cambios.descripcion = descripcion; // opcional: puede quedar vacía
+    actualizarUsuarioEstudianteActual(cambios);
     toast('Perfil actualizado correctamente', 'ok');
     renderPerfilEstudiante();
   }
 
+  // ---------- VER PERFIL DE OTRA PERSONA (modal de solo lectura) ----------
+  // Usado por el estudiante para ver el perfil de sus profesores asignados,
+  // y por el docente para ver el perfil de sus estudiantes.
+  function abrirPerfilPersonaPorNombreYRol(nombre, rol) {
+    if (!nombre) return;
+    const objetivo = nombre.trim().toLowerCase();
+    const usuarios = Store.list('usuarios');
+    const usuario = usuarios.find(u => u.rol === rol && u.nombre && u.nombre.trim().toLowerCase() === objetivo);
+    if (!usuario) { toast('No se encontró el perfil de ' + nombre, 'err'); return; }
+    abrirPerfilPersona(usuario.id);
+  }
+
+  function abrirPerfilPersona(usuarioId) {
+    const usuario = Store.list('usuarios').find(u => u.id === usuarioId);
+    if (!usuario) { toast('No se encontró ese perfil', 'err'); return; }
+
+    const iniciales = escapeHtml((usuario.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+    const avatarHtml = usuario.fotoUrl
+      ? `<img src="${escapeHtml(usuario.fotoUrl)}" alt="Foto de perfil" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100" />`
+      : `<div class="w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>`;
+
+    const esDocente = usuario.rol === 'Docente';
+    const infoExtra = esDocente
+      ? (() => {
+          const materias = Store.list('pensum').filter(p => p.docente === usuario.nombre);
+          return `
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1.5">Rol</label>
+              <p class="text-sm text-ink font-semibold">Docente</p>
+            </div>
+            ${materias.length ? `
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold text-slate2 mb-1.5">Materias que dicta</label>
+              <p class="text-sm text-ink">${escapeHtml([...new Set(materias.map(m => m.modulo))].join(', '))}</p>
+            </div>` : ''}`;
+        })()
+      : `
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1.5">Cohorte</label>
+              <p class="text-sm text-ink">${escapeHtml(usuario.cohorte || '—')}</p>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1.5">Estado</label>
+              ${statusPill(usuario.estado || 'Activo', ESTADO_COLORS)}
+            </div>`;
+
+    document.getElementById('perfilPersonaContenido').innerHTML = `
+      <div class="flex items-center gap-5 mb-6">
+        ${avatarHtml}
+        <div>
+          <p class="text-base font-extrabold text-ink">${escapeHtml(usuario.nombre || '')}</p>
+          <p class="text-sm text-slate2">${escapeHtml(usuario.email || '')}</p>
+        </div>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4 mb-6">${infoExtra}</div>
+      ${usuario.descripcion ? `
+      <div class="border-t border-gray-100 pt-5">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">Descripción</p>
+        <p class="text-sm text-ink leading-relaxed">${escapeHtml(usuario.descripcion)}</p>
+      </div>` : `
+      <div class="border-t border-gray-100 pt-5">
+        <p class="text-sm text-slate2 italic">Esta persona aún no ha agregado una descripción.</p>
+      </div>`}
+    `;
+    document.getElementById('perfilPersonaModal').classList.remove('hidden');
+  }
+
+  function cerrarPerfilPersonaModal() {
+    document.getElementById('perfilPersonaModal').classList.add('hidden');
+  }
+
+  // Devuelve un <button> clicable con el nombre de una persona, que abre su
+  // perfil de solo lectura. Se usa para reemplazar texto plano de nombres.
+  function nombrePersonaClicable(nombre, rol) {
+    if (!nombre) return '—';
+    return `<button type="button" onclick="abrirPerfilPersonaPorNombreYRol('${escapeHtml(nombre).replace(/'/g, "\\'")}', '${rol}')" class="hover:underline hover:text-morado transition text-left">${escapeHtml(nombre)}</button>`;
+  }
+
   // ---------- ASISTENCIA (QR) ----------
+  let asistenciaEstudianteTimer = null;
+
   function renderAsistenciaEstudiante() {
+    if (asistenciaEstudianteTimer) clearInterval(asistenciaEstudianteTimer);
+
     const nombre = estudianteNombre();
     const mod = estudianteModulo();
     const registros = [...Store.list('asistencia')].filter(a => a.estudiante === nombre)
@@ -3269,15 +4181,88 @@
     const totales = { Presente: 0, Tarde: 0, Falla: 0 };
     registros.forEach(r => { if (totales[r.estado] !== undefined) totales[r.estado]++; });
     const pct = registros.length ? Math.round((totales.Presente / registros.length) * 100) : 100;
-    const hoy = new Date().toISOString().slice(0, 10);
-    const yaHoy = registros.some(r => r.fecha === hoy);
 
     const rows = registros.map(r => `
       <tr class="border-b border-gray-50 last:border-0">
         <td class="py-3 px-4 text-sm text-ink">${fmtDate(r.fecha)}</td>
         <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(r.modulo)}</td>
-        <td class="py-3 px-4">${statusPill(r.estado, { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['En proceso'] || ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'] })}</td>
+        <td class="py-3 px-4">${statusPill(r.estado, { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['En proceso'] || ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'] })}${r.automatico ? '<span class="text-[10px] text-slate2 ml-2">automático</span>' : ''}</td>
       </tr>`).join('');
+
+    let tarjetasSesiones;
+    if (!mod) {
+      tarjetasSesiones = `
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 text-center">
+          <p class="text-sm text-slate2">No tienes un módulo activo asignado.</p>
+        </div>`;
+    } else {
+      const hoy = new Date().toISOString().slice(0, 10);
+      const sesionesHoy = Store.list('sesiones_asistencia').filter(s => s.cohorte === mod.nombre && s.fecha === hoy);
+
+      if (!sesionesHoy.length) {
+        tarjetasSesiones = `
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 flex flex-col sm:flex-row items-center gap-6">
+            <div class="w-32 h-32 rounded-2xl border-2 border-dashed border-gray-200 grid place-items-center shrink-0">
+              <svg class="w-14 h-14 text-slate2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.3"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h3v3h-3zM19 14v3M14 19h2M19 19h1"/></svg>
+            </div>
+            <div class="flex-1 text-center sm:text-left">
+              <p class="text-sm font-bold text-ink">Código de asistencia de hoy</p>
+              <p class="text-xs text-slate2 mt-1">Módulo: ${escapeHtml(mod.modulo)}</p>
+              <p class="text-sm text-slate2 mt-3">Ninguno de tus docentes ha habilitado su código de asistencia todavía. Cada materia se activa por separado.</p>
+            </div>
+          </div>`;
+      } else {
+        tarjetasSesiones = sesionesHoy.map(sesion => {
+          sincronizarAusentesSesion(sesion, docenteEstudiantesDeCohorte(mod.nombre));
+          const info = estadoActualEstudianteSesion(sesion, nombre);
+          const materiaLabel = sesion.materia || sesion.modulo;
+          const yaReg = registros.find(r => r.sesionId === sesion.id);
+
+          if (yaReg) {
+            const color = yaReg.estado === 'Presente' ? '#0f8f89' : yaReg.estado === 'Tarde' ? '#b5790f' : '#F0455C';
+            const texto = yaReg.estado === 'Presente' ? 'Llegaste puntual' : yaReg.estado === 'Tarde' ? 'Llegaste tarde' : 'Quedaste ausente';
+            return `
+              <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
+                <div class="w-28 h-28 rounded-2xl border-2 grid place-items-center shrink-0" style="border-color:${color}">
+                  <p class="text-sm font-extrabold text-center px-2" style="color:${color}">${texto}</p>
+                </div>
+                <div class="flex-1 text-center sm:text-left">
+                  <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
+                  <p class="text-xs text-slate2 mt-1">Docente: ${escapeHtml(sesion.iniciadaPor || '—')} · ${fmtDate(sesion.fecha)}</p>
+                </div>
+              </div>`;
+          }
+          if (info.estado === 'Falla') {
+            return `
+              <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
+                <div class="w-28 h-28 rounded-2xl border-2 border-coral grid place-items-center shrink-0">
+                  <svg class="w-11 h-11 text-coral" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </div>
+                <div class="flex-1 text-center sm:text-left">
+                  <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)} — la ventana ya cerró</p>
+                  <p class="text-xs text-slate2 mt-1">Quedaste registrado como ausente automáticamente. Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
+                </div>
+              </div>`;
+          }
+          const ventana = estadoVentanaSesion(sesion);
+          return `
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
+              <div class="w-28 h-28 rounded-2xl border-2 border-dashed border-gray-200 grid place-items-center shrink-0">
+                <svg class="w-12 h-12 text-slate2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.3"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h3v3h-3zM19 14v3M14 19h2M19 19h1"/></svg>
+              </div>
+              <div class="flex-1 text-center sm:text-left">
+                <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
+                <p class="text-xs text-slate2 mt-1 mb-1">Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
+                <p class="text-xs font-bold mb-3" style="color:${ventana.color}">${ventana.texto}</p>
+                <div class="flex flex-col sm:flex-row gap-2 max-w-xs mx-auto sm:mx-0">
+                  <input id="codigo_qr_estudiante_${sesion.id}" type="text" maxlength="6" placeholder="Código (ej. 7F3K9A)" class="flex-1 rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm uppercase tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-morado/30" />
+                  <button onclick="escanearAsistencia('${sesion.id}')" class="rounded-xl bg-ink text-white font-semibold text-sm py-2.5 px-5 hover:bg-morado transition">Escanear</button>
+                </div>
+              </div>
+            </div>`;
+        }).join('');
+      }
+    }
 
     document.getElementById('mount-s-asistencia').innerHTML = `
       <div class="grid sm:grid-cols-3 gap-5 mb-6">
@@ -3285,107 +4270,162 @@
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5"><p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Llegadas tarde</p><p class="text-2xl font-extrabold text-ink mt-1">${totales.Tarde}</p></div>
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5"><p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Fallas</p><p class="text-2xl font-extrabold text-ink mt-1">${totales.Falla}</p></div>
       </div>
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 flex flex-col sm:flex-row items-center gap-6">
-        <div class="w-32 h-32 rounded-2xl border-2 border-dashed border-gray-200 grid place-items-center shrink-0">
-          <svg class="w-14 h-14 text-slate2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.3"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h3v3h-3zM19 14v3M14 19h2M19 19h1"/></svg>
-        </div>
-        <div class="flex-1 text-center sm:text-left">
-          <p class="text-sm font-bold text-ink">Código QR de la sesión de hoy</p>
-          <p class="text-xs text-slate2 mt-1 mb-4">${mod ? 'Módulo: ' + escapeHtml(mod.modulo) : 'No tienes un módulo activo asignado.'}</p>
-          <button onclick="escanearAsistencia()" ${yaHoy || !mod ? 'disabled' : ''} class="rounded-full ${yaHoy || !mod ? 'bg-gray-100 text-slate2 cursor-not-allowed' : 'bg-ink text-white hover:bg-morado'} font-semibold text-sm py-3 px-6 transition">
-            ${yaHoy ? 'Asistencia ya registrada hoy' : 'Escanear QR y registrar asistencia'}
-          </button>
-        </div>
-      </div>
+      ${tarjetasSesiones}
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
         <p class="text-xs font-bold uppercase tracking-wide text-slate2 px-6 pt-5 pb-2">Historial mensual</p>
         <div class="overflow-x-auto">
           <table class="w-full">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Fecha</th><th class="py-3 px-4">Módulo</th><th class="py-3 px-4">Estado</th></tr></thead>
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Fecha</th><th class="py-3 px-4">Materia</th><th class="py-3 px-4">Estado</th></tr></thead>
             <tbody>${rows || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Aún no tienes registros de asistencia.</td></tr>'}</tbody>
           </table>
         </div>
       </div>`;
+
+    asistenciaEstudianteTimer = setInterval(() => {
+      const panel = document.getElementById('panel-s-asistencia');
+      if (panel && !panel.classList.contains('hidden')) renderAsistenciaEstudiante();
+      else clearInterval(asistenciaEstudianteTimer);
+    }, 15000);
   }
 
-  function escanearAsistencia() {
+  function escanearAsistencia(sesionId) {
     const nombre = estudianteNombre();
     const mod = estudianteModulo();
     if (!mod) { toast('No tienes un módulo activo asignado', 'err'); return; }
     const hoy = new Date().toISOString().slice(0, 10);
+    const sesion = Store.list('sesiones_asistencia').find(s => s.id === sesionId && s.cohorte === mod.nombre && s.fecha === hoy);
+    if (!sesion) { toast('Esa sesión ya no está disponible', 'err'); renderAsistenciaEstudiante(); return; }
     const registros = Store.list('asistencia');
-    if (registros.some(r => r.estudiante === nombre && r.fecha === hoy)) { toast('Ya registraste tu asistencia hoy', 'info'); return; }
-    registros.push({ id: uid('as'), estudiante: nombre, modulo: mod.modulo, fecha: hoy, estado: 'Presente' });
+    if (registros.some(r => r.estudiante === nombre && r.sesionId === sesion.id)) {
+      toast('Ya registraste tu asistencia en esta materia hoy', 'info'); renderAsistenciaEstudiante(); return;
+    }
+    const mins = minutosTranscurridos(sesion.horaInicio);
+    if (mins > VENTANA_TARDE_MIN) {
+      toast('La ventana de asistencia ya cerró', 'err'); renderAsistenciaEstudiante(); return;
+    }
+    const input = document.getElementById('codigo_qr_estudiante_' + sesionId);
+    const codigo = (input ? input.value : '').trim().toUpperCase();
+    if (!codigo) { toast('Ingresa el código que muestra tu docente', 'err'); return; }
+    if (codigo !== sesion.codigo) { toast('El código no coincide con el de la sesión de hoy', 'err'); return; }
+
+    const estado = estadoPorTiempo(mins);
+    registros.push({ id: uid('as'), estudiante: nombre, modulo: sesion.modulo, docente: sesion.iniciadaPor, materia: sesion.materia || sesion.modulo, fecha: sesion.fecha, estado, sesionId: sesion.id });
     Store.set('asistencia', registros);
-    toast('Asistencia registrada con éxito', 'ok');
+    const msg = estado === 'Presente' ? 'Asistencia registrada: llegaste puntual.' : 'Asistencia registrada: llegaste tarde.';
+    toast(msg, 'ok');
     renderAsistenciaEstudiante();
-  }
-
-  // ---------- ANÁLISIS ACADÉMICO IA ----------
-  function renderIaAnalisisEstudiante() {
-    const nombre = estudianteNombre();
-    const califs = Store.list('calificaciones').filter(c => c.estudiante === nombre);
-    const asistenciaReg = Store.list('asistencia').filter(a => a.estudiante === nombre);
-    const cfg = Store.get('configuracion') || SEED.configuracion;
-    const promedio = califs.length ? califs.reduce((a, c) => a + Number(c.nota || 0), 0) / califs.length : null;
-    const presentes = asistenciaReg.filter(a => a.estado === 'Presente').length;
-    const pctAsistencia = asistenciaReg.length ? Math.round((presentes / asistenciaReg.length) * 100) : null;
-
-    const fortalezas = [];
-    const porFortalecer = [];
-    if (promedio !== null && promedio >= (cfg.notasMinimaAprobacion + 1)) fortalezas.push('Tu promedio académico está sólidamente por encima del mínimo de aprobación.');
-    if (promedio !== null && promedio < cfg.notasMinimaAprobacion + 0.5) porFortalecer.push('Tu promedio está cerca del mínimo de aprobación; refuerza los temas con menor nota.');
-    if (pctAsistencia !== null && pctAsistencia >= cfg.asistenciaMinima) fortalezas.push('Mantienes una asistencia constante, por encima del mínimo institucional.');
-    if (pctAsistencia !== null && pctAsistencia < cfg.asistenciaMinima) porFortalecer.push('Tu asistencia está por debajo del mínimo requerido (' + cfg.asistenciaMinima + '%).');
-    if (asistenciaReg.some(a => a.estado === 'Tarde')) porFortalecer.push('Se registran llegadas tarde; procura ingresar puntualmente a cada sesión.');
-    if (!fortalezas.length) fortalezas.push('Estás construyendo tu historial académico; sigue participando activamente.');
-    if (!porFortalecer.length) porFortalecer.push('No se detectan aspectos críticos por el momento. ¡Sigue así!');
-
-    const recomendacion = promedio !== null && promedio < cfg.notasMinimaAprobacion + 0.5
-      ? 'Se recomienda revisar el Banco de recursos IA y agendar una sesión de refuerzo con tu docente.'
-      : 'Se recomienda explorar la Ruta de aprendizaje sugerida para seguir avanzando a tu propio ritmo.';
-
-    document.getElementById('mount-s-ia-analisis').innerHTML = `
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 sm:p-8">
-        <div class="flex items-center gap-3 mb-2">
-          <div class="w-10 h-10 rounded-xl bg-morado/10 grid place-items-center"><svg class="w-5 h-5 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg></div>
-          <h2 class="text-base font-extrabold text-ink">Reporte individual generado por IA</h2>
-        </div>
-        <p class="text-sm text-slate2 mb-6">Promedio actual: <strong class="text-ink">${promedio !== null ? promedio.toFixed(1) : 'Sin datos'}</strong> · Asistencia: <strong class="text-ink">${pctAsistencia !== null ? pctAsistencia + '%' : 'Sin datos'}</strong></p>
-        <div class="grid sm:grid-cols-2 gap-6">
-          <div>
-            <p class="text-xs font-bold uppercase tracking-wide text-turquesa mb-3">Fortalezas</p>
-            <ul class="space-y-2">${fortalezas.map(f => `<li class="text-sm text-ink flex gap-2"><span class="text-turquesa">●</span>${escapeHtml(f)}</li>`).join('')}</ul>
-          </div>
-          <div>
-            <p class="text-xs font-bold uppercase tracking-wide text-coral mb-3">Aspectos por fortalecer</p>
-            <ul class="space-y-2">${porFortalecer.map(f => `<li class="text-sm text-ink flex gap-2"><span class="text-coral">●</span>${escapeHtml(f)}</li>`).join('')}</ul>
-          </div>
-        </div>
-        <div class="mt-6 rounded-xl bg-oro/10 border border-oro/20 p-4">
-          <p class="text-xs font-bold uppercase tracking-wide text-oro mb-1">Recomendación</p>
-          <p class="text-sm text-ink">${escapeHtml(recomendacion)}</p>
-        </div>
-      </div>`;
   }
 
   // ---------- MIS MATERIAS Y HORARIO ----------
   // Mes seleccionado por el estudiante para ver su horario (memoria de sesión)
   let estudianteHorarioMes = null;
 
+  // ---------- Calificaciones (estudiante) — solo lectura ----------
+  // Muestra, por cada docente que le sube notas en su cohorte: cuántas notas
+  // hay, el porcentaje (peso) de cada una, la nota definitiva y el puesto
+  // que ocupa entre sus compañeros de esa misma cohorte. Nada más.
+  function renderCalificacionesEstudiante() {
+    const nombre = estudianteNombre();
+    const mod = estudianteModulo();
+
+    if (!mod) {
+      document.getElementById('mount-s-calificaciones').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
+        <p class="text-sm text-slate2">Aún no tienes una cohorte activa asignada, así que todavía no hay calificaciones para mostrar.</p>
+      </div>`;
+      return;
+    }
+
+    const registros = Store.list('notas_modulos').filter(r => r.cohorte === mod.nombre);
+
+    if (!registros.length) {
+      document.getElementById('mount-s-calificaciones').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
+        <p class="text-sm text-slate2">Tu(s) docente(s) aún no han registrado notas en <strong class="text-ink">${escapeHtml(mod.nombre)}</strong>.</p>
+      </div>`;
+      return;
+    }
+
+    const compañeros = docenteEstudiantesDeCohorte(mod.nombre);
+
+    const bloques = registros.map(rec => {
+      const materias = [...new Set(getSlotsDocente(rec.docente).filter(s => s.cohorte === mod.nombre).map(s => s.materia))];
+      const materiaLabel = materias.length ? materias.join(', ') : mod.modulo;
+
+      const valores = (rec.valores && rec.valores[nombre]) || {};
+      const filasNotas = (rec.criterios || []).map(c => {
+        const v = valores[c.id];
+        const tieneValor = v !== undefined && v !== null && v !== '';
+        return `<tr class="border-b border-gray-50 last:border-0">
+          <td class="py-2.5 px-4 text-sm font-semibold text-ink">${escapeHtml(c.nombre)}</td>
+          <td class="py-2.5 px-4 text-sm text-slate2">${c.peso}%</td>
+          <td class="py-2.5 px-4 text-sm font-bold text-right" style="color:${tieneValor ? '#14181F' : '#5B6472'}">${tieneValor ? Number(v).toFixed(1) : 'Pendiente'}</td>
+        </tr>`;
+      }).join('');
+
+      const resultado = calcularNotaFinal(rec, nombre);
+      const definitiva = resultado && !resultado.pendiente ? resultado.valor : null;
+
+      const ranking = compañeros
+        .map(u => {
+          const r = calcularNotaFinal(rec, u.nombre);
+          return { nombre: u.nombre, valor: r && !r.pendiente ? r.valor : null };
+        })
+        .filter(x => x.valor !== null)
+        .sort((a, b) => b.valor - a.valor);
+      const puesto = definitiva !== null ? ranking.findIndex(x => x.nombre === nombre) + 1 : null;
+
+      return `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden mb-6">
+        <div class="px-6 pt-5 pb-3 flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
+            <p class="text-xs text-slate2 mt-0.5">Docente: ${nombrePersonaClicable(rec.docente, 'Docente')}</p>
+          </div>
+          ${definitiva !== null ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${colorCualitativa(definitiva)}1A;color:${colorCualitativa(definitiva)}">${calificacionCualitativa(definitiva)}</span>` : ''}
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-2.5 px-4">Nota</th><th class="py-2.5 px-4">Porcentaje</th><th class="py-2.5 px-4 text-right">Calificación</th></tr></thead>
+            <tbody>${filasNotas || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Este docente aún no ha definido notas de evaluación.</td></tr>'}</tbody>
+          </table>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4 px-6 py-5 border-t border-gray-100">
+          <div>
+            <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Nota definitiva</p>
+            <p class="text-2xl font-extrabold mt-1" style="color:${colorCualitativa(definitiva)}">${definitiva !== null ? definitiva.toFixed(1) : '—'}</p>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Puesto en la cohorte</p>
+            <p class="text-2xl font-extrabold text-ink mt-1">${puesto !== null ? puesto + ' de ' + ranking.length : '—'}</p>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('mount-s-calificaciones').innerHTML = bloques;
+  }
+
   function renderAcademicoEstudiante() {
     const mod = estudianteModulo();
     const pensumItems = mod ? Store.list('pensum').filter(p => p.modulo === mod.modulo) : [];
+    const docentesCohorte = mod ? docentesDeCohorte(mod.nombre) : [];
     document.getElementById('mount-s-academico').innerHTML = `
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
-        <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-3">Mi módulo actual</p>
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-3">Mi cohorte</p>
         ${mod ? `
           <div class="flex flex-wrap items-center gap-3 mb-1">
-            <p class="text-lg font-extrabold text-ink">${escapeHtml(mod.modulo)}</p>
+            <p class="text-lg font-extrabold text-ink">${escapeHtml(mod.nombre)}</p>
             ${statusPill(mod.estado, ESTADO_COLORS)}
           </div>
-          <p class="text-sm text-slate2">${escapeHtml(mod.nombre)} · Docente: ${(() => { const ds = docentesDeCohorte(mod.nombre); return ds.length ? escapeHtml(ds.join(', ')) : 'Sin asignar'; })()}</p>
+          <p class="text-sm text-slate2">${escapeHtml(mod.modulo)}</p>
           <p class="text-sm text-slate2 mt-1">${fmtDate(mod.fechaInicio)} — ${fmtDate(mod.fechaFin)}</p>
+          <div class="mt-3">
+            <p class="text-xs font-semibold text-slate2 mb-1.5">Profesores de mi cohorte</p>
+            <div class="flex flex-wrap gap-2">
+              ${docentesCohorte.length
+                ? docentesCohorte.map(d => `<span class="inline-flex items-center rounded-full bg-morado/10 px-3 py-1 text-sm font-semibold text-morado">${nombrePersonaClicable(d, 'Docente')}</span>`).join('')
+                : '<span class="text-sm text-slate2">Sin docentes asignados aún.</span>'}
+            </div>
+          </div>
         ` : '<p class="text-sm text-slate2">No tienes un módulo activo asignado por el momento.</p>'}
       </div>
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
@@ -3397,7 +4437,7 @@
               <tr class="border-b border-gray-50 last:border-0">
                 <td class="py-3 px-4 text-sm text-ink">${escapeHtml(p.tema)}</td>
                 <td class="py-3 px-4 text-sm text-slate2">${p.horas} h</td>
-                <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(p.docente)}</td>
+                <td class="py-3 px-4 text-sm text-slate2">${nombrePersonaClicable(p.docente, 'Docente')}</td>
               </tr>`).join('') || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Aún no hay temas cargados para tu módulo.</td></tr>'}
             </tbody>
           </table>
@@ -3437,7 +4477,7 @@
         const c = celdas[celdaKey(dia, idx)] || {};
         return `<td class="py-2 px-3 align-top">
           <p class="text-xs font-semibold text-ink">${escapeHtml(c.materia || '—')}</p>
-          <p class="text-[11px] text-slate2">${escapeHtml(c.docente || '')}</p>
+          <p class="text-[11px] text-slate2">${nombrePersonaClicable(c.docente, 'Docente')}</p>
         </td>`;
       }).join('');
       return `<tr class="border-b border-gray-50">
@@ -3467,25 +4507,6 @@
   function onCambiaMesEstudianteHorario(mes) {
     estudianteHorarioMes = mes;
     renderAcademicoEstudiante();
-  }
-
-  // ---------- MATERIALES DE ESTUDIO ----------
-  function renderMaterialesEstudiante() {
-    const mod = estudianteModulo();
-    const materiales = Store.list('materiales').filter(m => !mod || m.modulo === mod.modulo);
-    const iconos = { PDF: '📄', Video: '🎬', Taller: '🛠️', Ejercicio: '✏️' };
-    document.getElementById('mount-s-materiales').innerHTML = `
-      <div class="grid sm:grid-cols-2 gap-4">
-        ${materiales.map(m => `
-          <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 flex items-start gap-4">
-            <div class="w-11 h-11 rounded-xl bg-gray-50 grid place-items-center text-xl shrink-0">${iconos[m.tipo] || '📁'}</div>
-            <div class="flex-1">
-              <p class="text-sm font-bold text-ink">${escapeHtml(m.titulo)}</p>
-              <p class="text-xs text-slate2 mt-0.5">${escapeHtml(m.tipo)} · ${escapeHtml(m.mes)}</p>
-              <button onclick="toast('Descargando: ${escapeHtml(m.titulo)}', 'ok')" class="text-xs font-semibold text-morado mt-2 hover:underline">Consultar material</button>
-            </div>
-          </div>`).join('') || '<p class="text-sm text-slate2 text-center py-8 sm:col-span-2">Tu docente aún no ha subido materiales para tu módulo.</p>'}
-      </div>`;
   }
 
   // ---------- PENSUM CURRICULAR ----------
@@ -3528,109 +4549,6 @@
     win.document.close();
     win.focus();
     win.print();
-  }
-
-  // ---------- BANCO DE RECURSOS IA ----------
-  function renderRecursosIaEstudiante() {
-    const nombre = estudianteNombre();
-    const califs = Store.list('calificaciones').filter(c => c.estudiante === nombre);
-    const cfg = Store.get('configuracion') || SEED.configuracion;
-    const debil = califs.filter(c => Number(c.nota) < cfg.notasMinimaAprobacion + 1).sort((a, b) => a.nota - b.nota)[0];
-    const tema = debil ? debil.modulo : (estudianteModulo() ? estudianteModulo().modulo : 'tu proceso académico');
-
-    const recursos = [
-      { tipo: 'Video', titulo: `Refuerzo visual: fundamentos de ${tema}` },
-      { tipo: 'PDF', titulo: `Guía de práctica — ${tema}` },
-      { tipo: 'Taller', titulo: `Taller guiado paso a paso — ${tema}` },
-      { tipo: 'Ejercicio', titulo: `Batería de ejercicios de repaso — ${tema}` },
-    ];
-    const iconos = { PDF: '📄', Video: '🎬', Taller: '🛠️', Ejercicio: '✏️' };
-    document.getElementById('mount-s-recursos-ia').innerHTML = `
-      <div class="rounded-2xl bg-morado/10 border border-morado/20 p-5 mb-6">
-        <p class="text-sm text-ink"><strong>Recomendación IA:</strong> según tu desempeño reciente, estos recursos sobre <strong>${escapeHtml(tema)}</strong> pueden ayudarte a reforzar tu aprendizaje.</p>
-      </div>
-      <div class="grid sm:grid-cols-2 gap-4">
-        ${recursos.map(r => `
-          <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 flex items-start gap-4">
-            <div class="w-11 h-11 rounded-xl bg-gray-50 grid place-items-center text-xl shrink-0">${iconos[r.tipo]}</div>
-            <div class="flex-1">
-              <p class="text-sm font-bold text-ink">${escapeHtml(r.titulo)}</p>
-              <p class="text-xs text-slate2 mt-0.5">${escapeHtml(r.tipo)}</p>
-              <button onclick="toast('Abriendo recurso recomendado', 'ok')" class="text-xs font-semibold text-morado mt-2 hover:underline">Abrir recurso</button>
-            </div>
-          </div>`).join('')}
-      </div>`;
-  }
-
-  // ---------- RUTA DE APRENDIZAJE IA ----------
-  function renderRutaIaEstudiante() {
-    const nombre = estudianteNombre();
-    const califs = Store.list('calificaciones').filter(c => c.estudiante === nombre);
-    const cfg = Store.get('configuracion') || SEED.configuracion;
-    const promedio = califs.length ? califs.reduce((a, c) => a + Number(c.nota || 0), 0) / califs.length : null;
-
-    const pasos = promedio !== null && promedio < cfg.notasMinimaAprobacion + 0.5
-      ? [
-          { titulo: 'Repasar fundamentos con el Banco de recursos IA', estado: 'Pendiente' },
-          { titulo: 'Agendar sesión de refuerzo con tu docente', estado: 'Pendiente' },
-          { titulo: 'Presentar evaluación de recuperación', estado: 'Pendiente' },
-          { titulo: 'Confirmar mejora con tu docente', estado: 'Pendiente' },
-        ]
-      : [
-          { titulo: 'Completar los temas restantes del pensum', estado: 'En curso' },
-          { titulo: 'Explorar un recurso avanzado sugerido por la IA', estado: 'Pendiente' },
-          { titulo: 'Participar en la próxima reunión virtual', estado: 'Pendiente' },
-          { titulo: 'Postularte a un reto de cierre de módulo', estado: 'Pendiente' },
-        ];
-
-    document.getElementById('mount-s-ruta-ia').innerHTML = `
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 sm:p-8">
-        <p class="text-xs font-bold uppercase tracking-wide text-morado mb-1">Plan de mejora sugerido por IA</p>
-        <p class="text-sm text-slate2 mb-6">Basado en tu promedio actual (${promedio !== null ? promedio.toFixed(1) : 'sin datos'}) y tu progreso en el módulo.</p>
-        <div class="space-y-3">
-          ${pasos.map((p, i) => `
-            <div class="flex items-center gap-4 rounded-xl border border-gray-100 p-4">
-              <div class="w-8 h-8 rounded-full bg-morado/10 text-morado font-bold text-sm grid place-items-center shrink-0">${i + 1}</div>
-              <p class="text-sm text-ink flex-1">${escapeHtml(p.titulo)}</p>
-              ${statusPill(p.estado, ESTADO_COLORS)}
-            </div>`).join('')}
-        </div>
-      </div>`;
-  }
-
-  // ---------- CORREO INSTITUCIONAL ----------
-  function renderCorreoEstudiante() {
-    const nombre = estudianteNombre();
-    const correos = [...Store.list('correos_estudiante')].filter(c => c.estudiante === nombre)
-      .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
-    document.getElementById('mount-s-correo').innerHTML = `
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft divide-y divide-gray-50">
-        ${correos.map(c => `
-          <button onclick="abrirCorreoEstudiante('${c.id}')" class="w-full text-left p-5 flex items-start gap-4 hover:bg-gray-50/60 transition">
-            <span class="w-2 h-2 rounded-full mt-2 shrink-0" style="background:${c.leido ? '#5B647233' : '#F5A623'}"></span>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center justify-between gap-3">
-                <p class="text-sm ${c.leido ? 'font-medium text-slate2' : 'font-bold text-ink'} truncate">${escapeHtml(c.asunto)}</p>
-                <p class="text-xs text-slate2 shrink-0">${fmtDate(c.fecha)}</p>
-              </div>
-              <p class="text-xs text-slate2 mt-0.5">De: ${escapeHtml(c.de)}</p>
-              <p class="text-xs text-slate2 mt-1 truncate">${escapeHtml(c.contenido)}</p>
-            </div>
-          </button>`).join('') || '<p class="text-sm text-slate2 text-center py-8">No tienes correos institucionales.</p>'}
-      </div>`;
-  }
-
-  function abrirCorreoEstudiante(id) {
-    const correos = Store.list('correos_estudiante');
-    const correo = correos.find(c => c.id === id);
-    if (!correo) return;
-    if (!correo.leido) {
-      correo.leido = true;
-      Store.set('correos_estudiante', correos);
-      updateCorreoBadge();
-    }
-    renderCorreoEstudiante();
-    toast(correo.asunto + ' — ' + correo.contenido, 'info');
   }
 
   // ---------- MEMORANDOS (solo lectura, formato carta) ----------
@@ -3787,27 +4705,6 @@
 
   // "Calendario institucional" fue eliminado del panel Estudiante.
 
-  // ---------- LOGROS E INSIGNIAS ----------
-  function renderLogrosEstudiante() {
-    const nombre = estudianteNombre();
-    const obtenidas = Store.list('insignias_estudiantes').filter(i => i.estudiante === nombre);
-    const obtenidasNombres = obtenidas.map(i => i.insignia);
-    document.getElementById('mount-s-logros').innerHTML = `
-      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        ${INSIGNIAS_CATALOGO.map(b => {
-          const lograda = obtenidasNombres.includes(b.nombre);
-          const fecha = lograda ? (obtenidas.find(i => i.insignia === b.nombre) || {}).fecha : null;
-          return `
-          <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 text-center ${lograda ? '' : 'opacity-45 grayscale'}">
-            <div class="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-3 text-2xl" style="background:${b.color}1A">🏅</div>
-            <p class="text-sm font-bold text-ink">${escapeHtml(b.nombre)}</p>
-            <p class="text-xs text-slate2 mt-1 leading-relaxed">${escapeHtml(b.descripcion)}</p>
-            ${lograda ? `<p class="text-xs font-semibold text-turquesa mt-2">Obtenida el ${fmtDate(fecha)}</p>` : '<p class="text-xs font-semibold text-slate2 mt-2">Aún no obtenida</p>'}
-          </div>`;
-        }).join('')}
-      </div>`;
-  }
-
   // ---------- ENCUESTAS DE SATISFACCIÓN ----------
   function renderEncuestasEstudiante() {
     const nombre = estudianteNombre();
@@ -3892,17 +4789,27 @@
     resumen: renderResumenEstudiante,
     perfil: renderPerfilEstudiante,
     asistencia: renderAsistenciaEstudiante,
-    'ia-analisis': renderIaAnalisisEstudiante,
     academico: renderAcademicoEstudiante,
-    materiales: renderMaterialesEstudiante,
+    calificaciones: renderCalificacionesEstudiante,
     pensum: renderPensumEstudiante,
-    'recursos-ia': renderRecursosIaEstudiante,
-    'ruta-ia': renderRutaIaEstudiante,
-    correo: renderCorreoEstudiante,
     memorandos: renderMemorandosEstudiante,
     pqr: renderPqrEstudiante,
     reuniones: renderReunionesEstudiante,
-    logros: renderLogrosEstudiante,
     encuestas: renderEncuestasEstudiante,
     agenda: renderAgendaEstudiante,
   };
+  // Si la URL trae ?qr=... (viene de escanear un código impreso con la
+  // cámara), toma el control ANTES que cualquier otra cosa.
+  manejarQrEnURL();
+
+  // Pinta el sitio público (Contáctanos + botón Postular) con lo que el
+  // Superadmin haya guardado en Configuración. Se ejecuta al cargar la
+  // página para que cualquier visitante vea siempre los datos vigentes.
+  seedIfEmpty();
+  // Limpieza única: 'alumnos_cohorte' fue una entidad de prueba del
+  // simulador de roles (ya retirado) que llegó a guardar alumnos ficticios
+  // en el localStorage de instalaciones anteriores. Se borra para dejar
+  // la base de datos local realmente en blanco.
+  localStorage.removeItem(DB_PREFIX + 'alumnos_cohorte');
+  renderContactoPublico();
+  actualizarBotonesPostular();
