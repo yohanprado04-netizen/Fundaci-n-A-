@@ -1,0 +1,238 @@
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+
+  /* --- Signature element: constellation of growth (100 -> 1000+) --- */
+  .constellation { position: relative; width: 100%; height: 100%; }
+  .node {
+    position: absolute;
+    border-radius: 9999px;
+    opacity: 0;
+    transform: scale(0);
+    animation: nodeIn 0.6s cubic-bezier(.2,.8,.2,1) forwards;
+  }
+  @keyframes nodeIn {
+    to { opacity: var(--op, 1); transform: scale(1); }
+  }
+  @keyframes drift {
+    0%, 100% { transform: translate(0,0); }
+    50% { transform: translate(var(--dx,4px), var(--dy,-4px)); }
+  }
+  .node.drift { animation: nodeIn 0.6s cubic-bezier(.2,.8,.2,1) forwards, drift 7s ease-in-out infinite; animation-delay: var(--delay,0s), var(--delay,0s); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .node { animation: none !important; opacity: var(--op,1); transform: scale(1); }
+    html { scroll-behavior: auto; }
+  }
+
+  .nav-link { position: relative; }
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    left: 0; bottom: -6px;
+    height: 2px; width: 0%;
+    background: linear-gradient(90deg, #1FC8C0, #8B5CF6, #F0455C);
+    transition: width .25s ease;
+  }
+  .nav-link:hover::after, .nav-link.active::after { width: 100%; }
+  .nav-link.active { color: #14181F; font-weight: 600; }
+
+  .grad-border {
+    position: relative;
+    background: white;
+  }
+  .grad-border::before {
+    content: '';
+    position: absolute; inset: 0;
+    padding: 1.5px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, #1FC8C0, #8B5CF6 35%, #F5A623 70%, #F0455C);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* =====================================================================
+     ADMIN SHELL — panel de administración (diseño corporativo moderno)
+     ===================================================================== */
+
+  .admin-shell { background: #F7F7F9; }
+
+  /* ---------- Sidebar ---------- */
+  .admin-sidebar {
+    background: #14181F;
+    border-radius: 0;
+  }
+  .admin-sidebar-brand {
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .admin-sidebar-section-label {
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.08em;
+  }
+  .superadmin-tab {
+    border: none !important;
+    font-weight: 500;
+    color: rgba(255,255,255,0.62);
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    position: relative;
+  }
+  .superadmin-tab svg { flex-shrink: 0; opacity: 0.85; }
+  .superadmin-tab:hover:not(.superadmin-tab-active) {
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+  }
+  .superadmin-tab-active {
+    background: rgba(139, 92, 246, 0.18) !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+  }
+  .superadmin-tab-active::before {
+    content: '';
+    position: absolute;
+    left: -0.5rem; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 60%;
+    border-radius: 9999px;
+    background: linear-gradient(180deg, #1FC8C0, #8B5CF6);
+  }
+  .admin-sidebar-footer {
+    border-top: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.4);
+  }
+
+  /* ---------- Topbar ---------- */
+  .admin-topbar {
+    background: #fff;
+    border-bottom: 1px solid #EEF0F3;
+  }
+  .admin-search {
+    background: #F3F4F6;
+    border: 1px solid transparent;
+    transition: background .2s ease, border-color .2s ease;
+  }
+  .admin-search:focus-within {
+    background: #fff;
+    border-color: #8B5CF6;
+    box-shadow: 0 0 0 3px rgba(139,92,246,0.12);
+  }
+  .admin-role-chip {
+    background: linear-gradient(135deg, #8B5CF61A, #1FC8C01A);
+    color: #5B21B6;
+    border: 1px solid #8B5CF633;
+  }
+
+  /* ---------- Banner de bienvenida ---------- */
+  .superadmin-banner {
+    position: relative;
+    overflow: hidden;
+    border-radius: 24px;
+    background: linear-gradient(115deg, #14181F 0%, #2A1F4D 55%, #5B21B6 100%);
+    box-shadow: 0 12px 40px rgba(20,24,31,0.18);
+  }
+  .superadmin-banner::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(31,200,192,0.35), transparent 40%),
+      radial-gradient(circle at 85% 0%, rgba(240,69,92,0.28), transparent 45%),
+      radial-gradient(circle at 75% 90%, rgba(245,166,35,0.22), transparent 40%);
+    pointer-events: none;
+  }
+  .superadmin-banner > * { position: relative; z-index: 1; }
+  .superadmin-banner-stat {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 14px;
+    backdrop-filter: blur(6px);
+  }
+
+  /* ---------- Cards de resumen ---------- */
+  .superadmin-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+  @media (min-width: 640px) {
+    .superadmin-cards { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (min-width: 1024px) {
+    .superadmin-cards { grid-template-columns: repeat(4, 1fr); }
+  }
+  .superadmin-card {
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid #EEF0F3;
+    padding: 1.5rem;
+    box-shadow: 0 1px 2px rgba(20,24,31,0.03);
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color .22s ease;
+  }
+  .superadmin-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 28px rgba(20,24,31,0.08);
+    border-color: #E4E1FA;
+  }
+  .superadmin-card-icon {
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.1rem;
+  }
+  .superadmin-card-dot {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 9999px;
+    margin-bottom: 1.25rem;
+  }
+  .superadmin-card-title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #5B6472;
+    margin: 0;
+  }
+  .superadmin-card-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #14181F;
+    margin-top: 0.375rem;
+    line-height: 1.15;
+  }
+  .superadmin-card-text {
+    font-size: 0.8125rem;
+    color: #5B6472;
+    margin-top: 0.5rem;
+    line-height: 1.5;
+  }
+
+  /* ---------- Paneles de contenido (tablas, formularios) ---------- */
+  .admin-panel-card {
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid #EEF0F3;
+    box-shadow: 0 1px 2px rgba(20,24,31,0.03);
+  }
+  .admin-table thead th {
+    background: #FAFAFB;
+    font-size: 0.6875rem;
+  }
+  .admin-table tbody tr {
+    transition: background-color .15s ease;
+  }
+  .admin-table tbody tr:hover {
+    background-color: #FAF9FF;
+  }
+  .admin-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 3rem 1rem;
+    color: #5B6472;
+  }
+
