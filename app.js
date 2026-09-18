@@ -2903,7 +2903,35 @@
   // guardan como Data URL en localStorage (Store 'trainee_archivos'), con
   // un límite de tamaño razonable por archivo para no saturar el navegador.
   const TRAINEE_ARCHIVO_MAX_BYTES = 3 * 1024 * 1024; // 3 MB por archivo
-  let traineeState = { estudianteId: null, busquedaArchivo: '' };
+  let traineeState = { estudianteId: null, busquedaArchivo: '', filtroTipo: 'todos' };
+
+  function formatFileSize(bytes) {
+    if (!bytes || isNaN(bytes)) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function getBadgeArchivo(archivo) {
+    const tipo = (archivo.tipo || '').toLowerCase();
+    const nombre = (archivo.nombre || '').toLowerCase();
+    if (tipo.includes('pdf') || nombre.endsWith('.pdf')) {
+      return { label: 'PDF', bg: 'bg-rose-500 text-white', icon: 'pdf' };
+    }
+    if (tipo.includes('png') || nombre.endsWith('.png')) {
+      return { label: 'PNG', bg: 'bg-indigo-600 text-white', icon: 'img' };
+    }
+    if (tipo.includes('jpeg') || tipo.includes('jpg') || nombre.endsWith('.jpg') || nombre.endsWith('.jpeg')) {
+      return { label: 'JPG', bg: 'bg-amber-600 text-white', icon: 'img' };
+    }
+    if (tipo.includes('webp') || nombre.endsWith('.webp')) {
+      return { label: 'WEBP', bg: 'bg-teal-600 text-white', icon: 'img' };
+    }
+    if (tipo.startsWith('image/')) {
+      return { label: 'IMG', bg: 'bg-morado text-white', icon: 'img' };
+    }
+    return { label: 'DOC', bg: 'bg-slate-700 text-white', icon: 'doc' };
+  }
 
   function renderTrainee() {
     document.getElementById('mount-trainee').innerHTML = `
@@ -2958,6 +2986,8 @@
 
   async function onCambiaTraineeEstudiante(estudianteId) {
     traineeState.estudianteId = estudianteId;
+    traineeState.busquedaArchivo = '';
+    traineeState.filtroTipo = 'todos';
     const input = document.getElementById('traineeBusquedaEmail');
     const persona = (await Store.list('usuarios')).find(u => u.id === estudianteId);
     if (input && persona) input.value = persona.email;
@@ -2969,6 +2999,8 @@
   // directamente la ficha de un estudiante puntual.
   async function abrirHistorialTrainee(estudianteId) {
     traineeState.estudianteId = estudianteId;
+    traineeState.busquedaArchivo = '';
+    traineeState.filtroTipo = 'todos';
     showPanel('trainee');
     // showPanel ya volvió a montar renderTrainee() con el input vacío —
     // se rellena aparte, después de que el DOM nuevo exista.
@@ -3050,10 +3082,22 @@
     // el await, "archivosTodos" habría quedado como esa Promise en vez
     // del array, rompiendo el .filter() de abajo.
     const archivosTodos = (await Store.list('trainee_archivos')).filter(a => a.estudianteId === est.id).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const totalArchivos = archivosTodos.length;
+    const totalImagenes = archivosTodos.filter(a => (a.tipo || '').startsWith('image/')).length;
+    const totalPdfs = archivosTodos.filter(a => (a.tipo === 'application/pdf' || (a.nombre || '').toLowerCase().endsWith('.pdf'))).length;
+
+    const filtroTipo = traineeState.filtroTipo || 'todos';
     const filtroArchivo = (traineeState.busquedaArchivo || '').trim().toLowerCase();
-    const archivos = filtroArchivo
-      ? archivosTodos.filter(a => (a.nombre || '').toLowerCase().includes(filtroArchivo))
-      : archivosTodos;
+
+    let archivos = archivosTodos;
+    if (filtroTipo === 'imagenes') {
+      archivos = archivos.filter(a => (a.tipo || '').startsWith('image/'));
+    } else if (filtroTipo === 'pdfs') {
+      archivos = archivos.filter(a => (a.tipo === 'application/pdf' || (a.nombre || '').toLowerCase().endsWith('.pdf')));
+    }
+    if (filtroArchivo) {
+      archivos = archivos.filter(a => (a.nombre || '').toLowerCase().includes(filtroArchivo));
+    }
 
     const iniciales = escapeHtml((est.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
 
@@ -3124,75 +3168,225 @@
         ${asistencia.length > 10 ? `<p class="text-xs text-slate2 mt-2">Mostrando los 10 registros más recientes de ${asistencia.length}.</p>` : ''}` : '<p class="text-sm text-slate2">Sin registros de asistencia.</p>'}
       </div>
 
-      <div class="admin-panel-card p-6">
-        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <p class="text-sm font-bold text-ink">Archivos (${archivosTodos.length})</p>
-          <div class="flex items-center gap-2">
-            <input id="traineeArchivoBusqueda" type="text" value="${escapeHtml(traineeState.busquedaArchivo || '')}" placeholder="Buscar por nombre de archivo..." oninput="buscarArchivoTrainee(this.value)" class="rounded-full border border-gray-200 px-3.5 py-1.5 text-xs w-48 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
-            <label class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-semibold px-4 py-2 hover:opacity-90 transition cursor-pointer whitespace-nowrap">
-              + Añadir archivo
+      <div class="admin-panel-card p-6 md:p-8">
+        <!-- Header con Icono y Botón de Subida -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-gray-100">
+          <div class="flex items-center gap-3.5">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-morado/15 to-turquesa/15 text-morado flex items-center justify-center shadow-inner shrink-0">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="text-base font-extrabold text-ink">Archivos y Evidencias</h3>
+                <span class="text-xs font-bold text-morado bg-morado/10 px-2.5 py-0.5 rounded-full">${totalArchivos}</span>
+              </div>
+              <p class="text-xs text-slate2 mt-0.5">Certificados, documentos de identidad o fotos del estudiante (hasta 3 MB).</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 shrink-0">
+            <label class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-morado via-purple-600 to-turquesa text-white text-xs font-bold px-4 py-2.5 shadow-md shadow-morado/20 hover:shadow-lg hover:shadow-morado/30 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              <span>Subir archivo</span>
               <input type="file" accept="image/*,.pdf,application/pdf" class="hidden" onchange="abrirNombreArchivoTrainee(this)" />
             </label>
           </div>
         </div>
-        <p class="text-xs text-slate2 mb-4">Imágenes o PDF. Máximo 3 MB por archivo. Al subir uno puedes ponerle un nombre; si lo dejas vacío se usa el nombre original del archivo.</p>
-        <div id="traineeArchivoNombreWrap" class="mb-4"></div>
-        <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
-          ${archivos.map(a => `
-            <div class="rounded-xl border border-gray-100 p-3">
-              ${a.tipo.startsWith('image/')
-                ? `<img src="${a.datos}" alt="${escapeHtml(a.nombre)}" class="w-full h-28 object-cover rounded-lg mb-2" />`
-                : `<div class="w-full h-28 rounded-lg bg-gray-50 grid place-items-center mb-2"><svg class="w-8 h-8 text-slate2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>`}
-              <p class="text-xs font-semibold text-ink truncate">${escapeHtml(a.nombre)}</p>
-              <p class="text-[11px] text-slate2">${fmtDate(a.fecha)}</p>
-              ${a.origen ? `<p class="text-[10px] text-morado font-semibold mt-0.5 truncate" title="${escapeHtml(a.origen)}">${escapeHtml(a.origen)}</p>` : ''}
-              <div class="flex items-center justify-between mt-2">
-                <a href="${a.datos}" download="${escapeHtml(a.nombre)}" class="text-[11px] font-semibold text-morado hover:underline">Descargar</a>
-                <button onclick="eliminarArchivoTrainee('${a.id}')" class="text-[11px] font-semibold text-coral hover:underline">Eliminar</button>
+
+        <!-- Filtros por tipo y Buscador -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 my-5">
+          <!-- Filtros de Tipo -->
+          <div class="inline-flex items-center gap-1.5 p-1 bg-gray-50 rounded-xl border border-gray-100 overflow-x-auto">
+            <button onclick="setFiltroTipoArchivoTrainee('todos')" class="px-3 py-1.5 rounded-lg text-xs transition-all ${filtroTipo === 'todos' ? 'bg-white text-ink shadow-sm border border-gray-200/60 font-bold' : 'text-slate2 hover:text-ink font-medium'}">
+              Todos <span class="ml-1 opacity-75 text-[11px]">(${totalArchivos})</span>
+            </button>
+            <button onclick="setFiltroTipoArchivoTrainee('imagenes')" class="px-3 py-1.5 rounded-lg text-xs transition-all ${filtroTipo === 'imagenes' ? 'bg-white text-ink shadow-sm border border-gray-200/60 font-bold' : 'text-slate2 hover:text-ink font-medium'}">
+              Imágenes <span class="ml-1 opacity-75 text-[11px]">(${totalImagenes})</span>
+            </button>
+            <button onclick="setFiltroTipoArchivoTrainee('pdfs')" class="px-3 py-1.5 rounded-lg text-xs transition-all ${filtroTipo === 'pdfs' ? 'bg-white text-ink shadow-sm border border-gray-200/60 font-bold' : 'text-slate2 hover:text-ink font-medium'}">
+              PDFs <span class="ml-1 opacity-75 text-[11px]">(${totalPdfs})</span>
+            </button>
+          </div>
+
+          <!-- Buscador -->
+          <div class="relative w-full sm:w-64">
+            <svg class="w-4 h-4 text-slate2 absolute left-3.5 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input id="traineeArchivoBusqueda" type="text" value="${escapeHtml(traineeState.busquedaArchivo || '')}" placeholder="Buscar por nombre..." oninput="buscarArchivoTrainee(this.value)" class="w-full pl-9 pr-8 py-2 rounded-xl border border-gray-200 bg-white text-xs text-ink placeholder-slate2/60 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+            ${traineeState.busquedaArchivo ? `
+              <button onclick="buscarArchivoTrainee('')" class="absolute right-2.5 top-2 text-slate2 hover:text-ink text-xs font-bold w-5 h-5 rounded-full hover:bg-gray-100 flex items-center justify-center">✕</button>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- Subida interactiva -->
+        <div id="traineeArchivoNombreWrap"></div>
+
+        <!-- Grid de Archivos -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          ${archivos.map(a => {
+            const badge = getBadgeArchivo(a);
+            const esImg = (a.tipo || '').startsWith('image/');
+            const esPdf = (a.tipo === 'application/pdf' || (a.nombre || '').toLowerCase().endsWith('.pdf'));
+
+            return `
+            <div class="group relative rounded-2xl border border-gray-200/80 bg-white hover:border-morado/30 hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden">
+              <!-- Thumbnail / Vista Previa -->
+              ${esImg ? `
+                <div class="relative h-44 sm:h-48 bg-gray-100 overflow-hidden cursor-pointer" onclick="verArchivoTraineeModal('${a.id}')">
+                  <img src="${a.datos}" alt="${escapeHtml(a.nombre)}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" />
+                  <div class="absolute inset-0 bg-ink/40 opacity-0 group-hover:opacity-100 backdrop-blur-[2px] transition-all duration-300 flex items-center justify-center">
+                    <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/95 text-ink text-xs font-bold shadow-lg transform translate-y-2 group-hover:translate-y-0 transition duration-300">
+                      <svg class="w-3.5 h-3.5 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                      Ver imagen
+                    </span>
+                  </div>
+                  <span class="absolute top-3 left-3 px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider ${badge.bg} shadow-md uppercase">
+                    ${badge.label}
+                  </span>
+                </div>
+              ` : `
+                <div class="relative h-44 sm:h-48 bg-gradient-to-br from-rose-50 via-red-50/60 to-orange-50 border-b border-rose-100/60 flex flex-col items-center justify-center p-4 cursor-pointer overflow-hidden" onclick="verArchivoTraineeModal('${a.id}')">
+                  <div class="w-16 h-20 bg-white rounded-xl shadow-md border border-rose-200/80 flex flex-col items-center justify-center relative group-hover:scale-110 transition-transform duration-300">
+                    <div class="w-9 h-9 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center mb-1">
+                      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                      </svg>
+                    </div>
+                    <span class="text-[9px] font-black tracking-widest text-rose-700 uppercase">PDF</span>
+                  </div>
+                  <div class="absolute inset-0 bg-ink/40 opacity-0 group-hover:opacity-100 backdrop-blur-[2px] transition-all duration-300 flex items-center justify-center">
+                    <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/95 text-ink text-xs font-bold shadow-lg transform translate-y-2 group-hover:translate-y-0 transition duration-300">
+                      <svg class="w-3.5 h-3.5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                      Abrir PDF
+                    </span>
+                  </div>
+                  <span class="absolute top-3 left-3 px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider ${badge.bg} shadow-md uppercase">
+                    ${badge.label}
+                  </span>
+                </div>
+              `}
+
+              <!-- Card Details -->
+              <div class="p-4 flex-1 flex flex-col justify-between">
+                <div>
+                  <h4 class="text-xs font-extrabold text-ink truncate mb-1.5" title="${escapeHtml(a.nombre)}">${escapeHtml(a.nombre)}</h4>
+                  <div class="flex items-center gap-2 text-slate2 text-[11px] flex-wrap">
+                    <span class="inline-flex items-center gap-1">
+                      <svg class="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                      ${fmtDate(a.fecha)}
+                    </span>
+                    ${a.origen ? `
+                      <span class="inline-block truncate max-w-[120px] font-semibold text-morado bg-morado/5 px-2 py-0.5 rounded-full" title="${escapeHtml(a.origen)}">
+                        ${escapeHtml(a.origen)}
+                      </span>
+                    ` : ''}
+                  </div>
+                </div>
+
+                <!-- Footer Actions -->
+                <div class="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-gray-100">
+                  <div class="flex items-center gap-1.5">
+                    <button onclick="verArchivoTraineeModal('${a.id}')" title="Ver archivo" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gray-50 hover:bg-morado/10 text-slate2 hover:text-morado text-xs font-bold border border-gray-200/60 transition-all">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                      Ver
+                    </button>
+                    <a href="${a.datos}" download="${escapeHtml(a.nombre)}" title="Descargar archivo" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gray-50 hover:bg-turquesa/10 text-slate2 hover:text-turquesa text-xs font-bold border border-gray-200/60 transition-all">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                      Descargar
+                    </a>
+                  </div>
+                  <button onclick="eliminarArchivoTrainee('${a.id}')" title="Eliminar archivo" class="w-8 h-8 rounded-xl text-slate2 hover:text-coral hover:bg-coral/10 flex items-center justify-center transition-all">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </div>
               </div>
-            </div>`).join('') || (filtroArchivo
-              ? `<p class="text-sm text-slate2 col-span-full">Ningún archivo coincide con "${escapeHtml(traineeState.busquedaArchivo)}".</p>`
-              : '<p class="text-sm text-slate2 col-span-full">Sin archivos adjuntos.</p>')}
+            </div>`;
+          }).join('') || (filtroArchivo || filtroTipo !== 'todos' ? `
+            <div class="col-span-full py-12 px-4 text-center rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/50">
+              <div class="w-12 h-12 rounded-full bg-gray-100 text-slate2 mx-auto flex items-center justify-center mb-3">
+                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              </div>
+              <p class="text-sm font-bold text-ink">No se encontraron archivos</p>
+              <p class="text-xs text-slate2 mt-1">Ningún archivo coincide con los filtros aplicados.</p>
+              <button onclick="traineeState.busquedaArchivo='';traineeState.filtroTipo='todos';renderTraineeFicha();" class="mt-3 text-xs font-bold text-morado hover:underline">Restablecer filtros</button>
+            </div>
+          ` : `
+            <div class="col-span-full py-12 px-4 text-center rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/50">
+              <div class="w-14 h-14 rounded-2xl bg-morado/10 text-morado mx-auto flex items-center justify-center mb-3 shadow-inner">
+                <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+              </div>
+              <p class="text-sm font-bold text-ink">No hay archivos adjuntos</p>
+              <p class="text-xs text-slate2 mt-1 max-w-sm mx-auto">Sube evidencias, notas, fotos o documentos relevantes para el historial de este estudiante.</p>
+              <label class="mt-4 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-morado via-purple-600 to-turquesa text-white text-xs font-bold px-5 py-2.5 shadow-md hover:opacity-95 cursor-pointer transition">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                Subir el primer archivo
+                <input type="file" accept="image/*,.pdf,application/pdf" class="hidden" onchange="abrirNombreArchivoTrainee(this)" />
+              </label>
+            </div>
+          `)}
         </div>
       </div>`;
   }
 
   // Escribe en traineeState y vuelve a pintar la ficha para aplicar el
-  // filtro — se hace en cada tecla (oninput), como el resto de buscadores
-  // de la plataforma (ver p. ej. buscarUsuarios).
-  function buscarArchivoTrainee(valor) {
+  // filtro — se hace en cada tecla (oninput).
+  async function buscarArchivoTrainee(valor) {
     traineeState.busquedaArchivo = valor;
-    renderTraineeFicha();
-    // Devuelve el foco al campo de búsqueda: renderTraineeFicha reconstruye
-    // todo el HTML de la tarjeta, así que el input original se reemplaza
-    // por uno nuevo y perdería el foco/cursor si no se restaura aquí.
+    await renderTraineeFicha();
     const input = document.getElementById('traineeArchivoBusqueda');
     if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
   }
 
+  function setFiltroTipoArchivoTrainee(tipo) {
+    traineeState.filtroTipo = tipo;
+    renderTraineeFicha();
+  }
+
   // Paso intermedio entre elegir el archivo y guardarlo: pide el nombre
-  // (opcional) antes de leerlo/guardarlo, para no tener que rediseñar el
-  // <input type="file"> nativo del navegador (que no permite pedir texto
-  // adicional en el mismo diálogo).
+  // (opcional) antes de leerlo/guardarlo con una tarjeta visual interactiva.
   function abrirNombreArchivoTrainee(input) {
     const file = input.files && input.files[0];
     if (!file) return;
     const wrap = document.getElementById('traineeArchivoNombreWrap');
     if (!wrap) { agregarArchivoTrainee(file, file.name); return; }
 
-    // DataTransfer para poder recuperar el mismo File tras el re-render del
-    // botón "Guardar" (el <input> original se pierde al tocar innerHTML).
     window.__traineeArchivoPendiente = file;
+    const fileSizeFmt = formatFileSize(file.size);
+    const esPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
     wrap.innerHTML = `
-      <div class="rounded-xl border border-morado/25 bg-morado/5 p-4">
-        <label class="block text-xs font-bold text-ink mb-1.5">Nombre del archivo (opcional)</label>
-        <div class="flex items-center gap-2 flex-wrap">
-          <input id="traineeArchivoNombreInput" type="text" placeholder="${escapeHtml(file.name)}" class="flex-1 min-w-[180px] rounded-lg border border-morado/25 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
-          <button onclick="confirmarSubidaArchivoTrainee()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-semibold px-4 py-2 hover:opacity-90 transition">Guardar archivo</button>
-          <button onclick="cancelarSubidaArchivoTrainee()" class="text-xs font-semibold text-slate2 hover:text-coral transition">Cancelar</button>
+      <div class="rounded-2xl border-2 border-dashed border-morado/40 bg-gradient-to-br from-morado/5 via-white to-turquesa/5 p-4 sm:p-5 mb-5 animate-fadeIn">
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl ${esPdf ? 'bg-rose-100 text-rose-600' : 'bg-morado/15 text-morado'} flex items-center justify-center shrink-0 mt-0.5">
+            ${esPdf ? `
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            ` : `
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            `}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-extrabold text-ink truncate max-w-[280px]">${escapeHtml(file.name)}</span>
+              ${fileSizeFmt ? `<span class="text-[11px] font-bold text-slate2 bg-gray-100 px-2 py-0.5 rounded-full">${fileSizeFmt}</span>` : ''}
+              <span class="text-[10px] font-bold text-morado bg-morado/10 px-2 py-0.5 rounded-full uppercase">${esPdf ? 'Documento PDF' : 'Imagen'}</span>
+            </div>
+            <label class="block text-xs font-semibold text-slate2 mt-2.5 mb-1" for="traineeArchivoNombreInput">Asignar un nombre o descripción (opcional):</label>
+            <div class="flex items-center gap-2 flex-wrap">
+              <input id="traineeArchivoNombreInput" type="text" placeholder="${escapeHtml(file.name)}" class="flex-1 min-w-[200px] rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs text-ink placeholder-slate2/60 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <button onclick="confirmarSubidaArchivoTrainee()" class="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-morado via-purple-600 to-turquesa text-white text-xs font-bold px-4 py-2 hover:opacity-95 shadow-md shadow-morado/20 hover:scale-[1.02] active:scale-[0.98] transition">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                Guardar archivo
+              </button>
+              <button onclick="cancelarSubidaArchivoTrainee()" class="px-3 py-2 text-xs font-semibold text-slate2 hover:text-coral hover:bg-coral/5 rounded-xl transition">
+                Cancelar
+              </button>
+            </div>
+            <p class="text-[11px] text-slate2/80 mt-1.5">Si lo dejas vacío, se guardará con su nombre de origen: <span class="font-medium text-ink">${escapeHtml(file.name)}</span></p>
+          </div>
         </div>
-        <p class="text-[11px] text-slate2 mt-1.5">Archivo seleccionado: ${escapeHtml(file.name)} — déjalo vacío para usar ese mismo nombre.</p>
       </div>`;
     const nombreInput = document.getElementById('traineeArchivoNombreInput');
     if (nombreInput) nombreInput.focus();
@@ -3219,8 +3413,7 @@
   // — eso solo persistía en localStorage (trainee_archivos no estaba en
   // ENTIDADES_MYSQL), por eso los archivos no aparecían al entrar desde
   // otro navegador o dispositivo. Ahora usa Store.agregarArchivo(), que
-  // sube SOLO este archivo al servidor (POST puntual — ver comentario en
-  // ENTIDADES_MYSQL en db.js sobre por qué no usa el Store.set genérico).
+  // sube SOLO este archivo al servidor.
   async function agregarArchivoTrainee(file, nombre) {
     const esValido = file.type.startsWith('image/') || file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     if (!esValido) { toast('Solo se permiten imágenes o archivos PDF', 'err'); return; }
@@ -3255,6 +3448,8 @@
   }
 
   async function eliminarArchivoTrainee(archivoId) {
+    if (!confirm('¿Estás seguro de que deseas eliminar este archivo? Esta acción no se puede deshacer.')) return;
+
     // Limpia del localStorage de inmediato por si el archivo provenía de caché local
     try {
       const locales = JSON.parse(localStorage.getItem('aplus_admin_v1_trainee_archivos') || '[]');
@@ -3281,6 +3476,97 @@
     toast(resultado && resultado.remoto ? 'Archivo eliminado de la base de datos' : 'Archivo eliminado', 'ok');
     renderTraineeFicha();
   }
+
+  function handleEscapeTraineeModal(e) {
+    if (e.key === 'Escape') cerrarArchivoTraineeModal();
+  }
+
+  async function verArchivoTraineeModal(archivoId) {
+    const archivos = await Store.list('trainee_archivos');
+    const arch = archivos.find(a => a.id === archivoId);
+    if (!arch) { toast('Archivo no encontrado', 'err'); return; }
+
+    let modal = document.getElementById('traineeArchivoModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'traineeArchivoModal';
+      document.body.appendChild(modal);
+    }
+
+    const esImagen = (arch.tipo || '').startsWith('image/');
+    const esPdf = arch.tipo === 'application/pdf' || (arch.nombre || '').toLowerCase().endsWith('.pdf');
+    const badge = getBadgeArchivo(arch);
+
+    modal.innerHTML = `
+      <div id="traineeArchivoModalBackdrop" class="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-ink/75 backdrop-blur-sm animate-fadeIn">
+        <div class="relative w-full max-w-4xl max-h-[92vh] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-white/20" onclick="event.stopPropagation()">
+          <!-- Header del visor -->
+          <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3 bg-gray-50/80">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${badge.bg} shadow-sm shrink-0">
+                ${badge.label}
+              </span>
+              <div class="min-w-0">
+                <h4 class="text-sm font-extrabold text-ink truncate">${escapeHtml(arch.nombre)}</h4>
+                <p class="text-[11px] text-slate2">${fmtDate(arch.fecha)}${arch.origen ? ' · ' + escapeHtml(arch.origen) : ''}</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <a href="${arch.datos}" download="${escapeHtml(arch.nombre)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-morado text-white text-xs font-bold hover:bg-morado/90 transition shadow-sm">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                <span>Descargar</span>
+              </a>
+              <button onclick="cerrarArchivoTraineeModal()" class="w-8 h-8 rounded-xl bg-gray-200/80 hover:bg-gray-300 text-ink flex items-center justify-center transition text-sm font-bold">
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- Contenedor del visor -->
+          <div class="flex-1 overflow-auto p-4 sm:p-6 flex items-center justify-center bg-gray-900/5 min-h-[350px]">
+            ${esImagen ? `
+              <img src="${arch.datos}" alt="${escapeHtml(arch.nombre)}" class="max-w-full max-h-[72vh] object-contain rounded-xl shadow-lg mx-auto" />
+            ` : esPdf ? `
+              <iframe src="${arch.datos}" class="w-full h-[72vh] rounded-xl border border-gray-200 bg-white shadow-inner" title="${escapeHtml(arch.nombre)}"></iframe>
+            ` : `
+              <div class="text-center p-8 bg-white rounded-2xl shadow-sm border border-gray-100 max-w-sm">
+                <div class="w-12 h-12 rounded-2xl bg-morado/10 text-morado mx-auto flex items-center justify-center mb-3">
+                  <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                </div>
+                <p class="text-sm font-bold text-ink">Vista previa no disponible</p>
+                <p class="text-xs text-slate2 mt-1">Este formato de archivo se puede abrir tras descargarlo.</p>
+                <a href="${arch.datos}" download="${escapeHtml(arch.nombre)}" class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-morado text-white text-xs font-bold shadow-md hover:bg-morado/90 transition">
+                  Descargar ahora
+                </a>
+              </div>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+
+    const backdrop = document.getElementById('traineeArchivoModalBackdrop');
+    if (backdrop) {
+      backdrop.addEventListener('click', cerrarArchivoTraineeModal);
+    }
+    window.addEventListener('keydown', handleEscapeTraineeModal);
+  }
+
+  function cerrarArchivoTraineeModal() {
+    const modal = document.getElementById('traineeArchivoModal');
+    if (modal) modal.remove();
+    window.removeEventListener('keydown', handleEscapeTraineeModal);
+  }
+
+  // Exposición explícita para llamadas desde onclick
+  window.verArchivoTraineeModal = verArchivoTraineeModal;
+  window.cerrarArchivoTraineeModal = cerrarArchivoTraineeModal;
+  window.setFiltroTipoArchivoTrainee = setFiltroTipoArchivoTrainee;
+  window.buscarArchivoTrainee = buscarArchivoTrainee;
+  window.abrirNombreArchivoTrainee = abrirNombreArchivoTrainee;
+  window.confirmarSubidaArchivoTrainee = confirmarSubidaArchivoTrainee;
+  window.cancelarSubidaArchivoTrainee = cancelarSubidaArchivoTrainee;
+  window.eliminarArchivoTrainee = eliminarArchivoTrainee;
 
   // async: 'cursos' vía MySQL.
   async function renderCursos() {
