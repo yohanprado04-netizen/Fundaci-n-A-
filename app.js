@@ -2903,7 +2903,12 @@
   // guardan como Data URL en localStorage (Store 'trainee_archivos'), con
   // un límite de tamaño razonable por archivo para no saturar el navegador.
   const TRAINEE_ARCHIVO_MAX_BYTES = 3 * 1024 * 1024; // 3 MB por archivo
-  let traineeState = { estudianteId: null, busquedaArchivo: '', filtroTipo: 'todos' };
+  let traineeState = { estudianteId: null, busquedaArchivo: '', filtroTipo: 'todos', archivosExpandidos: false };
+
+  function toggleExpandirArchivosTrainee() {
+    traineeState.archivosExpandidos = !traineeState.archivosExpandidos;
+    renderTraineeFicha();
+  }
 
   function formatFileSize(bytes) {
     if (!bytes || isNaN(bytes)) return '';
@@ -2988,6 +2993,7 @@
     traineeState.estudianteId = estudianteId;
     traineeState.busquedaArchivo = '';
     traineeState.filtroTipo = 'todos';
+    traineeState.archivosExpandidos = false;
     const input = document.getElementById('traineeBusquedaEmail');
     const persona = (await Store.list('usuarios')).find(u => u.id === estudianteId);
     if (input && persona) input.value = persona.email;
@@ -3001,6 +3007,7 @@
     traineeState.estudianteId = estudianteId;
     traineeState.busquedaArchivo = '';
     traineeState.filtroTipo = 'todos';
+    traineeState.archivosExpandidos = false;
     showPanel('trainee');
     // showPanel ya volvió a montar renderTrainee() con el input vacío —
     // se rellena aparte, después de que el DOM nuevo exista.
@@ -3099,73 +3106,161 @@
       archivos = archivos.filter(a => (a.nombre || '').toLowerCase().includes(filtroArchivo));
     }
 
+    const limiteArchivos = 6;
+    const mostrarVerMas = archivos.length > limiteArchivos;
+    const archivosMostrados = (mostrarVerMas && !traineeState.archivosExpandidos)
+      ? archivos.slice(0, limiteArchivos)
+      : archivos;
+
+    const promVal = promedioGeneral ? promedioGeneral.promedio : null;
+    let semaforoBadge = { text: 'Sin datos suficientes', bg: 'bg-gray-100 text-slate2 border-gray-200', dot: 'bg-slate-400' };
+    if (promVal !== null || pctAsistencia !== null) {
+      const p = promVal !== null ? promVal : 7.0;
+      const a = pctAsistencia !== null ? pctAsistencia : 100;
+      const m = memos.length;
+      if (p >= 7.0 && a >= 80 && m === 0) {
+        semaforoBadge = { text: 'Rendimiento Óptimo', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' };
+      } else if (p >= 6.0 && a >= 70 && m <= 1) {
+        semaforoBadge = { text: 'En Seguimiento', bg: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
+      } else {
+        semaforoBadge = { text: 'Atención Requerida', bg: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' };
+      }
+    }
+
     const iniciales = escapeHtml((est.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
 
     wrap.innerHTML = `
       <div class="admin-panel-card p-6 mb-6">
-        <div class="flex items-center gap-4">
-          <div class="w-16 h-16 rounded-full grid place-items-center text-xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              <p class="text-base font-extrabold text-ink">${escapeHtml(est.nombre)}</p>
-              ${!esEstudianteActual ? `<span class="text-[10px] font-bold uppercase tracking-wide text-morado bg-morado/10 rounded-full px-2 py-0.5">Fue estudiante · ahora ${escapeHtml(est.rol)}</span>` : ''}
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div class="w-16 h-16 rounded-2xl grid place-items-center text-xl font-extrabold text-white shrink-0 shadow-md shadow-morado/20" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <p class="text-lg font-extrabold text-ink">${escapeHtml(est.nombre)}</p>
+                ${!esEstudianteActual ? `<span class="text-[10px] font-bold uppercase tracking-wide text-morado bg-morado/10 border border-morado/20 rounded-full px-2 py-0.5">Histórico · ${escapeHtml(est.rol)}</span>` : ''}
+                ${statusPill(est.estado || 'Activo', ESTADO_COLORS)}
+              </div>
+              <p class="text-sm text-slate2 mt-0.5">${escapeHtml(est.email || '')} ${cohorteHistorica ? '· <span class="font-semibold text-ink">' + escapeHtml(cohorteHistorica) + '</span>' + (esEstudianteActual ? '' : ' (cohorte histórica)') : ''}</p>
             </div>
-            <p class="text-sm text-slate2">${escapeHtml(est.email || '')} ${cohorteHistorica ? '· ' + escapeHtml(cohorteHistorica) + (esEstudianteActual ? '' : ' (cohorte cuando fue estudiante)') : ''}</p>
           </div>
-          ${statusPill(est.estado || 'Activo', ESTADO_COLORS)}
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="exportarFichaTraineePDF('${est.id}')" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-morado via-purple-600 to-turquesa text-white text-xs font-bold shadow-md shadow-morado/20 hover:shadow-lg hover:shadow-morado/30 transition-all active:scale-[0.98]">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              <span>Exportar Ficha Oficial (PDF)</span>
+            </button>
+          </div>
         </div>
-        <div class="grid grid-cols-2 gap-3 mt-5 pt-5 border-t border-gray-100">
-          <div><p class="text-[11px] font-semibold text-slate2 uppercase tracking-wide">Asistencia</p><p class="text-lg font-extrabold text-ink mt-0.5">${pctAsistencia !== null ? pctAsistencia + '%' : '—'}</p></div>
-          <div><p class="text-[11px] font-semibold text-slate2 uppercase tracking-wide">Promedio</p><p class="text-lg font-extrabold text-ink mt-0.5">${promedioGeneral ? promedioGeneral.promedio.toFixed(1) : '—'}</p></div>
+
+        <!-- 4 KPI Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-6 pt-5 border-t border-gray-100">
+          <div class="p-3.5 rounded-xl bg-gray-50 border border-gray-100">
+            <p class="text-[11px] font-bold text-slate2 uppercase tracking-wide">Asistencia Acumulada</p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <p class="text-2xl font-black text-ink">${pctAsistencia !== null ? pctAsistencia + '%' : '—'}</p>
+              ${pctAsistencia !== null ? `<span class="text-[11px] font-semibold ${pctAsistencia >= 85 ? 'text-emerald-600' : (pctAsistencia >= 75 ? 'text-amber-600' : 'text-rose-600')}">${pctAsistencia >= 85 ? 'Excelente' : (pctAsistencia >= 75 ? 'Regular' : 'Crítica')}</span>` : ''}
+            </div>
+            <p class="text-[11px] text-slate2 mt-0.5">${asistencia.length} registros totales</p>
+          </div>
+
+          <div class="p-3.5 rounded-xl bg-gray-50 border border-gray-100">
+            <p class="text-[11px] font-bold text-slate2 uppercase tracking-wide">Promedio General</p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <p class="text-2xl font-black" style="color:${promVal !== null ? colorCualitativa(promVal) : '#1E293B'}">${promVal !== null ? promVal.toFixed(1) : '—'}</p>
+              ${promVal !== null ? `<span class="text-[11px] font-bold uppercase" style="color:${colorCualitativa(promVal)}">${calificacionCualitativa(promVal)}</span>` : ''}
+            </div>
+            <p class="text-[11px] text-slate2 mt-0.5">Escala estándar 0 a 10</p>
+          </div>
+
+          <div class="p-3.5 rounded-xl bg-gray-50 border border-gray-100">
+            <p class="text-[11px] font-bold text-slate2 uppercase tracking-wide">Diagnóstico Académico</p>
+            <div class="mt-2">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${semaforoBadge.bg}">
+                <span class="w-2 h-2 rounded-full ${semaforoBadge.dot} animate-pulse"></span>
+                ${semaforoBadge.text}
+              </span>
+            </div>
+            <p class="text-[11px] text-slate2 mt-1">${memos.length} ${memos.length === 1 ? 'llamado registrado' : 'llamados registrados'}</p>
+          </div>
+
+          <div class="p-3.5 rounded-xl bg-gray-50 border border-gray-100">
+            <p class="text-[11px] font-bold text-slate2 uppercase tracking-wide">Cohorte y Estado</p>
+            <p class="text-base font-extrabold text-ink mt-1 truncate" title="${escapeHtml(cohorteHistorica || 'Sin cohorte')}">${escapeHtml(cohorteHistorica || 'Sin cohorte')}</p>
+            <p class="text-[11px] text-slate2 mt-0.5">${esEstudianteActual ? 'En formación activa' : 'Completó etapa formativa'}</p>
+          </div>
         </div>
       </div>
 
       <div class="admin-panel-card p-6 mb-6">
         <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <p class="text-sm font-bold text-ink">Calificaciones por mes</p>
-          <span class="text-xs text-slate2">Promedio general: <span class="font-bold" style="color:${promedioGeneral ? colorCualitativa(promedioGeneral.promedio) : '#5B6472'}">${promedioGeneral ? promedioGeneral.promedio.toFixed(1) : '—'}</span></span>
+          <div>
+            <h3 class="text-sm font-bold text-ink">Calificaciones por mes</h3>
+            <p class="text-xs text-slate2">Rendimiento mensual consolidado según evaluaciones docentes</p>
+          </div>
+          <span class="text-xs text-slate2 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">Promedio general: <span class="font-bold ml-1" style="color:${promVal !== null ? colorCualitativa(promVal) : '#5B6472'}">${promVal !== null ? promVal.toFixed(1) : '—'}</span></span>
         </div>
         ${calificacionesPorMes.length ? `
         <div class="overflow-x-auto">
           <table class="w-full admin-table">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-2 px-3">Mes</th><th class="py-2 px-3">Promedio del mes</th><th class="py-2 px-3">Profesores</th></tr></thead>
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-2.5 px-3">Mes</th><th class="py-2.5 px-3">Promedio</th><th class="py-2.5 px-3">Nivel Cualitativo</th><th class="py-2.5 px-3">Docentes Evaluadores</th></tr></thead>
             <tbody>${calificacionesPorMes.map(r => `
-              <tr class="border-b border-gray-50 last:border-0">
-                <td class="py-2 px-3 text-sm text-ink font-medium">${escapeHtml(mesLabel(r.mes))}</td>
-                <td class="py-2 px-3 text-sm"><span class="font-bold" style="color:${colorCualitativa(r.resultado.promedio)}">${r.resultado.promedio.toFixed(1)}</span></td>
-                <td class="py-2 px-3 text-sm text-slate2">${r.resultado.profesores}</td>
+              <tr class="border-b border-gray-50 hover:bg-gray-50/50 transition last:border-0">
+                <td class="py-3 px-3 text-sm text-ink font-semibold capitalize">${escapeHtml(mesLabel(r.mes))}</td>
+                <td class="py-3 px-3 text-sm"><span class="text-base font-black px-2 py-0.5 rounded-lg" style="color:${colorCualitativa(r.resultado.promedio)};background:${colorCualitativa(r.resultado.promedio)}15">${r.resultado.promedio.toFixed(1)}</span></td>
+                <td class="py-3 px-3 text-xs font-bold uppercase" style="color:${colorCualitativa(r.resultado.promedio)}">${calificacionCualitativa(r.resultado.promedio)}</td>
+                <td class="py-3 px-3 text-sm text-slate2">${r.resultado.profesores}</td>
               </tr>`).join('')}</tbody>
           </table>
-        </div>` : '<p class="text-sm text-slate2">Sin calificaciones registradas por mes todavía.</p>'}
+        </div>` : '<p class="text-sm text-slate2 py-2">Sin calificaciones registradas por mes todavía.</p>'}
       </div>
 
       <div class="admin-panel-card p-6 mb-6">
-        <p class="text-sm font-bold text-ink mb-4">Memorandos (${memos.length})</p>
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 class="text-sm font-bold text-ink">Llamados de Atención y Memorandos</h3>
+            <p class="text-xs text-slate2">Expediente disciplinario y compromisos formativos</p>
+          </div>
+          <span class="text-xs font-bold ${memos.length > 0 ? 'text-amber-700 bg-amber-50 border border-amber-200' : 'text-emerald-700 bg-emerald-50 border border-emerald-200'} px-2.5 py-0.5 rounded-full">${memos.length} ${memos.length === 1 ? 'memorando' : 'memorandos'}</span>
+        </div>
         ${memos.length ? memos.map(m => `
-          <div class="flex items-start justify-between gap-3 py-3 border-b border-gray-50 last:border-0">
-            <div class="min-w-0">
-              <p class="text-sm font-semibold text-ink">${escapeHtml(m.titulo)}</p>
-              <p class="text-xs text-slate2">${fmtDate(m.fecha)}</p>
+          <div class="flex items-start justify-between gap-3 py-3 px-3 rounded-xl hover:bg-gray-50/80 transition border-b border-gray-50 last:border-0">
+            <div class="flex items-start gap-3 min-w-0">
+              <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              </div>
+              <div class="min-w-0">
+                <p class="text-sm font-bold text-ink">${escapeHtml(m.titulo)}</p>
+                <p class="text-xs text-slate2 mt-0.5">${fmtDate(m.fecha)}</p>
+              </div>
             </div>
-            <button onclick="abrirMemorandoCarta('${m.id}')" class="text-xs font-semibold text-morado hover:underline shrink-0">Ver carta</button>
-          </div>`).join('') : '<p class="text-sm text-slate2">Sin memorandos registrados.</p>'}
+            <button onclick="abrirMemorandoCarta('${m.id}')" class="text-xs font-bold text-morado bg-morado/10 hover:bg-morado/20 px-3 py-1.5 rounded-lg transition shrink-0">Ver carta</button>
+          </div>`).join('') : `
+          <div class="py-3 px-3 rounded-xl bg-emerald-50/50 border border-emerald-100 flex items-center gap-2.5 text-emerald-800 text-xs font-medium">
+            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span>Expediente impecable: no registra llamados de atención ni sanciones disciplinarias.</span>
+          </div>`}
       </div>
 
       <div class="admin-panel-card p-6 mb-6">
-        <p class="text-sm font-bold text-ink mb-4">Asistencia reciente</p>
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 class="text-sm font-bold text-ink">Asistencia Reciente</h3>
+            <p class="text-xs text-slate2">Últimos registros de asistencia a clases y talleres</p>
+          </div>
+          ${pctAsistencia !== null ? `<span class="text-xs font-bold text-ink bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-lg">Asistencia: <span class="font-extrabold ${pctAsistencia >= 85 ? 'text-emerald-600' : 'text-amber-600'}">${pctAsistencia}%</span></span>` : ''}
+        </div>
         ${asistencia.length ? `
         <div class="overflow-x-auto">
           <table class="w-full admin-table">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-2 px-3">Fecha</th><th class="py-2 px-3">Curso</th><th class="py-2 px-3">Estado</th></tr></thead>
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-2.5 px-3">Fecha</th><th class="py-2.5 px-3">Curso / Módulo</th><th class="py-2.5 px-3">Estado</th></tr></thead>
             <tbody>${asistencia.slice(0, 10).map(a => `
-              <tr class="border-b border-gray-50 last:border-0">
-                <td class="py-2 px-3 text-sm text-ink">${fmtDate(a.fecha)}</td>
-                <td class="py-2 px-3 text-sm text-slate2">${escapeHtml(a.modulo || '—')}</td>
-                <td class="py-2 px-3">${statusPill(a.estado, { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'] })}</td>
+              <tr class="border-b border-gray-50 hover:bg-gray-50/50 transition last:border-0">
+                <td class="py-2.5 px-3 text-sm text-ink font-medium">${fmtDate(a.fecha)}</td>
+                <td class="py-2.5 px-3 text-sm text-slate2">${escapeHtml(a.modulo || '—')}</td>
+                <td class="py-2.5 px-3">${statusPill(a.estado, { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'] })}</td>
               </tr>`).join('')}</tbody>
           </table>
         </div>
-        ${asistencia.length > 10 ? `<p class="text-xs text-slate2 mt-2">Mostrando los 10 registros más recientes de ${asistencia.length}.</p>` : ''}` : '<p class="text-sm text-slate2">Sin registros de asistencia.</p>'}
+        ${asistencia.length > 10 ? `<p class="text-xs text-slate2 mt-2">Mostrando los 10 registros más recientes de un total de ${asistencia.length}.</p>` : ''}` : '<p class="text-sm text-slate2 py-2">Sin registros de asistencia.</p>'}
       </div>
 
       <div class="admin-panel-card p-6 md:p-8">
@@ -3226,7 +3321,7 @@
 
         <!-- Grid de Archivos -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          ${archivos.map(a => {
+          ${archivosMostrados.map(a => {
             const badge = getBadgeArchivo(a);
             const esImg = (a.tipo || '').startsWith('image/');
             const esPdf = (a.tipo === 'application/pdf' || (a.nombre || '').toLowerCase().endsWith('.pdf'));
@@ -3327,6 +3422,20 @@
               </label>
             </div>
           `)}
+
+          ${mostrarVerMas ? `
+            <div class="col-span-full flex justify-center mt-2">
+              <button onclick="toggleExpandirArchivosTrainee()" class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl border border-morado/30 bg-morado/5 hover:bg-morado/10 text-morado text-xs font-bold transition-all shadow-sm hover:shadow active:scale-95">
+                ${traineeState.archivosExpandidos ? `
+                  <span>Mostrar menos archivos</span>
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                ` : `
+                  <span>Ver más archivos (${archivos.length - limiteArchivos} adicionales)</span>
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                `}
+              </button>
+            </div>
+          ` : ''}
         </div>
       </div>`;
   }
@@ -3558,6 +3667,330 @@
     window.removeEventListener('keydown', handleEscapeTraineeModal);
   }
 
+  // Genera el informe oficial completo del Trainee en formato membretado listo para imprimir o guardar en PDF
+  async function exportarFichaTraineePDF(estudianteId) {
+    const est = (await Store.list('usuarios')).find(u => u.id === estudianteId);
+    if (!est) { toast('Estudiante no encontrado', 'err'); return; }
+
+    const esEstudianteActual = est.rol === 'Estudiante';
+    const cohorteHistorica = esEstudianteActual ? est.cohorte : (est.cohorteAnterior || est.cohorte);
+    const emailLower = (est.email || '').toLowerCase();
+
+    const [memosTodos, asistenciaTodas, archivosTodos] = await Promise.all([
+      Store.list('memorandos'),
+      Store.list('asistencia'),
+      Store.list('trainee_archivos')
+    ]);
+
+    const memos = memosTodos.filter(m => {
+      if (m.estado !== 'Enviado') return false;
+      const dest = m.destinatario || '';
+      return dest.toLowerCase() === emailLower
+        || dest === 'Todos'
+        || dest === 'Todos los estudiantes'
+        || (cohorteHistorica && dest === cohorteHistorica);
+    }).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+
+    const asistencia = asistenciaTodas.filter(a => a.estudiante === est.nombre).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const totalesAsist = { Presente: 0, Tarde: 0, Falla: 0 };
+    asistencia.forEach(a => { if (totalesAsist[a.estado] !== undefined) totalesAsist[a.estado]++; });
+    const pctAsistencia = asistencia.length ? Math.round((totalesAsist.Presente / asistencia.length) * 100) : null;
+
+    const promedioGeneral = cohorteHistorica ? await promedioGeneralEstudianteCohorte(est.nombre, cohorteHistorica, null) : null;
+    let calificacionesPorMes = [];
+    if (cohorteHistorica) {
+      const mesesUnicos = new Set();
+      const docentesHistorico = await docentesDeCohorte(cohorteHistorica);
+      for (const d of docentesHistorico) {
+        (await mesesConNotasDocenteCohorte(d, cohorteHistorica)).forEach(m => mesesUnicos.add(m));
+      }
+      const mesesOrdenados = [...mesesUnicos].sort().reverse();
+      const resultadosPorMes = await Promise.all(mesesOrdenados.map(m => promedioGeneralEstudianteCohorte(est.nombre, cohorteHistorica, m)));
+      calificacionesPorMes = mesesOrdenados.map((m, i) => ({
+        mes: m,
+        resultado: resultadosPorMes[i]
+      })).filter(r => r.resultado);
+    }
+
+    const archivos = archivosTodos.filter(a => a.estudianteId === est.id).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+
+    const semaforoColor = (promedioGeneral && promedioGeneral.promedio >= 7.0 && (pctAsistencia === null || pctAsistencia >= 85) && memos.length === 0)
+      ? '#059669' // verde esmeralda
+      : ((!promedioGeneral || promedioGeneral.promedio >= 6.0) && (pctAsistencia === null || pctAsistencia >= 75) && memos.length <= 1)
+        ? '#D97706' // ambar
+        : '#DC2626'; // rojo
+
+    const semaforoTexto = semaforoColor === '#059669'
+      ? 'Rendimiento Óptimo'
+      : (semaforoColor === '#D97706' ? 'En Seguimiento' : 'Atención Requerida');
+
+    const faseTexto = (cohorteHistorica || '').toLowerCase().includes('profundizacion') || (cohorteHistorica || '').toLowerCase().includes('fase 2') || (cohorteHistorica || '').toLowerCase().includes('fase dos')
+      ? 'Profundización (Fase 2)'
+      : 'Fundamentación (Fase 1)';
+
+    const fechaHoy = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    const htmlDoc = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Ficha Integral del Trainee — ${escapeHtml(est.nombre)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #14181F; background: #eef1f5; margin: 0; padding: 24px 16px; }
+  .action-bar { max-width: 850px; margin: 0 auto 16px; display: flex; justify-content: flex-end; gap: 10px; }
+  .action-bar button { border: none; border-radius: 9999px; padding: 10px 24px; font-size: 13px; font-weight: 700; cursor: pointer; background: #8B5CF6; color: #fff; box-shadow: 0 2px 8px rgba(139,92,246,0.3); transition: all 0.2s; }
+  .action-bar button:hover { background: #7C3AED; }
+  .action-bar button.close-btn { background: #5B6472; }
+  .page { max-width: 850px; margin: 0 auto; background: #fff; border: 1px solid #d1d5db; border-radius: 12px; padding: 40px 48px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+  
+  .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #8B5CF6; padding-bottom: 18px; margin-bottom: 24px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand img { height: 42px; width: auto; border-radius: 6px; }
+  .brand-title { font-size: 18px; font-weight: 900; color: #14181F; margin: 0; }
+  .brand-sub { font-size: 11px; font-weight: 600; color: #5B6472; margin: 2px 0 0; text-transform: uppercase; letter-spacing: 0.5px; }
+  
+  .doc-title { text-align: center; margin-bottom: 24px; }
+  .doc-title h1 { font-size: 18px; font-weight: 900; color: #14181F; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 1px; }
+  .doc-title p { font-size: 12px; color: #5B6472; margin: 0; }
+  
+  .student-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; }
+  .student-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 24px; font-size: 13px; }
+  .student-grid .label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+  .student-grid .val { font-weight: 700; color: #0f172a; margin-top: 1px; }
+  
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+  .kpi-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; text-align: center; }
+  .kpi-card .num { font-size: 20px; font-weight: 900; margin: 4px 0 2px; }
+  .kpi-card .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; }
+  
+  .section-title { font-size: 13px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; margin: 24px 0 12px; display: flex; align-items: center; justify-content: space-between; }
+  
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px; }
+  table.data-table th { background: #f1f5f9; color: #475569; font-weight: 800; text-transform: uppercase; font-size: 10px; text-align: left; padding: 8px 10px; border: 1px solid #e2e8f0; }
+  table.data-table td { padding: 8px 10px; border: 1px solid #e2e8f0; color: #1e293b; }
+  table.data-table tr:nth-child(even) td { background: #f8fafc; }
+  
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 10px; font-weight: 700; }
+  
+  .footer-signatures { display: grid; grid-template-columns: repeat(2, 1fr); gap: 48px; margin-top: 56px; padding-top: 16px; }
+  .signature-box { text-align: center; border-top: 1px solid #94a3b8; padding-top: 8px; font-size: 12px; }
+  .signature-box .role { font-size: 11px; color: #64748b; margin-top: 2px; }
+  
+  .verification-note { margin-top: 36px; padding: 10px; border: 1px dashed #cbd5e1; border-radius: 8px; font-size: 10px; color: #64748b; text-align: center; }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .action-bar { display: none; }
+    .page { border: none; box-shadow: none; padding: 20px 24px; max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+  <div class="action-bar">
+    <button onclick="window.print()">🖨️ Descargar / Imprimir en PDF</button>
+    <button class="close-btn" onclick="window.close()">✕ Cerrar</button>
+  </div>
+  
+  <div class="page">
+    <div class="header">
+      <div class="brand">
+        <img src="${LOGO_FUNDACION_DATAURL}" alt="Fundación A+" />
+        <div>
+          <h2 class="brand-title">Fundación A+</h2>
+          <p class="brand-sub">Programa TrAIning de 100 a 1000+</p>
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <span style="font-size:11px;font-weight:700;color:#64748b;">EXPEDIENTE OFICIAL</span><br>
+        <span style="font-size:12px;font-weight:800;color:#8B5CF6;">ID: TRAINEE-${escapeHtml(est.id.slice(-6).toUpperCase())}</span>
+      </div>
+    </div>
+
+    <div class="doc-title">
+      <h1>Ficha Integral y Expediente Académico del Trainee</h1>
+      <p>Reporte oficial consolidado emitido el ${fechaHoy}</p>
+    </div>
+
+    <div class="student-box">
+      <div class="student-grid">
+        <div>
+          <div class="label">Estudiante / Trainee</div>
+          <div class="val">${escapeHtml(est.nombre)}</div>
+        </div>
+        <div>
+          <div class="label">Correo Electrónico</div>
+          <div class="val">${escapeHtml(est.email || 'No registrado')}</div>
+        </div>
+        <div>
+          <div class="label">Cohorte Académica</div>
+          <div class="val">${escapeHtml(cohorteHistorica || 'Sin cohorte')} (${faseTexto})</div>
+        </div>
+        <div>
+          <div class="label">Estado Actual</div>
+          <div class="val">${escapeHtml(est.estado || 'Activo')}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="lbl">Asistencia Global</div>
+        <div class="num" style="color:#0f172a;">${pctAsistencia !== null ? pctAsistencia + '%' : '—'}</div>
+        <span style="font-size:10px;color:#64748b;">${totalesAsist.Presente} asistencias · ${totalesAsist.Falla} fallas</span>
+      </div>
+      <div class="kpi-card">
+        <div class="lbl">Promedio General</div>
+        <div class="num" style="color:${promedioGeneral ? colorCualitativa(promedioGeneral.promedio) : '#0f172a'};">
+          ${promedioGeneral ? promedioGeneral.promedio.toFixed(1) : '—'}
+        </div>
+        <span style="font-size:10px;color:#64748b;">${promedioGeneral ? escapeHtml(calificacionCualitativa(promedioGeneral.promedio)) : 'Sin notas'}</span>
+      </div>
+      <div class="kpi-card">
+        <div class="lbl">Salud Académica</div>
+        <div class="num" style="font-size:14px;color:${semaforoColor};margin-top:7px;">
+          ${semaforoTexto}
+        </div>
+        <span style="font-size:10px;color:#64748b;">Diagnóstico continuo</span>
+      </div>
+      <div class="kpi-card">
+        <div class="lbl">Evidencias / Archivos</div>
+        <div class="num" style="color:#8B5CF6;">${archivos.length}</div>
+        <span style="font-size:10px;color:#64748b;">Documentos adjuntos</span>
+      </div>
+    </div>
+
+    <div class="section-title">
+      <span>1. Calificaciones Consolidadas por Mes</span>
+      <span style="font-size:10px;color:#64748b;">${calificacionesPorMes.length} periodos evaluados</span>
+    </div>
+    ${calificacionesPorMes.length ? `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Periodo</th>
+          <th>Promedio Numérico</th>
+          <th>Evaluación Cualitativa</th>
+          <th>Docentes Evaluadores</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${calificacionesPorMes.map(r => `
+          <tr>
+            <td><b>${escapeHtml(mesLabel(r.mes))}</b></td>
+            <td style="font-weight:800;color:${colorCualitativa(r.resultado.promedio)};">${r.resultado.promedio.toFixed(1)}</td>
+            <td><span class="badge" style="background:${colorCualitativa(r.resultado.promedio)}20;color:${colorCualitativa(r.resultado.promedio)};">${escapeHtml(calificacionCualitativa(r.resultado.promedio))}</span></td>
+            <td>${escapeHtml(r.resultado.profesores || '—')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>` : '<p style="font-size:12px;color:#64748b;font-style:italic;">No registra calificaciones periódicas en el sistema.</p>'}
+
+    <div class="section-title">
+      <span>2. Balance de Asistencia y Asistencia Reciente</span>
+      <span style="font-size:10px;color:#64748b;">${asistencia.length} clases computadas</span>
+    </div>
+    ${asistencia.length ? `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Módulo / Curso</th>
+          <th>Registro de Asistencia</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${asistencia.slice(0, 8).map(a => `
+          <tr>
+            <td>${fmtDate(a.fecha)}</td>
+            <td>${escapeHtml(a.modulo || '—')}</td>
+            <td><b>${escapeHtml(a.estado)}</b></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    ${asistencia.length > 8 ? `<p style="font-size:10px;color:#64748b;margin-top:4px;">* Mostrando las 8 sesiones más recientes de un total de ${asistencia.length}.</p>` : ''}
+    ` : '<p style="font-size:12px;color:#64748b;font-style:italic;">Sin registros de asistencia.</p>'}
+
+    <div class="section-title">
+      <span>3. Novedades y Memorandos Emitidos</span>
+      <span style="font-size:10px;color:#64748b;">${memos.length} registros</span>
+    </div>
+    ${memos.length ? `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Título / Asunto del Memorando</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${memos.map(m => `
+          <tr>
+            <td>${fmtDate(m.fecha)}</td>
+            <td><b>${escapeHtml(m.titulo)}</b></td>
+            <td>Oficial / Enviado</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>` : '<p style="font-size:12px;color:#059669;font-weight:600;">✓ El estudiante no cuenta con memorandos ni observaciones disciplinarias.</p>'}
+
+    <div class="section-title">
+      <span>4. Portafolio de Archivos y Evidencias Adjuntas</span>
+      <span style="font-size:10px;color:#64748b;">${archivos.length} archivos</span>
+    </div>
+    ${archivos.length ? `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Nombre del Archivo / Documento</th>
+          <th>Formato</th>
+          <th>Origen</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${archivos.map(a => `
+          <tr>
+            <td>${fmtDate(a.fecha)}</td>
+            <td><b>${escapeHtml(a.nombre)}</b></td>
+            <td>${(a.tipo || '').includes('pdf') || (a.nombre || '').toLowerCase().endsWith('.pdf') ? 'Documento PDF' : 'Imagen'}</td>
+            <td>${escapeHtml(a.origen || 'Carga directa')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>` : '<p style="font-size:12px;color:#64748b;font-style:italic;">Sin evidencias registradas.</p>'}
+
+    <div class="footer-signatures">
+      <div class="signature-box">
+        <b>Dirección Académica y Pedagógica</b>
+        <div class="role">Fundación A+ · Programa TrAIning</div>
+      </div>
+      <div class="signature-box">
+        <b>Coordinación de Programas y Alianzas</b>
+        <div class="role">Fundación A+ · Litoral Pacífico</div>
+      </div>
+    </div>
+
+    <div class="verification-note">
+      Documento oficial generado por la Plataforma de Gestión Académica de la Fundación A+.
+      Para verificar la autenticidad de esta ficha, comunicarse con info@fundacionamas.org.co.
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) {
+      toast('Habilita las ventanas emergentes para generar el PDF', 'err');
+      return;
+    }
+    win.document.open();
+    win.document.write(htmlDoc);
+    win.document.close();
+  }
+
   // Exposición explícita para llamadas desde onclick
   window.verArchivoTraineeModal = verArchivoTraineeModal;
   window.cerrarArchivoTraineeModal = cerrarArchivoTraineeModal;
@@ -3567,6 +4000,8 @@
   window.confirmarSubidaArchivoTrainee = confirmarSubidaArchivoTrainee;
   window.cancelarSubidaArchivoTrainee = cancelarSubidaArchivoTrainee;
   window.eliminarArchivoTrainee = eliminarArchivoTrainee;
+  window.toggleExpandirArchivosTrainee = toggleExpandirArchivosTrainee;
+  window.exportarFichaTraineePDF = exportarFichaTraineePDF;
 
   // async: 'cursos' vía MySQL.
   async function renderCursos() {
