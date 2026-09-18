@@ -31,7 +31,7 @@
     }
   }
 </script>
-<link rel="stylesheet" href="style.css?v=20260918-8">
+<link rel="stylesheet" href="style.css?v=20260918-10">
 </head>
 <body class="bg-white text-ink antialiased">
 
@@ -259,28 +259,6 @@
         <p class="mt-4 text-slate2 text-base leading-relaxed">
           Inicia sesión para consultar tus notas, registrar asistencias por código QR, gestionar tu cohorte o acceder a los recursos del Training de 100 a 1000+.
         </p>
-
-        <!-- Feature pills on the left -->
-        <div class="mt-8 space-y-3.5">
-          <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-gray-50/80 border border-gray-100 shadow-sm">
-            <div class="w-9 h-9 rounded-xl bg-turquesa/15 text-turquesa flex items-center justify-center flex-shrink-0">
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            </div>
-            <div>
-              <p class="text-xs font-bold text-ink">Estudiantes y Trainees</p>
-              <p class="text-[11px] text-slate2">Notas, asistencias instantáneas y certificado en tiempo real</p>
-            </div>
-          </div>
-          <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-gray-50/80 border border-gray-100 shadow-sm">
-            <div class="w-9 h-9 rounded-xl bg-morado/15 text-morado flex items-center justify-center flex-shrink-0">
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0a2 2 0 002-2v-4a2 2 0 00-2-2m-4 8v1m0-9V4m-6 7H2m4 0a2 2 0 012-2V5a2 2 0 012-2m-4 8a2 2 0 002 2v4a2 2 0 002 2m0-8h4"/></svg>
-            </div>
-            <div>
-              <p class="text-xs font-bold text-ink">Docentes y Facilitadores</p>
-              <p class="text-[11px] text-slate2">Activación dinámica de sesión QR y control de asistencia</p>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div class="lg:col-span-7">
@@ -447,20 +425,25 @@
 </div>
 
 <!-- ============ PANEL SUPERADMIN (post-login) ============ -->
-<div id="dashboardView" class="hidden min-h-screen bg-gray-50/60">
-  <header class="sticky top-0 z-40 bg-white border-b border-gray-100">
+<div id="dashboardView" class="hidden min-h-screen bg-slate-50/70">
+  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b border-gray-100/90 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
     <div class="max-w-7xl mx-auto px-6 lg:px-10 h-20 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-
-        <img src="logo.jpg" alt="Fundación A+" class="h-10 w-auto" />
+      <div class="flex items-center gap-3.5">
+        <div class="relative">
+          <img src="logo.jpg" alt="Fundación A+" class="h-11 w-auto rounded-xl shadow-sm" />
+          <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+        </div>
         <div>
-          <p class="text-sm font-extrabold text-ink leading-tight">Fundación A<span class="text-coral">+</span></p>
-          <p id="adminPanelLabel" class="text-xs text-slate2 leading-tight">Panel Superadmin</p>
+          <p class="text-sm font-extrabold text-ink leading-tight tracking-tight">Fundación A<span class="text-coral">+</span></p>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-morado animate-pulse"></span>
+            <p id="adminPanelLabel" class="text-xs font-semibold text-morado leading-tight">Panel Superadmin</p>
+          </div>
         </div>
       </div>
-      <button onclick="logout()" class="text-sm font-semibold text-slate2 hover:text-ink transition flex items-center gap-2">
-        Cerrar sesión
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 5v1a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h5a2 2 0 012 2v1"/></svg>
+      <button onclick="logout()" class="group text-xs font-bold text-slate2 hover:text-coral transition-colors flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gray-50/80 hover:bg-coral/10 border border-gray-100 hover:border-coral/20">
+        <span>Cerrar sesión</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 5v1a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h5a2 2 0 012 2v1"/></svg>
       </button>
     </div>
   </header>
@@ -585,9 +568,16 @@
 
     <!-- Content -->
     <main>
-      <div class="rounded-3xl border border-gray-100 bg-white p-8 sm:p-10 mb-8">
-        <p id="adminEyebrow" class="text-xs font-bold tracking-widest uppercase text-morado">Superadmin</p>
-        <p id="adminBannerText" class="mt-2 text-sm text-slate2 max-w-lg leading-relaxed">Desde aquí administrarás usuarios, cohortes y calificaciones del Training de 100 a 1000+.</p>
+      <div class="relative overflow-hidden rounded-3xl border border-gray-100 bg-white/95 backdrop-blur-xl p-8 sm:p-10 mb-8 shadow-soft">
+        <div class="pointer-events-none absolute -top-16 -right-16 w-60 h-60 rounded-full bg-morado/10 blur-2xl"></div>
+        <div class="pointer-events-none absolute -bottom-16 -left-16 w-60 h-60 rounded-full bg-turquesa/10 blur-2xl"></div>
+        <div class="relative">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-morado/10 text-morado text-xs font-bold uppercase tracking-wider mb-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-morado"></span>
+            <span id="adminEyebrow">Superadmin</span>
+          </div>
+          <p id="adminBannerText" class="mt-2 text-sm text-slate2 max-w-lg leading-relaxed">Desde aquí administrarás usuarios, cohortes y calificaciones del Training de 100 a 1000+.</p>
+        </div>
       </div>
 
       <!-- ================= RESUMEN ================= -->
@@ -617,71 +607,65 @@
 
   <!-- ============ MODAL (genérico, reutilizado por todos los módulos) ============ -->
   <div id="adminModal" class="hidden fixed inset-0 z-[100]">
-    <div class="absolute inset-0 bg-ink/40 backdrop-blur-sm" onclick="closeModal()"></div>
+    <div class="absolute inset-0 bg-ink/60 backdrop-blur-md transition-opacity" onclick="closeModal()"></div>
     <div class="absolute inset-0 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
-      <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-2xl my-8 p-7 sm:p-8">
-        <button onclick="closeModal()" class="absolute top-5 right-5 text-slate2 hover:text-ink transition">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      <div class="relative bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white w-full max-w-2xl my-8 p-7 sm:p-9 ring-1 ring-black/5">
+        <button onclick="closeModal()" class="absolute top-5 right-5 text-slate2 hover:text-ink transition p-1 rounded-full hover:bg-gray-100">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
-        <div class="pb-5 mb-5 border-b border-morado/10">
+        <div class="pb-5 mb-5 border-b border-gray-100">
           <p id="modalEyebrow" class="text-xs font-bold tracking-widest uppercase text-morado"></p>
-          <h3 id="modalTitle" class="text-xl font-extrabold text-ink mt-1"></h3>
+          <h3 id="modalTitle" class="text-xl font-extrabold text-ink mt-1 tracking-tight"></h3>
         </div>
         <form id="modalForm" onsubmit="event.preventDefault(); saveModal();" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4"></form>
-        <div class="flex items-center gap-3 mt-6">
-          <button type="button" onclick="saveModal()" class="flex-1 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 hover:opacity-90 transition">Guardar</button>
-          <button type="button" onclick="closeModal()" class="rounded-full border border-morado/25 text-slate2 font-semibold text-sm py-3 px-5 hover:bg-morado/5 transition">Cancelar</button>
+        <div class="flex items-center gap-3 mt-8">
+          <button type="button" onclick="saveModal()" class="btn-glow-primary flex-1 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold text-sm py-3.5 shadow-lg shadow-morado/20 hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition">Guardar</button>
+          <button type="button" onclick="closeModal()" class="rounded-2xl border border-gray-200 text-slate2 font-semibold text-sm py-3.5 px-6 hover:bg-gray-50 transition">Cancelar</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- El modal "Crear Cohorte + Administrador exclusivo" (aislamiento
-       multi-tenant por cohorteId) se retiró: nunca tuvo un botón real que
-       lo abriera en ningún panel visible, así que era inalcanzable. El
-       Administrador real de la app se gestiona desde el panel
-       "Administradores" (rol Coordinador en Store('usuarios')). -->
-
   <!-- ============ MODAL: Nueva/Editar Promoción ============ -->
   <div id="promoModal" class="hidden fixed inset-0 z-[100]">
-    <div class="absolute inset-0 bg-ink/40 backdrop-blur-sm" onclick="closePromoModal()"></div>
+    <div class="absolute inset-0 bg-ink/60 backdrop-blur-md transition-opacity" onclick="closePromoModal()"></div>
     <div class="absolute inset-0 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
-      <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-2xl my-8 p-7 sm:p-8">
-        <button onclick="closePromoModal()" class="absolute top-5 right-5 text-slate2 hover:text-ink transition">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      <div class="relative bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white w-full max-w-2xl my-8 p-7 sm:p-9 ring-1 ring-black/5">
+        <button onclick="closePromoModal()" class="absolute top-5 right-5 text-slate2 hover:text-ink transition p-1 rounded-full hover:bg-gray-100">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
-        <div class="pb-5 mb-5 border-b border-morado/10">
+        <div class="pb-5 mb-5 border-b border-gray-100">
           <p class="text-xs font-bold tracking-widest uppercase text-morado">Training de 100 a 1000+</p>
-          <h3 id="promoModalTitle" class="text-xl font-extrabold text-ink mt-1">Nueva promoción</h3>
+          <h3 id="promoModalTitle" class="text-xl font-extrabold text-ink mt-1 tracking-tight">Nueva promoción</h3>
         </div>
 
         <form onsubmit="event.preventDefault(); guardarPromoModal();" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
           <div class="sm:col-span-2">
             <label class="block text-xs font-semibold text-slate2 mb-1.5" for="promo_nombre">Nombre de la promoción</label>
-            <input id="promo_nombre" type="text" placeholder="Ej: Primera Promoción" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+            <input id="promo_nombre" type="text" placeholder="Ej: Primera Promoción" class="w-full rounded-xl border border-gray-200 bg-gray-50/70 px-3.5 py-2.5 text-sm text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate2 mb-1.5" for="promo_fecha">Fecha</label>
-            <input id="promo_fecha" type="text" placeholder="Ej: Julio 2026" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+            <input id="promo_fecha" type="text" placeholder="Ej: Julio 2026" class="w-full rounded-xl border border-gray-200 bg-gray-50/70 px-3.5 py-2.5 text-sm text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate2 mb-1.5" for="promo_estado">Estado</label>
-            <select id="promo_estado" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition">
+            <select id="promo_estado" class="w-full rounded-xl border border-gray-200 bg-gray-50/70 px-3.5 py-2.5 text-sm text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition">
               <option value="Publicada">Publicada</option>
               <option value="Oculta">Oculta</option>
             </select>
           </div>
           <div class="sm:col-span-2">
             <label class="block text-xs font-semibold text-slate2 mb-1.5" for="promo_descripcion">Descripción</label>
-            <textarea id="promo_descripcion" rows="3" placeholder="Breve descripción de la cohorte graduada" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition"></textarea>
+            <textarea id="promo_descripcion" rows="3" placeholder="Breve descripción de la cohorte graduada" class="w-full rounded-xl border border-gray-200 bg-gray-50/70 px-3.5 py-2.5 text-sm text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition"></textarea>
           </div>
 
-          <div class="sm:col-span-2 pt-2 border-t border-morado/15">
+          <div class="sm:col-span-2 pt-2 border-t border-gray-100">
             <p class="text-xs font-bold uppercase tracking-wide text-turquesa mb-2 mt-3">Fotos</p>
             <div id="promoFotosGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
           </div>
 
-          <div class="sm:col-span-2 pt-2 border-t border-morado/15">
+          <div class="sm:col-span-2 pt-2 border-t border-gray-100">
             <div class="flex items-center justify-between mb-2 mt-3">
               <p class="text-xs font-bold uppercase tracking-wide text-turquesa">Graduados</p>
               <button type="button" onclick="agregarPromoGraduado()" class="text-xs font-semibold text-morado hover:underline">+ Agregar graduado</button>
@@ -690,9 +674,9 @@
           </div>
         </form>
 
-        <div class="flex items-center gap-3 mt-6">
-          <button type="button" onclick="guardarPromoModal()" class="flex-1 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 hover:opacity-90 transition">Guardar</button>
-          <button type="button" onclick="closePromoModal()" class="rounded-full border border-morado/25 text-slate2 font-semibold text-sm py-3 px-5 hover:bg-morado/5 transition">Cancelar</button>
+        <div class="flex items-center gap-3 mt-8">
+          <button type="button" onclick="guardarPromoModal()" class="btn-glow-primary flex-1 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold text-sm py-3.5 shadow-lg shadow-morado/20 hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition">Guardar</button>
+          <button type="button" onclick="closePromoModal()" class="rounded-2xl border border-gray-200 text-slate2 font-semibold text-sm py-3.5 px-6 hover:bg-gray-50 transition">Cancelar</button>
         </div>
       </div>
     </div>
@@ -700,16 +684,16 @@
 
   <!-- ============ CONFIRM DELETE ============ -->
   <div id="confirmModal" class="hidden fixed inset-0 z-[100]">
-    <div class="absolute inset-0 bg-ink/40 backdrop-blur-sm" onclick="closeConfirm()"></div>
+    <div class="absolute inset-0 bg-ink/60 backdrop-blur-md transition-opacity" onclick="closeConfirm()"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
-      <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-sm p-7 text-center">
-        <div class="w-12 h-12 rounded-full bg-coral/10 grid place-items-center mx-auto mb-4">
-          <svg class="w-6 h-6 text-coral" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16"/></svg>
+      <div class="relative bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white w-full max-w-sm p-7 text-center ring-1 ring-black/5">
+        <div class="w-14 h-14 rounded-2xl bg-coral/10 grid place-items-center mx-auto mb-4 text-coral">
+          <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16"/></svg>
         </div>
-        <p class="font-bold text-ink mb-1.5">¿Eliminar este registro?</p>
-        <p class="text-sm text-slate2 mb-6">Esta acción no se puede deshacer.</p>
+        <p class="text-lg font-bold text-ink mb-1.5">¿Eliminar este registro?</p>
+        <p class="text-xs text-slate2 mb-6">Esta acción no se puede deshacer.</p>
         <div class="flex items-center gap-3">
-          <button onclick="confirmDelete()" class="flex-1 rounded-xl bg-coral text-white font-semibold text-sm py-3 hover:bg-coral/90 transition">Sí, eliminar</button>
+          <button onclick="confirmDelete()" class="flex-1 rounded-xl bg-coral text-white font-bold text-sm py-3 shadow-md shadow-coral/20 hover:bg-coral/90 hover:scale-[1.02] active:scale-[0.98] transition">Sí, eliminar</button>
           <button onclick="closeConfirm()" class="flex-1 rounded-xl border border-gray-200 text-slate2 font-semibold text-sm py-3 hover:bg-gray-50 transition">Cancelar</button>
         </div>
       </div>
@@ -719,19 +703,25 @@
 </div>
 
 <!-- ============ PANEL DOCENTE (post-login docente) ============ -->
-<div id="teacherView" class="hidden min-h-screen bg-gray-50/60">
-  <header class="sticky top-0 z-40 bg-white border-b border-gray-100">
+<div id="teacherView" class="hidden min-h-screen bg-slate-50/70">
+  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b border-gray-100/90 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
     <div class="max-w-7xl mx-auto px-6 lg:px-10 h-20 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <img src="logo.jpg" alt="Fundación A+" class="h-10 w-auto" />
+      <div class="flex items-center gap-3.5">
+        <div class="relative">
+          <img src="logo.jpg" alt="Fundación A+" class="h-11 w-auto rounded-xl shadow-sm" />
+          <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-turquesa ring-2 ring-white"></span>
+        </div>
         <div>
-          <p class="text-sm font-extrabold text-ink leading-tight">Fundación A<span class="text-coral">+</span></p>
-          <p class="text-xs text-slate2 leading-tight">Panel Docente</p>
+          <p class="text-sm font-extrabold text-ink leading-tight tracking-tight">Fundación A<span class="text-coral">+</span></p>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-turquesa animate-pulse"></span>
+            <p class="text-xs font-semibold text-turquesa leading-tight">Panel Docente</p>
+          </div>
         </div>
       </div>
-      <button onclick="logoutDocente()" class="text-sm font-semibold text-slate2 hover:text-ink transition flex items-center gap-2">
-        Cerrar sesión
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 5v1a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h5a2 2 0 012 2v1"/></svg>
+      <button onclick="logoutDocente()" class="group text-xs font-bold text-slate2 hover:text-coral transition-colors flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gray-50/80 hover:bg-coral/10 border border-gray-100 hover:border-coral/20">
+        <span>Cerrar sesión</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 5v1a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h5a2 2 0 012 2v1"/></svg>
       </button>
     </div>
   </header>
@@ -824,10 +814,17 @@
     <!-- Content -->
     <main>
       <div id="panel-t-resumen" class="panel-content-t">
-        <div class="rounded-3xl border border-gray-100 bg-white p-8 sm:p-10 mb-8">
-          <p class="text-xs font-bold tracking-widest uppercase text-morado">Docentes · A+ Smart</p>
-          <h1 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">Panel del docente</h1>
-          <p class="mt-2 text-sm text-slate2 max-w-lg leading-relaxed">Tu espacio para gestionar cohortes, riesgo académico, materiales y herramientas con IA.</p>
+        <div class="relative overflow-hidden rounded-3xl border border-gray-100 bg-white/95 backdrop-blur-xl p-8 sm:p-10 mb-8 shadow-soft">
+          <div class="pointer-events-none absolute -top-16 -right-16 w-60 h-60 rounded-full bg-turquesa/10 blur-2xl"></div>
+          <div class="pointer-events-none absolute -bottom-16 -left-16 w-60 h-60 rounded-full bg-morado/10 blur-2xl"></div>
+          <div class="relative">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-turquesa/10 text-turquesa text-xs font-bold uppercase tracking-wider mb-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-turquesa"></span>
+              Docentes · A+ Smart
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight mt-2">Panel del docente</h1>
+            <p class="mt-2 text-sm text-slate2 max-w-lg leading-relaxed">Tu espacio para gestionar cohortes, riesgo académico, materiales y herramientas con IA.</p>
+          </div>
         </div>
         <div id="mount-t-resumen"></div>
       </div>
@@ -846,20 +843,26 @@
 </div>
 
 <!-- ============ PANEL ESTUDIANTE (post-login estudiante) ============ -->
-<div id="studentView" class="hidden min-h-screen bg-gray-50/60">
-  <header class="sticky top-0 z-40 bg-white border-b border-gray-100">
+<div id="studentView" class="hidden min-h-screen bg-slate-50/70">
+  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b border-gray-100/90 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
     <div class="max-w-7xl mx-auto px-6 lg:px-10 h-20 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <img src="logo.jpg" alt="Fundación A+" class="h-10 w-auto" />
+      <div class="flex items-center gap-3.5">
+        <div class="relative">
+          <img src="logo.jpg" alt="Fundación A+" class="h-11 w-auto rounded-xl shadow-sm" />
+          <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-oro ring-2 ring-white"></span>
+        </div>
         <div>
-          <p class="text-sm font-extrabold text-ink leading-tight">Fundación A<span class="text-coral">+</span></p>
-          <p class="text-xs text-slate2 leading-tight">Panel Estudiante</p>
+          <p class="text-sm font-extrabold text-ink leading-tight tracking-tight">Fundación A<span class="text-coral">+</span></p>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-oro animate-pulse"></span>
+            <p class="text-xs font-semibold text-amber-600 leading-tight">Panel Estudiante</p>
+          </div>
         </div>
       </div>
       <div class="flex items-center gap-4">
-        <button onclick="logoutEstudiante()" class="text-sm font-semibold text-slate2 hover:text-ink transition flex items-center gap-2">
-          Cerrar sesión
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 5v1a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h5a2 2 0 012 2v1"/></svg>
+        <button onclick="logoutEstudiante()" class="group text-xs font-bold text-slate2 hover:text-coral transition-colors flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gray-50/80 hover:bg-coral/10 border border-gray-100 hover:border-coral/20">
+          <span>Cerrar sesión</span>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 5v1a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h5a2 2 0 012 2v1"/></svg>
         </button>
       </div>
     </div>
@@ -948,15 +951,25 @@
     <!-- Content -->
     <main>
       <div id="panel-s-resumen" class="panel-content-s">
-        <div id="mensajeMotivacional" class="rounded-3xl border border-gray-100 bg-gradient-to-br from-oro/10 via-white to-morado/10 p-6 sm:p-7 mb-6 hidden">
-          <p class="text-xs font-bold tracking-widest uppercase text-oro">Mensaje del día</p>
-          <p id="mensajeMotivacionalTexto" class="mt-1.5 text-sm sm:text-base font-semibold text-ink leading-relaxed"></p>
+        <div id="mensajeMotivacional" class="relative overflow-hidden rounded-3xl border border-oro/20 bg-gradient-to-br from-oro/15 via-white to-morado/10 p-6 sm:p-7 mb-6 hidden shadow-soft">
+          <div class="flex items-center gap-2 mb-1.5">
+            <span class="w-2 h-2 rounded-full bg-oro animate-ping"></span>
+            <p class="text-xs font-bold tracking-widest uppercase text-oro">Mensaje del día</p>
+          </div>
+          <p id="mensajeMotivacionalTexto" class="text-sm sm:text-base font-semibold text-ink leading-relaxed"></p>
         </div>
 
-        <div class="rounded-3xl border border-gray-100 bg-white p-8 sm:p-10 mb-8">
-          <p class="text-xs font-bold tracking-widest uppercase text-oro">Estudiantes · A+ Smart</p>
-          <h1 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">Panel del estudiante</h1>
-          <p class="mt-2 text-sm text-slate2 max-w-lg leading-relaxed">Tu espacio para seguir tu proceso, tus materiales y tus herramientas con IA.</p>
+        <div class="relative overflow-hidden rounded-3xl border border-gray-100 bg-white/95 backdrop-blur-xl p-8 sm:p-10 mb-8 shadow-soft">
+          <div class="pointer-events-none absolute -top-16 -right-16 w-60 h-60 rounded-full bg-oro/10 blur-2xl"></div>
+          <div class="pointer-events-none absolute -bottom-16 -left-16 w-60 h-60 rounded-full bg-morado/10 blur-2xl"></div>
+          <div class="relative">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-oro/15 text-amber-700 text-xs font-bold uppercase tracking-wider mb-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-oro"></span>
+              Estudiantes · A+ Smart
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight mt-2">Panel del estudiante</h1>
+            <p class="mt-2 text-sm text-slate2 max-w-lg leading-relaxed">Tu espacio para seguir tu proceso, tus materiales y tus herramientas con IA.</p>
+          </div>
         </div>
 
         <div id="mount-s-resumen"></div>
@@ -1101,8 +1114,8 @@
      actualizó pero db.js se siguió cargando desde caché sin esa función.
      Cambia el número cada vez que subas una versión nueva de cualquiera
      de los dos archivos, para forzar que el navegador la descargue. -->
-<script src="db.js?v=20260918-9"></script>
-<script src="app.js?v=20260918-9"></script>
+<script src="db.js?v=20260918-10"></script>
+<script src="app.js?v=20260918-10"></script>
 
 </body>
 </html>
