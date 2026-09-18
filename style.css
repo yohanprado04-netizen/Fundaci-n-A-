@@ -1,5 +1,60 @@
 html { scroll-behavior: smooth; }
-  body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+body { 
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; 
+  -webkit-font-smoothing: antialiased; 
+  -moz-osx-font-smoothing: grayscale;
+  color: #14181F;
+}
+
+::selection {
+  background: rgba(139, 92, 246, 0.25);
+  color: #14181F;
+}
+
+/* Scrollbar estilizada y moderna */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(91, 100, 114, 0.22);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.5);
+}
+
+/* Efectos de cristal y resplandor modernos */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.modern-hover-card {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modern-hover-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 36px -8px rgba(20, 24, 31, 0.08);
+}
+
+.btn-glow-primary {
+  box-shadow: 0 4px 16px -2px rgba(139, 92, 246, 0.35);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-glow-primary:hover {
+  box-shadow: 0 8px 25px -2px rgba(139, 92, 246, 0.5);
+  transform: translateY(-1.5px);
+}
+.btn-glow-primary:active {
+  transform: translateY(0);
+}
 
   /* --- Signature element: constellation of growth (100 -> 1000+) --- */
   .constellation { position: relative; width: 100%; height: 100%; }

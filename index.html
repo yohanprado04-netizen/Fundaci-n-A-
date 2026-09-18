@@ -31,198 +31,317 @@
     }
   }
 </script>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20260918-8">
 </head>
 <body class="bg-white text-ink antialiased">
 
 <div id="siteView">
 
 <!-- ============ NAV ============ -->
-<header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
+<header class="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-100/80 transition-all duration-300 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
   <div class="max-w-7xl mx-auto px-6 lg:px-10">
     <div class="flex items-center justify-between h-20">
       <!-- Logo -->
-      <a href="#inicio" class="flex items-center gap-3 shrink-0">
-        <img src="logo.jpg" alt="Fundación A+" class="h-12 w-auto" />
+      <a href="#inicio" class="flex items-center gap-3 shrink-0 group">
+        <img src="logo.jpg" alt="Fundación A+" class="h-11 w-auto rounded-lg shadow-sm group-hover:scale-105 transition-transform duration-200" />
       </a>
 
       <!-- Desktop nav -->
-      <nav class="hidden lg:flex items-center gap-10 text-[15px] text-slate2">
-        <a href="#inicio" class="nav-link active">Inicio</a>
-        <a href="https://fundacionamas.org.co/" target="_blank" rel="noopener" class="nav-link hover:text-ink">Nosotros</a>
-        <a href="#programa" class="nav-link hover:text-ink">Training / Programas</a>
-        <a href="#calificaciones" class="nav-link hover:text-ink">Portal</a>
+      <nav class="hidden lg:flex items-center gap-9 text-[14.5px] font-medium text-slate2">
+        <a href="#inicio" class="nav-link active hover:text-ink transition-colors">Inicio</a>
+        <a href="https://fundacionamas.org.co/" target="_blank" rel="noopener" class="nav-link hover:text-ink transition-colors">Nosotros</a>
+        <a href="#programa" class="nav-link hover:text-ink transition-colors">Training / Programas</a>
+        <a href="#calificaciones" class="nav-link hover:text-ink transition-colors">Portal</a>
       </nav>
 
       <div class="hidden lg:flex items-center gap-4">
-        <a href="#programa" class="text-sm font-semibold text-white bg-ink hover:bg-morado transition rounded-full px-5 py-2.5">Únete al programa</a>
+        <a href="#programa" class="text-xs font-bold uppercase tracking-wide text-white bg-gradient-to-r from-ink via-slate-800 to-ink hover:from-morado hover:to-turquesa transition-all duration-300 rounded-full px-6 py-3 shadow-sm hover:shadow-[0_4px_16px_rgba(139,92,246,0.35)] hover:-translate-y-0.5">
+          Únete al programa
+        </a>
       </div>
 
       <!-- Mobile toggle -->
-      <button id="menuBtn" class="lg:hidden w-10 h-10 grid place-items-center rounded-full hover:bg-gray-100">
-        <svg id="iconOpen" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-        <svg id="iconClose" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      <button id="menuBtn" class="lg:hidden w-10 h-10 grid place-items-center rounded-xl bg-gray-50 border border-gray-200 hover:bg-gray-100 transition">
+        <svg id="iconOpen" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-ink" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <svg id="iconClose" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-ink hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
     </div>
   </div>
 
   <!-- Mobile nav -->
-  <div id="mobileMenu" class="hidden lg:hidden border-t border-gray-100 bg-white">
-    <nav class="flex flex-col px-6 py-4 gap-1 text-[15px]">
-      <a href="#inicio" class="py-3 border-b border-gray-50 text-ink font-semibold">Inicio</a>
-      <a href="https://fundacionamas.org.co/" target="_blank" rel="noopener" class="py-3 border-b border-gray-50 text-slate2">Nosotros</a>
-      <a href="#programa" class="py-3 border-b border-gray-50 text-slate2">Training / Programas</a>
-      <a href="#calificaciones" class="py-3 text-slate2">Portal</a>
-      <a href="#programa" class="mt-4 text-center text-sm font-semibold text-white bg-ink rounded-full px-5 py-3">Únete al programa</a>
+  <div id="mobileMenu" class="hidden lg:hidden border-t border-gray-100 bg-white/95 backdrop-blur-xl">
+    <nav class="flex flex-col px-6 py-5 gap-1.5 text-[15px]">
+      <a href="#inicio" class="py-2.5 px-3 rounded-lg text-ink font-semibold hover:bg-gray-50">Inicio</a>
+      <a href="https://fundacionamas.org.co/" target="_blank" rel="noopener" class="py-2.5 px-3 rounded-lg text-slate2 hover:bg-gray-50">Nosotros</a>
+      <a href="#programa" class="py-2.5 px-3 rounded-lg text-slate2 hover:bg-gray-50">Training / Programas</a>
+      <a href="#calificaciones" class="py-2.5 px-3 rounded-lg text-slate2 hover:bg-gray-50">Portal</a>
+      <a href="#programa" class="mt-3 text-center text-xs font-bold uppercase tracking-wide text-white bg-gradient-to-r from-morado to-turquesa rounded-full px-5 py-3.5 shadow-md">Únete al programa</a>
     </nav>
   </div>
 </header>
 
 <!-- ============ HERO ============ -->
-<section id="inicio" class="relative overflow-hidden bg-gray-50/60">
-  <div class="max-w-7xl mx-auto px-6 lg:px-10 pt-16 pb-20 lg:pt-24 lg:pb-28 grid lg:grid-cols-2 gap-16 items-center">
+<section id="inicio" class="relative overflow-hidden bg-gradient-to-b from-gray-50/80 via-white to-gray-50/40">
+  <!-- Malla de luz ambiental suave de fondo -->
+  <div class="absolute -top-32 -left-32 w-96 h-96 bg-turquesa/10 rounded-full blur-3xl pointer-events-none"></div>
+  <div class="absolute top-1/4 -right-32 w-[32rem] h-[32rem] bg-morado/10 rounded-full blur-3xl pointer-events-none"></div>
+  <div class="absolute bottom-10 left-1/3 w-80 h-80 bg-coral/5 rounded-full blur-3xl pointer-events-none"></div>
+
+  <div class="relative max-w-7xl mx-auto px-6 lg:px-10 pt-16 pb-20 lg:pt-24 lg:pb-28 grid lg:grid-cols-2 gap-16 items-center">
     <!-- Left: copy -->
     <div>
-      <div class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate2 shadow-soft">
-        <span class="w-1.5 h-1.5 rounded-full bg-turquesa"></span>
-        TrAIning de 100 a 1000+ · Quibdó, Chocó
+      <div class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/80 bg-white/90 backdrop-blur-md px-4 py-1.5 text-xs font-semibold text-slate2 shadow-sm hover:border-turquesa/40 transition-colors">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-turquesa opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-turquesa"></span>
+        </span>
+        <span>TrAIning de 100 a 1000+ · Quibdó, Chocó</span>
       </div>
 
-      <h1 class="mt-6 text-4xl sm:text-5xl lg:text-[3.4rem] font-extrabold leading-[1.08] tracking-tight text-ink">
+      <h1 class="mt-6 text-4xl sm:text-5xl lg:text-[3.35rem] font-black leading-[1.08] tracking-tight text-ink">
         Cada joven que formamos en alta tecnología
         <span class="bg-gradient-to-r from-turquesa via-morado to-coral bg-clip-text text-transparent">forma a la siguiente generación.</span>
       </h1>
 
-      <p class="mt-6 text-lg text-slate2 leading-relaxed max-w-xl">
+      <p class="mt-6 text-base sm:text-lg text-slate2 leading-relaxed max-w-xl font-normal">
         En el Chocó las ganas y el talento sobran. A través del TrAIning de 100 a 1000+, capacitamos a jóvenes
         del territorio en programación con Inteligencia Artificial para vincularse a la industria tecnológica
         global sin abandonar su tierra, multiplicando el conocimiento de persona a persona.
       </p>
 
       <div class="mt-9 flex flex-wrap items-center gap-4">
-        <a href="#programa" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold px-7 py-3.5 hover:bg-morado transition shadow-soft">
-          Conocer el TrAIning
+        <a href="#programa" class="rounded-full bg-gradient-to-r from-morado via-morado to-turquesa text-white font-semibold text-sm px-8 py-4 shadow-[0_6px_20px_rgba(139,92,246,0.35)] hover:shadow-[0_8px_25px_rgba(139,92,246,0.5)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 flex items-center gap-2">
+          <span>Conocer el TrAIning</span>
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+        </a>
+        <a href="#calificaciones" class="rounded-full bg-white border border-gray-200 hover:border-gray-300 text-ink font-semibold text-sm px-7 py-4 shadow-sm hover:bg-gray-50 transition-all duration-200">
+          Acceder al Portal
         </a>
       </div>
 
-      <div class="mt-12 grid sm:grid-cols-3 gap-6">
-        <div class="flex items-start gap-3">
-          <span class="w-2 h-2 rounded-full bg-turquesa mt-1.5 shrink-0"></span>
-          <div>
-            <p class="font-semibold text-ink text-sm">Tecnología sin desarraigo</p>
-            <p class="text-sm text-slate2 mt-1 leading-relaxed">Python, lógica computacional y programación con IA desde Quibdó para el mundo, sin tener que migrar.</p>
+      <div class="mt-14 grid sm:grid-cols-3 gap-4">
+        <div class="group p-4 sm:p-5 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-100 hover:border-turquesa/40 shadow-soft hover:shadow-md transition-all duration-300 hover:-translate-y-1">
+          <div class="w-9 h-9 rounded-xl bg-turquesa/15 text-turquesa flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
           </div>
+          <p class="font-bold text-ink text-sm">Tecnología sin desarraigo</p>
+          <p class="text-xs text-slate2 mt-1.5 leading-relaxed">Python, lógica computacional e IA desde Quibdó para el mundo, sin tener que migrar.</p>
         </div>
-        <div class="flex items-start gap-3">
-          <span class="w-2 h-2 rounded-full bg-morado mt-1.5 shrink-0"></span>
-          <div>
-            <p class="font-semibold text-ink text-sm">Efecto multiplicador 10 a 1</p>
-            <p class="text-sm text-slate2 mt-1 leading-relaxed">Cada participante becado se convierte en facilitador y replica lo aprendido con 10 personas de su comunidad.</p>
+
+        <div class="group p-4 sm:p-5 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-100 hover:border-morado/40 shadow-soft hover:shadow-md transition-all duration-300 hover:-translate-y-1">
+          <div class="w-9 h-9 rounded-xl bg-morado/15 text-morado flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m5-5.13a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 10-3.87-5"/></svg>
           </div>
+          <p class="font-bold text-ink text-sm">Efecto multiplicador 10 a 1</p>
+          <p class="text-xs text-slate2 mt-1.5 leading-relaxed">Cada becado se convierte en facilitador y replica lo aprendido con 10 personas.</p>
         </div>
-        <div class="flex items-start gap-3">
-          <span class="w-2 h-2 rounded-full bg-coral mt-1.5 shrink-0"></span>
-          <div>
-            <p class="font-semibold text-ink text-sm">Proyectos con impacto local</p>
-            <p class="text-sm text-slate2 mt-1 leading-relaxed">Soluciones digitales pensadas para las necesidades del territorio, con calificaciones y avances 100% verificables.</p>
+
+        <div class="group p-4 sm:p-5 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-100 hover:border-coral/40 shadow-soft hover:shadow-md transition-all duration-300 hover:-translate-y-1">
+          <div class="w-9 h-9 rounded-xl bg-coral/15 text-coral flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           </div>
+          <p class="font-bold text-ink text-sm">Impacto local real</p>
+          <p class="text-xs text-slate2 mt-1.5 leading-relaxed">Soluciones digitales para el territorio con calificaciones y avances 100% verificables.</p>
         </div>
       </div>
     </div>
 
-    <!-- Right: signature visual — growth constellation -->
+    <!-- Right: signature visual — growth constellation with glow frame -->
     <div class="relative">
-      <div class="relative aspect-square max-w-lg mx-auto rounded-[2rem] bg-white border border-gray-100 shadow-softLg p-6">
+      <div class="absolute -inset-2 rounded-[2.5rem] bg-gradient-to-tr from-turquesa/20 via-morado/20 to-coral/20 blur-xl opacity-60"></div>
+      <div class="relative aspect-square max-w-lg mx-auto rounded-[2.2rem] bg-white/95 backdrop-blur-xl border border-white shadow-2xl p-6 ring-1 ring-black/5">
         <div id="constellation" class="constellation"></div>
       </div>
-      <p class="text-center text-xs text-slate2 mt-4">Cada nodo representa una persona formada dentro del programa</p>
+      <p class="text-center text-xs font-medium text-slate2 mt-4 flex items-center justify-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-turquesa inline-block"></span>
+        Cada nodo representa una persona formada dentro del programa
+      </p>
     </div>
   </div>
 </section>
 
 <!-- ============ PROGRAMA / TRAINING ============ -->
-<section id="programa" class="py-24 lg:py-32 bg-gray-50/60">
-  <div class="max-w-7xl mx-auto px-6 lg:px-10">
+<section id="programa" class="py-24 lg:py-32 bg-slate-50/50 relative overflow-hidden">
+  <div class="pointer-events-none absolute top-1/2 left-0 -translate-y-1/2 w-96 h-96 bg-turquesa/5 rounded-full blur-3xl"></div>
+  <div class="pointer-events-none absolute bottom-0 right-0 w-96 h-96 bg-morado/5 rounded-full blur-3xl"></div>
+
+  <div class="relative max-w-7xl mx-auto px-6 lg:px-10">
     <div class="max-w-2xl mb-16">
-      <p class="text-xs font-bold tracking-widest uppercase text-coral mb-3">Programa insignia</p>
-      <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink leading-tight">Training de 100 a 1000+</h2>
-      <p class="mt-5 text-slate2 leading-relaxed">
-        Un modelo de capacitación en dos fases: formamos a un primer grupo, y ese grupo se encarga
-        de llevar el conocimiento al resto de la comunidad.
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-coral/10 text-coral text-xs font-bold uppercase tracking-wider mb-4">
+        <span class="w-1.5 h-1.5 rounded-full bg-coral"></span>
+        Programa insignia
+      </div>
+      <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink leading-tight">
+        Training de 100 a <span class="bg-gradient-to-r from-morado via-turquesa to-coral bg-clip-text text-transparent">1000+</span>
+      </h2>
+      <p class="mt-4 text-slate2 text-base leading-relaxed">
+        Un modelo de capacitación exponencial en dos fases: formamos a una cohorte inicial de líderes, y ellos multiplican el conocimiento en cada rincón de sus comunidades.
       </p>
     </div>
 
-    <div class="grid md:grid-cols-2 gap-6">
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8">
-        <span class="text-sm font-bold text-turquesa">Fase 1</span>
-        <h3 class="text-xl font-bold text-ink mt-2 mb-3">Fundamentación</h3>
-        <p class="text-sm text-slate2 leading-relaxed">
-          Formación de base a cargo de la Fundación A+: seleccionamos y capacitamos intensivamente a un primer grupo
-          de líderes comunitarios en habilidades técnicas y de facilitación.
+    <div class="grid md:grid-cols-2 gap-8">
+      <!-- Card Fase 1 -->
+      <div class="modern-hover-card group relative bg-white/90 backdrop-blur-xl rounded-3xl p-8 sm:p-10 border border-gray-100/80 shadow-soft hover:shadow-xl transition-all duration-300">
+        <div class="absolute top-0 inset-x-8 h-1 bg-gradient-to-r from-turquesa to-emerald-400 rounded-b-full"></div>
+        <div class="flex items-center justify-between mb-6">
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-turquesa/10 text-turquesa text-xs font-bold uppercase tracking-wider">
+            Fase 1 · Semillero Base
+          </span>
+          <span class="text-xs font-medium text-slate2 bg-gray-100/80 px-2.5 py-1 rounded-full">6 Meses</span>
+        </div>
+        <h3 class="text-2xl font-bold text-ink mb-3 group-hover:text-turquesa transition-colors">Fundamentación Integral</h3>
+        <p class="text-sm text-slate2 leading-relaxed mb-6">
+          Formación técnica y pedagógica intensiva a cargo de la Fundación A+. Seleccionamos y preparamos a líderes comunitarios en habilidades digitales clave, resolución de problemas y metodologías de facilitación.
         </p>
+        <ul class="space-y-2.5 text-xs text-slate2 border-t border-gray-100/80 pt-6">
+          <li class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-turquesa flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span>Desarrollo de pensamiento lógico y programación básica</span>
+          </li>
+          <li class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-turquesa flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span>Liderazgo multiplicador y habilidades blandas comunitarias</span>
+          </li>
+          <li class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-turquesa flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span>Evaluación continua y proyectos aplicados en territorio</span>
+          </li>
+        </ul>
       </div>
 
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8">
-        <span class="text-sm font-bold text-coral">Fase 2</span>
-        <h3 class="text-xl font-bold text-ink mt-2 mb-3">Profundización</h3>
-        <p class="text-sm text-slate2 leading-relaxed">
-          Etapa avanzada que desarrollamos junto a <strong>Blend360</strong>, nuestro aliado principal, para llevar
-          la formación a un nivel más profundo y conectada con la industria tecnológica.
+      <!-- Card Fase 2 -->
+      <div class="modern-hover-card group relative bg-white/90 backdrop-blur-xl rounded-3xl p-8 sm:p-10 border border-gray-100/80 shadow-soft hover:shadow-xl transition-all duration-300">
+        <div class="absolute top-0 inset-x-8 h-1 bg-gradient-to-r from-morado to-coral rounded-b-full"></div>
+        <div class="flex items-center justify-between mb-6">
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-morado/10 text-morado text-xs font-bold uppercase tracking-wider">
+            Fase 2 · Especialización
+          </span>
+          <span class="text-xs font-medium text-slate2 bg-gray-100/80 px-2.5 py-1 rounded-full">Alianza Blend360</span>
+        </div>
+        <h3 class="text-2xl font-bold text-ink mb-3 group-hover:text-morado transition-colors">Profundización & Conexión Global</h3>
+        <p class="text-sm text-slate2 leading-relaxed mb-6">
+          Etapa avanzada desarrollada en alianza estratégica con <strong>Blend360</strong>. Llevamos las competencias de los graduados al estándar de la industria tecnológica internacional, conectándolos con mentoría experta y empleabilidad.
         </p>
+        <ul class="space-y-2.5 text-xs text-slate2 border-t border-gray-100/80 pt-6">
+          <li class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-morado flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span>Análisis de datos avanzado y metodologías ágiles de trabajo</span>
+          </li>
+          <li class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-morado flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span>Mentorías directas con especialistas globales de Blend360</span>
+          </li>
+          <li class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-morado flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span>Conexión con oportunidades reales en el ecosistema digital</span>
+          </li>
+        </ul>
       </div>
     </div>
   </div>
 </section>
 
 <!-- ============ CALIFICACIONES ============ -->
-<section id="calificaciones" class="py-24 lg:py-32 bg-gray-50/60">
-  <div class="max-w-7xl mx-auto px-6 lg:px-10">
-    <div class="grid lg:grid-cols-12 gap-14 items-center">
+<section id="calificaciones" class="py-24 lg:py-32 relative overflow-hidden bg-white">
+  <div class="pointer-events-none absolute -top-40 -right-40 w-96 h-96 bg-morado/10 rounded-full blur-3xl"></div>
+  <div class="pointer-events-none absolute -bottom-40 -left-40 w-96 h-96 bg-turquesa/10 rounded-full blur-3xl"></div>
+
+  <div class="relative max-w-7xl mx-auto px-6 lg:px-10">
+    <div class="grid lg:grid-cols-12 gap-12 lg:gap-16 items-center">
       <div class="lg:col-span-5">
-        <p class="text-xs font-bold tracking-widest uppercase text-magenta mb-3">Acceso</p>
-        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink leading-tight">Portal</h2>
-        <p class="mt-5 text-slate2 leading-relaxed">
-          Inicia sesión para consultar tus calificaciones, gestionar tu cohorte o acceder a tu panel del Training de 100 a 1000+.
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-morado/10 text-morado text-xs font-bold uppercase tracking-wider mb-4">
+          <span class="w-1.5 h-1.5 rounded-full bg-morado"></span>
+          Acceso Plataforma
+        </div>
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink leading-tight">
+          Portal de Aprendizaje y Gestión
+        </h2>
+        <p class="mt-4 text-slate2 text-base leading-relaxed">
+          Inicia sesión para consultar tus notas, registrar asistencias por código QR, gestionar tu cohorte o acceder a los recursos del Training de 100 a 1000+.
         </p>
+
+        <!-- Feature pills on the left -->
+        <div class="mt-8 space-y-3.5">
+          <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-gray-50/80 border border-gray-100 shadow-sm">
+            <div class="w-9 h-9 rounded-xl bg-turquesa/15 text-turquesa flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div>
+              <p class="text-xs font-bold text-ink">Estudiantes y Trainees</p>
+              <p class="text-[11px] text-slate2">Notas, asistencias instantáneas y certificado en tiempo real</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 p-3.5 rounded-2xl bg-gray-50/80 border border-gray-100 shadow-sm">
+            <div class="w-9 h-9 rounded-xl bg-morado/15 text-morado flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0a2 2 0 002-2v-4a2 2 0 00-2-2m-4 8v1m0-9V4m-6 7H2m4 0a2 2 0 012-2V5a2 2 0 012-2m-4 8a2 2 0 002 2v4a2 2 0 002 2m0-8h4"/></svg>
+            </div>
+            <div>
+              <p class="text-xs font-bold text-ink">Docentes y Facilitadores</p>
+              <p class="text-[11px] text-slate2">Activación dinámica de sesión QR y control de asistencia</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="lg:col-span-7">
-        <!-- Login inline, dentro de Calificaciones -->
-        <div class="max-w-2xl mx-auto bg-white rounded-3xl border border-gray-100 shadow-soft p-8 sm:p-10">
-          <img src="logo.jpg" alt="Fundación A+" class="h-14 w-auto mx-auto mb-5" />
-          <h3 class="text-xl font-extrabold text-ink text-center">Iniciar sesión</h3>
-          <p class="text-sm text-slate2 mt-1 text-center">Ingresa tu correo y contraseña para continuar.</p>
+        <div class="relative max-w-xl mx-auto">
+          <!-- Ambient card glow -->
+          <div class="absolute -inset-1.5 rounded-[2.5rem] bg-gradient-to-r from-turquesa/20 via-morado/25 to-coral/20 blur-xl opacity-70"></div>
+          
+          <div class="relative bg-white/95 backdrop-blur-2xl rounded-[2.2rem] border border-white shadow-2xl p-8 sm:p-10 ring-1 ring-black/5">
+            <div class="text-center mb-6">
+              <img src="logo.jpg" alt="Fundación A+" class="h-14 w-auto mx-auto mb-4 rounded-xl shadow-sm" />
+              <h3 class="text-2xl font-extrabold text-ink tracking-tight">Bienvenido al Portal</h3>
+              <p class="text-xs text-slate2 mt-1">Ingresa tus credenciales autorizadas para continuar</p>
+            </div>
 
-          <!-- target="loginTargetFrame": el formulario de login SÍ hace un
-               submit real (a un iframe interno invisible), en vez de
-               bloquearlo siempre con preventDefault. Esa es la señal que
-               los navegadores (Chrome, Edge, Firefox...) necesitan para
-               ofrecer guardar la contraseña — y al ser el propio formulario
-               visible el que el usuario llenó (no uno oculto/paralelo), no
-               lo descartan como sospechoso de phishing. La navegación
-               nunca sale de ese iframe, así que la SPA no se recarga ni
-               pierde su estado. Ver submitLogin() en app.js: solo deja
-               pasar este submit real cuando el login es exitoso. -->
-          <form id="loginForm" autocomplete="on" target="loginTargetFrame" action="about:blank" onsubmit="submitLogin(event)" class="mt-6 space-y-3">
-            <input id="loginEmail" name="username" type="email" autocomplete="username" placeholder="Correo electrónico" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-            <div class="relative">
-              <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Contraseña" class="w-full rounded-xl border border-morado/25 bg-morado/5 pl-4 pr-11 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-              <button type="button" onclick="toggleLoginPasswordVisibility()" aria-label="Mostrar u ocultar contraseña" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate2 hover:text-ink transition">
-                <svg id="loginPwEyeOpen" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                <svg id="loginPwEyeClosed" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.5a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+            <!-- target="loginTargetFrame": el formulario de login SÍ hace un
+                 submit real (a un iframe interno invisible), en vez de
+                 bloquearlo siempre con preventDefault. Esa es la señal que
+                 los navegadores (Chrome, Edge, Firefox...) necesitan para
+                 ofrecer guardar la contraseña — y al ser el propio formulario
+                 visible el que el usuario llenó (no uno oculto/paralelo), no
+                 lo descartan como sospechoso de phishing. La navegación
+                 nunca sale de ese iframe, así que la SPA no se recarga ni
+                 pierde su estado. Ver submitLogin() en app.js: solo deja
+                 pasar este submit real cuando el login es exitoso. -->
+            <form id="loginForm" autocomplete="on" target="loginTargetFrame" action="about:blank" onsubmit="submitLogin(event)" class="mt-6 space-y-4">
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate2">
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"/></svg>
+                </div>
+                <input id="loginEmail" name="username" type="email" autocomplete="username" placeholder="Correo electrónico" class="w-full rounded-2xl border border-gray-200/90 bg-gray-50/70 pl-11 pr-4 py-3.5 text-sm text-ink placeholder:text-slate2/70 focus:bg-white focus:outline-none focus:ring-4 focus:ring-morado/15 focus:border-morado transition" />
+              </div>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate2">
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </div>
+                <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Contraseña" class="w-full rounded-2xl border border-gray-200/90 bg-gray-50/70 pl-11 pr-12 py-3.5 text-sm text-ink placeholder:text-slate2/70 focus:bg-white focus:outline-none focus:ring-4 focus:ring-morado/15 focus:border-morado transition" />
+                <button type="button" onclick="toggleLoginPasswordVisibility()" aria-label="Mostrar u ocultar contraseña" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate2 hover:text-ink transition p-1">
+                  <svg id="loginPwEyeOpen" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                  <svg id="loginPwEyeClosed" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.5a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+                </button>
+              </div>
+            </form>
+            <iframe name="loginTargetFrame" title="" aria-hidden="true" tabindex="-1" style="position:absolute;width:1px;height:1px;border:0;opacity:0.01;pointer-events:none;"></iframe>
+
+            <div id="loginError" class="hidden mt-3.5 p-3 rounded-xl bg-coral/10 border border-coral/20 text-xs font-semibold text-coral flex items-center gap-2">
+              <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              <span>Credenciales incorrectas. Verifica tu correo y contraseña.</span>
+            </div>
+
+            <button type="submit" form="loginForm" class="btn-glow-primary w-full mt-6 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold py-3.5 shadow-lg shadow-morado/20 hover:shadow-xl hover:shadow-morado/30 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200">
+              Ingresar al Portal
+            </button>
+
+            <div class="mt-6 pt-5 border-t border-gray-100 flex items-center justify-between text-xs">
+              <span class="text-slate2">¿No tienes cuenta aún?</span>
+              <button type="button" onclick="abrirRegistroPublico()" class="font-bold text-morado hover:text-indigo-700 transition flex items-center gap-1 group">
+                <span>Regístrate como estudiante</span>
+                <span class="group-hover:translate-x-0.5 transition-transform">→</span>
               </button>
             </div>
-          </form>
-          <iframe name="loginTargetFrame" title="" aria-hidden="true" tabindex="-1" style="position:absolute;width:1px;height:1px;border:0;opacity:0.01;pointer-events:none;"></iframe>
-
-          <p id="loginError" class="hidden text-xs text-coral mt-3">Credenciales incorrectas. Verifica tu correo y contraseña.</p>
-
-          <button type="submit" form="loginForm" class="w-full mt-6 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold py-3.5 hover:opacity-90 transition">
-            Ingresar
-          </button>
-          <button type="button" onclick="abrirRegistroPublico()" class="w-full mt-3 text-sm font-semibold text-morado hover:underline">
-            ¿Eres nuevo? Regístrate como estudiante
-          </button>
+          </div>
         </div>
       </div>
     </div>
@@ -230,36 +349,46 @@
 </section>
 
 <!-- ============ CTA FINAL ============ -->
-<section class="py-24">
+<section class="py-24 relative overflow-hidden">
   <div class="max-w-7xl mx-auto px-6 lg:px-10">
-    <div class="relative overflow-hidden rounded-[2rem] bg-ink px-8 py-16 sm:px-16 sm:py-20 text-center">
-      <div class="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-morado/30 blur-3xl"></div>
-      <div class="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-coral/30 blur-3xl"></div>
-      <div class="relative">
-        <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight max-w-2xl mx-auto">
+    <div class="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-ink via-gray-900 to-ink px-8 py-16 sm:px-16 sm:py-20 text-center shadow-2xl border border-white/10">
+      <div class="pointer-events-none absolute -top-24 -left-24 w-80 h-80 rounded-full bg-morado/30 blur-3xl"></div>
+      <div class="pointer-events-none absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-coral/25 blur-3xl"></div>
+      <div class="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-turquesa/10 rounded-full blur-3xl"></div>
+      <div class="relative z-10">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-turquesa text-xs font-bold uppercase tracking-wider mb-4 border border-white/10 backdrop-blur-md">
+          Conectividad &amp; Transformación
+        </span>
+        <h2 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight max-w-2xl mx-auto leading-tight">
           Tu comunidad puede ser el próximo nodo de esta red
         </h2>
-        <p class="mt-5 text-gray-300 max-w-xl mx-auto">
-          Postula a la próxima cohorte del Training de 100 a 1000+ y empieza a formar a los líderes de tu zona.
+        <p class="mt-5 text-gray-300 max-w-xl mx-auto text-base leading-relaxed">
+          Postula a la próxima cohorte del Training de 100 a 1000+ y multiplica las oportunidades en tu región con tecnología y propósito.
         </p>
-        <a href="#" onclick="abrirPostulacion(event)" class="btn-postular inline-block mt-8 rounded-full bg-white text-ink font-semibold px-8 py-3.5 hover:bg-turquesa hover:text-white transition">
-          Postular ahora
-        </a>
+        <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+          <a href="#" onclick="abrirPostulacion(event)" class="btn-postular inline-flex items-center gap-2 rounded-full bg-white text-ink font-bold px-8 py-4 shadow-xl hover:bg-turquesa hover:text-white hover:scale-105 active:scale-95 transition-all duration-200">
+            <span>Postular ahora</span>
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+          </a>
+          <a href="https://fundacionamas.org.co/" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md text-white border border-white/20 font-semibold px-6 py-4 hover:bg-white/20 transition-all duration-200">
+            Conocer más
+          </a>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
 <!-- ============ FOOTER ============ -->
-<footer class="border-t border-gray-100 py-14">
+<footer class="border-t border-gray-100 py-16 bg-slate-50/40">
   <div class="max-w-7xl mx-auto px-6 lg:px-10">
     <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-10">
       <div class="lg:col-span-2">
         <div class="flex items-center gap-3 mb-4">
-          <img src="logo.jpg" alt="Fundación A+" class="h-10 w-auto" />
+          <img src="logo.jpg" alt="Fundación A+" class="h-11 w-auto rounded-xl shadow-sm" />
         </div>
         <p class="text-sm text-slate2 leading-relaxed max-w-xs">
-          Formamos líderes que multiplican el conocimiento en sus comunidades a través del Training de 100 a 1000+.
+          Formamos líderes multiplicadores que transforman y empoderan el tejido comunitario a través del Training de 100 a 1000+.
         </p>
       </div>
       <div>
@@ -281,23 +410,23 @@
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-4">Contáctanos</p>
         <div id="contactoPublico" class="flex flex-col gap-2 text-sm text-slate2"></div>
         <div class="flex items-center gap-3 mt-4">
-          <a href="https://www.instagram.com/fundacionamas.org.co?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==" target="_blank" rel="noopener" aria-label="Instagram" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition">
+          <a href="https://www.instagram.com/fundacionamas.org.co?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==" target="_blank" rel="noopener" aria-label="Instagram" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition hover:scale-110">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4.5 h-4.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
           </a>
-          <a href="https://www.facebook.com/fundacionamas.org" target="_blank" rel="noopener" aria-label="Facebook" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition">
+          <a href="https://www.facebook.com/fundacionamas.org" target="_blank" rel="noopener" aria-label="Facebook" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition hover:scale-110">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
           </a>
-          <a href="https://www.linkedin.com/company/fundacionamas" target="_blank" rel="noopener" aria-label="LinkedIn" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition">
+          <a href="https://www.linkedin.com/company/fundacionamas" target="_blank" rel="noopener" aria-label="LinkedIn" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition hover:scale-110">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
           </a>
-          <a href="https://www.youtube.com/channel/UCYtl9tnCwwRDNr-_sAe5Erw" target="_blank" rel="noopener" aria-label="YouTube" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition">
+          <a href="https://www.youtube.com/channel/UCYtl9tnCwwRDNr-_sAe5Erw" target="_blank" rel="noopener" aria-label="YouTube" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition hover:scale-110">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon></svg>
           </a>
         </div>
       </div>
     </div>
     <div class="mt-14 pt-8 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-      <p class="text-xs text-slate2">© 2026 Fundación A+. Todos los derechos reservados.</p>
+      <p class="text-xs text-slate2">© Fundación A+. Todos los derechos reservados.</p>
       <div class="flex gap-2">
         <span class="w-2 h-2 rounded-full bg-turquesa"></span>
         <span class="w-2 h-2 rounded-full bg-morado"></span>
@@ -972,8 +1101,8 @@
      actualizó pero db.js se siguió cargando desde caché sin esa función.
      Cambia el número cada vez que subas una versión nueva de cualquiera
      de los dos archivos, para forzar que el navegador la descargue. -->
-<script src="db.js?v=20260918-7"></script>
-<script src="app.js?v=20260918-7"></script>
+<script src="db.js?v=20260918-8"></script>
+<script src="app.js?v=20260918-8"></script>
 
 </body>
 </html>
