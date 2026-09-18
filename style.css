@@ -391,19 +391,122 @@ body {
     border: 1px solid rgba(238, 240, 243, 0.9);
     box-shadow: 0 2px 10px rgba(20,24,31,0.03);
   }
-  .admin-table thead th {
-    background: #F8FAFC;
+  .admin-table thead th,
+  .sticky-table thead th {
+    background: #F8FAFC !important;
     color: #475569;
     font-weight: 700;
     font-size: 0.6875rem;
     letter-spacing: 0.05em;
     text-transform: uppercase;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 1px 0 rgba(226, 232, 240, 0.9);
+    user-select: none;
   }
   .admin-table tbody tr {
     transition: background-color .15s ease;
   }
   .admin-table tbody tr:hover {
     background-color: #F8F7FF;
+  }
+
+  /* Cabeceras ordenables */
+  .th-sortable {
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+  }
+  .th-sortable:hover {
+    color: #8B5CF6;
+    background-color: #F1F5F9 !important;
+  }
+  .th-sort-icon {
+    display: inline-block;
+    margin-left: 0.35rem;
+    font-size: 0.7rem;
+    vertical-align: middle;
+    color: #8B5CF6;
+  }
+
+  /* Contenedor responsivo con scroll de ventana óptimo */
+  .table-responsive-container {
+    max-height: 560px;
+    overflow-y: auto;
+    overflow-x: auto;
+    border-radius: 14px;
+    position: relative;
+    border: 1px solid rgba(238, 240, 243, 0.9);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+  }
+
+  /* Barra de paginación interactiva y responsiva */
+  .table-pagination-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid rgba(238, 240, 243, 0.9);
+    font-size: 0.8125rem;
+    color: #5B6472;
+  }
+  .table-pagination-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 500;
+  }
+  .table-page-size-select {
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #14181F;
+    background-color: #fff !important;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+  .table-page-size-select:focus {
+    border-color: #8B5CF6;
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
+  }
+  .table-pagination-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .table-page-btn {
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #5B6472;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .table-page-btn:hover:not(:disabled):not(.active) {
+    background: #F1F5F9;
+    color: #14181F;
+  }
+  .table-page-btn.active {
+    background: linear-gradient(135deg, #8B5CF6, #6366F1);
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(139, 92, 246, 0.35);
+  }
+  .table-page-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
   }
   .admin-empty-state {
     display: flex;

@@ -674,7 +674,10 @@
       tab.style.color = '#14181F';
     }
     panelActivoDocente = panel;
-    if (RENDERERS_DOCENTE[panel]) await RENDERERS_DOCENTE[panel]();
+    if (RENDERERS_DOCENTE[panel]) {
+      await RENDERERS_DOCENTE[panel]();
+      initTablesEnPanel('panel-t-' + panel);
+    }
   }
 
   // ---------- Navegación del panel Superadmin ----------
@@ -709,7 +712,10 @@
     const banner = document.getElementById('superadminBanner');
     if (banner) banner.classList.toggle('hidden', panel !== 'resumen');
     if (panel === 'resumen') await renderAdminBannerStats();
-    if (RENDERERS[panel]) await RENDERERS[panel]();
+    if (RENDERERS[panel]) {
+      await RENDERERS[panel]();
+      initTablesEnPanel('panel-' + panel);
+    }
     actualizarBadgePqrAdmin();
   }
 
@@ -1989,12 +1995,306 @@
   // vive en MySQL, ver-el-backend/db.py lee esa tabla directamente en cada
   // pregunta — ya no hace falta exportar/subir un knowledge.json a mano.)
 
-  // ---------- Búsqueda de tablas ----------
+  // =====================================================================
+  // GESTOR UNIVERSAL DE TABLAS Y GRANDES VOLÚMENES DE DATOS (TableManager)
+  // Paginación dinámica, búsqueda en tiempo real con contador,
+  // ordenamiento por columnas, sticky headers y estado vacío inteligente.
+  // =====================================================================
+
+  const TableManager = {
+    states: {}, // { [tableId]: { page: 1, pageSize: 15, search: '', sortCol: -1, sortAsc: true } }
+
+    getState(tableId) {
+      if (!this.states[tableId]) {
+        this.states[tableId] = {
+          page: 1,
+          pageSize: 15,
+          search: '',
+          sortCol: -1,
+          sortAsc: true
+        };
+      }
+      return this.states[tableId];
+    },
+
+    init(tableId, options = {}) {
+      const table = typeof tableId === 'string' ? document.getElementById(tableId) : tableId;
+      if (!table || table.dataset.noPaginate === 'true' || table.classList.contains('campos')) return;
+      const id = table.id || ('tbl_' + Math.random().toString(36).slice(2, 7));
+      if (!table.id) table.id = id;
+
+      const state = this.getState(id);
+      if (options.pageSize !== undefined) state.pageSize = options.pageSize;
+
+      // Asignar contenedor con scroll ergonómico
+      const wrapper = table.closest('.overflow-x-auto') || table.parentElement;
+      if (wrapper && !wrapper.classList.contains('table-responsive-container')) {
+        wrapper.classList.add('table-responsive-container');
+      }
+
+      // Hacer los <th> ordenables si aún no lo están
+      const ths = table.querySelectorAll('thead th');
+      ths.forEach((th, idx) => {
+        if (idx === ths.length - 1 && (!th.textContent.trim() || th.textContent.includes('Acci'))) return;
+        if (!th.dataset.sortInitialized) {
+          th.dataset.sortInitialized = 'true';
+          th.classList.add('th-sortable');
+          th.title = 'Clic para ordenar por esta columna';
+          th.addEventListener('click', () => this.toggleSort(id, idx));
+        }
+      });
+
+      this.update(id);
+    },
+
+    toggleSort(tableId, colIndex) {
+      const state = this.getState(tableId);
+      if (state.sortCol === colIndex) {
+        state.sortAsc = !state.sortAsc;
+      } else {
+        state.sortCol = colIndex;
+        state.sortAsc = true;
+      }
+      this.update(tableId);
+    },
+
+    setPage(tableId, page) {
+      const state = this.getState(tableId);
+      state.page = page;
+      this.update(tableId);
+    },
+
+    setPageSize(tableId, size) {
+      const state = this.getState(tableId);
+      state.pageSize = size === 'all' ? 999999 : parseInt(size, 10);
+      state.page = 1;
+      this.update(tableId);
+    },
+
+    filter(tableId, term) {
+      const state = this.getState(tableId);
+      state.search = (term || '').trim().toLowerCase();
+      state.page = 1;
+      this.update(tableId);
+    },
+
+    clearFilter(tableId) {
+      const state = this.getState(tableId);
+      state.search = '';
+      state.page = 1;
+      const entity = tableId.replace(/^table-/, '');
+      const inputs = document.querySelectorAll(`input[oninput*="${entity}"], input[data-table="${tableId}"]`);
+      inputs.forEach(inp => { inp.value = ''; });
+      this.update(tableId);
+    },
+
+    update(tableId) {
+      const table = document.getElementById(tableId);
+      if (!table) return;
+      const state = this.getState(tableId);
+      const tbody = table.querySelector('tbody');
+      if (!tbody) return;
+
+      // Actualizar indicadores visuales de ordenación en <th>
+      const ths = table.querySelectorAll('thead th');
+      ths.forEach((th, idx) => {
+        let icon = th.querySelector('.th-sort-icon');
+        if (state.sortCol === idx) {
+          if (!icon) {
+            icon = document.createElement('span');
+            icon.className = 'th-sort-icon';
+            th.appendChild(icon);
+          }
+          icon.textContent = state.sortAsc ? '▲' : '▼';
+        } else if (icon) {
+          icon.remove();
+        }
+      });
+
+      // Obtener filas válidas
+      const allRows = Array.from(tbody.querySelectorAll('tr')).filter(tr => !tr.classList.contains('empty-filter-row') && !tr.classList.contains('admin-empty-state-row'));
+      if (!allRows.length) {
+        this.renderPaginationBar(tableId, 0, 0, 0);
+        return;
+      }
+
+      // 1. Filtrar filas
+      let filteredRows = allRows;
+      if (state.search) {
+        filteredRows = allRows.filter(tr => {
+          const searchData = tr.dataset.search || tr.textContent.toLowerCase();
+          return searchData.toLowerCase().includes(state.search);
+        });
+      }
+
+      // 2. Ordenar filas
+      if (state.sortCol >= 0) {
+        filteredRows.sort((a, b) => {
+          const cellA = a.children[state.sortCol]?.textContent.trim() || '';
+          const cellB = b.children[state.sortCol]?.textContent.trim() || '';
+          const numA = parseFloat(cellA.replace(/[^\d.-]/g, ''));
+          const numB = parseFloat(cellB.replace(/[^\d.-]/g, ''));
+          let cmp = 0;
+          if (!isNaN(numA) && !isNaN(numB) && !cellA.includes('@') && !cellA.includes('/') && !cellA.includes('-')) {
+            cmp = numA - numB;
+          } else {
+            cmp = cellA.localeCompare(cellB, undefined, { numeric: true, sensitivity: 'base' });
+          }
+          return state.sortAsc ? cmp : -cmp;
+        });
+      }
+
+      // 3. Paginación
+      const totalFiltered = filteredRows.length;
+      const pageSize = state.pageSize;
+      const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+      if (state.page > totalPages) state.page = totalPages;
+      if (state.page < 1) state.page = 1;
+
+      const startIndex = (state.page - 1) * pageSize;
+      const endIndex = Math.min(startIndex + pageSize, totalFiltered);
+
+      // Ocultar todas las filas
+      allRows.forEach(tr => { tr.style.display = 'none'; });
+
+      // Estado vacío en caso de que la búsqueda no arroje resultados
+      let emptyFilterRow = tbody.querySelector('.empty-filter-row');
+      if (totalFiltered === 0 && state.search) {
+        if (!emptyFilterRow) {
+          emptyFilterRow = document.createElement('tr');
+          emptyFilterRow.className = 'empty-filter-row';
+          tbody.appendChild(emptyFilterRow);
+        }
+        emptyFilterRow.innerHTML = `
+          <td colspan="${ths.length || 1}" class="py-10 text-center text-slate2 bg-slate-50/40">
+            <div class="flex flex-col items-center justify-center gap-2 max-w-xs mx-auto">
+              <svg class="w-8 h-8 text-slate2/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <p class="text-sm font-semibold text-ink">Sin coincidencias</p>
+              <p class="text-xs text-slate2">No se encontraron registros para "<strong class="text-ink">${escapeHtml(state.search)}</strong>"</p>
+              <button type="button" onclick="TableManager.clearFilter('${tableId}')" class="mt-2 text-xs font-bold text-morado bg-morado/10 hover:bg-morado/20 rounded-xl px-3 py-1.5 transition">
+                Limpiar búsqueda
+              </button>
+            </div>
+          </td>`;
+        emptyFilterRow.style.display = '';
+      } else if (emptyFilterRow) {
+        emptyFilterRow.remove();
+      }
+
+      // Re-ordenar y mostrar solo las filas de la página actual
+      filteredRows.forEach((tr, idx) => {
+        if (idx >= startIndex && idx < endIndex) {
+          tr.style.display = '';
+          tbody.appendChild(tr);
+        }
+      });
+
+      // 4. Renderizar barra de paginación
+      this.renderPaginationBar(tableId, totalFiltered, allRows.length, totalPages);
+    },
+
+    renderPaginationBar(tableId, filteredCount, totalCount, totalPages) {
+      const table = document.getElementById(tableId);
+      if (!table) return;
+      const state = this.getState(tableId);
+
+      let bar = document.getElementById('pagination-' + tableId);
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'pagination-' + tableId;
+        bar.className = 'table-pagination-bar';
+        const container = table.closest('.table-responsive-container') || table.closest('.overflow-x-auto') || table;
+        container.insertAdjacentElement('afterend', bar);
+      }
+
+      if (totalCount <= 5 && !state.search) {
+        bar.innerHTML = `<div class="table-pagination-info"><span class="text-xs text-slate2 font-medium">Total: <strong class="text-ink font-semibold">${totalCount}</strong> registro${totalCount === 1 ? '' : 's'}</span></div>`;
+        return;
+      }
+
+      const startIndex = filteredCount === 0 ? 0 : (state.page - 1) * state.pageSize + 1;
+      const endIndex = Math.min(state.page * state.pageSize, filteredCount);
+
+      let infoText = '';
+      if (state.search) {
+        infoText = `Mostrando <strong class="text-ink">${filteredCount}</strong> de ${totalCount} (filtrado)`;
+      } else {
+        infoText = `Mostrando <strong class="text-ink">${startIndex}–${endIndex}</strong> de ${totalCount} registros`;
+      }
+
+      let pagesHtml = '';
+      if (totalPages > 1) {
+        pagesHtml += `
+          <button type="button" class="table-page-btn" ${state.page === 1 ? 'disabled' : ''} onclick="TableManager.setPage('${tableId}', ${state.page - 1})" title="Página anterior">
+            ‹ Anterior
+          </button>`;
+
+        for (let p = 1; p <= totalPages; p++) {
+          if (p === 1 || p === totalPages || (p >= state.page - 1 && p <= state.page + 1)) {
+            pagesHtml += `
+              <button type="button" class="table-page-btn ${p === state.page ? 'active' : ''}" onclick="TableManager.setPage('${tableId}', ${p})">
+                ${p}
+              </button>`;
+          } else if (p === state.page - 2 || p === state.page + 2) {
+            pagesHtml += `<span class="px-1 text-slate2 text-xs">…</span>`;
+          }
+        }
+
+        pagesHtml += `
+          <button type="button" class="table-page-btn" ${state.page === totalPages ? 'disabled' : ''} onclick="TableManager.setPage('${tableId}', ${state.page + 1})" title="Página siguiente">
+            Siguiente ›
+          </button>`;
+      }
+
+      bar.innerHTML = `
+        <div class="table-pagination-info">
+          <span>${infoText}</span>
+          <div class="flex items-center gap-1.5 text-xs text-slate2">
+            <span>Mostrar:</span>
+            <select class="table-page-size-select" onchange="TableManager.setPageSize('${tableId}', this.value)">
+              <option value="10" ${state.pageSize === 10 ? 'selected' : ''}>10</option>
+              <option value="15" ${state.pageSize === 15 ? 'selected' : ''}>15</option>
+              <option value="25" ${state.pageSize === 25 ? 'selected' : ''}>25</option>
+              <option value="50" ${state.pageSize === 50 ? 'selected' : ''}>50</option>
+              <option value="all" ${state.pageSize > 1000 ? 'selected' : ''}>Todos</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-pagination-nav">
+          ${pagesHtml}
+        </div>`;
+    }
+  };
+  window.TableManager = TableManager;
+
+  // ---------- Inicializador de tablas en un contenedor ----------
+  function initTablesEnPanel(containerId) {
+    setTimeout(() => {
+      const root = containerId ? (document.getElementById(containerId) || document) : document;
+      root.querySelectorAll('table.admin-table, table[id^="table-"], .admin-panel-card table').forEach(tbl => {
+        if (!tbl.dataset.noPaginate && !tbl.classList.contains('campos')) {
+          TableManager.init(tbl);
+        }
+      });
+    }, 60);
+  }
+  window.initTablesEnPanel = initTablesEnPanel;
+
+  // ---------- Búsqueda de tablas (enlazada con TableManager) ----------
   function filterTable(entity, term) {
-    term = term.toLowerCase();
-    document.querySelectorAll('#table-' + entity + ' tbody tr').forEach(tr => {
-      tr.style.display = tr.dataset.search.includes(term) ? '' : 'none';
-    });
+    const tableId = 'table-' + entity;
+    const tbl = document.getElementById(tableId);
+    if (tbl) {
+      TableManager.filter(tableId, term);
+    } else {
+      term = (term || '').toLowerCase();
+      document.querySelectorAll('#table-' + entity + ' tbody tr, [data-entity="' + entity + '"] tbody tr').forEach(tr => {
+        const text = tr.dataset.search || tr.textContent.toLowerCase();
+        tr.style.display = text.includes(term) ? '' : 'none';
+      });
+    }
   }
 
   // ---------- Recarga en vivo bajo demanda (al clic) ----------
@@ -2002,16 +2302,19 @@
     if (currentAdminRole || currentAdminUser) {
       if (panelActivoAdmin && RENDERERS[panelActivoAdmin]) {
         await RENDERERS[panelActivoAdmin]();
+        initTablesEnPanel('panel-' + panelActivoAdmin);
       }
       if (panelActivoAdmin === 'resumen') await renderAdminBannerStats();
       actualizarBadgePqrAdmin();
     } else if (currentDocente) {
       if (panelActivoDocente && RENDERERS_DOCENTE[panelActivoDocente]) {
         await RENDERERS_DOCENTE[panelActivoDocente]();
+        initTablesEnPanel('panel-t-' + panelActivoDocente);
       }
     } else if (currentEstudiante) {
       if (panelActivoEstudiante && RENDERERS_ESTUDIANTE[panelActivoEstudiante]) {
         await RENDERERS_ESTUDIANTE[panelActivoEstudiante]();
+        initTablesEnPanel('panel-s-' + panelActivoEstudiante);
       }
     }
     toast('Datos actualizados en vivo', 'ok');
@@ -2022,24 +2325,31 @@
   function sectionHeader(entity, title, subtitle, extraBtn, showNewButton, csvExcludeKeys) {
     if (showNewButton === undefined) showNewButton = true;
     const excludeArg = csvExcludeKeys && csvExcludeKeys.length ? ', ' + JSON.stringify(csvExcludeKeys) : '';
+    const tableId = 'table-' + entity;
+    // Auto-programar inicialización de la tabla
+    setTimeout(() => {
+      const tbl = document.getElementById(tableId);
+      if (tbl) TableManager.init(tbl);
+    }, 80);
+
     return `
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-gray-100">
         <div>
-          <h2 class="text-lg font-extrabold text-ink">${title}</h2>
-          <p class="text-sm text-slate2 mt-0.5">${subtitle}</p>
+          <h2 class="text-lg font-extrabold text-ink tracking-tight">${title}</h2>
+          <p class="text-xs text-slate2 mt-0.5">${subtitle}</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <div class="relative">
-            <input oninput="filterTable('${entity}', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
-            <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input data-table="${tableId}" oninput="filterTable('${entity}', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+            <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5 sm:top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           </div>
-          <button onclick="recargarPanelActual()" title="Actualizar datos en vivo" class="rounded-xl border border-gray-200 text-slate2 hover:text-morado hover:bg-morado/5 text-sm font-semibold px-3 py-2 transition flex items-center gap-1.5">
+          <button onclick="recargarPanelActual()" title="Actualizar datos en vivo" class="rounded-xl border border-gray-200 text-slate2 hover:text-morado hover:bg-morado/5 text-xs sm:text-sm font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-sm">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
             <span class="hidden md:inline">Actualizar</span>
           </button>
-          <button onclick="exportCSV('${entity}'${excludeArg})" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+          <button onclick="exportCSV('${entity}'${excludeArg})" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-xs sm:text-sm font-semibold px-3.5 py-2 transition shadow-sm">CSV</button>
           ${extraBtn || ''}
-          ${showNewButton ? `<button onclick="openModal('${entity}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-sm font-semibold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5 shadow-sm">
+          ${showNewButton ? `<button onclick="openModal('${entity}')" class="btn-glow-primary rounded-xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white text-xs sm:text-sm font-bold px-4 py-2 hover:opacity-95 transition flex items-center gap-1.5 shadow-md shadow-morado/20 hover:scale-[1.02] active:scale-[0.98]">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
             Nuevo
           </button>` : ''}
@@ -3470,23 +3780,34 @@
       <div class="admin-panel-card p-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-gray-100">
           <div>
-            <h2 class="text-lg font-extrabold text-ink">Administradores</h2>
-            <p class="text-sm text-slate2 mt-0.5">${records.length} administrador${records.length === 1 ? '' : 'es'} con acceso al panel de Administración.</p>
+            <h2 class="text-lg font-extrabold text-ink tracking-tight">Administradores</h2>
+            <p class="text-xs text-slate2 mt-0.5">${records.length} administrador${records.length === 1 ? '' : 'es'} con acceso al panel de Administración.</p>
           </div>
-          <button onclick="openModal('usuarios', null, 'Coordinador')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-sm font-semibold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5 whitespace-nowrap shadow-sm">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-            Nuevo administrador
-          </button>
+          <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <div class="relative">
+              <input data-table="table-administradores" oninput="filterTable('administradores', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5 sm:top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <button onclick="recargarPanelActual()" title="Actualizar datos en vivo" class="rounded-xl border border-gray-200 text-slate2 hover:text-morado hover:bg-morado/5 text-xs sm:text-sm font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-sm">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <span class="hidden md:inline">Actualizar</span>
+            </button>
+            <button onclick="openModal('usuarios', null, 'Coordinador')" class="btn-glow-primary rounded-xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white text-xs sm:text-sm font-bold px-4 py-2 hover:opacity-95 transition flex items-center gap-1.5 shadow-md shadow-morado/20 hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              Nuevo administrador
+            </button>
+          </div>
         </div>
-        <div class="overflow-x-auto">
+        <div class="table-responsive-container">
           <table id="table-administradores" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Nombre</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+              <th class="py-2.5 px-4">Nombre</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4" data-no-sort="true"></th>
             </tr></thead>
             <tbody>${rows || emptyRow(4)}</tbody>
           </table>
         </div>
       </div>`;
+    TableManager.init('table-administradores');
   }
 
   // ---------- HORARIO (antes "Módulos y cohortes") ----------
@@ -4224,7 +4545,7 @@
             <button onclick="exportarSemaforoCSV()" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
           </div>
         </div>
-        <div class="overflow-x-auto">
+        <div class="table-responsive-container">
           <table id="table-semaforo" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
               <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Promedio</th><th class="py-2.5 px-4">Asistencia</th><th class="py-2.5 px-4">Riesgo</th><th class="py-2.5 px-4">Motivo</th>
@@ -4234,6 +4555,7 @@
         </div>
         ${!data.length ? '<p class="text-sm text-slate2 text-center py-4">Crea usuarios con rol "Estudiante" para que aparezcan aquí.</p>' : ''}
       </div>`;
+    TableManager.init('table-semaforo');
   }
 
   // El semáforo se calcula en vivo (no vive en Store como lista), así que
@@ -4602,22 +4924,27 @@
           </div>
           <div class="flex items-center gap-2">
             <div class="relative">
-              <input oninput="filterTable('pqr', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
-              <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input data-table="table-pqr" oninput="filterTable('pqr', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5 sm:top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
-            <button onclick="exportCSV('pqr', ['archivoDatos'])" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+            <button onclick="recargarPanelActual()" title="Actualizar datos en vivo" class="rounded-xl border border-gray-200 text-slate2 hover:text-morado hover:bg-morado/5 text-xs sm:text-sm font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-sm">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <span class="hidden md:inline">Actualizar</span>
+            </button>
+            <button onclick="exportCSV('pqr', ['archivoDatos'])" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-xs sm:text-sm font-semibold px-3.5 py-2 transition shadow-sm">CSV</button>
           </div>
         </div>
         <p class="text-xs text-slate2 -mt-2 mb-4">Solo lectura: el administrador no puede editar ni crear PQR. El estado cambia a <span class="font-semibold text-ink">Activo</span> automáticamente al descargar el PDF por primera vez.</p>
-        <div class="overflow-x-auto">
+        <div class="table-responsive-container">
           <table id="table-pqr" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Tipo</th><th class="py-2.5 px-4">Remitente</th><th class="py-2.5 px-4">Asunto</th><th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+              <th class="py-2.5 px-4">Tipo</th><th class="py-2.5 px-4">Remitente</th><th class="py-2.5 px-4">Asunto</th><th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4" data-no-sort="true"></th>
             </tr></thead>
             <tbody>${rows || emptyRow(6)}</tbody>
           </table>
         </div>
       </div>`;
+    TableManager.init('table-pqr');
   }
 
   // Abre el PDF de una PQR en una pestaña nueva y, la primera vez que el
@@ -4841,10 +5168,16 @@
             <p class="text-sm font-bold text-ink">${escapeHtml(calificacionesAdminState.cohorte)}</p>
             <p class="text-xs text-slate2">${calificacionesAdminState.mes ? escapeHtml(mesLabel(calificacionesAdminState.mes)) : 'General — promedio de todos los meses con notas'}</p>
           </div>
-          <span class="text-xs text-slate2">${docentesCohorte.length} profesor${docentesCohorte.length !== 1 ? 'es' : ''} · ${estudiantes.length} estudiante${estudiantes.length !== 1 ? 's' : ''}</span>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-slate2">${docentesCohorte.length} profesor${docentesCohorte.length !== 1 ? 'es' : ''} · ${estudiantes.length} estudiante${estudiantes.length !== 1 ? 's' : ''}</span>
+            <div class="relative">
+              <input data-table="table-calificaciones-admin" oninput="TableManager.filter('table-calificaciones-admin', this.value)" type="text" placeholder="Buscar estudiante..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+          </div>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full admin-table">
+        <div class="table-responsive-container">
+          <table id="table-calificaciones-admin" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
               <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Promedio${calificacionesAdminState.mes ? '' : ' general'}</th>
             </tr></thead>
@@ -4852,6 +5185,7 @@
           </table>
         </div>
       </div>`;
+    TableManager.init('table-calificaciones-admin');
   }
 
   // ---------- RENDER: Informes enviados por docentes (agrupados por profesor) ----------
@@ -5033,7 +5367,7 @@
     const acciones = await Store.list('auditoria_acciones');
 
     const filasLogin = logins.map(l => `
-      <tr class="border-b border-gray-50 last:border-0">
+      <tr data-search="${escapeHtml((l.fecha + ' ' + l.hora + ' ' + (l.rol || '') + ' ' + l.email + ' ' + l.resultado).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(l.fecha)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(l.hora)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(l.rol || 'Superadmin')}</td>
@@ -5042,7 +5376,7 @@
       </tr>`).join('');
 
     const filasAcciones = acciones.map(a => `
-      <tr class="border-b border-gray-50 last:border-0">
+      <tr data-search="${escapeHtml((a.fecha + ' ' + a.hora + ' ' + (a.rol || '') + ' ' + a.actor + ' ' + a.tipo + ' ' + (a.detalle || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(a.fecha)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(a.hora)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(a.rol || '—')}</td>
@@ -5052,7 +5386,7 @@
       </tr>`).join('');
 
     const filasCambios = cambios.map(c => `
-      <tr class="border-b border-gray-50 last:border-0">
+      <tr data-search="${escapeHtml((c.fecha + ' ' + c.hora + ' ' + c.autor + ' ' + c.cohorte + ' ' + c.mes + ' ' + c.franja + ' ' + c.campo + ' ' + c.valorAnterior + ' ' + c.valorNuevo).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(c.fecha)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(c.hora)}</td>
         <td class="py-2.5 px-4 text-sm text-ink font-semibold">${escapeHtml(c.autor)}</td>
@@ -5066,15 +5400,21 @@
 
     document.getElementById('mount-auditoria').innerHTML = `
       <div class="admin-panel-card p-6 mb-6">
-        <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div>
-            <h2 class="text-lg font-extrabold text-ink">Auditoría de accesos</h2>
-            <p class="text-sm text-slate2 mt-0.5">${logins.length} intento${logins.length === 1 ? '' : 's'} de inicio de sesión registrado${logins.length === 1 ? '' : 's'} (Superadmin, Coordinador, Docente y Estudiante).</p>
+            <h2 class="text-lg font-extrabold text-ink tracking-tight">Auditoría de accesos</h2>
+            <p class="text-xs text-slate2 mt-0.5">${logins.length} intento${logins.length === 1 ? '' : 's'} de inicio de sesión registrado${logins.length === 1 ? '' : 's'} (Superadmin, Coordinador, Docente y Estudiante).</p>
           </div>
-          <button onclick="exportCSV('auditoria_login')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+          <div class="flex items-center gap-2">
+            <div class="relative">
+              <input data-table="table-auditoria-login" oninput="TableManager.filter('table-auditoria-login', this.value)" type="text" placeholder="Buscar acceso..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <button onclick="exportCSV('auditoria_login')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-xs sm:text-sm font-semibold px-3 py-1.5 transition shadow-sm">CSV</button>
+          </div>
         </div>
-        <div class="overflow-x-auto mt-4">
-          <table class="w-full">
+        <div class="table-responsive-container">
+          <table id="table-auditoria-login" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
               <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Resultado</th>
             </tr></thead>
@@ -5084,15 +5424,21 @@
       </div>
 
       <div class="admin-panel-card p-6 mb-6">
-        <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div>
-            <h2 class="text-lg font-extrabold text-ink">Auditoría de acciones</h2>
-            <p class="text-sm text-slate2 mt-0.5">${acciones.length} acción${acciones.length === 1 ? '' : 'es'} registrada${acciones.length === 1 ? '' : 's'} dentro del sistema (ej. notas actualizadas por un docente).</p>
+            <h2 class="text-lg font-extrabold text-ink tracking-tight">Auditoría de acciones</h2>
+            <p class="text-xs text-slate2 mt-0.5">${acciones.length} acción${acciones.length === 1 ? '' : 'es'} registrada${acciones.length === 1 ? '' : 's'} dentro del sistema (ej. notas actualizadas por un docente).</p>
           </div>
-          <button onclick="exportCSV('auditoria_acciones')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+          <div class="flex items-center gap-2">
+            <div class="relative">
+              <input data-table="table-auditoria-acciones" oninput="TableManager.filter('table-auditoria-acciones', this.value)" type="text" placeholder="Buscar acción..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <button onclick="exportCSV('auditoria_acciones')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-xs sm:text-sm font-semibold px-3 py-1.5 transition shadow-sm">CSV</button>
+          </div>
         </div>
-        <div class="overflow-x-auto mt-4">
-          <table class="w-full">
+        <div class="table-responsive-container">
+          <table id="table-auditoria-acciones" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
               <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Quién</th><th class="py-2.5 px-4">Acción</th><th class="py-2.5 px-4">Detalle</th>
             </tr></thead>
@@ -5102,15 +5448,21 @@
       </div>
 
       <div class="admin-panel-card p-6">
-        <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div>
-            <h2 class="text-lg font-extrabold text-ink">Auditoría de cambios en el Horario</h2>
-            <p class="text-sm text-slate2 mt-0.5">${cambios.length} cambio${cambios.length === 1 ? '' : 's'} de Materia o Docente registrado${cambios.length === 1 ? '' : 's'}, con quién lo hizo y cuándo.</p>
+            <h2 class="text-lg font-extrabold text-ink tracking-tight">Auditoría de cambios en el Horario</h2>
+            <p class="text-xs text-slate2 mt-0.5">${cambios.length} cambio${cambios.length === 1 ? '' : 's'} de Materia o Docente registrado${cambios.length === 1 ? '' : 's'}, con quién lo hizo y cuándo.</p>
           </div>
-          <button onclick="exportCSV('auditoria_horario')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+          <div class="flex items-center gap-2">
+            <div class="relative">
+              <input data-table="table-auditoria-horario" oninput="TableManager.filter('table-auditoria-horario', this.value)" type="text" placeholder="Buscar cambio..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <button onclick="exportCSV('auditoria_horario')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-xs sm:text-sm font-semibold px-3 py-1.5 transition shadow-sm">CSV</button>
+          </div>
         </div>
-        <div class="overflow-x-auto mt-4">
-          <table class="w-full">
+        <div class="table-responsive-container">
+          <table id="table-auditoria-horario" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
               <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Autor</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Mes</th><th class="py-2.5 px-4">Franja</th><th class="py-2.5 px-4">Campo</th><th class="py-2.5 px-4">Antes</th><th class="py-2.5 px-4">Ahora</th>
             </tr></thead>
@@ -5118,6 +5470,9 @@
           </table>
         </div>
       </div>`;
+    TableManager.init('table-auditoria-login');
+    TableManager.init('table-auditoria-acciones');
+    TableManager.init('table-auditoria-horario');
   }
 
   // async: 'configuracion' y 'superadmin_credentials' vía MySQL (Fase 4).
@@ -6428,7 +6783,7 @@
     const riesgoColor = { Verde: { bg: '#1FC8C01A', text: '#0f8f89', dot: '#1FC8C0' }, Amarillo: { bg: '#F5A6231A', text: '#b5790f', dot: '#F5A623' }, Rojo: { bg: '#F0455C1A', text: '#F0455C', dot: '#F0455C' } };
 
     const rows = data.map(s => `
-      <tr class="border-b border-gray-50 last:border-0">
+      <tr data-search="${escapeHtml((s.nombre + ' ' + (s.cohorte || '') + ' ' + s.riesgo + ' ' + (s.motivo || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-3 px-4 text-sm font-semibold text-ink"><span class="inline-block w-2 h-2 rounded-full mr-2" style="background:${riesgoColor[s.riesgo].dot}"></span>${escapeHtml(s.nombre)}</td>
         <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(s.cohorte || '—')}</td>
         <td class="py-3 px-4 text-sm text-slate2">${s.promedio}</td>
@@ -6439,12 +6794,18 @@
 
     document.getElementById('mount-t-riesgo').innerHTML = `
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6">
-        <div class="mb-5">
-          <p class="text-sm font-bold text-ink">Semáforo de riesgo académico</p>
-          <p class="text-xs text-slate2 mt-0.5">100% automático: calculado con el promedio real de notas y el % real de asistencia de tus estudiantes.</p>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-4 border-b border-gray-100">
+          <div>
+            <p class="text-sm font-bold text-ink tracking-tight">Semáforo de riesgo académico</p>
+            <p class="text-xs text-slate2 mt-0.5">100% automático: calculado con el promedio real de notas y el % real de asistencia de tus estudiantes.</p>
+          </div>
+          <div class="relative">
+            <input data-table="table-docente-riesgo" oninput="TableManager.filter('table-docente-riesgo', this.value)" type="text" placeholder="Buscar estudiante..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full">
+        <div class="table-responsive-container">
+          <table id="table-docente-riesgo" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
               <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Promedio</th><th class="py-2.5 px-4">Asistencia</th><th class="py-2.5 px-4">Riesgo</th><th class="py-2.5 px-4">Motivo</th>
             </tr></thead>
@@ -6452,6 +6813,7 @@
           </table>
         </div>
       </div>`;
+    TableManager.init('table-docente-riesgo');
   }
 
   // ---------- Calificaciones (docente) — notas de 0.0 a 10.0, ponderadas ----------
@@ -6976,28 +7338,35 @@
     const totalHoras = items.reduce((a, p) => a + (Number(p.horas) || 0), 0);
 
     const rows = items.map(p => `
-      <tr class="border-b border-gray-50 last:border-0">
+      <tr data-search="${escapeHtml((p.modulo + ' ' + p.tema).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-2.5 px-4 text-sm font-semibold text-ink">${escapeHtml(p.modulo)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(p.tema)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2">${p.horas} h</td>
       </tr>`).join('');
 
     document.getElementById('mount-t-pensum').innerHTML = `
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <p class="text-sm font-bold text-ink">Pensum curricular</p>
           <p class="text-xs text-slate2 mt-0.5">${items.length} tema${items.length === 1 ? '' : 's'} asignado${items.length === 1 ? '' : 's'} a tu perfil · ${totalHoras} h en total</p>
         </div>
-        <button onclick="descargarPensumDocente()" ${items.length ? '' : 'disabled'} class="rounded-xl ${items.length ? 'bg-gradient-to-r from-morado to-turquesa text-white hover:bg-morado' : 'bg-gray-100 text-slate2 cursor-not-allowed'} font-semibold text-sm py-2.5 px-5 transition">Descargar PDF</button>
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="relative">
+            <input data-table="table-docente-pensum" oninput="TableManager.filter('table-docente-pensum', this.value)" type="text" placeholder="Buscar tema..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs sm:text-sm w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <button onclick="descargarPensumDocente()" ${items.length ? '' : 'disabled'} class="rounded-xl ${items.length ? 'bg-gradient-to-r from-morado to-turquesa text-white hover:opacity-95 shadow-sm' : 'bg-gray-100 text-slate2 cursor-not-allowed'} font-semibold text-xs sm:text-sm py-2 px-4 transition">Descargar PDF</button>
+        </div>
       </div>
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full">
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden p-6">
+        <div class="table-responsive-container">
+          <table id="table-docente-pensum" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Módulo / Asignatura</th><th class="py-3 px-4">Tema</th><th class="py-3 px-4">Intensidad horaria</th></tr></thead>
             <tbody>${rows || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Aún no tienes temas asignados en el pensum.</td></tr>'}</tbody>
           </table>
         </div>
       </div>`;
+    TableManager.init('table-docente-pensum');
   }
 
   function descargarPensumDocente() {
@@ -7121,16 +7490,23 @@
         <input id="pqr_t_archivo" type="file" accept=".pdf,application/pdf" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-morado/15 file:text-morado file:px-3 file:py-1.5 file:text-xs file:font-semibold focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
         <button onclick="enviarPqrDocente()" class="mt-4 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition">Enviar solicitud</button>
       </div>
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-        <p class="text-xs font-bold uppercase tracking-wide text-slate2 px-6 pt-5 pb-2">Mis solicitudes</p>
-        <div class="overflow-x-auto">
-          <table class="w-full">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Tipo</th><th class="py-3 px-4">Asunto</th><th class="py-3 px-4">Estado</th><th class="py-3 px-4">Archivo</th></tr></thead>
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 overflow-hidden">
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <p class="text-xs font-bold uppercase tracking-wide text-slate2">Mis solicitudes</p>
+          <div class="relative">
+            <input data-table="table-docente-pqr" oninput="TableManager.filter('table-docente-pqr', this.value)" type="text" placeholder="Buscar solicitud..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+        </div>
+        <div class="table-responsive-container">
+          <table id="table-docente-pqr" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Tipo</th><th class="py-3 px-4">Asunto</th><th class="py-3 px-4">Estado</th><th class="py-3 px-4" data-no-sort="true">Archivo</th></tr></thead>
             <tbody>${propias.map(filaPqrPropia).join('') || '<tr><td colspan="4" class="text-sm text-slate2 text-center py-6">Aún no has enviado solicitudes.</td></tr>'}
             </tbody>
           </table>
         </div>
       </div>`;
+    TableManager.init('table-docente-pqr');
   }
 
   async function enviarPqrDocente() {
@@ -7221,7 +7597,10 @@
       tab.style.color = '#14181F';
     }
     panelActivoEstudiante = panel;
-    if (RENDERERS_ESTUDIANTE[panel]) await RENDERERS_ESTUDIANTE[panel]();
+    if (RENDERERS_ESTUDIANTE[panel]) {
+      await RENDERERS_ESTUDIANTE[panel]();
+      initTablesEnPanel('panel-s-' + panel);
+    }
   }
 
   // ---------- RESUMEN ----------
@@ -7555,7 +7934,7 @@
     const pct = registros.length ? Math.round((totales.Presente / registros.length) * 100) : 100;
 
     const rows = registros.map(r => `
-      <tr class="border-b border-gray-50 last:border-0">
+      <tr data-search="${escapeHtml((r.fecha + ' ' + (r.modulo || '') + ' ' + r.estado).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-3 px-4 text-sm text-ink">${fmtDate(r.fecha)}</td>
         <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(r.modulo)}</td>
         <td class="py-3 px-4">${statusPill(r.estado, { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['En proceso'] || ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'] })}${r.automatico ? '<span class="text-[10px] text-slate2 ml-2">automático</span>' : ''}</td>
@@ -7648,15 +8027,22 @@
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5"><p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Fallas</p><p class="text-2xl font-extrabold text-ink mt-1">${totales.Falla}</p></div>
       </div>
       ${tarjetasSesiones}
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-        <p class="text-xs font-bold uppercase tracking-wide text-slate2 px-6 pt-5 pb-2">Historial mensual</p>
-        <div class="overflow-x-auto">
-          <table class="w-full">
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 overflow-hidden">
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <p class="text-xs font-bold uppercase tracking-wide text-slate2">Historial de asistencia</p>
+          <div class="relative">
+            <input data-table="table-estudiante-asistencia" oninput="TableManager.filter('table-estudiante-asistencia', this.value)" type="text" placeholder="Buscar fecha o materia..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+        </div>
+        <div class="table-responsive-container">
+          <table id="table-estudiante-asistencia" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Fecha</th><th class="py-3 px-4">Materia</th><th class="py-3 px-4">Estado</th></tr></thead>
             <tbody>${rows || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Aún no tienes registros de asistencia.</td></tr>'}</tbody>
           </table>
         </div>
       </div>`;
+    TableManager.init('table-estudiante-asistencia');
 
     asistenciaEstudianteTimer = setInterval(() => {
       const panel = document.getElementById('panel-s-asistencia');
@@ -7826,13 +8212,19 @@
           </div>
         ` : '<p class="text-sm text-slate2">No tienes un módulo activo asignado por el momento.</p>'}
       </div>
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-        <p class="text-xs font-bold uppercase tracking-wide text-slate2 px-6 pt-5 pb-2">Temas / horario de tu módulo</p>
-        <div class="overflow-x-auto">
-          <table class="w-full">
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 overflow-hidden">
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <p class="text-xs font-bold uppercase tracking-wide text-slate2">Temas / horario de tu módulo</p>
+          <div class="relative">
+            <input data-table="table-estudiante-academico" oninput="TableManager.filter('table-estudiante-academico', this.value)" type="text" placeholder="Buscar tema o docente..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+        </div>
+        <div class="table-responsive-container">
+          <table id="table-estudiante-academico" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Tema</th><th class="py-3 px-4">Intensidad</th><th class="py-3 px-4">Docente</th></tr></thead>
             <tbody>${pensumItems.map(p => `
-              <tr class="border-b border-gray-50 last:border-0">
+              <tr data-search="${escapeHtml((p.tema + ' ' + (p.docente || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
                 <td class="py-3 px-4 text-sm text-ink">${escapeHtml(p.tema)}</td>
                 <td class="py-3 px-4 text-sm text-slate2">${p.horas} h</td>
                 <td class="py-3 px-4 text-sm text-slate2">${nombrePersonaClicable(p.docente, 'Docente')}</td>
@@ -7842,6 +8234,7 @@
         </div>
       </div>
       ${await renderHorarioEstudianteBloque(mod)}`;
+    TableManager.init('table-estudiante-academico');
   }
 
   // ---------- Mi horario de clases (estudiante) ----------
@@ -7905,18 +8298,27 @@
     const mod = await estudianteModulo();
     const pensumItems = [...(await Store.list('pensum'))].filter(p => !mod || p.modulo === mod.modulo).sort((a, b) => a.orden - b.orden);
     document.getElementById('mount-s-pensum').innerHTML = `
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-        <div class="flex items-center justify-between px-6 pt-5 pb-2">
-          <p class="text-xs font-bold uppercase tracking-wide text-slate2">Pensum de ${mod ? escapeHtml(mod.modulo) : 'tu módulo'}</p>
-          <button onclick="descargarPensumEstudiante()" class="text-xs font-semibold text-white bg-ink hover:bg-morado transition rounded-full px-4 py-2">Descargar PDF</button>
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 overflow-hidden">
+        <div class="flex items-center justify-between gap-4 mb-4 flex-wrap">
+          <div>
+            <p class="text-sm font-bold text-ink tracking-tight">Pensum de ${mod ? escapeHtml(mod.modulo) : 'tu módulo'}</p>
+            <p class="text-xs text-slate2 mt-0.5">${pensumItems.length} tema${pensumItems.length === 1 ? '' : 's'} en el plan de estudios</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="relative">
+              <input data-table="table-estudiante-pensum" oninput="TableManager.filter('table-estudiante-pensum', this.value)" type="text" placeholder="Buscar tema..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <button onclick="descargarPensumEstudiante()" class="text-xs font-semibold text-white bg-ink hover:bg-morado transition rounded-full px-4 py-2">Descargar PDF</button>
+          </div>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">#</th><th class="py-3 px-4">Tema</th><th class="py-3 px-4">Intensidad</th><th class="py-3 px-4">Material</th></tr></thead>
+        <div class="table-responsive-container">
+          <table id="table-estudiante-pensum" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">#</th><th class="py-3 px-4">Tema</th><th class="py-3 px-4">Intensidad</th><th class="py-3 px-4" data-no-sort="true">Material</th></tr></thead>
             <tbody>${pensumItems.map(p => `
-              <tr class="border-b border-gray-50 last:border-0">
+              <tr data-search="${escapeHtml((p.orden + ' ' + p.tema + ' ' + (p.archivoNombre || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
                 <td class="py-3 px-4 text-sm text-slate2">${p.orden}</td>
-                <td class="py-3 px-4 text-sm text-ink">${escapeHtml(p.tema)}</td>
+                <td class="py-3 px-4 text-sm text-ink font-semibold">${escapeHtml(p.tema)}</td>
                 <td class="py-3 px-4 text-sm text-slate2">${p.horas} h</td>
                 <td class="py-3 px-4 text-sm">${p.archivoDatos ? `<button onclick="verArchivoPensum('${p.id}')" class="text-xs font-semibold text-morado hover:underline">📎 ${escapeHtml(p.archivoNombre || 'Ver archivo')}</button>` : '<span class="text-xs text-slate2">Sin archivo</span>'}</td>
               </tr>`).join('') || '<tr><td colspan="4" class="text-sm text-slate2 text-center py-6">Sin temas registrados.</td></tr>'}
@@ -7924,6 +8326,7 @@
           </table>
         </div>
       </div>`;
+    TableManager.init('table-estudiante-pensum');
   }
 
   // async: 'modulos' vía MySQL. window.open() se llama SÍNCRONAMENTE antes
@@ -8079,9 +8482,9 @@
   // Fila reutilizable de "mis solicitudes" (Docente y Estudiante).
   function filaPqrPropia(p) {
     return `
-      <tr class="border-b border-gray-50 last:border-0">
+      <tr data-search="${escapeHtml((p.tipo + ' ' + p.asunto + ' ' + p.estado).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(p.tipo)}</td>
-        <td class="py-3 px-4 text-sm text-ink">${escapeHtml(p.asunto)}</td>
+        <td class="py-3 px-4 text-sm text-ink font-semibold">${escapeHtml(p.asunto)}</td>
         <td class="py-3 px-4">${statusPill(p.estado, ESTADO_COLORS)}</td>
         <td class="py-3 px-4 text-sm">${p.archivoDatos ? `<button onclick="verPqrPropia('${p.id}')" class="text-xs font-semibold text-morado hover:underline">📎 ${escapeHtml(p.archivoNombre || 'Ver PDF')}</button>` : '—'}</td>
       </tr>`;
@@ -8122,16 +8525,23 @@
         <input id="pqr_archivo" type="file" accept=".pdf,application/pdf" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold focus:outline-none focus:ring-2 focus:ring-oro/30" />
         <button onclick="enviarPqrEstudiante()" class="mt-4 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition">Enviar solicitud</button>
       </div>
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-        <p class="text-xs font-bold uppercase tracking-wide text-slate2 px-6 pt-5 pb-2">Mis solicitudes</p>
-        <div class="overflow-x-auto">
-          <table class="w-full">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Tipo</th><th class="py-3 px-4">Asunto</th><th class="py-3 px-4">Estado</th><th class="py-3 px-4">Archivo</th></tr></thead>
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 overflow-hidden">
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <p class="text-xs font-bold uppercase tracking-wide text-slate2">Mis solicitudes</p>
+          <div class="relative">
+            <input data-table="table-estudiante-pqr" oninput="TableManager.filter('table-estudiante-pqr', this.value)" type="text" placeholder="Buscar solicitud..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+        </div>
+        <div class="table-responsive-container">
+          <table id="table-estudiante-pqr" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Tipo</th><th class="py-3 px-4">Asunto</th><th class="py-3 px-4">Estado</th><th class="py-3 px-4" data-no-sort="true">Archivo</th></tr></thead>
             <tbody>${propias.map(filaPqrPropia).join('') || '<tr><td colspan="4" class="text-sm text-slate2 text-center py-6">Aún no has enviado solicitudes.</td></tr>'}
             </tbody>
           </table>
         </div>
       </div>`;
+    TableManager.init('table-estudiante-pqr');
   }
 
   async function enviarPqrEstudiante() {
