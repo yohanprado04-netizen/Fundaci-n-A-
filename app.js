@@ -655,23 +655,27 @@
 
   // ---------- Navegación del panel Docente ----------
   const PANEL_COLOR_DOCENTE = '#1FC8C0';
-  let panelActivoDocente = null; // último panel mostrado, para no recorrer todo el DOM en cada clic
+  let panelActivoDocente = null;
   async function showPanelDocente(panel) {
+    const tab = document.querySelector('.panel-tab-t[data-tpanel="' + panel + '"]');
+    if (tab && tab.classList.contains('hidden')) return;
     if (!(await permisoUsuarioSobrePanel(currentDocente, 'docente.' + panel)).ver) return;
-    if (panelActivoDocente && panelActivoDocente !== panel) {
-      const prevContent = document.getElementById('panel-t-' + panelActivoDocente);
-      if (prevContent) prevContent.classList.add('hidden');
-      const prevTab = document.querySelector('.panel-tab-t[data-tpanel="' + panelActivoDocente + '"]');
-      if (prevTab) {
-        prevTab.classList.remove('font-semibold');
-        prevTab.style.borderLeftColor = 'transparent';
-        prevTab.style.background = '';
-        prevTab.style.color = '#5B6472';
+
+    // Ocultar todos los demás paneles y desactivar tabs docentes de forma sincronizada e instantánea
+    document.querySelectorAll('.panel-content-t').forEach(p => {
+      if (p.id !== 'panel-t-' + panel) p.classList.add('hidden');
+    });
+    document.querySelectorAll('.panel-tab-t').forEach(t => {
+      if (t.dataset.tpanel !== panel) {
+        t.classList.remove('font-semibold');
+        t.style.borderLeftColor = 'transparent';
+        t.style.background = '';
+        t.style.color = '#5B6472';
       }
-    }
+    });
+
     const content = document.getElementById('panel-t-' + panel);
     if (content) content.classList.remove('hidden');
-    const tab = document.querySelector('.panel-tab-t[data-tpanel="' + panel + '"]');
     if (tab) {
       tab.classList.add('font-semibold');
       tab.style.borderLeftColor = PANEL_COLOR_DOCENTE;
@@ -679,6 +683,15 @@
       tab.style.color = '#14181F';
     }
     panelActivoDocente = panel;
+
+    const mount = document.getElementById('mount-t-' + panel);
+    if (mount && !mount.innerHTML.trim()) {
+      mount.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-12 text-center flex flex-col items-center justify-center gap-3">
+        <div class="w-8 h-8 border-3 border-turquesa/20 border-t-turquesa rounded-full animate-spin"></div>
+        <p class="text-xs font-semibold text-slate2">Cargando módulo...</p>
+      </div>`;
+    }
+
     if (RENDERERS_DOCENTE[panel]) {
       await RENDERERS_DOCENTE[panel]();
       initTablesEnPanel('panel-t-' + panel);
@@ -687,32 +700,37 @@
 
   // ---------- Navegación del panel Superadmin ----------
   const PANEL_COLOR = '#8B5CF6';
-  let panelActivoAdmin = null; // último panel mostrado, para no recorrer todo el DOM en cada clic
+  let panelActivoAdmin = null;
   async function showPanel(panel) {
-    // Si el usuario (Administración, no Superadmin) no tiene permiso de
-    // "ver" sobre este panel, no se navega hacia él.
     if (currentAdminRole === 'administracion' && currentAdminUser) {
-      // Techo estructural: "administradores" y "perfiles" (Perfiles y
-      // permisos) son exclusivos del Superadmin sin excepción — ningún
-      // perfil asignado por el Superadmin puede otorgar acceso a esto,
-      // sin importar lo que digan sus permisos guardados.
       const tabDelPanel = document.querySelector('.panel-tab[data-panel="' + panel + '"]');
-      if (tabDelPanel && tabDelPanel.dataset.superOnly === 'true') return;
+      if (tabDelPanel && (tabDelPanel.dataset.superOnly === 'true' || tabDelPanel.classList.contains('hidden'))) return;
       if (!(await permisoUsuarioSobrePanel(currentAdminUser, 'admin.' + panel)).ver) return;
     }
-    // Solo se toca el DOM del panel que se apaga y el que se enciende — no
-    // se recorren los ~15 panel-content/panel-tab restantes en cada clic.
-    if (panelActivoAdmin && panelActivoAdmin !== panel) {
-      const prevContent = document.getElementById('panel-' + panelActivoAdmin);
-      if (prevContent) prevContent.classList.add('hidden');
-      const prevTab = document.querySelector('.panel-tab[data-panel="' + panelActivoAdmin + '"]');
-      if (prevTab) prevTab.classList.remove('superadmin-tab-active');
-    }
+
+    // Ocultar de inmediato TODOS los demás paneles administrativos para evitar solapamientos
+    document.querySelectorAll('.panel-content').forEach(p => {
+      if (p.id !== 'panel-' + panel) p.classList.add('hidden');
+    });
+    document.querySelectorAll('.panel-tab').forEach(t => {
+      if (t.dataset.panel !== panel) t.classList.remove('superadmin-tab-active');
+    });
+
     const content = document.getElementById('panel-' + panel);
     if (content) content.classList.remove('hidden');
     const tab = document.querySelector('.panel-tab[data-panel="' + panel + '"]');
     if (tab) tab.classList.add('superadmin-tab-active');
     panelActivoAdmin = panel;
+
+    // Si el contenedor está vacío en el primer clic, mostrar skeleton de carga inmediata
+    const mountId = 'mount-' + (panel === 'informesAdmin' ? 'informes-admin' : panel);
+    const mount = document.getElementById(mountId);
+    if (mount && !mount.innerHTML.trim()) {
+      mount.innerHTML = `<div class="admin-panel-card p-12 text-center flex flex-col items-center justify-center gap-3">
+        <div class="w-8 h-8 border-3 border-morado/20 border-t-morado rounded-full animate-spin"></div>
+        <p class="text-xs font-semibold text-slate2">Cargando módulo...</p>
+      </div>`;
+    }
 
     const banner = document.getElementById('superadminBanner');
     if (banner) banner.classList.toggle('hidden', panel !== 'resumen');
@@ -1113,7 +1131,11 @@
 
   // Devuelve el permiso combinado (unión) de un usuario sobre un panel.
   // usuario null/undefined => sin acceso a nada (defensivo).
-  // async: 'perfiles' vía MySQL (Fase 4).
+  // Cache en memoria para navegación instantánea sin peticiones de red repetitivas en cada clic.
+  let _perfilesMemoryCache = null;
+  let _perfilesMemoryCacheTime = 0;
+  function invalidarCachePerfiles() { _perfilesMemoryCache = null; }
+
   async function permisoUsuarioSobrePanel(usuario, panelCodigo) {
     const vacio = { ver: false, crear: false, editar: false, eliminar: false };
     if (!usuario) return vacio;
@@ -1122,7 +1144,11 @@
     // acceso total, para que nunca dependa de datos editables.
     const idsPerfiles = usuario.perfiles || [];
     if (!idsPerfiles.length) return vacio;
-    const perfiles = (await Store.list('perfiles')).filter(p => idsPerfiles.includes(p.id));
+    if (!_perfilesMemoryCache || (Date.now() - _perfilesMemoryCacheTime > 45000)) {
+      _perfilesMemoryCache = await Store.list('perfiles');
+      _perfilesMemoryCacheTime = Date.now();
+    }
+    const perfiles = _perfilesMemoryCache.filter(p => idsPerfiles.includes(p.id));
     const combinado = { ...vacio };
     perfiles.forEach(p => {
       const perm = (p.permisos || {})[panelCodigo];
@@ -2938,24 +2964,47 @@
     return { label: 'DOC', bg: 'bg-slate-700 text-white', icon: 'doc' };
   }
 
-  function renderTrainee() {
+  async function renderTrainee() {
+    const todosEstudiantes = (await Store.list('usuarios'))
+      .filter(u => u.rol === 'Estudiante' || u.fueEstudiante)
+      .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+    if (!traineeState.estudianteId && todosEstudiantes.length > 0) {
+      traineeState.estudianteId = todosEstudiantes[0].id;
+    }
+    const estudianteActivo = todosEstudiantes.find(u => u.id === traineeState.estudianteId);
+
     document.getElementById('mount-trainee').innerHTML = `
       <div class="mb-5">
         <h2 class="text-lg font-extrabold text-ink">Historial Trainee</h2>
         <p class="text-sm text-slate2 mt-0.5">Todo lo que ha pasado con un estudiante en la fundación: memorandos, asistencia, PQR, calificaciones y archivos. Incluye a quienes fueron estudiantes y ahora tienen otro rol.</p>
       </div>
       <div class="admin-panel-card p-6 mb-6">
-        <label class="block text-xs font-semibold text-slate2 mb-1.5" for="traineeBusquedaEmail">Buscar por correo electrónico o nombre</label>
-        <div class="relative w-full sm:max-w-sm">
-          <input id="traineeBusquedaEmail" type="text" oninput="onBuscaTraineeEmail(this.value)" autocomplete="off" placeholder="Correo o nombre..."
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <label class="block text-xs font-bold text-slate2 uppercase tracking-wide" for="traineeBusquedaEmail">Buscar por correo o nombre</label>
+          <span class="text-xs text-slate2">${todosEstudiantes.length} trainees en plataforma</span>
+        </div>
+        <div class="relative w-full sm:max-w-md mb-3">
+          <input id="traineeBusquedaEmail" type="text" value="${estudianteActivo ? escapeHtml(estudianteActivo.nombre + ' (' + estudianteActivo.email + ')') : ''}" oninput="onBuscaTraineeEmail(this.value)" autocomplete="off" placeholder="Escribe para buscar..."
             class="w-full rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
           <svg class="w-4 h-4 text-slate2 absolute left-3 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
         </div>
-        <div id="traineeBusquedaResultados" class="mt-2"></div>
+        <div id="traineeBusquedaResultados" class="mb-2"></div>
+        ${todosEstudiantes.length ? `
+          <div class="pt-3 border-t border-gray-100 flex items-center gap-2 overflow-x-auto pb-1">
+            <span class="text-[11px] font-bold text-slate2 uppercase tracking-wide shrink-0">Acceso rápido:</span>
+            ${todosEstudiantes.slice(0, 10).map(u => `
+              <button onclick="onCambiaTraineeEstudiante('${u.id}')" class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${u.id === traineeState.estudianteId ? 'bg-morado text-white shadow-sm' : 'bg-gray-100 text-slate2 hover:bg-gray-200 hover:text-ink'}">
+                ${escapeHtml(u.nombre.split(' ')[0])}
+              </button>
+            `).join('')}
+            ${todosEstudiantes.length > 10 ? `<span class="text-xs text-slate2 shrink-0">+${todosEstudiantes.length - 10} más</span>` : ''}
+          </div>
+        ` : ''}
       </div>
       <div id="traineeFicha"></div>`;
 
-    renderTraineeFicha();
+    await renderTraineeFicha();
   }
 
   // Busca por coincidencia parcial de correo O nombre, y solo entre quienes
@@ -2995,10 +3044,20 @@
     traineeState.filtroTipo = 'todos';
     traineeState.archivosExpandidos = false;
     const input = document.getElementById('traineeBusquedaEmail');
+    const resWrap = document.getElementById('traineeBusquedaResultados');
+    if (resWrap) resWrap.innerHTML = '';
+
+    const wrap = document.getElementById('traineeFicha');
+    if (wrap) {
+      wrap.innerHTML = `<div class="admin-panel-card p-12 text-center flex flex-col items-center justify-center gap-3">
+        <div class="w-10 h-10 border-4 border-morado/20 border-t-morado rounded-full animate-spin"></div>
+        <p class="text-sm font-semibold text-ink">Cargando ficha del trainee...</p>
+      </div>`;
+    }
+
     const persona = (await Store.list('usuarios')).find(u => u.id === estudianteId);
-    if (input && persona) input.value = persona.email;
-    document.getElementById('traineeBusquedaResultados').innerHTML = '';
-    renderTraineeFicha();
+    if (input && persona) input.value = persona.nombre + ' (' + persona.email + ')';
+    await renderTraineeFicha();
   }
 
   // Se puede llamar desde afuera (ej. desde el panel Usuarios) para abrir
@@ -3008,12 +3067,7 @@
     traineeState.busquedaArchivo = '';
     traineeState.filtroTipo = 'todos';
     traineeState.archivosExpandidos = false;
-    showPanel('trainee');
-    // showPanel ya volvió a montar renderTrainee() con el input vacío —
-    // se rellena aparte, después de que el DOM nuevo exista.
-    const persona = (await Store.list('usuarios')).find(u => u.id === estudianteId);
-    const input = document.getElementById('traineeBusquedaEmail');
-    if (input && persona) input.value = persona.email;
+    await showPanel('trainee');
   }
 
   async function renderTraineeFicha() {
@@ -4543,6 +4597,9 @@
   // async: contarInscritos(), docentesDeCohorte() y 'modulos' vía MySQL.
   async function renderModulos() {
     const cohortes = await Store.list('modulos');
+    if (!horarioState.cohorte && cohortes.length > 0) {
+      horarioState.cohorte = cohortes[0].nombre;
+    }
     const inscritosPorCohorte = await Promise.all(cohortes.map(m => contarInscritos(m.nombre)));
     const docentesPorCohorte = await Promise.all(cohortes.map(m => docentesDeCohorte(m.nombre)));
 
@@ -4551,9 +4608,13 @@
       const docentes = docentesPorCohorte[i];
       const pct = m.cupos ? Math.min(100, Math.round((inscritos / m.cupos) * 100)) : 0;
       const llena = m.cupos && inscritos >= m.cupos;
+      const esSeleccionada = horarioState.cohorte === m.nombre;
       return `
-      <tr data-search="${escapeHtml((m.nombre + ' ' + m.modulo + ' ' + docentes.join(' ')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
-        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(m.nombre)}</td>
+      <tr onclick="seleccionarCohorteHorario('${escapeHtml(m.nombre)}')" data-search="${escapeHtml((m.nombre + ' ' + m.modulo + ' ' + docentes.join(' ')).toLowerCase())}" class="cursor-pointer transition border-b border-gray-50 last:border-0 ${esSeleccionada ? 'bg-morado/10 font-medium' : 'hover:bg-gray-50/80'}" title="Clic para ver horario de ${escapeHtml(m.nombre)}">
+        <td class="py-3 px-4 text-sm font-semibold text-ink flex items-center gap-2">
+          ${esSeleccionada ? `<span class="w-2 h-2 rounded-full bg-morado animate-pulse"></span>` : ''}
+          ${escapeHtml(m.nombre)}
+        </td>
         <td class="py-3 px-4 text-sm text-slate2">${fmtDate(m.fechaInicio)} – ${fmtDate(m.fechaFin)}</td>
         <td class="py-3 px-4 text-sm text-slate2 min-w-[110px]">
           <div class="flex items-center gap-2">
@@ -4562,7 +4623,7 @@
           </div>
         </td>
         <td class="py-3 px-4">${statusPill(m.estado, ESTADO_COLORS)}</td>
-        <td class="py-3 px-4 text-right whitespace-nowrap">
+        <td class="py-3 px-4 text-right whitespace-nowrap" onclick="event.stopPropagation()">
           <button onclick="openModal('modulos','${m.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
           <button onclick="askDelete('modulos','${m.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
         </td>
@@ -4613,9 +4674,19 @@
         </div>
       </div>`;
 
-    poblarMesesHorario();
-    renderHorarioGrid();
+    await poblarMesesHorario();
+    await renderHorarioGrid();
   }
+
+  async function seleccionarCohorteHorario(nombre) {
+    horarioState.cohorte = nombre;
+    const sel = document.getElementById('horarioCohorteSelect');
+    if (sel) sel.value = nombre;
+    await poblarMesesHorario();
+    await renderHorarioGrid();
+    document.getElementById('horarioCohorteSelect')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  window.seleccionarCohorteHorario = seleccionarCohorteHorario;
 
   // async: 'modulos' vía MySQL.
   async function poblarMesesHorario() {
@@ -4628,6 +4699,9 @@
     }
     const cohorte = (await Store.list('modulos')).find(c => c.nombre === horarioState.cohorte);
     const opciones = generarOpcionesMes(cohorte);
+    if (!horarioState.mes && opciones.length > 0) {
+      horarioState.mes = opciones[0].value;
+    }
     mesSelect.disabled = false;
     mesSelect.innerHTML = '<option value="">Selecciona un mes...</option>' +
       opciones.map(o => `<option value="${o.value}" ${horarioState.mes === o.value ? 'selected' : ''}>${o.label}</option>`).join('');
@@ -5791,13 +5865,10 @@
 
   // async: 'modulos' vía MySQL.
   async function renderCalificaciones() {
-    // Vista de SOLO LECTURA para Superadmin y Administración (Coordinador):
-    // el administrador elige Cohorte y Mes (o "General" = todos los meses),
-    // y la tabla de estudiantes de esa cohorte se trae automáticamente con
-    // su promedio general, calculado sobre las notas de todos los
-    // profesores que le dictan clase. No se muestran notas individuales por
-    // docente ni la valoración cualitativa (esa vive solo en el Informe).
     const cohortes = await Store.list('modulos');
+    if (!calificacionesAdminState.cohorte && cohortes.length > 0) {
+      calificacionesAdminState.cohorte = cohortes[0].nombre;
+    }
 
     document.getElementById('mount-calificaciones').innerHTML = `
       <div class="mb-5">
@@ -5823,8 +5894,8 @@
       </div>
       <div id="califAdminResultado"></div>`;
 
-    poblarMesesCalifAdmin();
-    renderCalifAdminResultado();
+    await poblarMesesCalifAdmin();
+    await renderCalifAdminResultado();
   }
 
   // async: docentesDeCohorte() ahora es async.
@@ -5848,12 +5919,19 @@
       mesesOrdenados.map(m => `<option value="${m}" ${calificacionesAdminState.mes === m ? 'selected' : ''}>${mesLabel(m)}</option>`).join('');
   }
 
-  function onCambiaCalifAdminCohorte() {
+  async function onCambiaCalifAdminCohorte() {
     const sel = document.getElementById('califAdminCohorteSelect');
     calificacionesAdminState.cohorte = sel.value || null;
     calificacionesAdminState.mes = null;
-    poblarMesesCalifAdmin();
-    renderCalifAdminResultado();
+    const wrap = document.getElementById('califAdminResultado');
+    if (wrap) {
+      wrap.innerHTML = `<div class="admin-panel-card p-12 text-center flex flex-col items-center justify-center gap-3">
+        <div class="w-8 h-8 border-3 border-morado/20 border-t-morado rounded-full animate-spin"></div>
+        <p class="text-xs font-semibold text-slate2">Cargando calificaciones...</p>
+      </div>`;
+    }
+    await poblarMesesCalifAdmin();
+    await renderCalifAdminResultado();
   }
 
   function onCambiaCalifAdminMes() {
@@ -8299,23 +8377,27 @@
     return h;
   }
 
-  let panelActivoEstudiante = null; // último panel mostrado, para no recorrer todo el DOM en cada clic
+  let panelActivoEstudiante = null;
   async function showPanelEstudiante(panel) {
+    const tab = document.querySelector('.panel-tab-s[data-spanel="' + panel + '"]');
+    if (tab && tab.classList.contains('hidden')) return;
     if (!(await permisoUsuarioSobrePanel(currentEstudiante, 'estudiante.' + panel)).ver) return;
-    if (panelActivoEstudiante && panelActivoEstudiante !== panel) {
-      const prevContent = document.getElementById('panel-s-' + panelActivoEstudiante);
-      if (prevContent) prevContent.classList.add('hidden');
-      const prevTab = document.querySelector('.panel-tab-s[data-spanel="' + panelActivoEstudiante + '"]');
-      if (prevTab) {
-        prevTab.classList.remove('font-semibold');
-        prevTab.style.borderLeftColor = 'transparent';
-        prevTab.style.background = '';
-        prevTab.style.color = '#5B6472';
+
+    // Ocultar de inmediato todos los demás paneles de estudiante y desmarcar tabs
+    document.querySelectorAll('.panel-content-s').forEach(p => {
+      if (p.id !== 'panel-s-' + panel) p.classList.add('hidden');
+    });
+    document.querySelectorAll('.panel-tab-s').forEach(t => {
+      if (t.dataset.spanel !== panel) {
+        t.classList.remove('font-semibold');
+        t.style.borderLeftColor = 'transparent';
+        t.style.background = '';
+        t.style.color = '#5B6472';
       }
-    }
+    });
+
     const content = document.getElementById('panel-s-' + panel);
     if (content) content.classList.remove('hidden');
-    const tab = document.querySelector('.panel-tab-s[data-spanel="' + panel + '"]');
     if (tab) {
       tab.classList.add('font-semibold');
       tab.style.borderLeftColor = PANEL_COLOR_ESTUDIANTE;
@@ -8323,6 +8405,15 @@
       tab.style.color = '#14181F';
     }
     panelActivoEstudiante = panel;
+
+    const mount = document.getElementById('mount-s-' + panel);
+    if (mount && !mount.innerHTML.trim()) {
+      mount.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-12 text-center flex flex-col items-center justify-center gap-3">
+        <div class="w-8 h-8 border-3 border-morado/20 border-t-morado rounded-full animate-spin"></div>
+        <p class="text-xs font-semibold text-slate2">Cargando...</p>
+      </div>`;
+    }
+
     if (RENDERERS_ESTUDIANTE[panel]) {
       await RENDERERS_ESTUDIANTE[panel]();
       initTablesEnPanel('panel-s-' + panel);
