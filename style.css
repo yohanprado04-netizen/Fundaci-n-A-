@@ -1,0 +1,774 @@
+html { scroll-behavior: smooth; }
+  body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+
+  /* --- Signature element: constellation of growth (100 -> 1000+) --- */
+  .constellation { position: relative; width: 100%; height: 100%; }
+  .node {
+    position: absolute;
+    border-radius: 9999px;
+    opacity: 0;
+    transform: scale(0);
+    animation: nodeIn 0.6s cubic-bezier(.2,.8,.2,1) forwards;
+  }
+  @keyframes nodeIn {
+    to { opacity: var(--op, 1); transform: scale(1); }
+  }
+  @keyframes drift {
+    0%, 100% { transform: translate(0,0); }
+    50% { transform: translate(var(--dx,4px), var(--dy,-4px)); }
+  }
+  .node.drift { animation: nodeIn 0.6s cubic-bezier(.2,.8,.2,1) forwards, drift 7s ease-in-out infinite; animation-delay: var(--delay,0s), var(--delay,0s); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .node { animation: none !important; opacity: var(--op,1); transform: scale(1); }
+    html { scroll-behavior: auto; }
+  }
+
+  /* --- Mensajes por nodo (tooltip propio, más legible que el title nativo) ---
+     El punto visual mide 4–14px y además se mueve por el drift; para que el
+     hover sea usable, el propio .node--msg agranda su área real de hit con
+     un pseudo-elemento invisible (::before) más grande que el punto, sin
+     cambiar el tamaño visual (el color/tamaño visual sigue en el div real).
+     ::after sigue siendo la burbuja del mensaje. */
+  .node--msg { cursor: pointer; outline: none; }
+  .node--msg::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 28px;
+    height: 28px;
+    transform: translate(-50%, -50%);
+    border-radius: 9999px;
+    background: transparent;
+  }
+  .node--msg::after {
+    content: attr(data-msg);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    transform: translateX(-50%) translateY(4px);
+    width: max-content;
+    max-width: 220px;
+    background: #14181F;
+    color: #fff;
+    font-size: 11px;
+    line-height: 1.4;
+    font-family: 'Inter', sans-serif;
+    padding: 8px 10px;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(20,24,31,0.25);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+    z-index: 30;
+    text-align: left;
+  }
+  .node--msg:hover::after, .node--msg:focus-visible::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  /* Móvil sin hover: tap mantiene el foco y muestra el tooltip */
+  @media (hover: none) {
+    .node--msg:active::after {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  }
+
+  .nav-link { position: relative; }
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    left: 0; bottom: -6px;
+    height: 2px; width: 0%;
+    background: linear-gradient(90deg, #1FC8C0, #8B5CF6, #F0455C);
+    transition: width .25s ease;
+  }
+  .nav-link:hover::after, .nav-link.active::after { width: 100%; }
+  .nav-link.active { color: #14181F; font-weight: 600; }
+
+  .grad-border {
+    position: relative;
+    background: white;
+  }
+  .grad-border::before {
+    content: '';
+    position: absolute; inset: 0;
+    padding: 1.5px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, #1FC8C0, #8B5CF6 35%, #F5A623 70%, #F0455C);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* =====================================================================
+     ADMIN SHELL — panel de administración (diseño corporativo moderno)
+     ===================================================================== */
+
+  .admin-shell { background: #F7F7F9; }
+
+  /* ---------- Sidebar ---------- */
+  .admin-sidebar {
+    background: #14181F;
+    border-radius: 0;
+  }
+  .admin-sidebar-brand {
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .admin-sidebar-section-label {
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.08em;
+  }
+  .superadmin-tab {
+    border: none !important;
+    font-weight: 500;
+    color: rgba(255,255,255,0.62);
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    position: relative;
+  }
+  .superadmin-tab svg { flex-shrink: 0; opacity: 0.85; }
+  .superadmin-tab:hover:not(.superadmin-tab-active) {
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+  }
+  .superadmin-tab-active {
+    background: rgba(139, 92, 246, 0.18) !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+  }
+  .superadmin-tab-active::before {
+    content: '';
+    position: absolute;
+    left: -0.5rem; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 60%;
+    border-radius: 9999px;
+    background: linear-gradient(180deg, #1FC8C0, #8B5CF6);
+  }
+  .admin-sidebar-footer {
+    border-top: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.4);
+  }
+
+  /* ---------- Topbar ---------- */
+  .admin-topbar {
+    background: #fff;
+    border-bottom: 1px solid #EEF0F3;
+  }
+  .admin-search {
+    background: #F3F4F6;
+    border: 1px solid transparent;
+    transition: background .2s ease, border-color .2s ease;
+  }
+  .admin-search:focus-within {
+    background: #fff;
+    border-color: #8B5CF6;
+    box-shadow: 0 0 0 3px rgba(139,92,246,0.12);
+  }
+  .admin-role-chip {
+    background: linear-gradient(135deg, #8B5CF61A, #1FC8C01A);
+    color: #5B21B6;
+    border: 1px solid #8B5CF633;
+  }
+
+  /* ---------- Banner de bienvenida ---------- */
+  .superadmin-banner {
+    position: relative;
+    overflow: hidden;
+    border-radius: 24px;
+    background: linear-gradient(115deg, #14181F 0%, #2A1F4D 55%, #5B21B6 100%);
+    box-shadow: 0 12px 40px rgba(20,24,31,0.18);
+  }
+  .superadmin-banner::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(31,200,192,0.35), transparent 40%),
+      radial-gradient(circle at 85% 0%, rgba(240,69,92,0.28), transparent 45%),
+      radial-gradient(circle at 75% 90%, rgba(245,166,35,0.22), transparent 40%);
+    pointer-events: none;
+  }
+  .superadmin-banner > * { position: relative; z-index: 1; }
+  .superadmin-banner-stat {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 14px;
+    backdrop-filter: blur(6px);
+  }
+
+  /* ---------- Cards de resumen ---------- */
+  .superadmin-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+  @media (min-width: 640px) {
+    .superadmin-cards { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (min-width: 1024px) {
+    .superadmin-cards { grid-template-columns: repeat(4, 1fr); }
+  }
+  .superadmin-card {
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid #EEF0F3;
+    padding: 1.5rem;
+    box-shadow: 0 1px 2px rgba(20,24,31,0.03);
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color .22s ease;
+  }
+  .superadmin-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 28px rgba(20,24,31,0.08);
+    border-color: #E4E1FA;
+  }
+  .superadmin-card-icon {
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.1rem;
+  }
+  .superadmin-card-dot {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 9999px;
+    margin-bottom: 1.25rem;
+  }
+  .superadmin-card-title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #5B6472;
+    margin: 0;
+  }
+  .superadmin-card-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #14181F;
+    margin-top: 0.375rem;
+    line-height: 1.15;
+  }
+  .superadmin-card-text {
+    font-size: 0.8125rem;
+    color: #5B6472;
+    margin-top: 0.5rem;
+    line-height: 1.5;
+  }
+
+  /* ---------- Cards de resumen de SOLO LECTURA (sin click, no navegan) ---------- */
+  .superadmin-card-readonly {
+    cursor: default;
+  }
+  .superadmin-card-readonly:hover {
+    transform: none;
+    box-shadow: 0 1px 2px rgba(20,24,31,0.03);
+    border-color: #EEF0F3;
+  }
+  .superadmin-card-readonly .superadmin-card-title {
+    margin-bottom: 0.5rem;
+  }
+  .superadmin-card-readonly .superadmin-card-value {
+    margin-top: 0;
+  }
+
+  /* ---------- Banner "hero" degradado (dashboard, solo lectura) ---------- */
+  .dashboard-hero-banner {
+    position: relative;
+    overflow: hidden;
+    border-radius: 22px;
+    background: linear-gradient(115deg, #1FC8C0 0%, #6C5CE7 100%);
+    box-shadow: 0 12px 32px rgba(107,92,231,0.18);
+  }
+  .dashboard-hero-banner::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 10% 110%, rgba(255,255,255,0.16), transparent 45%),
+      radial-gradient(circle at 95% -10%, rgba(255,255,255,0.14), transparent 45%);
+    pointer-events: none;
+  }
+  .dashboard-hero-banner > * { position: relative; z-index: 1; }
+
+  /* ---------- Cards oscuras del dashboard (ocupación, usuarios por rol) ---------- */
+  .dashboard-dark-card {
+    border-radius: 22px;
+    background: #14181F;
+    box-shadow: 0 1px 2px rgba(20,24,31,0.03);
+  }
+  .dashboard-progress-track {
+    width: 100%;
+    height: 8px;
+    border-radius: 9999px;
+    background: rgba(255,255,255,0.12);
+    overflow: hidden;
+  }
+  .dashboard-progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, #1FC8C0, #4FE0D8);
+    transition: width .6s ease;
+  }
+
+  /* ---------- Paneles de contenido (tablas, formularios) ---------- */
+  .admin-panel-card {
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid #EEF0F3;
+    box-shadow: 0 1px 2px rgba(20,24,31,0.03);
+  }
+  .admin-table thead th {
+    background: #FAFAFB;
+    font-size: 0.6875rem;
+  }
+  .admin-table tbody tr {
+    transition: background-color .15s ease;
+  }
+  .admin-table tbody tr:hover {
+    background-color: #FAF9FF;
+  }
+  .admin-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 3rem 1rem;
+    color: #5B6472;
+  }
+
+  /* ---------- Tarjetas de dashboard (Resumen: Superadmin/Docente/Estudiante) ---------- */
+  .dash-stat-card {
+    position: relative;
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid #EEF0F3;
+    padding: 1.375rem 1.5rem;
+    overflow: hidden;
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  }
+  .dash-stat-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--brand) 0%, transparent 65%);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+  }
+  .dash-stat-card:hover::before { opacity: 0.05; }
+  .dash-stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 28px rgba(20,24,31,0.08);
+    border-color: color-mix(in srgb, var(--brand) 35%, #EEF0F3);
+  }
+  .dash-stat-icon {
+    width: 2.375rem;
+    height: 2.375rem;
+    border-radius: 11px;
+    display: grid;
+    place-items: center;
+  }
+
+  /* ---------- Cabecera de dashboard con degradado de marca (Docente/Estudiante) ---------- */
+  .dash-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 22px;
+    color: #fff;
+  }
+  .dash-hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: var(--hero-gradient);
+    pointer-events: none;
+  }
+  .dash-hero::after {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 12% 15%, rgba(255,255,255,0.16), transparent 42%),
+      radial-gradient(circle at 90% 85%, rgba(255,255,255,0.10), transparent 45%);
+    pointer-events: none;
+  }
+  .dash-hero > * { position: relative; z-index: 1; }
+
+  /* =====================================================================
+     CAMPOS DE FORMULARIO — fondo siempre blanco (nunca transparente)
+     Aplica a inputs, selects y textareas en toda la app.
+     Las clases de Tailwind bg-morado/5 pueden resultar casi transparentes
+     en ciertos contextos; esta regla los ancla a blanco sólido.
+     ===================================================================== */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]),
+  select,
+  textarea {
+    background-color: #ffffff !important;
+  }
+
+  /* Campos deshabilitados: gris muy suave para indicar solo-lectura */
+  input:disabled:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select:disabled,
+  textarea:disabled {
+    background-color: #F3F4F6 !important;
+    color: #6B7280 !important;
+    cursor: not-allowed;
+  }
+
+/* ============================================================================
+   WIDGET: Chat de la Fundación A+ (texto). Todo prefijado con .aplus-chat
+   para no chocar con el resto del proyecto. Colores alineados con la
+   paleta real del sitio (turquesa/morado/coral/ink, ver tailwind.config
+   en index.html) — mismos valores hex, así que no hace falta tocarlos.
+   ============================================================================ */
+.aplus-chat {
+  --a-teal: #1FC8C0;
+  --a-purple: #8B5CF6;
+  --a-purple-deep: #5B21B6;
+  --a-coral: #F0455C;
+  --a-amber: #F5A623;
+  --a-ink: #14181F;
+  --a-gray: #5B6472;
+  --a-bg: #F7F7F9;
+  --a-border: #EEF0F3;
+  font-family: 'Inter', sans-serif;
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 9999;
+}
+
+.aplus-chat-fab {
+  position: relative;
+  width: 60px; height: 60px;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--a-teal), var(--a-purple) 55%, var(--a-coral));
+  box-shadow: 0 10px 28px rgba(20,24,31,0.22);
+  display: grid; place-items: center;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.aplus-chat-fab:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(20,24,31,0.28); }
+.aplus-chat-fab:focus-visible { outline: 3px solid var(--a-purple); outline-offset: 3px; }
+.aplus-chat-fab svg { width: 26px; height: 26px; stroke: #fff; transition: opacity .15s ease, transform .15s ease; }
+.aplus-chat-fab .icon-close { position: absolute; opacity: 0; transform: scale(.6) rotate(-45deg); }
+.aplus-chat-fab.is-open .icon-chat { opacity: 0; transform: scale(.6) rotate(45deg); }
+.aplus-chat-fab.is-open .icon-close { opacity: 1; transform: scale(1) rotate(0); }
+
+.aplus-chat-fab .pulse-ring {
+  position: absolute; inset: -6px;
+  border-radius: 9999px;
+  border: 2px solid var(--a-purple);
+  opacity: 0;
+  animation: aplus-pulse 2.4s ease-out 1;
+  animation-delay: 1s;
+}
+@keyframes aplus-pulse {
+  0% { opacity: .55; transform: scale(.9); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+
+.aplus-chat-badge {
+  position: absolute; top: -2px; right: -2px;
+  width: 14px; height: 14px;
+  border-radius: 9999px;
+  background: var(--a-coral);
+  border: 2px solid #fff;
+}
+
+.aplus-chat-panel {
+  position: absolute;
+  right: 0; bottom: 74px;
+  width: 360px;
+  max-width: calc(100vw - 2rem);
+  height: 520px;
+  max-height: calc(100vh - 8rem);
+  background: #fff;
+  border-radius: 20px;
+  border: 1px solid var(--a-border);
+  box-shadow: 0 24px 60px rgba(20,24,31,0.22);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(12px) scale(.98);
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.aplus-chat-panel.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.aplus-chat-header {
+  position: relative;
+  overflow: hidden;
+  padding: 1.1rem 1.15rem;
+  background: linear-gradient(115deg, var(--a-ink) 0%, #2A1F4D 55%, var(--a-purple-deep) 100%);
+  color: #fff;
+  flex-shrink: 0;
+}
+.aplus-chat-header::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(31,200,192,0.35), transparent 40%),
+    radial-gradient(circle at 88% 0%, rgba(240,69,92,0.28), transparent 45%);
+  pointer-events: none;
+}
+.aplus-chat-header-row { position: relative; z-index: 1; display: flex; align-items: center; gap: 0.7rem; }
+.aplus-chat-header-info { flex: 1; min-width: 0; }
+.aplus-chat-avatar {
+  width: 38px; height: 38px; border-radius: 9999px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--a-teal), var(--a-purple));
+  display: grid; place-items: center;
+  font-weight: 800; font-size: 0.95rem; color: #fff;
+}
+.aplus-chat-title { font-weight: 700; font-size: 0.95rem; line-height: 1.2; }
+.aplus-chat-subtitle { font-size: 0.75rem; color: rgba(255,255,255,0.62); display: flex; align-items: center; gap: 0.35rem; margin-top: 2px; }
+.aplus-chat-dot { width: 6px; height: 6px; border-radius: 9999px; background: var(--a-teal); box-shadow: 0 0 0 3px rgba(31,200,192,0.25); flex-shrink: 0; transition: background .2s ease, box-shadow .2s ease; }
+/* Estados del indicador del header: online (verde/turquesa, por defecto),
+   comprobando (ámbar, mientras se hace ping a /health) y offline (coral) —
+   ver checkBackendStatus() en app.js. */
+.aplus-chat-dot.is-checking { background: var(--a-amber); box-shadow: 0 0 0 3px rgba(245,166,35,0.25); animation: aplus-dot-pulse 1s ease-in-out infinite; }
+.aplus-chat-dot.is-offline { background: var(--a-coral); box-shadow: 0 0 0 3px rgba(240,69,92,0.25); animation: none; }
+@keyframes aplus-dot-pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+/* Botón "Limpiar conversación" en el header */
+.aplus-chat-clear {
+  flex-shrink: 0;
+  width: 30px; height: 30px;
+  border-radius: 9px;
+  border: none;
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.75);
+  display: grid; place-items: center;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+  position: relative; z-index: 1;
+}
+.aplus-chat-clear:hover { background: rgba(255,255,255,0.18); color: #fff; }
+.aplus-chat-clear svg { width: 15px; height: 15px; }
+
+/* Chips de preguntas frecuentes (sugeridas según el rol de quien esté
+   usando el chat — ver getSuggestedChips() en app.js). Se muestran solo
+   al abrir el chat, antes del primer mensaje del usuario. */
+.aplus-chat-chips {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  padding: 0 1rem;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .2s ease, padding .2s ease;
+}
+.aplus-chat-chips.is-visible { max-height: 120px; padding: 0.7rem 1rem 0; }
+.aplus-chat-chip {
+  border: 1px solid var(--a-border);
+  background: #fff;
+  color: var(--a-ink);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.4rem 0.7rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+  white-space: nowrap;
+}
+.aplus-chat-chip:hover { border-color: var(--a-purple); background: #FAF8FF; }
+
+.aplus-chat-body {
+  flex: 1;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  padding: 1rem;
+  background: var(--a-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.aplus-chat-body::-webkit-scrollbar { width: 6px; }
+.aplus-chat-body::-webkit-scrollbar-thumb { background: #D9DCE2; border-radius: 9999px; }
+
+.aplus-msg-row { display: flex; flex-direction: column; animation: aplus-msg-in .25s cubic-bezier(.2,.8,.2,1); }
+.aplus-msg-row.user { align-items: flex-end; }
+.aplus-msg-row.assistant, .aplus-msg-row.error { align-items: flex-start; }
+@keyframes aplus-msg-in {
+  from { opacity: 0; transform: translateY(6px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.aplus-msg {
+  max-width: 82%;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  border-radius: 14px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.aplus-msg.assistant {
+  background: #fff;
+  border: 1px solid var(--a-border);
+  color: var(--a-ink);
+  border-bottom-left-radius: 4px;
+}
+.aplus-msg.assistant a {
+  color: var(--a-purple);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+.aplus-msg.assistant a:hover { color: var(--a-purple-deep); }
+/* Markdown básico dentro de la burbuja del asistente: negritas y listas
+   con guiones, que es lo único que el prompt del backend puede producir
+   (ver linkifyMensajeAsistente/formatearMarkdownBasico en app.js) — nunca
+   HTML arbitrario, todo pasa primero por escapeHtml. */
+.aplus-msg.assistant strong { font-weight: 700; color: var(--a-ink); }
+.aplus-msg.assistant ul { margin: 0.35rem 0; padding-left: 1.1rem; }
+.aplus-msg.assistant li { margin-bottom: 0.15rem; }
+.aplus-msg.user {
+  background: linear-gradient(135deg, var(--a-purple), var(--a-purple-deep));
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.aplus-msg.error {
+  background: #FDEDEF;
+  border: 1px solid #F8C6CE;
+  color: #9C1B2E;
+  border-bottom-left-radius: 4px;
+}
+/* Cursor parpadeante al final de la burbuja mientras el streaming sigue
+   en curso (ver sendMessage() en app.js) — se quita cuando llega "done". */
+.aplus-msg.is-streaming::after {
+  content: '';
+  display: inline-block;
+  width: 2px; height: 0.9em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: currentColor;
+  animation: aplus-caret-blink 0.9s step-end infinite;
+}
+@keyframes aplus-caret-blink { 50% { opacity: 0; } }
+
+.aplus-msg-time {
+  font-size: 0.62rem;
+  color: var(--a-gray);
+  margin-top: 0.2rem;
+  padding: 0 0.2rem;
+}
+.aplus-msg-row.user .aplus-msg-time { text-align: right; }
+
+.aplus-typing { display: flex; align-items: center; gap: 5px; padding: 0.6rem 0.9rem; }
+.aplus-typing .node {
+  width: 6px; height: 6px; border-radius: 9999px;
+  opacity: 0; transform: scale(0);
+  animation: aplus-node-in .5s cubic-bezier(.2,.8,.2,1) forwards infinite alternate;
+}
+.aplus-typing .node:nth-child(1) { background: var(--a-teal);   animation-delay: 0s; }
+.aplus-typing .node:nth-child(2) { background: var(--a-purple); animation-delay: .18s; }
+.aplus-typing .node:nth-child(3) { background: var(--a-coral);  animation-delay: .36s; }
+@keyframes aplus-node-in { to { opacity: 1; transform: scale(1.35); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .aplus-chat-fab .pulse-ring { display: none; }
+  .aplus-typing .node { animation: none; opacity: 1; transform: scale(1); }
+  .aplus-msg-row { animation: none; }
+  .aplus-msg.is-streaming::after { animation: none; opacity: 1; }
+  .aplus-chat-body { scroll-behavior: auto; }
+}
+
+.aplus-chat-inputbar {
+  display: flex; align-items: flex-end; gap: 0.5rem;
+  padding: 0.75rem;
+  background: #fff;
+  border-top: 1px solid var(--a-border);
+  flex-shrink: 0;
+}
+.aplus-chat-textarea {
+  flex: 1;
+  resize: none;
+  max-height: 88px;
+  border: 1px solid var(--a-border);
+  background: var(--a-bg);
+  border-radius: 12px;
+  padding: 0.55rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: var(--a-ink);
+  outline: none;
+  transition: border-color .15s ease, background .15s ease;
+}
+.aplus-chat-textarea:focus {
+  background: #fff;
+  border-color: var(--a-purple);
+  box-shadow: 0 0 0 3px rgba(139,92,246,0.12);
+}
+.aplus-chat-send {
+  flex-shrink: 0;
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--a-teal), var(--a-purple));
+  display: grid; place-items: center;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.aplus-chat-send:hover:not(:disabled) { transform: translateY(-1px); }
+.aplus-chat-send:disabled { opacity: 0.45; cursor: not-allowed; }
+.aplus-chat-send svg { width: 17px; height: 17px; stroke: #fff; }
+
+.aplus-chat-footnote {
+  font-size: 0.65rem; color: var(--a-gray); text-align: center;
+  padding: 0.4rem 0.75rem 0.65rem;
+  background: #fff;
+}
+
+@media (max-width: 480px) {
+  /* Prioridad al chat en celular: el FAB se aleja un poco del borde para
+     no quedar pegado a otros controles fijos de la pantalla (como la
+     barra del sistema o botones flotantes de cada panel), y al abrirse
+     el panel ocupa toda la pantalla en vez de una ventana flotante
+     pequeña — mucho más cómodo para escribir y leer en un celular. */
+  .aplus-chat {
+    right: 1rem;
+    bottom: 1.25rem;
+  }
+  .aplus-chat-fab {
+    width: 54px; height: 54px;
+  }
+  .aplus-chat-panel {
+    position: fixed;
+    inset: 0;
+    right: 0; bottom: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+  /* En pantalla completa el FAB queda flotando sobre el propio panel de
+     chat, para seguir sirviendo como botón de cerrar (ver toggleChat en
+     app.js, que alterna su ícono entre chat/cerrar). */
+  .aplus-chat-fab {
+    position: relative;
+    z-index: 1;
+  }
+  .aplus-chat.is-open-mobile .aplus-chat-fab {
+    position: fixed;
+    right: 1.1rem;
+    bottom: 1.1rem;
+    z-index: 10000;
+    box-shadow: 0 6px 18px rgba(20,24,31,0.3);
+  }
+  .aplus-chat-inputbar {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+}

@@ -1,0 +1,8774 @@
+// Mobile menu toggle
+  const menuBtn = document.getElementById('menuBtn');
+  const mobileMenu = document.getElementById('mobileMenu');
+  const iconOpen = document.getElementById('iconOpen');
+  const iconClose = document.getElementById('iconClose');
+  menuBtn.addEventListener('click', () => {
+    mobileMenu.classList.toggle('hidden');
+    iconOpen.classList.toggle('hidden');
+    iconClose.classList.toggle('hidden');
+  });
+  document.querySelectorAll('#mobileMenu a').forEach(a => {
+    a.addEventListener('click', () => {
+      mobileMenu.classList.add('hidden');
+      iconOpen.classList.remove('hidden');
+      iconClose.classList.add('hidden');
+    });
+  });
+
+  // Active nav link on scroll
+  const sections = ['inicio','programa','calificaciones'];
+  const navLinks = document.querySelectorAll('.nav-link');
+  const onScroll = () => {
+    let current = sections[0];
+    for (const id of sections) {
+      const el = document.getElementById(id);
+      if (el && window.scrollY >= el.offsetTop - 100) current = id;
+    }
+    navLinks.forEach(link => {
+      link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+    });
+  };
+  window.addEventListener('scroll', onScroll);
+
+  // Signature visual: growth constellation (100 -> 1000+)
+  // Antes eran 140 nodos decorativos con posiciones aleatorias fijas, sin
+  // relación con datos reales. Ahora: un nodo por cada estudiante realmente
+  // inscrito (Store('usuarios') con rol 'Estudiante'). Se mantiene un
+  // mínimo visual (MIN_NODOS) para que la constelación nunca se vea vacía
+  // mientras la fundación recién está arrancando y aún no tiene
+  // estudiantes cargados; en cuanto el número real de estudiantes supera
+  // ese mínimo, se muestran todos los reales.
+  // NOTA: no se implementan aún los tooltips/mensajes por nodo (queda para
+  // una fase posterior) — por ahora cada nodo sigue siendo decorativo,
+  // solo que la CANTIDAD ya es real.
+  const CONSTELLATION_COLORS = ['#1FC8C0', '#8B5CF6', '#F5A623', '#9A5B3F', '#EC4899', '#F0455C'];
+  const CONSTELLATION_MIN_NODOS = 60;
+  const constellationReduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function seededRandom(seed) {
+    let s = seed;
+    return () => {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+  }
+
+  // Se llama después de seedIfEmpty() (al final del archivo), así ya hay
+  // datos reales de usuarios disponibles en Store. Si aún no hay Store
+  // (no debería pasar, pero por seguridad) cae al mínimo visual.
+  // async: Store.list('usuarios') ahora habla con MySQL (ver db.js) — las
+  // 4 llamadas a esta función son "fire and forget" (no esperan su
+  // resultado), así que no hace falta await en cada punto de llamada.
+  async function renderConstellation() {
+    const container = document.getElementById('constellation');
+    if (!container) return;
+    // El elemento puede seguir existiendo en el DOM aunque esté oculto
+    // (p. ej. el sitio público vive siempre en el HTML, solo se le pone
+    // "hidden" mientras alguien está adentro del panel interno).
+    // offsetParent es null en cualquiera de esos casos (display:none en
+    // el propio elemento o en un ancestro) — evita gastar una consulta a
+    // la base de datos para redibujar algo que nadie está viendo ahora
+    // mismo. Se vuelve a llamar de todas formas cada vez que se
+    // crea/edita un usuario, así que en cuanto la persona SÍ esté viendo
+    // el sitio público, ya la habrá disparado alguna otra acción o la
+    // llamada inicial al cargar la página.
+    if (container.offsetParent === null) return;
+    container.innerHTML = '';
+
+    let totalEstudiantes = 0;
+    try {
+      // Solo cuentan estudiantes ya aprobados/matriculados de verdad — una
+      // solicitud de autorregistro con estadoRegistro='Pendiente' todavía
+      // no es un estudiante inscrito, así que no debe inflar el contador.
+      totalEstudiantes = (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && u.estadoRegistro !== 'Pendiente').length;
+    } catch (e) { /* Store aún no listo */ }
+    const nodeCount = Math.max(CONSTELLATION_MIN_NODOS, totalEstudiantes);
+
+    // Semilla fija: mismos nodos "decorativos extra" siempre en la misma
+    // posición entre recargas (no parpadea al refrescar la página), pero
+    // el TOTAL sí crece con estudiantes reales.
+    const rand = seededRandom(42);
+
+    for (let i = 0; i < nodeCount; i++) {
+      const node = document.createElement('div');
+      // distribute with a slight center bias, avoiding the label chips at bottom
+      const x = rand() * 92 + 2;
+      const y = rand() * 90 + 3;
+      const size = 4 + rand() * 10;
+      const color = CONSTELLATION_COLORS[Math.floor(rand() * CONSTELLATION_COLORS.length)];
+      const delay = rand() * 1.4;
+      const opacity = 0.55 + rand() * 0.45;
+
+      node.className = 'node' + (constellationReduceMotion ? '' : ' drift');
+      node.style.left = x + '%';
+      node.style.top = y + '%';
+      node.style.width = size + 'px';
+      node.style.height = size + 'px';
+      node.style.background = color;
+      node.style.setProperty('--op', opacity);
+      node.style.setProperty('--delay', delay + 's');
+      node.style.setProperty('--dx', (rand() * 10 - 5) + 'px');
+      node.style.setProperty('--dy', (rand() * 10 - 5) + 'px');
+      node.style.animationDelay = delay + 's, ' + delay + 's';
+      container.appendChild(node);
+    }
+  }
+  // ---------- Login inline (Calificaciones) — un solo formulario ----------
+  // Ya no hay pestañas de perfil: el correo y la contraseña ingresados se
+  // comparan automáticamente contra las 4 fuentes de credenciales posibles
+  // (Superadmin, Administración, Docente, Estudiante) y se entra al panel
+  // que corresponda según cuál coincida. Ver submitLogin().
+  //
+  // 1) Superadmin: una única cuenta con control total. Sus credenciales YA
+  //    NO son fijas en el código — se guardan en Store('superadmin_credentials')
+  //    y se pueden cambiar desde Configuración > Seguridad del Superadmin
+  //    (ver guardarCredencialesSuperadmin()). SEED.superadmin_credentials
+  //    define el correo/contraseña iniciales.
+  // 2) Administración, Docentes y Estudiantes: cada usuario tiene su PROPIA
+  //    contraseña (campo "password" en Store 'usuarios'), definida por el
+  //    administrador al crear/editar el usuario. El login siempre es con
+  //    su correo + esa contraseña individual (ver submitLogin()).
+
+  let currentDocente = null;
+  let currentEstudiante = null;
+  let currentAdminRole = null; // 'superadmin' | 'administracion'
+  let currentAdminUser = null; // registro del usuario Coordinador cuando currentAdminRole === 'administracion'
+
+  // El contexto del chat por rol (notas, asistencia, PQR, memorandos,
+  // agenda, semáforo, permisos por perfil, etc.) YA NO se arma aquí en el
+  // navegador — se calcula del lado del servidor, consultando MySQL, una
+  // vez verificado el rol real de quien pregunta con un token firmado.
+  // Ver backend_chat/db.py (contexto_estudiante, contexto_docente,
+  // contexto_administracion, contexto_superadmin) y backend_chat/auth.py.
+  // Este archivo solo se encarga de obtener y guardar ese token tras el
+  // login (ver iniciarSesionChat, más abajo) y mandarlo en cada mensaje.
+
+
+  /* =====================================================================
+     AUDITORÍA — solo lectura, visible únicamente para el Superadmin
+     (panel "Auditoría" bajo Sistema). Tres bitácoras, las tres ya en
+     MySQL (Fase 4):
+     1) auditoria_login: cada intento (exitoso o fallido) de login de
+        cualquier rol. Se registra directamente en api/auth.php en el
+        servidor (registrarAuditoriaLogin() en PHP) — por eso ya NO existe
+        una función homónima aquí: el login pasa por apiLogin()/db.js, no
+        por código de este archivo, así que no hay nada que auditar del
+        lado del cliente para este caso.
+     2) auditoria_acciones: acciones relevantes dentro del sistema (hoy,
+        que un docente suba/actualice notas).
+     3) auditoria_horario: cada cambio de Materia o Docente en una celda
+        del Horario — quién lo hizo, cuándo, y el valor anterior/nuevo.
+     ===================================================================== */
+  function fechaHoraActual() {
+    const ahora = new Date();
+    return {
+      fecha: ahora.toISOString().slice(0, 10),
+      hora: ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+    };
+  }
+
+  // Bitácora de ACCIONES relevantes (no login) para el dashboard de
+  // "Actividad reciente": hoy solo se usa para que quede registro de
+  // cuándo un docente sube/actualiza notas, pero está pensada para poder
+  // sumar más tipos de evento a futuro sin cambiar la forma del registro.
+  // Persistencia aparte de auditoria_login porque es otro tipo de bitácora
+  // (acciones dentro del sistema, no intentos de acceso).
+  // async: 'auditoria_acciones' vía MySQL.
+  async function registrarAuditoriaAccion(tipo, actor, rol, detalle) {
+    const { fecha, hora } = fechaHoraActual();
+    const registros = await Store.list('auditoria_acciones');
+    registros.unshift({ id: uid('aa'), fecha, hora, tipo, actor: actor || '—', rol: rol || '—', detalle: detalle || '' });
+    await Store.save('auditoria_acciones', registros.slice(0, 500));
+  }
+
+  // Nombre a mostrar de quien está haciendo un cambio administrativo ahora
+  // mismo (Superadmin o el nombre real del Coordinador que inició sesión).
+  function actorAdminActual() {
+    if (currentAdminRole === 'superadmin') return 'Superadmin';
+    if (currentAdminRole === 'administracion' && currentAdminUser) return currentAdminUser.nombre + ' (Administración)';
+    return 'Desconocido';
+  }
+
+  // Etiqueta legible de una franja del Horario: "Lunes 08:00–09:50".
+  function franjaLabel(franja) {
+    return franja ? (franja.dia + ' ' + franja.inicio + '–' + franja.fin) : '';
+  }
+
+  // async: 'auditoria_horario' vía MySQL.
+  async function registrarAuditoriaHorario(cohorte, mes, franjaEtiqueta, campo, valorAnterior, valorNuevo) {
+    const { fecha, hora } = fechaHoraActual();
+    const registros = await Store.list('auditoria_horario');
+    registros.unshift({
+      id: uid('ah'), fecha, hora, autor: actorAdminActual(),
+      cohorte, mes: mesLabel(mes), franja: franjaEtiqueta,
+      campo, valorAnterior: valorAnterior || '(vacío)', valorNuevo: valorNuevo || '(vacío)'
+    });
+    await Store.save('auditoria_horario', registros.slice(0, 1000));
+  }
+
+  /* =====================================================================
+     SEGURIDAD DEL LOGIN — 3 capas
+     1) Bloqueo temporal tras varios intentos fallidos (anti fuerza bruta).
+     2) Cierre de sesión automático por inactividad (ver iniciarControlInactividad).
+     3) Contraseñas con una fortaleza mínima al crearlas (ver validarFortalezaPassword,
+        usado tanto en el modal de Usuarios como en Crear Cohorte + Administrador).
+     ===================================================================== */
+
+  function validarFortalezaPassword(pw) {
+    return typeof pw === 'string' && pw.length >= 6 && /[A-Za-z]/.test(pw) && /[0-9]/.test(pw);
+  }
+
+  // ---- Capa 1: bloqueo por intentos fallidos ----
+  const LOGIN_MAX_INTENTOS = 5;
+  const LOGIN_BLOQUEO_MS = 60000; // 60 segundos
+  let loginIntentosFallidos = 0;
+  let loginBloqueadoHasta = 0;
+
+  function segundosRestantesBloqueo() {
+    return Math.max(0, Math.ceil((loginBloqueadoHasta - Date.now()) / 1000));
+  }
+
+  // (Se quitó el ojito de mostrar/ocultar contraseña: por pedido, las
+  // contraseñas ahora se ven siempre como texto plano en todos los
+  // formularios, así que no hace falta alternar el tipo del input.)
+
+  // ---- Capa 2: cierre de sesión automático por inactividad ----
+  const INACTIVIDAD_LIMITE_MS = 20 * 60 * 1000; // 20 minutos
+  let inactividadTimer = null;
+
+  function iniciarControlInactividad() {
+    detenerControlInactividad();
+    const reiniciar = () => {
+      clearTimeout(inactividadTimer);
+      inactividadTimer = setTimeout(cerrarSesionPorInactividad, INACTIVIDAD_LIMITE_MS);
+    };
+    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(ev => document.addEventListener(ev, reiniciar));
+    inactividadListeners = reiniciar;
+    reiniciar();
+  }
+  let inactividadListeners = null;
+
+  function detenerControlInactividad() {
+    clearTimeout(inactividadTimer);
+    if (inactividadListeners) {
+      ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(ev => document.removeEventListener(ev, inactividadListeners));
+      inactividadListeners = null;
+    }
+  }
+
+  function cerrarSesionPorInactividad() {
+    if (currentAdminRole) logout();
+    else if (currentDocente) logoutDocente();
+    else if (currentEstudiante) logoutEstudiante();
+    else return;
+    toast('Tu sesión se cerró automáticamente por inactividad', 'info');
+  }
+
+
+
+  // ---------- Guardado nativo de contraseña (sin recargar la SPA) ----------
+  // El navegador (Chrome/Edge/Firefox/Safari) solo ofrece guardar una
+  // contraseña cuando ve un <form> completar un submit real con campos
+  // username/password. Como el login de esta app es 100% manejado por JS
+  // (no debe recargar ni navegar, para no perder el estado de la SPA), ese
+  // submit real se hace en un <form> aparte, oculto, apuntando a un
+  // <iframe> también oculto (target) — así el navegador SÍ ve un submit
+  // real y ofrece guardar la contraseña, pero la navegación ocurre solo
+  // dentro de ese iframe invisible y la página visible nunca se mueve.
+  // El guardado nativo de contraseñas (Chrome, Edge, Firefox, Safari...)
+  // exige dos cosas: (1) un <form> visible y real —no oculto ni de tamaño
+  // 0— que (2) complete un submit real sin que JavaScript lo bloquee con
+  // preventDefault. Intentos anteriores fallaron por no cumplir esto:
+  // - PasswordCredential/navigator.credentials.store ya no existe en
+  //   navegadores modernos (API retirada).
+  // - Un <form> paralelo oculto con estilo width:0;height:0 es ignorado
+  //   a propósito por los navegadores (protección anti-phishing: no
+  //   confían en formularios invisibles para ofrecer guardar credenciales).
+  // Ahora es el propio loginForm (real, visible, el que el usuario llenó)
+  // el que hace el submit — con target="loginTargetFrame" (ver
+  // index.html) apuntando a un iframe casi invisible, así la navegación
+  // real ocurre pero nunca se nota y la SPA no se recarga ni pierde su
+  // estado. submitLogin() solo deja pasar este submit cuando el login es
+  // exitoso; en cualquier otro caso sigue cancelándose con preventDefault.
+  function guardarCredencialEnNavegador() {
+    try {
+      const form = document.getElementById('loginForm');
+      if (form) form.submit();
+    } catch (e) { /* nunca debe interrumpir el login si algo falla acá */ }
+  }
+
+  // El guardado nativo de contraseñas (Chrome, Edge, Firefox, Safari...)
+  // depende únicamente de que el <form> de login complete un submit real,
+  // sin JavaScript bloqueándolo con preventDefault. La antigua Credential
+  // Management API (PasswordCredential / navigator.credentials.store), que
+  // este archivo usaba para forzar el guardado, fue retirada de los
+  // navegadores y ya no existe — por eso nunca guardaba la contraseña.
+  // Ahora el <form> visible de login NUNCA navega (siempre preventDefault):
+  // el guardado se logra con un submit real, pero en un <form>/<iframe>
+  // ocultos aparte (ver guardarCredencialEnNavegador), así la SPA nunca se
+  // recarga ni pierde su estado.
+
+  // Muestra u oculta el texto de la contraseña en el login al hacer clic en
+  // el ícono del ojo. Antes este botón no hacía nada porque esta función
+  // nunca se había definido (el onclick del HTML la llamaba en el vacío).
+  function toggleLoginPasswordVisibility() {
+    const input = document.getElementById('loginPassword');
+    const eyeOpen = document.getElementById('loginPwEyeOpen');
+    const eyeClosed = document.getElementById('loginPwEyeClosed');
+    if (!input) return;
+    const estabaOculta = input.type === 'password';
+    input.type = estabaOculta ? 'text' : 'password';
+    if (eyeOpen) eyeOpen.classList.toggle('hidden', estabaOculta);
+    if (eyeClosed) eyeClosed.classList.toggle('hidden', !estabaOculta);
+  }
+
+  // async: ahora llama al backend real (apiLogin, ver db.js) en vez de
+  // comparar contraseñas en memoria — la verificación de credenciales
+  // ocurre en el servidor (auth.php), nunca en el navegador. onsubmit del
+  // formulario acepta una función async sin problema (preventDefault ya
+  // se llama de forma síncrona al inicio, antes de cualquier await).
+  async function submitLogin(event) {
+    const errorEl = document.getElementById('loginError');
+    // El submit real del formulario solo se deja pasar en caso de éxito
+    // (ver registrarExito -> guardarCredencialEnNavegador): es lo que el
+    // navegador necesita ver para ofrecer guardar la contraseña. En
+    // cualquier otro caso (error, campos vacíos, bloqueo) se cancela aquí
+    // mismo para no navegar ni perder el formulario con el error visible.
+    if (event && event.preventDefault) event.preventDefault();
+
+    if (Date.now() < loginBloqueadoHasta) {
+      errorEl.textContent = 'Demasiados intentos fallidos. Espera ' + segundosRestantesBloqueo() + ' segundos antes de volver a intentar.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value.trim();
+    if (!email || !password) {
+      errorEl.textContent = 'Completa tu correo y contraseña para continuar.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    const registrarExito = async () => {
+      loginIntentosFallidos = 0;
+      loginBloqueadoHasta = 0;
+      errorEl.classList.add('hidden');
+      iniciarControlInactividad();
+      window.scrollTo(0, 0);
+      guardarCredencialEnNavegador();
+      // Espera el token que el chat necesita para reconocer el rol real
+      // de esta sesión (ver iniciarSesionChat)
+      await iniciarSesionChat(email, password);
+      if (window.aplusChatResetSession) window.aplusChatResetSession();
+    };
+
+    const registrarFallo = (mensaje) => {
+      loginIntentosFallidos++;
+      if (loginIntentosFallidos >= LOGIN_MAX_INTENTOS) {
+        loginBloqueadoHasta = Date.now() + LOGIN_BLOQUEO_MS;
+        loginIntentosFallidos = 0;
+        errorEl.textContent = 'Demasiados intentos fallidos. Espera ' + segundosRestantesBloqueo() + ' segundos antes de volver a intentar.';
+      } else {
+        errorEl.textContent = mensaje;
+      }
+      errorEl.classList.remove('hidden');
+    };
+
+    // apiLogin (ver db.js) hace TODA la verificación en el servidor
+    // (auth.php): revisa superadmin_credentials y usuarios en MySQL,
+    // valida el hash de la contraseña, y devuelve el rol real — nunca se
+    // compara ninguna contraseña aquí en el navegador. Si las
+    // credenciales no son válidas, o la cuenta está pendiente/inactiva,
+    // apiLogin lanza un Error con el mensaje exacto que debe verse.
+    let resultado;
+    try {
+      resultado = await apiLogin(email, password);
+    } catch (e) {
+      // Fallo de red (backend caído, sin conexión) se distingue del
+      // mensaje de credenciales para no confundir a la persona.
+      const mensaje = (e && e.message) || 'Credenciales incorrectas. Verifica tu correo y contraseña.';
+      registrarFallo(mensaje.includes('conectar') || mensaje.includes('servidor')
+        ? mensaje
+        : mensaje + (mensaje.includes('incorrectas') ? ' Te quedan ' + (LOGIN_MAX_INTENTOS - loginIntentosFallidos - 1) + ' intento(s) antes de un bloqueo temporal.' : ''));
+      return;
+    }
+
+    const usuario = resultado.usuario;
+    if (usuario.rol === 'Superadmin') {
+      currentAdminRole = 'superadmin';
+      currentAdminUser = null;
+      document.getElementById('siteView').classList.add('hidden');
+      document.getElementById('dashboardView').classList.remove('hidden');
+      applyAdminRoleUI();
+      await initAdmin();
+      showPanel('resumen');
+      await registrarExito();
+      return;
+    }
+
+    if (usuario.rol === 'Coordinador' || usuario.rol === 'Administrador') {
+      currentAdminRole = 'administracion';
+      currentAdminUser = usuario;
+      document.getElementById('siteView').classList.add('hidden');
+      document.getElementById('dashboardView').classList.remove('hidden');
+      applyAdminRoleUI(usuario);
+      await initAdmin();
+      await abrirPrimerPanelSegunPermisos('admin', usuario, '.panel-tab', '.panel-content', showPanel, 'resumen');
+      await registrarExito();
+      return;
+    }
+
+    if (usuario.rol === 'Docente') {
+      currentDocente = usuario;
+      document.getElementById('siteView').classList.add('hidden');
+      document.getElementById('teacherView').classList.remove('hidden');
+      await abrirPrimerPanelSegunPermisos('docente', usuario, '.panel-tab-t', '.panel-content-t', showPanelDocente, 'resumen');
+      await updateMemorandosBadge();
+      await registrarExito();
+      return;
+    }
+
+    if (usuario.rol === 'Estudiante') {
+      currentEstudiante = usuario;
+      document.getElementById('siteView').classList.add('hidden');
+      document.getElementById('studentView').classList.remove('hidden');
+      await initEstudiante();
+      await abrirPrimerPanelSegunPermisos('estudiante', usuario, '.panel-tab-s', '.panel-content-s', showPanelEstudiante, 'resumen');
+      await registrarExito();
+      return;
+    }
+
+    // No debería llegar aquí: apiLogin ya validó el rol contra los
+    // valores válidos de la columna `rol` en MySQL. Si de todos modos
+    // llega un rol no reconocido, se trata como fallo de credenciales en
+    // vez de dejar a la persona en un estado indefinido.
+    registrarFallo('No se pudo determinar tu rol en la plataforma. Contacta al Superadmin.');
+  }
+
+  // ---------- AUTORREGISTRO PÚBLICO (solo Estudiante) ----------
+  // Formulario mínimo, visible sin sesión iniciada. El usuario elige su
+  // propia contraseña y queda con estadoRegistro='Pendiente' — no puede
+  // iniciar sesión (ver bloqueo en submitLogin) hasta que el Superadmin lo
+  // apruebe y le asigne un perfil, desde el panel "Solicitudes de registro".
+  function abrirRegistroPublico() {
+    document.getElementById('registroPublicoContenido').innerHTML = `
+      <img src="logo.jpg" alt="Fundación A+" class="h-12 w-auto mx-auto mb-4" />
+      <h3 class="text-xl font-extrabold text-ink text-center">Registro de estudiante</h3>
+      <p class="text-sm text-slate2 mt-1 text-center">Completa tus datos. Un administrador revisará tu solicitud antes de activar tu acceso.</p>
+      <div class="mt-6 space-y-3">
+        <input id="reg_nombre" type="text" placeholder="Nombre completo" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+        <input id="reg_email" type="email" placeholder="Correo electrónico" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+        <input id="reg_telefono" type="tel" placeholder="Teléfono / WhatsApp" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+        <div class="relative">
+          <input id="reg_password" type="text" autocomplete="new-password" placeholder="Crea una contraseña" class="w-full rounded-xl border border-morado/25 bg-morado/5 pl-4 pr-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+        </div>
+        <p class="text-xs text-slate2">Mínimo 6 caracteres, con al menos una letra y un número.</p>
+      </div>
+      <p id="registroPublicoError" class="hidden text-xs text-coral mt-3"></p>
+      <button onclick="withBotonCargando(this, enviarRegistroPublico)" class="w-full mt-5 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold py-3.5 hover:bg-morado transition">
+        Enviar solicitud
+      </button>`;
+    document.getElementById('registroPublicoModal').classList.remove('hidden');
+    habilitarEnterEnFormulario('registroPublicoContenido');
+  }
+
+  function cerrarRegistroPublico() {
+    document.getElementById('registroPublicoModal').classList.add('hidden');
+  }
+
+  async function enviarRegistroPublico() {
+    const errorEl = document.getElementById('registroPublicoError');
+    const nombre = document.getElementById('reg_nombre').value.trim();
+    const email = document.getElementById('reg_email').value.trim();
+    const telefono = document.getElementById('reg_telefono').value.trim();
+    const password = document.getElementById('reg_password').value;
+
+    if (!nombre || !email || !password) {
+      errorEl.textContent = 'Completa nombre, correo y contraseña.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    if (!validarFortalezaPassword(password)) {
+      errorEl.textContent = 'La contraseña debe tener mínimo 6 caracteres, con al menos una letra y un número.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    const yaExiste = (await Store.list('usuarios')).some(u => u.email.toLowerCase() === email.toLowerCase());
+    if (yaExiste) {
+      errorEl.textContent = 'Ya existe una cuenta con ese correo. Si es tuya, inicia sesión o espera la aprobación.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    const usuarios = await Store.list('usuarios');
+    usuarios.unshift({
+      id: uid('us'),
+      nombre, email, telefono, password,
+      rol: 'Estudiante',
+      cohorte: '',
+      estado: 'Activo',       // estado operativo normal de la cuenta
+      estadoRegistro: 'Pendiente', // candado de acceso: solo lo quita el Superadmin al aprobar
+      perfiles: [],
+    });
+    await Store.set('usuarios', usuarios);
+    cerrarRegistroPublico();
+    toast('Tu solicitud fue enviada. Te avisaremos cuando esté aprobada.', 'ok');
+    if (panelActivoAdmin === 'usuarios' && RENDERERS['usuarios']) {
+      await RENDERERS['usuarios']();
+    }
+  }
+
+  // Ajusta el panel administrativo según el perfil: Superadmin ve todo;
+  // Administración (Coordinador) no gestiona cuentas de usuario ni la
+  // configuración global de la plataforma.
+  function applyAdminRoleUI(coordinador) {
+    const isSuper = currentAdminRole === 'superadmin';
+
+    // Reset SIEMPRE primero y completo: cada login (Superadmin o
+    // Administración) parte de un estado limpio y conocido —
+    // TODOS los tabs visibles y TODOS los panel-content ocultos excepto
+    // "resumen" — antes de aplicar sus propias reglas. Sin este doble
+    // reset (tabs Y contenidos), tanto el menú como el panel que haya
+    // quedado abierto en una sesión anterior (Superadmin o de otro
+    // Administrador, con otro perfil) se quedan pegados y contaminan la
+    // vista siguiente, en cualquiera de los dos sentidos.
+    document.querySelectorAll('.panel-tab').forEach(tab => tab.classList.remove('hidden'));
+    document.querySelectorAll('.panel-content').forEach(panel => {
+      panel.classList.toggle('hidden', panel.id !== 'panel-resumen');
+    });
+    // Mismo reset para los TÍTULOS de sección del sidebar (ver
+    // ocultarSeccionesSidebarVacias): sin esto, una sección que quedó
+    // oculta en el login de un Coordinador anterior (o de otro perfil)
+    // seguía oculta para el Superadmin o para el siguiente Coordinador,
+    // aunque su perfil sí tuviera módulos ahí.
+    document.querySelectorAll('aside .mb-6').forEach(seccion => seccion.classList.remove('hidden'));
+    panelActivoAdmin = 'resumen';
+
+    const label = document.getElementById('adminPanelLabel');
+    const eyebrow = document.getElementById('adminEyebrow');
+    if (label) label.textContent = isSuper ? 'Panel Superadmin' : 'Panel Administración';
+    if (eyebrow) eyebrow.textContent = isSuper ? 'Superadmin' : 'Administración';
+    const bannerText = document.getElementById('adminBannerText');
+    if (bannerText) {
+      bannerText.textContent = isSuper
+        ? 'Desde aquí administrarás usuarios, cohortes y calificaciones del Training de 100 a 1000+.'
+        : 'Gestiona cohortes, calificaciones y el seguimiento académico del programa A+ Smart.';
+    }
+    document.querySelectorAll('.panel-tab[data-super-only="true"]').forEach(tab => {
+      tab.classList.toggle('hidden', !isSuper);
+    });
+    // El grupo/sección "Superadmin" del menú (título + contenedor) solo
+    // se muestra para el Superadmin — igual que sus botones internos.
+    document.querySelectorAll('[data-super-only-group="true"]').forEach(group => {
+      group.classList.toggle('hidden', !isSuper);
+    });
+    // Superadmin ve un menú reducido (Resumen, Administradores, Usuarios,
+    // Cohortes, Calificaciones, Configuración); Administración conserva el
+    // menú completo (sin el apartado de Administradores).
+    document.querySelectorAll('.panel-tab[data-admin-hide="true"]').forEach(tab => {
+      tab.classList.toggle('hidden', isSuper);
+    });
+    document.querySelectorAll('[data-admin-hide-group="true"]').forEach(group => {
+      group.classList.toggle('hidden', isSuper);
+    });
+    const restrictedNote = document.getElementById('adminRestrictedNote');
+    if (restrictedNote) restrictedNote.classList.toggle('hidden', isSuper);
+    const roleChip = document.getElementById('adminRoleChip');
+    if (roleChip) roleChip.textContent = isSuper ? 'Superadmin' : 'Administración';
+  }
+
+  // async (fire-and-forget desde showPanel, ver más abajo): Store('usuarios')
+  // ahora habla con MySQL. 'modulos' sigue síncrono (localStorage, Fase 2
+  // pendiente) — Promise.all solo espera lo que de verdad es asíncrono.
+  async function renderAdminBannerStats() {
+    const el = document.getElementById('adminBannerStats');
+    if (!el) return;
+    const [usuarios, modulos] = await Promise.all([Store.list('usuarios'), Store.list('modulos')]);
+    const enCurso = modulos.filter(m => m.estado === 'En curso').length;
+    const stats = [
+      { label: 'Usuarios', value: usuarios.length },
+      { label: 'Cohortes en curso', value: enCurso },
+      { label: 'Cohortes totales', value: modulos.length },
+    ];
+    el.innerHTML = stats.map(s => `
+      <div class="superadmin-banner-stat px-4 py-2.5">
+        <p class="text-[11px] font-semibold text-white/60 uppercase tracking-wide">${s.label}</p>
+        <p class="text-lg font-extrabold text-white leading-tight mt-0.5">${s.value}</p>
+      </div>`).join('');
+  }
+
+  function logout() {
+    detenerControlInactividad();
+    currentAdminRole = null;
+    currentAdminUser = null;
+    panelActivoAdmin = null;
+    document.getElementById('dashboardView').classList.add('hidden');
+    document.getElementById('siteView').classList.remove('hidden');
+    document.getElementById('loginEmail').value = '';
+    document.getElementById('loginPassword').value = '';
+    quitarAvisoSinAcceso('.panel-content');
+    window.scrollTo(0, 0);
+    if (window.aplusChatResetSession) window.aplusChatResetSession();
+    cerrarSesionChat();
+  }
+
+  function logoutDocente() {
+    detenerControlInactividad();
+    currentDocente = null;
+    panelActivoDocente = null;
+    document.getElementById('teacherView').classList.add('hidden');
+    document.getElementById('siteView').classList.remove('hidden');
+    document.getElementById('loginEmail').value = '';
+    document.getElementById('loginPassword').value = '';
+    quitarAvisoSinAcceso('.panel-content-t');
+    // Mismo motivo que en applyAdminRoleUI: si el siguiente login (otro
+    // Docente, con otro perfil) reutiliza este mismo DOM sin recargar la
+    // página, las secciones ocultas por este usuario no deben quedar
+    // pegadas para el que entre después.
+    document.querySelectorAll('#teacherView .mb-6').forEach(seccion => seccion.classList.remove('hidden'));
+    window.scrollTo(0, 0);
+    if (window.aplusChatResetSession) window.aplusChatResetSession();
+    cerrarSesionChat();
+  }
+
+  function logoutEstudiante() {
+    detenerControlInactividad();
+    currentEstudiante = null;
+    panelActivoEstudiante = null;
+    document.getElementById('studentView').classList.add('hidden');
+    document.getElementById('siteView').classList.remove('hidden');
+    document.getElementById('loginEmail').value = '';
+    document.getElementById('loginPassword').value = '';
+    quitarAvisoSinAcceso('.panel-content-s');
+    document.querySelectorAll('#studentView .mb-6').forEach(seccion => seccion.classList.remove('hidden'));
+    window.scrollTo(0, 0);
+    if (window.aplusChatResetSession) window.aplusChatResetSession();
+    cerrarSesionChat();
+  }
+
+  // ---------- Navegación del panel Docente ----------
+  const PANEL_COLOR_DOCENTE = '#1FC8C0';
+  let panelActivoDocente = null; // último panel mostrado, para no recorrer todo el DOM en cada clic
+  async function showPanelDocente(panel) {
+    if (!(await permisoUsuarioSobrePanel(currentDocente, 'docente.' + panel)).ver) return;
+    if (panelActivoDocente && panelActivoDocente !== panel) {
+      const prevContent = document.getElementById('panel-t-' + panelActivoDocente);
+      if (prevContent) prevContent.classList.add('hidden');
+      const prevTab = document.querySelector('.panel-tab-t[data-tpanel="' + panelActivoDocente + '"]');
+      if (prevTab) {
+        prevTab.classList.remove('font-semibold');
+        prevTab.style.borderLeftColor = 'transparent';
+        prevTab.style.background = '';
+        prevTab.style.color = '#5B6472';
+      }
+    }
+    const content = document.getElementById('panel-t-' + panel);
+    if (content) content.classList.remove('hidden');
+    const tab = document.querySelector('.panel-tab-t[data-tpanel="' + panel + '"]');
+    if (tab) {
+      tab.classList.add('font-semibold');
+      tab.style.borderLeftColor = PANEL_COLOR_DOCENTE;
+      tab.style.background = PANEL_COLOR_DOCENTE + '0D';
+      tab.style.color = '#14181F';
+    }
+    panelActivoDocente = panel;
+    if (RENDERERS_DOCENTE[panel]) await RENDERERS_DOCENTE[panel]();
+  }
+
+  // ---------- Navegación del panel Superadmin ----------
+  const PANEL_COLOR = '#8B5CF6';
+  let panelActivoAdmin = null; // último panel mostrado, para no recorrer todo el DOM en cada clic
+  async function showPanel(panel) {
+    // Si el usuario (Administración, no Superadmin) no tiene permiso de
+    // "ver" sobre este panel, no se navega hacia él.
+    if (currentAdminRole === 'administracion' && currentAdminUser) {
+      // Techo estructural: "administradores" y "perfiles" (Perfiles y
+      // permisos) son exclusivos del Superadmin sin excepción — ningún
+      // perfil asignado por el Superadmin puede otorgar acceso a esto,
+      // sin importar lo que digan sus permisos guardados.
+      const tabDelPanel = document.querySelector('.panel-tab[data-panel="' + panel + '"]');
+      if (tabDelPanel && tabDelPanel.dataset.superOnly === 'true') return;
+      if (!(await permisoUsuarioSobrePanel(currentAdminUser, 'admin.' + panel)).ver) return;
+    }
+    // Solo se toca el DOM del panel que se apaga y el que se enciende — no
+    // se recorren los ~15 panel-content/panel-tab restantes en cada clic.
+    if (panelActivoAdmin && panelActivoAdmin !== panel) {
+      const prevContent = document.getElementById('panel-' + panelActivoAdmin);
+      if (prevContent) prevContent.classList.add('hidden');
+      const prevTab = document.querySelector('.panel-tab[data-panel="' + panelActivoAdmin + '"]');
+      if (prevTab) prevTab.classList.remove('superadmin-tab-active');
+    }
+    const content = document.getElementById('panel-' + panel);
+    if (content) content.classList.remove('hidden');
+    const tab = document.querySelector('.panel-tab[data-panel="' + panel + '"]');
+    if (tab) tab.classList.add('superadmin-tab-active');
+    panelActivoAdmin = panel;
+
+    const banner = document.getElementById('superadminBanner');
+    if (banner) banner.classList.toggle('hidden', panel !== 'resumen');
+    if (panel === 'resumen') await renderAdminBannerStats();
+    if (RENDERERS[panel]) await RENDERERS[panel]();
+    actualizarBadgePqrAdmin();
+  }
+
+  /* =====================================================================
+     PANEL ADMINISTRATIVO — motor de datos y CRUD
+     Persistencia: localStorage (namespace "aplus_admin_v1")
+     ===================================================================== */
+
+  const DB_PREFIX = 'aplus_admin_v1_';
+  let ADMIN_BOOTED = false;
+
+  // Nota mínima de aprobación: fija en el código, ya NO es configurable
+  // desde el panel (antes vivía en configuracion.notasMinimaAprobacion).
+  // Único criterio real de aprobación — la asistencia se sigue mostrando
+  // como dato informativo (semáforo, informes) pero no decide si alguien
+  // aprueba o no.
+  const NOTA_MINIMA_APROBACION = 6.0;
+
+  // ---------- Capa de almacenamiento ----------
+  // Store ahora vive en db.js (cargado antes que este archivo en
+  // index.html): la entidad 'usuarios' habla con MySQL vía el backend
+  // PHP, el resto sigue en localStorage tal como antes. Ver el
+  // comentario de cabecera de db.js para el detalle completo.
+
+  function uid(prefix) {
+    return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  /* =====================================================================
+     HORARIO (antes "Módulos y cohortes") — franjas de horario LIBRES.
+     El administrador elige una Cohorte y un Mes; agrega franjas sueltas,
+     cada una con: Día, Curso, Trainer (docente), hora de inicio, hora de
+     fin, y Estado (Activo/Inactivo — reemplaza al "eliminar": una franja
+     inactiva no cuenta para nadie, pero queda en el historial).
+     Persistencia: Store('horarios'), un registro por Cohorte + Mes, con
+     un array 'franjas' (antes era una matriz fija 'celdas').
+     ===================================================================== */
+  // Logo real de la Fundación A+ (logo.jpg), incrustado como Data URL para
+  // usarlo en documentos que se abren en una ventana/pestaña nueva sin DOM
+  // compartido con index.html (ej. la carta de memorando en
+  // construirCartaMemorandoHTML) — ahí una ruta relativa "logo.jpg" no
+  // siempre resuelve de forma confiable, así que se incrusta directamente.
+  const LOGO_FUNDACION_DATAURL = 'data:image/jpeg;base64,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';
+  const DIAS_HORARIO = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const MESES_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+  function minutosDesdeHora(hhmm) {
+    const [h, m] = (hhmm || '0:0').split(':').map(Number);
+    return h * 60 + m;
+  }
+  function horasFranja(franja) {
+    return Math.round(((minutosDesdeHora(franja.fin) - minutosDesdeHora(franja.inicio)) / 60) * 100) / 100;
+  }
+  function mesLabel(mesValue) {
+    if (!mesValue || mesValue === '0000-00') return 'Periodo sin fecha registrada';
+    const [y, m] = mesValue.split('-').map(Number);
+    return (MESES_ES[m - 1] || '') + ' ' + y;
+  }
+  // Genera opciones de mes: si la cohorte tiene fechaInicio/fechaFin válidas, cubre ese rango;
+  // si no, ofrece un rango amplio alrededor del mes actual.
+  function generarOpcionesMes(cohorte) {
+    let start, end;
+    const ini = cohorte && cohorte.fechaInicio ? new Date(cohorte.fechaInicio + 'T00:00:00') : null;
+    const fin = cohorte && cohorte.fechaFin ? new Date(cohorte.fechaFin + 'T00:00:00') : null;
+    if (ini && !isNaN(ini) && fin && !isNaN(fin)) {
+      start = new Date(ini.getFullYear(), ini.getMonth(), 1);
+      end = new Date(fin.getFullYear(), fin.getMonth(), 1);
+    } else {
+      const hoy = new Date();
+      start = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+      end = new Date(hoy.getFullYear(), hoy.getMonth() + 6, 1);
+    }
+    const opciones = [];
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      const value = cursor.getFullYear() + '-' + String(cursor.getMonth() + 1).padStart(2, '0');
+      opciones.push({ value, label: mesLabel(value) });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return opciones;
+  }
+  // async: 'horarios' vía MySQL.
+  async function getHorario(cohorteNombre, mes) {
+    return (await Store.list('horarios')).find(h => h.cohorte === cohorteNombre && h.mes === mes) || null;
+  }
+  // Solo las franjas Activas cuentan para todo lo demás (carga de un
+  // docente, vista del estudiante, etc.) — una franja Inactiva queda en el
+  // historial pero no aparece en ningún cálculo ni vista de consumo.
+  function franjasActivas(horario) {
+    return horario && horario.franjas ? horario.franjas.filter(f => f.estado !== 'Inactivo') : [];
+  }
+
+  // ---------- Datos semilla (solo se cargan la primera vez) ----------
+  // La plataforma arranca EN BLANCO: no hay estudiantes, docentes ni
+  // coordinadores/administradores de ejemplo. El ÚNICO acceso inicial es
+  // el Superadmin (superadmin_credentials). Todo lo demás se crea desde
+  // la plataforma (Usuarios, Cohortes, Pensum, etc.) una vez inicias sesión.
+  const SEED = {
+    // Credenciales del Superadmin: se guardan en el Store (editables desde
+    // Configuración), ya no son una constante fija en el código.
+    superadmin_credentials: { email: 'superadmin@aplus.org', password: 'Super2026#' },
+    usuarios: [],
+    // Perfiles: conjuntos de permisos con nombre que el Superadmin arma
+    // marcando, panel por panel, si el perfil puede Ver / Crear / Editar /
+    // Eliminar. Un usuario puede tener VARIOS perfiles asignados (union de
+    // permisos). Se explican con más detalle en CATALOGO_PANELES más abajo.
+    perfiles: [],
+    modulos: [],
+    cursos: [],
+    // Base de conocimiento del chat de voz (módulo pendiente, ver SCHEMAS
+    // arriba y renderChatVozConocimiento() más abajo para el contexto).
+    chat_voz_conocimiento: [],
+    trainee_archivos: [],
+    pensum: [],
+    memorandos: [],
+    // PQR: cada solicitud se envía como archivo PDF (la enviaron Docente o
+    // Estudiante). estado empieza en 'Pendiente' y pasa a 'Activo' de forma
+    // automática la primera vez que el administrador abre/descarga el PDF
+    // (ver descargarPqrAdmin). No se edita manualmente.
+    pqr: [],
+    asistencia: [],
+    agenda_estudiante: [],
+    semaforo_overrides: {},
+    // LIMPIEZA: se retiraron de aquí 4 entidades que nunca se leían ni se
+    // escribían en ningún panel (código/datos muertos, siempre quedaban
+    // vacías): "calificaciones" (schema genérico reemplazado hace tiempo
+    // por notas_modulos), "encuestas" tenía un comentario obsoleto que
+    // decía que se había eliminado del sitio cuando en realidad el panel
+    // Encuestas sí sigue activo — solo se corrigió el comentario, la
+    // entidad se mantiene—, y "materiales", "insignias_estudiantes",
+    // "correos_estudiante", que no tenían ningún panel ni función que las
+    // usara. Quitarlas no afecta nada visible.
+    // Auditoría (solo lectura, Superadmin): ver panel "Auditoría" en Sistema.
+    auditoria_login: [],
+    auditoria_acciones: [],
+    auditoria_horario: [],
+    configuracion: {
+      nombre: 'Fundación A+',
+      ciudad: 'Quibdó',
+      direccion: '',
+      correo: 'info@fundacionamas.org.co',
+      telefono: '3214974708',
+      asistenciaMinima: 80,
+      notificacionesEmail: true,
+      notificacionesIA: true,
+      // Postulación pública: el Superadmin activa/desactiva el botón "Postular"
+      // del sitio y define el link del cuestionario externo (Google Forms, etc.)
+      // donde los interesados dejan sus datos.
+      postulacionHabilitada: false,
+      postulacionUrl: ''
+    }
+  };
+
+  // async: Store.get/set ahora son asíncronos para cualquier entidad (ver
+  // db.js) — 'usuarios' se excluye explícitamente del sembrado: esa
+  // entidad ya vive en MySQL con datos reales, y jamás debe
+  // sobrescribirse con el array vacío de SEED.usuarios. El Superadmin
+  // también vive en MySQL (superadmin_credentials, gestionado aparte del
+  // seed) desde la Fase 1 de la migración.
+  async function seedIfEmpty() {
+    for (const key of Object.keys(SEED)) {
+      if (key === 'usuarios') continue;
+      if (key === 'configuracion') {
+        if (!(await Store.get('configuracion'))) await Store.set('configuracion', SEED.configuracion);
+      } else if (key === 'semaforo_overrides') {
+        if (!(await Store.get('semaforo_overrides'))) await Store.set('semaforo_overrides', {});
+      } else {
+        if (!(await Store.get(key))) await Store.set(key, SEED[key]);
+      }
+    }
+    await asegurarPerfilesDeSistema();
+  }
+
+  // ---------- Enter para avanzar/enviar en formularios sin <form> real ----------
+  // Muchos formularios de la app (modales de registro, PQR, agenda, etc.)
+  // son un <div> con inputs sueltos + un botón, no un <form>, así que Enter
+  // no hacía nada y había que ir a buscar el botón con el mouse. Esta
+  // función activa, dentro de un contenedor dado:
+  //   - Enter en un input de texto  -> salta al siguiente campo visible
+  //   - Enter en el ÚLTIMO campo    -> hace clic en el botón principal
+  // No afecta <textarea> (ahí Enter sigue siendo salto de línea) ni
+  // <select>/checkbox (Enter no tiene un uso natural ahí).
+  // Se llama una vez, justo después de pintar el formulario con innerHTML.
+  // Por defecto también enfoca el primer campo (para modales que se abren
+  // desde cero); pasa autofocus=false en secciones de pestaña ya visibles,
+  // donde robarle el foco al usuario al cargar la página sería molesto.
+  function habilitarEnterEnFormulario(containerId, botonSelector, autofocus) {
+    if (autofocus === undefined) autofocus = true;
+    const cont = document.getElementById(containerId);
+    if (!cont) return;
+    const seleccionCampos = 'input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select';
+    const campos = Array.from(cont.querySelectorAll(seleccionCampos));
+
+    campos.forEach((campo, i) => {
+      campo.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const siguiente = campos[i + 1];
+        if (siguiente) {
+          siguiente.focus();
+          if (siguiente.select) siguiente.select();
+        } else {
+          const boton = botonSelector
+            ? (cont.querySelector(botonSelector) || document.querySelector(botonSelector))
+            : cont.querySelector('button:not([data-cancelar])');
+          if (boton) boton.click();
+        }
+      });
+    });
+
+    if (!autofocus) return;
+    // El primer campo visible recibe el foco automáticamente, para poder
+    // empezar a escribir apenas se abre el formulario sin tener que hacer
+    // clic primero.
+    const primero = campos.find(c => c.offsetParent !== null);
+    if (primero) setTimeout(() => primero.focus(), 50);
+  }
+
+  // ---------- Toasts ----------
+  function toast(msg, kind) {
+    const wrap = document.getElementById('toastWrap');
+    const el = document.createElement('div');
+    const colors = { ok: '#1FC8C0', err: '#F0455C', info: '#8B5CF6' };
+    const c = colors[kind] || colors.info;
+    el.className = 'bg-gradient-to-r from-morado to-turquesa text-white text-sm font-semibold px-4 py-3 rounded-xl shadow-softLg flex items-center gap-2.5 opacity-0 translate-y-2 transition-all duration-300';
+    el.innerHTML = `<span class="w-2 h-2 rounded-full shrink-0" style="background:${c}"></span><span>${escapeHtml(msg)}</span>`;
+    wrap.appendChild(el);
+    requestAnimationFrame(() => { el.classList.remove('opacity-0', 'translate-y-2'); });
+    setTimeout(() => {
+      el.classList.add('opacity-0', 'translate-y-2');
+      setTimeout(() => el.remove(), 300);
+    }, 1000);
+  }
+
+  // ---------------------------------------------------------------------
+  // Feedback inmediato de clic para acciones async (guardar, enviar, etc).
+  // Sin esto, entre el clic y que termine la operación el botón se ve
+  // "muerto" y el usuario puede hacer doble clic, disparando un segundo
+  // guardado duplicado. Deshabilita el botón, muestra un spinner, y
+  // siempre lo restaura al terminar (éxito o error).
+  // Uso: onclick="withBotonCargando(this, funcionAsync)"
+  // ---------------------------------------------------------------------
+  async function withBotonCargando(boton, fnAsync, textoCargando) {
+    if (!boton || boton.dataset.cargando === '1') return;
+    const textoOriginal = boton.innerHTML;
+    boton.dataset.cargando = '1';
+    boton.disabled = true;
+    boton.classList.add('opacity-70', 'cursor-wait');
+    boton.innerHTML = `<span class="inline-flex items-center gap-2 justify-center w-full"><svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>${escapeHtml(textoCargando || 'Guardando…')}</span>`;
+    try {
+      await fnAsync();
+    } finally {
+      boton.dataset.cargando = '0';
+      boton.disabled = false;
+      boton.classList.remove('opacity-70', 'cursor-wait');
+      boton.innerHTML = textoOriginal;
+    }
+  }
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  // =====================================================================
+  // SISTEMA DE PERFILES Y PERMISOS (100% local / localStorage)
+  // =====================================================================
+  // Concepto: el Superadmin crea "perfiles" (ej. "Coordinador Académico",
+  // "Docente Estándar") marcando, panel por panel, 4 casillas: Ver, Crear,
+  // Editar, Eliminar. Cada usuario puede tener VARIOS perfiles asignados a
+  // la vez — sus permisos se combinan por unión (si CUALQUIERA de sus
+  // perfiles da acceso a algo, el usuario lo tiene).
+  //
+  // usuarios.rol se conserva tal cual estaba (Estudiante/Docente/
+  // Coordinador/Administrador): sigue decidiendo cuál de las 3 vistas
+  // (Admin/Docente/Estudiante) carga al iniciar sesión. usuarios.perfiles
+  // (array de ids de "perfiles") decide QUÉ VE dentro de esa vista.
+  //
+  // Un usuario sin ningún perfil asignado (perfiles: [] o ausente) puede
+  // iniciar sesión pero no ve ningún panel — se le muestra un aviso para
+  // que contacte al Superadmin.
+  // =====================================================================
+
+  // Catálogo fijo de paneles reales del sistema — mismo código que usa
+  // data-panel-code en los botones de menú de index.html. Namespaced por
+  // categoría (admin./docente./estudiante.) porque hay nombres repetidos
+  // (ej. "pqr") que son datos y vistas distintas según el contexto.
+  const CATALOGO_PANELES = [
+    { codigo: 'admin.resumen', categoria: 'Administrativo', etiqueta: 'Resumen' },
+    { codigo: 'admin.usuarios', categoria: 'Administrativo', etiqueta: 'Usuarios' },
+    { codigo: 'admin.perfiles', categoria: 'Administrativo', etiqueta: 'Perfiles y permisos' },
+    { codigo: 'admin.modulos', categoria: 'Administrativo', etiqueta: 'Cohortes' },
+    { codigo: 'admin.cursos', categoria: 'Administrativo', etiqueta: 'Cursos' },
+    { codigo: 'admin.horario', categoria: 'Administrativo', etiqueta: 'Horario' },
+    { codigo: 'admin.codigosqr', categoria: 'Administrativo', etiqueta: 'Códigos QR' },
+    { codigo: 'admin.pensum', categoria: 'Administrativo', etiqueta: 'Pensum' },
+    { codigo: 'admin.semaforo', categoria: 'Administrativo', etiqueta: 'Semáforo académico' },
+    { codigo: 'admin.memorandos', categoria: 'Administrativo', etiqueta: 'Memorandos' },
+    { codigo: 'admin.pqr', categoria: 'Administrativo', etiqueta: 'PQR' },
+    { codigo: 'admin.calificaciones', categoria: 'Administrativo', etiqueta: 'Calificaciones' },
+    { codigo: 'admin.informesAdmin', categoria: 'Administrativo', etiqueta: 'Informes' },
+    { codigo: 'admin.encuestas', categoria: 'Administrativo', etiqueta: 'Encuestas de satisfacción' },
+    { codigo: 'admin.trainee', categoria: 'Administrativo', etiqueta: 'Historial Trainee' },
+    { codigo: 'admin.auditoria', categoria: 'Administrativo', etiqueta: 'Auditoría' },
+    { codigo: 'admin.chatvoz', categoria: 'Administrativo', etiqueta: 'Chat conocimiento — Base de conocimiento' },
+    { codigo: 'admin.configuracion', categoria: 'Administrativo', etiqueta: 'Configuración' },
+    { codigo: 'docente.resumen', categoria: 'Docente', etiqueta: 'Resumen' },
+    { codigo: 'docente.perfil', categoria: 'Docente', etiqueta: 'Mi perfil' },
+    { codigo: 'docente.asistencia', categoria: 'Docente', etiqueta: 'Asistencia' },
+    { codigo: 'docente.riesgo', categoria: 'Docente', etiqueta: 'Riesgo académico' },
+    { codigo: 'docente.informes', categoria: 'Docente', etiqueta: 'Informes' },
+    { codigo: 'docente.modulos', categoria: 'Docente', etiqueta: 'Horario' },
+    { codigo: 'docente.calificaciones', categoria: 'Docente', etiqueta: 'Calificaciones' },
+    { codigo: 'docente.pensum', categoria: 'Docente', etiqueta: 'Pensum' },
+    { codigo: 'docente.memorandos', categoria: 'Docente', etiqueta: 'Memorandos' },
+    { codigo: 'docente.pqr', categoria: 'Docente', etiqueta: 'PQR' },
+    { codigo: 'docente.agenda', categoria: 'Docente', etiqueta: 'Agenda' },
+    { codigo: 'estudiante.resumen', categoria: 'Estudiante', etiqueta: 'Resumen' },
+    { codigo: 'estudiante.perfil', categoria: 'Estudiante', etiqueta: 'Mi perfil' },
+    { codigo: 'estudiante.asistencia', categoria: 'Estudiante', etiqueta: 'Asistencia' },
+    { codigo: 'estudiante.academico', categoria: 'Estudiante', etiqueta: 'Académico' },
+    { codigo: 'estudiante.calificaciones', categoria: 'Estudiante', etiqueta: 'Calificaciones' },
+    { codigo: 'estudiante.pensum', categoria: 'Estudiante', etiqueta: 'Pensum' },
+    { codigo: 'estudiante.memorandos', categoria: 'Estudiante', etiqueta: 'Memorandos' },
+    { codigo: 'estudiante.pqr', categoria: 'Estudiante', etiqueta: 'PQR' },
+    { codigo: 'estudiante.encuestas', categoria: 'Estudiante', etiqueta: 'Encuestas' },
+    { codigo: 'estudiante.agenda', categoria: 'Estudiante', etiqueta: 'Agenda' },
+  ];
+
+  // Nombres de los 2 perfiles "de sistema" que dan acceso completo a su
+  // categoría — se auto-crean si no existen, para que Docente/Estudiante
+  // sigan viendo todo lo que veían antes de activar este sistema.
+  const PERFIL_SISTEMA_DOCENTE = 'Docente Estándar';
+  const PERFIL_SISTEMA_ESTUDIANTE = 'Estudiante Estándar';
+
+  // Crea (si no existen) los perfiles de sistema con acceso total a su
+  // categoría, y asigna ese perfil a cualquier Docente/Estudiante que
+  // todavía no tenga ningún perfil — así nadie pierde acceso el día que
+  // se activa este sistema sobre datos ya existentes.
+  // async: toca tanto 'perfiles' (localStorage, Fase 4) como 'usuarios'
+  // (MySQL desde la Fase 1) — ver comentario de seedIfEmpty(), que ahora
+  // hace await de esta función.
+  async function asegurarPerfilesDeSistema() {
+    let perfiles = await Store.list('perfiles');
+    let cambiosPerfiles = false;
+
+    [{ nombre: PERFIL_SISTEMA_DOCENTE, categoria: 'Docente' },
+     { nombre: PERFIL_SISTEMA_ESTUDIANTE, categoria: 'Estudiante' }].forEach(base => {
+      let p = perfiles.find(x => x.nombre === base.nombre);
+      if (!p) {
+        p = {
+          id: uid('perf'), nombre: base.nombre, categoria: base.categoria,
+          descripcion: 'Acceso completo — perfil de sistema, no se puede eliminar.',
+          esSistema: true,
+          permisos: {}, // panel_codigo -> {ver,crear,editar,eliminar}
+        };
+        perfiles.push(p);
+        cambiosPerfiles = true;
+      }
+      // Se re-normaliza siempre (no solo al crear) para que un panel nuevo
+      // agregado en el futuro a CATALOGO_PANELES quede también cubierto.
+      CATALOGO_PANELES.filter(pan => pan.categoria === base.categoria).forEach(pan => {
+        if (!p.permisos[pan.codigo] || !p.permisos[pan.codigo].ver) {
+          p.permisos[pan.codigo] = { ver: true, crear: true, editar: true, eliminar: true };
+          cambiosPerfiles = true;
+        }
+      });
+    });
+
+    if (cambiosPerfiles) await Store.set('perfiles', perfiles);
+
+    const usuarios = await Store.list('usuarios');
+    let cambiosUsuarios = false;
+    usuarios.forEach(u => {
+      if ((u.rol === 'Docente' || u.rol === 'Estudiante') && (!u.perfiles || !u.perfiles.length)) {
+        const nombreBuscado = u.rol === 'Docente' ? PERFIL_SISTEMA_DOCENTE : PERFIL_SISTEMA_ESTUDIANTE;
+        const perfilSistema = perfiles.find(p => p.nombre === nombreBuscado); // reutiliza 'perfiles' ya cargado arriba, en vez de otra llamada a Store
+        if (perfilSistema) { u.perfiles = [perfilSistema.id]; cambiosUsuarios = true; }
+      }
+    });
+    if (cambiosUsuarios) await Store.set('usuarios', usuarios);
+  }
+
+  // Devuelve el permiso combinado (unión) de un usuario sobre un panel.
+  // usuario null/undefined => sin acceso a nada (defensivo).
+  // async: 'perfiles' vía MySQL (Fase 4).
+  async function permisoUsuarioSobrePanel(usuario, panelCodigo) {
+    const vacio = { ver: false, crear: false, editar: false, eliminar: false };
+    if (!usuario) return vacio;
+    // El Superadmin (currentAdminRole === 'superadmin') no pasa por esta
+    // función: se resuelve aparte en applyPermisosPanelesAdmin() con
+    // acceso total, para que nunca dependa de datos editables.
+    const idsPerfiles = usuario.perfiles || [];
+    if (!idsPerfiles.length) return vacio;
+    const perfiles = (await Store.list('perfiles')).filter(p => idsPerfiles.includes(p.id));
+    const combinado = { ...vacio };
+    perfiles.forEach(p => {
+      const perm = (p.permisos || {})[panelCodigo];
+      if (!perm) return;
+      combinado.ver = combinado.ver || !!perm.ver;
+      combinado.crear = combinado.crear || !!perm.crear;
+      combinado.editar = combinado.editar || !!perm.editar;
+      combinado.eliminar = combinado.eliminar || !!perm.eliminar;
+    });
+    return combinado;
+  }
+
+  // Se llama UNA VEZ justo después del login: oculta del menú los tabs sin
+  // permiso de "ver" y navega al primer panel que el usuario sí puede ver.
+  // Si no tiene ningún permiso (sin perfil asignado), muestra el aviso.
+  async function abrirPrimerPanelSegunPermisos(prefijo, usuario, tabSelector, contentSelector, showFn, panelPreferido) {
+    // Antes de decidir nada: si quedó un aviso de "sin perfil asignado"
+    // de una sesión anterior en ESTE MISMO contenedor (logout() no borra
+    // el HTML, solo oculta la vista — ver logout()/logoutDocente()/
+    // logoutEstudiante()), se quita ahora. Sin esto, el aviso de un login
+    // anterior sin perfil quedaba visible por encima de cualquier panel
+    // nuevo, incluso el del Superadmin, que comparte el mismo
+    // dashboardView/.panel-content que Coordinador/Administración.
+    quitarAvisoSinAcceso(contentSelector);
+
+    // El Superadmin siempre ve todo: nunca se filtra nada para él.
+    if (prefijo === 'admin' && currentAdminRole === 'superadmin') {
+      showFn(panelPreferido);
+      return;
+    }
+    let primerVisible = null;
+    let preferidoVisible = false;
+    // for...of (no forEach) porque cada vuelta necesita esperar la
+    // Promise real de permisoUsuarioSobrePanel — un forEach normal NO
+    // espera awaits dentro de su callback, así que antes cada `permiso`
+    // era la Promise en sí (no el objeto {ver, crear...}), permiso.ver
+    // siempre salía undefined, y TODOS los tabs quedaban ocultos sin
+    // importar el perfil real asignado.
+    for (const tab of document.querySelectorAll(tabSelector)) {
+      // Techo estructural por rol: un tab exclusivo de Superadmin
+      // (data-super-only) o vedado a Administración (data-admin-hide)
+      // permanece oculto sin importar lo que diga el perfil asignado.
+      // El perfil solo puede RESTRINGIR dentro de lo que el rol ya
+      // permite, nunca AMPLIAR más allá de esas fronteras.
+      if (prefijo === 'admin' && (tab.dataset.superOnly === 'true' || tab.dataset.adminHide === 'true')) {
+        tab.classList.add('hidden');
+        continue;
+      }
+      const codigo = tab.dataset.panelCode;
+      if (!codigo) continue; // tab sin código = no gestionado por permisos
+      const permiso = await permisoUsuarioSobrePanel(usuario, codigo);
+      tab.classList.toggle('hidden', !permiso.ver);
+      if (permiso.ver) {
+        const clave = tab.dataset.panel || tab.dataset.tpanel || tab.dataset.spanel;
+        if (!primerVisible) primerVisible = clave;
+        if (clave === panelPreferido) preferidoVisible = true;
+      }
+    }
+    if (preferidoVisible) showFn(panelPreferido);
+    else if (primerVisible) showFn(primerVisible);
+    else mostrarSinAcceso(contentSelector);
+
+    // Oculta el título de cada sección del sidebar (ej. "Gestión académica",
+    // "Comunicación") cuando NINGUNO de sus botones quedó visible tras el
+    // filtro de permisos de arriba — antes esos títulos se quedaban
+    // siempre visibles, mostrando encabezados "vacíos" sin nada debajo
+    // para un usuario cuyo perfil no incluye ningún módulo de esa sección.
+    ocultarSeccionesSidebarVacias(tabSelector);
+  }
+
+  function ocultarSeccionesSidebarVacias(tabSelector) {
+    // Cada sección es el <div class="mb-6" (...)> más cercano que contiene
+    // al <nav> con los tabs — mismo patrón en los sidebars de Admin,
+    // Docente y Estudiante. Se agrupan los tabs por esa sección y se
+    // oculta la sección completa (título incluido) si ninguno quedó visible.
+    document.querySelectorAll(tabSelector).forEach(tab => {
+      const seccion = tab.closest('nav')?.parentElement;
+      if (!seccion) return;
+      const algunoVisible = Array.from(seccion.querySelectorAll(tabSelector)).some(t => !t.classList.contains('hidden'));
+      seccion.classList.toggle('hidden', !algunoVisible);
+    });
+  }
+
+  // Quita el aviso de "sin perfil asignado" de un login anterior, si
+  // quedó huérfano en este contenedor (ver comentario en
+  // abrirPrimerPanelSegunPermisos). Se usa tanto antes de recalcular los
+  // permisos como en cada logout, para no depender de un solo punto.
+  function quitarAvisoSinAcceso(contentSelector) {
+    const contenedor = document.querySelector(contentSelector)?.parentElement;
+    if (!contenedor) return;
+    const avisoViejo = contenedor.querySelector('.sin-acceso-aviso');
+    if (avisoViejo) avisoViejo.remove();
+  }
+
+  // Pantalla de aviso cuando el usuario no tiene ningún panel visible.
+  function mostrarSinAcceso(contentSelector) {
+    document.querySelectorAll(contentSelector).forEach(el => el.classList.add('hidden'));
+    const contenedor = document.querySelector(contentSelector)?.parentElement;
+    if (!contenedor) return;
+    // Se recrea desde cero en vez de reutilizar un nodo previo: así nunca
+    // hay dos avisos duplicados ni uno "hidden" que alguien vuelva a
+    // mostrar por error.
+    quitarAvisoSinAcceso(contentSelector);
+    const aviso = document.createElement('div');
+    aviso.className = 'sin-acceso-aviso bg-white rounded-2xl border border-gray-100 shadow-soft p-10 text-center';
+    aviso.innerHTML = `
+      <p class="text-base font-bold text-ink mb-2">Tu cuenta no tiene ningún perfil asignado todavía</p>
+      <p class="text-sm text-slate2">Contacta al Superadmin para que te asigne un perfil con las funcionalidades que necesitas.</p>`;
+    contenedor.appendChild(aviso);
+  }
+
+  // ---------- Esquemas de formulario por entidad ----------
+  const SCHEMAS = {
+    usuarios: {
+      label: 'Usuario', icon: 'Usuarios',
+      fields: [
+        { key: 'nombre', label: 'Nombre completo', type: 'text', required: true },
+        { key: 'email', label: 'Correo electrónico', type: 'email', required: true },
+        // Contraseña de acceso: el usuario inicia sesión con su correo + esta
+        // contraseña. Al editar, se puede dejar en blanco para conservar la
+        // que ya tenía (ver manejo especial en saveModal).
+        { key: 'password', label: 'Contraseña de acceso', type: 'password' },
+        // Las opciones reales de "rol" se calculan en openModal() a partir de
+        // rolesCreacionUsuario(): Estudiante/Docente para Administración, y
+        // además Coordinador ("Administrador") si quien crea es el Superadmin.
+        { key: 'rol', label: 'Rol', type: 'select', options: ['Estudiante', 'Docente', 'Coordinador', 'Administrador'], required: true },
+        // Las opciones reales de "cohorte" se calculan en openModal() a partir de
+        // las cohortes existentes (Store('modulos')) — ver bloque "select" más abajo.
+        { key: 'cohorte', label: 'Cohorte', type: 'select', options: [] },
+        { key: 'estado', label: 'Estado', type: 'select', options: ['Activo', 'Inactivo'], default: 'Activo' },
+      ]
+    },
+    modulos: {
+      label: 'Cohorte', icon: 'Módulos',
+      fields: [
+        { key: 'nombre', label: 'Nombre de la cohorte', type: 'text', required: true },
+        { key: 'modulo', label: 'Módulo del Training', type: 'text', required: true },
+        // El docente ya NO se escribe aquí: se asigna desde el panel "Horario"
+        // (celda por celda) y se calcula automáticamente para toda la app.
+        { key: 'fechaInicio', label: 'Fecha de inicio', type: 'date' },
+        { key: 'fechaFin', label: 'Fecha de finalización', type: 'date' },
+        { key: 'cupos', label: 'Cupos totales', type: 'number', default: 25 },
+        // "Inscritos" tampoco se escribe a mano: se cuenta solo a partir de
+        // los estudiantes que realmente tienen esta cohorte asignada, vía
+        // contarInscritos(). CORREGIDO: el Resumen (Superadmin y
+        // Administración) todavía leía un campo "m.inscritos" que nunca se
+        // llenó — daba siempre 0 y hacía que "Ocupación de cupos" y la
+        // alerta "cupos completos" fueran incorrectas. Ya se corrigió para
+        // usar contarInscritos() ahí también (ver renderResumenSuperadmin()
+        // y renderResumen()).
+        { key: 'estado', label: 'Estado', type: 'select', options: ['Planeada', 'En curso', 'Finalizada'], default: 'Planeada' },
+      ]
+    },
+    // "Cursos" es una entidad NUEVA e independiente de "Pensum" (que sigue
+    // existiendo tal cual, para los temas curriculares dentro de una
+    // cohorte). Cursos es el catálogo general de programas que ofrece la
+    // fundación — solo nombre, descripción y si está activo u ofertándose.
+    cursos: {
+      label: 'Curso', icon: 'Cursos',
+      fields: [
+        { key: 'nombre', label: 'Nombre del curso', type: 'text', required: true },
+        { key: 'descripcion', label: 'Descripción', type: 'textarea', rows: 4 },
+        { key: 'estado', label: 'Estado', type: 'select', options: ['Activo', 'Inactivo'], default: 'Activo' },
+      ]
+    },
+    // ---------------------------------------------------------------------
+    // MÓDULO: Chat conocimiento — base de conocimiento del chat con IA
+    // ---------------------------------------------------------------------
+    // El chat de texto (widget flotante, backend_chat/ con Groq/Gemini) ya
+    // está implementado y responde preguntas usando IA real. Esta base de
+    // conocimiento es la fuente que consulta para lo que no puede resolver
+    // solo con los datos propios del sistema (ej. "¿Cuándo se abren las
+    // convocatorias?"). Vive en MySQL (tabla chat_voz_conocimiento — el
+    // nombre interno de la tabla se mantuvo por compatibilidad aunque el
+    // panel visible se llama "Chat conocimiento"), así que lo que se
+    // guarda aquí lo lee el backend en cada pregunta, sin pasos manuales.
+    //
+    // Cada entrada tiene un TEMA (título de referencia, no una pregunta
+    // exacta), su contenido/información completa, y un campo "visibilidad"
+    // clave para la regla de negocio ya acordada:
+    //   - "Pública": el chat puede usarla tanto con visitantes sin sesión
+    //     como con usuarios logueados.
+    //   - "Solo usuarios con sesión": el chat NUNCA debe usar esta entrada
+    //     para responderle a alguien sin login. Esto es aparte de los datos
+    //     propios del usuario (notas, asistencia, etc.), que salen de las
+    //     entidades reales (usuarios, notas_modulos, asistencia...), no de
+    //     aquí — esta base es solo para información de tipo FAQ que no
+    //     vive en ninguna otra tabla.
+    // La IA reformula esta información con sus propias palabras al
+    // responder — no la lee literal ni busca coincidencia exacta de texto
+    // (buscarEnBaseConocimientoChatVoz() más abajo es un placeholder viejo
+    // que ya no usa el chat real; el backend en Python lee la tabla
+    // directo vía api/index.php -> manejarChatVozConocimiento).
+    chat_voz_conocimiento: {
+      label: 'Entrada de conocimiento', icon: 'ChatVoz',
+      fields: [
+        { key: 'titulo', label: 'Tema (ej. "Convocatorias: cuándo abren y cómo aplicar", NO una pregunta exacta)', type: 'text', required: true },
+        { key: 'contenido', label: 'Información completa sobre ese tema (el chat la reformula con IA, no la lee literal)', type: 'textarea', rows: 5, required: true },
+        { key: 'visibilidad', label: 'Quién puede recibir esta respuesta', type: 'select', options: ['Pública', 'Solo usuarios con sesión'], default: 'Pública' },
+        { key: 'categoria', label: 'Categoría (opcional, para organizar)', type: 'text' },
+        { key: 'estado', label: 'Estado', type: 'select', options: ['Activa', 'Inactiva'], default: 'Activa' },
+      ]
+    },
+    pensum: {
+      label: 'Tema curricular', icon: 'Pensum',
+      fields: [
+        { key: 'modulo', label: 'Módulo', type: 'text', required: true },
+        { key: 'tema', label: 'Tema / unidad', type: 'text', required: true },
+        { key: 'horas', label: 'Horas', type: 'number', default: 8 },
+        { key: 'docente', label: 'Docente responsable', type: 'select', options: [] },
+        { key: 'orden', label: 'Orden dentro del módulo', type: 'number', default: 1 },
+        // Archivo que el estudiante podrá ver/descargar desde su Pensum curricular.
+        // Se maneja aparte en openModal()/saveModal() (lee el File y lo guarda como
+        // data URL en archivoNombre/archivoTipo/archivoDatos del registro).
+        { key: 'archivo', label: 'Archivo (PDF u otro documento)', type: 'file' },
+      ]
+    },
+    memorandos: {
+      label: 'Memorando', icon: 'Memorandos',
+      fields: [
+        { key: 'titulo', label: 'Asunto', type: 'text', required: true },
+        // Antes era un <select> con TODOS los usuarios precargados; ahora es
+        // un buscador (escribe nombre o correo y elige de la lista filtrada)
+        // — mismo valor guardado (correo del usuario, o un grupo especial),
+        // solo cambia cómo se elige. Ver renderizado en type 'buscar_destinatario'.
+        { key: 'destinatario', label: 'Destinatario', type: 'buscar_destinatario', required: true },
+        { key: 'fecha', label: 'Fecha', type: 'date' },
+        { key: 'estado', label: 'Estado', type: 'select', options: ['Borrador', 'Enviado'], default: 'Borrador' },
+        // El memorando ya NO lleva un campo de texto largo ("Contenido"):
+        // el documento en sí (PDF/Word/PowerPoint) ES el memorando, y por
+        // eso el archivo es obligatorio aquí (a diferencia del patrón que
+        // sigue PQR/Pensum, donde es opcional). Ver saveModal() para la
+        // validación de obligatoriedad de este campo en particular.
+        { key: 'archivo', label: 'Archivo del memorando (PDF, Word o PowerPoint)', type: 'file', required: true },
+      ]
+    },
+    // "pqr" ya no tiene schema de edición: el administrador no puede editar
+    // ni crear PQR manualmente. Cada solicitud la sube como PDF el Docente
+    // o el Estudiante (ver renderPqrDocente/renderPqrEstudiante) y su estado
+    // ("Pendiente" -> "Activo") lo actualiza automáticamente el sistema
+    // cuando el administrador descarga el PDF (ver descargarPqrAdmin).
+    // "calendario" (Calendario institucional) fue eliminado del sitio: ya no
+    // existe en el panel Admin ni en el panel Estudiante.
+    // Encuestas de satisfacción: ya NO es un formulario interno con
+    // calificación de estrellas — es un LINK EXTERNO (típicamente Google
+    // Forms) que se le envía a los estudiantes de una cohorte. La app solo
+    // guarda el título, el link, y a qué cohorte va dirigida; las
+    // respuestas y su análisis viven en la herramienta externa, no aquí.
+    encuestas: {
+      label: 'Encuesta de satisfacción', icon: 'Encuestas',
+      fields: [
+        { key: 'titulo', label: 'Título de la encuesta', type: 'text', required: true },
+        { key: 'url', label: 'Link de la encuesta (Google Forms u otro)', type: 'text', required: true },
+        { key: 'cohorte', label: 'Cohorte destinataria', type: 'select', options: [], required: true },
+        { key: 'fecha', label: 'Fecha de publicación', type: 'date', required: true },
+        { key: 'estado', label: 'Estado', type: 'select', options: ['Abierta', 'Cerrada'], default: 'Abierta' },
+      ]
+    },
+    // "calificaciones" (schema genérico {estudiante, modulo, nota, fecha})
+    // se retiró: era código muerto — nunca se leía ni se guardaba en
+    // Store('calificaciones') desde ningún panel. El sistema real de
+    // calificaciones usa Store('notas_modulos') con criterios ponderados
+    // por docente/cohorte/mes (ver calcularNotaFinal(),
+    // promedioGeneralEstudianteCohorte(), renderCalificaciones*()). El
+    // panel visible "Calificaciones" del menú usa esas funciones, no este
+    // schema — nunca hubo un botón "Crear calificación" que lo abriera.
+  };
+
+  // ---------- Estado del modal ----------
+  let modalCtx = { entity: null, id: null };
+  let deleteCtx = { entity: null, id: null };
+
+  // Roles que se pueden asignar al CREAR/EDITAR un usuario desde el panel
+  // genérico "Usuarios" (Estudiantes y Docentes). Los Administradores ya NO
+  // se crean aquí: tienen su propio apartado exclusivo del Superadmin (ver
+  // panel "Administradores" / renderAdministradores() / openModal(..., 'Coordinador')).
+  function rolesCreacionUsuario() {
+    return ['Estudiante', 'Docente'];
+  }
+
+  // async: 'usuarios' habla con MySQL ahora. Se precargan aquí, ANTES del
+  // .map() síncrono de más abajo (que genera el HTML de cada campo del
+  // formulario), porque ese .map() no puede usar await dentro de sus
+  // callbacks. record0 también depende de esto cuando entity=='usuarios'.
+  async function openModal(entity, id, forcedRole) {
+    const schema = SCHEMAS[entity];
+    if (!schema) return;
+    const listaEntidadActual = await Store.list(entity); // funciona igual para 'usuarios' (MySQL) y cualquier otra entidad (localStorage, ver Store híbrido en db.js)
+    const record0 = id ? listaEntidadActual.find(r => r.id === id) : null;
+
+    // Solo el Superadmin puede editar cuentas de Administrador (Coordinador).
+    if (entity === 'usuarios' && record0 && (record0.rol === 'Coordinador' || record0.rol === 'Administrador') && currentAdminRole !== 'superadmin') {
+      toast('Solo el Superadmin puede editar una cuenta de Administrador', 'err');
+      return;
+    }
+
+    modalCtx = { entity, id: id || null };
+    const record = record0;
+
+    // Precarga de listas usadas DENTRO de los .map()/callbacks síncronos
+    // de más abajo (no pueden hacer await): 'usuarios' vía MySQL, el resto
+    // vía localStorage — Store.list ya maneja ambos casos por igual.
+    // Si la entidad que se está editando YA ES 'usuarios', se reutiliza
+    // listaEntidadActual (evita pedirla dos veces a MySQL en la misma
+    // apertura de modal); si es otra entidad pero el formulario necesita
+    // el catálogo de usuarios (buscador de destinatario, docente del
+    // pensum...), se pide aparte.
+    const necesitaUsuarios = entity === 'usuarios' || schema.fields.some(f => f.type === 'buscar_destinatario' || (entity === 'pensum' && f.key === 'docente'));
+    const usuariosPrecargados = necesitaUsuarios
+      ? (entity === 'usuarios' ? listaEntidadActual : await Store.list('usuarios'))
+      : null;
+    const necesitaModulos = schema.fields.some(f => (entity === 'usuarios' && f.key === 'cohorte') || (entity === 'encuestas' && f.key === 'cohorte'));
+    const modulosPrecargados = necesitaModulos
+      ? (entity === 'modulos' ? listaEntidadActual : await Store.list('modulos'))
+      : null;
+
+    document.getElementById('modalEyebrow').textContent = id ? 'Editar' : 'Crear nuevo';
+    document.getElementById('modalTitle').textContent = forcedRole === 'Coordinador' ? 'Administrador' : schema.label;
+
+    const form = document.getElementById('modalForm');
+    form.innerHTML = schema.fields.map(f => {
+      const val = record ? record[f.key] : (f.default !== undefined ? f.default : '');
+      const idAttr = 'field_' + f.key;
+
+      // Apartado exclusivo de Administradores: el rol ya viene fijo
+      // (Coordinador) y no aplica cohorte, así que esos dos campos se
+      // guardan como ocultos en vez de mostrarse en el formulario.
+      if (entity === 'usuarios' && forcedRole && f.key === 'rol') {
+        return `<input type="hidden" id="${idAttr}" value="${escapeHtml(forcedRole)}" />`;
+      }
+      if (entity === 'usuarios' && forcedRole === 'Coordinador' && f.key === 'cohorte') {
+        return `<input type="hidden" id="${idAttr}" value="" />`;
+      }
+
+      // Buscador de destinatario para Memorandos: escribe nombre o correo y
+      // elige de una lista filtrada en vivo, en vez de desplazarse por un
+      // <select> con todos los usuarios precargados. El grupo especial
+      // ('Todos', 'Todos los estudiantes', 'Todos los docentes') sigue
+      // disponible como resultado más al escribir "todos". El valor real
+      // que lee saveModal() (el correo o el nombre de grupo) vive en el
+      // input oculto con el mismo id que espera saveModal(); el input
+      // visible solo muestra el nombre/correo elegido y es puramente de UI.
+      if (f.type === 'buscar_destinatario') {
+        const usuarios = [...usuariosPrecargados].sort((a, b) => a.nombre.localeCompare(b.nombre));
+        const grupos = [
+          { value: 'Todos', label: '— Todos los usuarios —' },
+          { value: 'Todos los estudiantes', label: '— Todos los estudiantes —' },
+          { value: 'Todos los docentes', label: '— Todos los docentes —' },
+        ];
+        const catalogo = [
+          ...grupos,
+          ...usuarios.map(u => ({ value: u.email, label: `${u.nombre} (${u.email}) · ${u.rol}` })),
+        ];
+        window.__catalogoDestinatarios = catalogo; // leído por buscarDestinatarioInput()
+        const actual = catalogo.find(o => o.value === val);
+        const textoInicial = actual ? actual.label : (val || '');
+        return `<div class="sm:col-span-2 relative">
+          <label class="block text-xs font-semibold text-slate2 mb-1.5" for="destinatarioBuscar">${f.label}</label>
+          <input id="destinatarioBuscar" type="text" autocomplete="off" value="${escapeHtml(textoInicial)}"
+            placeholder="Escribe un nombre, correo, o 'todos'…"
+            oninput="buscarDestinatarioInput(this.value)"
+            onfocus="buscarDestinatarioInput(this.value)"
+            onblur="setTimeout(() => { const c = document.getElementById('destinatarioResultados'); if (c) c.classList.add('hidden'); }, 150)"
+            class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+          <input id="${idAttr}" type="hidden" value="${escapeHtml(val)}" />
+          <div id="destinatarioResultados" class="hidden absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"></div>
+        </div>`;
+      }
+
+      if (f.type === 'select') {
+        // El rol disponible depende de quién crea el usuario: ver rolesCreacionUsuario().
+        let opciones = f.options;
+        if (entity === 'usuarios' && f.key === 'rol') {
+          opciones = rolesCreacionUsuario();
+        } else if (entity === 'usuarios' && f.key === 'cohorte') {
+          // Cohortes existentes, tomadas de las que ya armó el administrador (Store 'modulos').
+          opciones = modulosPrecargados.map(m => m.nombre);
+          if (val && !opciones.includes(val)) opciones = [val, ...opciones]; // conserva un valor legado que ya no exista
+          opciones = ['', ...opciones]; // primera opción = sin asignar
+        } else if (entity === 'pensum' && f.key === 'docente') {
+          // Lista real de docentes (Store 'usuarios'), no texto libre — así el
+          // nombre siempre coincide exactamente con su usuario y su perfil se
+          // puede abrir con un clic desde el Pensum del estudiante.
+          const docentesReales = usuariosPrecargados.filter(u => u.rol === 'Docente').map(u => u.nombre);
+          if (val && !docentesReales.includes(val)) docentesReales.push(val); // conserva un valor legado que ya no exista
+          opciones = ['', ...docentesReales];
+        } else if (entity === 'encuestas' && f.key === 'cohorte') {
+          // Cohortes reales (Store 'modulos'): el link llega a todos los
+          // estudiantes con ese valor exacto en usuarios.cohorte.
+          const cohortesReales = modulosPrecargados.map(m => m.nombre);
+          if (val && !cohortesReales.includes(val)) cohortesReales.push(val); // conserva un valor legado que ya no exista
+          opciones = [{ value: '', label: 'Selecciona una cohorte…' }, ...cohortesReales.map(c => ({ value: c, label: c }))];
+        }
+        // Normaliza a {value,label} para poder mezclar strings simples con pares dinámicos.
+        opciones = opciones.map(o => (o && typeof o === 'object') ? o : { value: o, label: (o === '' ? 'Sin asignar' : o) });
+        const opts = opciones.map(o => `<option value="${escapeHtml(o.value)}" ${val === o.value ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('');
+        return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
+          <select id="${idAttr}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition">${opts}</select></div>`;
+      }
+      if (f.type === 'textarea') {
+        return `<div class="sm:col-span-2"><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
+          <textarea id="${idAttr}" rows="${f.rows || 3}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition">${escapeHtml(val)}</textarea></div>`;
+      }
+      if (f.type === 'file') {
+        const actual = record && record.archivoNombre
+          ? `<p class="text-xs text-slate2 mt-1.5">Archivo actual: <span class="font-semibold text-ink">${escapeHtml(record.archivoNombre)}</span> — sube uno nuevo para reemplazarlo, o deja el campo vacío para conservarlo.</p>`
+          : '';
+        return `<div class="sm:col-span-2"><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
+          <input id="${idAttr}" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,application/pdf" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-morado/15 file:text-morado file:px-3 file:py-1.5 file:text-xs file:font-semibold focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+          ${actual}</div>`;
+      }
+      const step = f.step ? `step="${f.step}"` : '';
+      if (f.type === 'password') {
+        const ayudaPassword = (entity === 'usuarios' && f.key === 'password')
+          ? (record ? 'Déjala en blanco para conservar la contraseña actual. ' : '') + 'Mínimo 6 caracteres, con al menos una letra y un número.'
+          : '';
+        return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
+          <input id="${idAttr}" type="text" value="" autocomplete="new-password" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+          ${ayudaPassword ? `<p class="text-xs text-slate2 mt-1.5">${ayudaPassword}</p>` : ''}</div>`;
+      }
+      return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
+        <input id="${idAttr}" type="${f.type}" ${step} value="${escapeHtml(val)}" autocomplete="new-password" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" /></div>`;
+    }).join('');
+
+    // ---- Usuarios: si el registro YA existe y es Docente, permitir asignar
+    //      materias y horas (tomadas del pensum creado a partir del calendario
+    //      de cohortes que ya armó el administrador). Solo aplica al EDITAR,
+    //      nunca al crear, porque primero hay que guardar al docente. ----
+    if (entity === 'usuarios') {
+      const materiasWrap = document.createElement('div');
+      materiasWrap.id = 'materiasAsignadasContainer';
+      materiasWrap.className = 'sm:col-span-2';
+      form.appendChild(materiasWrap);
+
+      const rolSelect = document.getElementById('field_rol');
+      const refrescarSeccionMaterias = async () => {
+        materiasWrap.innerHTML = (id && rolSelect.value === 'Docente') ? await renderMateriasAssignSection(record) : '';
+      };
+      rolSelect.addEventListener('change', refrescarSeccionMaterias);
+      await refrescarSeccionMaterias();
+    }
+
+    // ---- Usuarios: selector múltiple de perfiles. Se filtran a los
+    //      perfiles cuya categoría corresponde al rol elegido (Estudiante/
+    //      Docente => su categoría; Coordinador/Administrador => categoría
+    //      Administrativo) y se recalculan si el usuario cambia el rol en
+    //      el propio formulario, antes de guardar. ----
+    if (entity === 'usuarios') {
+      const perfilesWrap = document.createElement('div');
+      perfilesWrap.id = 'perfilesAsignadosContainer';
+      perfilesWrap.className = 'sm:col-span-2';
+      form.appendChild(perfilesWrap);
+
+      const rolSelectParaPerfiles = document.getElementById('field_rol');
+      const perfilesYaAsignados = record ? (record.perfiles || []) : [];
+      const refrescarSeccionPerfiles = async () => {
+        const rolActual = forcedRole || rolSelectParaPerfiles.value;
+        const categoriaDelRol = (rolActual === 'Docente') ? 'Docente' : (rolActual === 'Estudiante') ? 'Estudiante' : 'Administrativo';
+        const disponibles = (await Store.list('perfiles')).filter(p => p.categoria === categoriaDelRol);
+        perfilesWrap.innerHTML = `
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Perfiles asignados (funcionalidades que puede usar)</label>
+            ${disponibles.length ? `
+              <div class="border border-morado/20 bg-morado/5 rounded-xl p-3 space-y-1.5 max-h-40 overflow-y-auto">
+                ${disponibles.map(p => `
+                  <label class="flex items-center gap-2 text-sm text-ink cursor-pointer">
+                    <input type="checkbox" class="perfil-asignado-checkbox w-4 h-4 rounded border-morado/40 text-morado focus:ring-morado/40" value="${p.id}" ${perfilesYaAsignados.includes(p.id) ? 'checked' : ''} />
+                    ${escapeHtml(p.nombre)}
+                  </label>`).join('')}
+              </div>
+              <p class="text-xs text-slate2 mt-1.5">Puedes marcar más de uno. Si no marcas ninguno, el usuario podrá iniciar sesión pero no verá ningún panel.</p>
+            ` : `<p class="text-xs text-slate2 border border-dashed border-morado/25 bg-morado/5 rounded-xl p-3">Aún no hay perfiles creados para esta categoría — ve a "Perfiles y permisos" para crear uno.</p>`}
+          </div>`;
+      };
+      if (rolSelectParaPerfiles) rolSelectParaPerfiles.addEventListener('change', refrescarSeccionPerfiles);
+      refrescarSeccionPerfiles();
+    }
+
+
+    //      calculados automáticamente — ver contarInscritos()/docentesDeCohorte(). ----
+    if (entity === 'modulos' && id) {
+      const docentesAsignados = await docentesDeCohorte(record.nombre);
+      const inscritosReales = await contarInscritos(record.nombre);
+      const info = document.createElement('div');
+      info.className = 'sm:col-span-2 rounded-xl bg-turquesa/5 border border-turquesa/20 px-4 py-3 text-xs text-slate2 space-y-1';
+      info.innerHTML = `
+        <p><span class="font-semibold text-ink">Docente(s) asignado(s):</span> ${docentesAsignados.length ? escapeHtml(docentesAsignados.join(', ')) : 'Sin asignar — ve al panel "Horario" y escribe el nombre del docente en la celda correspondiente'}</p>
+        <p><span class="font-semibold text-ink">Estudiantes matriculados:</span> ${inscritosReales} de ${record.cupos || 0} cupos ${inscritosReales >= (record.cupos || 0) && record.cupos ? '<span class="text-coral font-semibold">· Cupos llenos</span>' : ''}</p>`;
+      form.appendChild(info);
+    }
+
+    document.getElementById('adminModal').classList.remove('hidden');
+  }
+
+  // Devuelve, para un Docente, todas las franjas del Horario donde aparece
+  // asignado (en cualquier cohorte/mes), ordenadas de más reciente a más
+  // antiguo y por día/hora dentro de cada mes. Solo cuenta franjas Activas.
+  // async: 'horarios' vía MySQL.
+  async function getSlotsDocente(nombreDocente) {
+    if (!nombreDocente) return [];
+    const registros = await Store.list('horarios');
+    const slots = [];
+    registros.forEach(h => {
+      franjasActivas(h).forEach(f => {
+        if (f.docente === nombreDocente) {
+          slots.push({ cohorte: h.cohorte, mes: h.mes, dia: f.dia, inicio: f.inicio, fin: f.fin, horas: horasFranja(f), curso: f.curso || '(sin curso)', materia: f.curso || '(sin curso)' });
+        }
+      });
+    });
+    slots.sort((a, b) => (b.mes || '').localeCompare(a.mes || '') || (DIAS_HORARIO.indexOf(a.dia) - DIAS_HORARIO.indexOf(b.dia)) || a.inicio.localeCompare(b.inicio));
+    return slots;
+  }
+
+  // Número REAL de estudiantes matriculados en una cohorte: se cuenta a
+  // partir de los usuarios con rol Estudiante cuyo campo "cohorte" apunta
+  // a esta cohorte. Ya NO es un número que el administrador escribe a mano
+  // (evita que quede desincronizado de la matrícula real).
+  // async: 'usuarios' ahora vive en MySQL. Todo punto que llame a esta
+  // función debe usar await (y por tanto, ser async ella misma) — ver la
+  // cadena completa de funciones convertidas más abajo por este motivo.
+  async function contarInscritos(nombreCohorte) {
+    if (!nombreCohorte) return 0;
+    return (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && u.cohorte === nombreCohorte).length;
+  }
+
+  // Docente(s) que aparecen asignados a una cohorte, calculado a partir del
+  // Horario (única fuente de verdad). Puede haber más de uno si distintas
+  // franjas de la misma cohorte las dicta gente distinta. Solo cuenta
+  // franjas Activas.
+  // async: 'horarios' vía MySQL.
+  async function docentesDeCohorte(nombreCohorte) {
+    const nombres = new Set();
+    (await Store.list('horarios')).filter(h => h.cohorte === nombreCohorte).forEach(h => {
+      franjasActivas(h).forEach(f => { if (f.docente) nombres.add(f.docente); });
+    });
+    return [...nombres];
+  }
+
+  // Construye la sección "Materias y horas asignadas" para un Docente.
+  // Es de SOLO LECTURA a propósito: la única forma de asignarle (o quitarle)
+  // una materia y sus horas es entrando al panel "Horario" y escribiendo su
+  // nombre en la celda correspondiente. Así nunca queda una materia asignada
+  // que no exista en el horario real.
+  // async: getSlotsDocente() ahora es async.
+  async function renderMateriasAssignSection(userRecord) {
+    const nombreDocente = userRecord ? userRecord.nombre : null;
+    const slots = await getSlotsDocente(nombreDocente);
+    const totalHoras = slots.reduce((acc, s) => acc + s.horas, 0);
+
+    const filasHtml = slots.length ? slots.map(s => `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-2 px-3 text-xs text-ink font-semibold">${escapeHtml(s.materia)}</td>
+        <td class="py-2 px-3 text-xs text-slate2">${escapeHtml(s.cohorte)}</td>
+        <td class="py-2 px-3 text-xs text-slate2">${escapeHtml(mesLabel(s.mes))}</td>
+        <td class="py-2 px-3 text-xs text-slate2">${escapeHtml(s.dia)}</td>
+        <td class="py-2 px-3 text-xs text-slate2 whitespace-nowrap">${s.inicio}–${s.fin}</td>
+      </tr>`).join('') : `<tr><td colspan="5" class="text-xs text-slate2 text-center py-4">Este docente aún no aparece en ninguna franja del Horario.</td></tr>`;
+
+    return `<div class="pt-4 mt-2 border-t border-gray-100">
+      <p class="text-sm font-bold text-ink mb-1">Materias y horas asignadas</p>
+      <p class="text-xs text-slate2 mb-3">Solo lectura: se calcula a partir del panel <span class="font-semibold text-ink">Horario</span>. Para asignar o quitar una materia a este docente, ve a Horario y escribe (o borra) su nombre en la celda correspondiente — no es posible asignarle una materia que no exista en el horario.</p>
+      <div class="overflow-x-auto rounded-xl border border-gray-100">
+        <table class="w-full">
+          <thead><tr class="text-left text-[10px] font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+            <th class="py-2 px-3">Materia</th><th class="py-2 px-3">Cohorte</th><th class="py-2 px-3">Mes</th><th class="py-2 px-3">Día</th><th class="py-2 px-3">Horario</th>
+          </tr></thead>
+          <tbody>${filasHtml}</tbody>
+        </table>
+      </div>
+      ${slots.length ? `<p class="text-xs text-slate2 mt-2">Total: <span class="font-bold text-ink">${totalHoras} h</span> por semana en ${slots.length} franja${slots.length === 1 ? '' : 's'}.</p>` : ''}
+    </div>`;
+  }
+
+  function closeModal() {
+    document.getElementById('adminModal').classList.add('hidden');
+    modalCtx = { entity: null, id: null };
+  }
+
+  // Convierte un File (input type="file") a data URL, para poder guardarlo
+  // en localStorage sin backend de archivos.
+  function leerArchivoComoDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function saveModal() {
+    const { entity, id } = modalCtx;
+    const schema = SCHEMAS[entity];
+    if (!schema) return;
+
+    const data = {};
+    for (const f of schema.fields) {
+      const el = document.getElementById('field_' + f.key);
+
+      if (f.type === 'file') {
+        const nuevoArchivo = el.files && el.files[0];
+        if (nuevoArchivo) {
+          if (nuevoArchivo.size > 8 * 1024 * 1024) {
+            toast('El archivo no puede superar 8 MB', 'err');
+            return;
+          }
+          try {
+            data.archivoNombre = nuevoArchivo.name;
+            data.archivoTipo = nuevoArchivo.type || 'application/octet-stream';
+            data.archivoDatos = await leerArchivoComoDataURL(nuevoArchivo);
+          } catch (e) {
+            toast('No se pudo leer el archivo', 'err');
+            return;
+          }
+        } else if (id) {
+          // Edición sin subir un archivo nuevo: conserva el que ya existía.
+          // await: Store.list puede hablar con MySQL (devuelve Promise).
+          const previo = (await Store.list(entity)).find(r => r.id === id) || {};
+          if (previo.archivoNombre) {
+            data.archivoNombre = previo.archivoNombre;
+            data.archivoTipo = previo.archivoTipo;
+            data.archivoDatos = previo.archivoDatos;
+          }
+        }
+        // Campo de archivo obligatorio (ej. memorandos, donde el documento
+        // ES el contenido): sin archivo nuevo y sin uno previo que
+        // conservar, no se puede guardar.
+        if (f.required && !data.archivoDatos) {
+          el.classList.add('ring-2', 'ring-coral');
+          toast('Adjunta el archivo de "' + f.label + '"', 'err');
+          return;
+        }
+        continue;
+      }
+
+      if (f.key === 'password' && entity === 'usuarios') {
+        const v = el.value;
+        if (v === '') {
+          if (!id) {
+            el.classList.add('ring-2', 'ring-coral');
+            el.focus();
+            toast('Completa el campo "' + f.label + '"', 'err');
+            return;
+          }
+          // Editando y se dejó en blanco: conserva la contraseña que ya tenía.
+          // await: Store.list('usuarios') habla con MySQL y devuelve una
+          // Promise — sin el await, .find() se llamaba sobre la promesa y
+          // reventaba con "Store.list(...).find is not a function",
+          // interrumpiendo el guardado completo.
+          const previo = (await Store.list(entity)).find(r => r.id === id) || {};
+          data.password = previo.password || '';
+        } else {
+          if (!validarFortalezaPassword(v)) {
+            el.classList.add('ring-2', 'ring-coral');
+            el.focus();
+            toast('La contraseña debe tener mínimo 6 caracteres, con al menos una letra y un número', 'err');
+            return;
+          }
+          data.password = v;
+        }
+        continue;
+      }
+
+      let v = el.value;
+      if (f.type === 'number') v = v === '' ? 0 : parseFloat(v);
+      if (f.required && (v === '' || v === null || v === undefined)) {
+        // El buscador de destinatario guarda su valor real en un input
+        // oculto (id="field_destinatario"): el resaltado de error visual
+        // se aplica al input visible que sí ve el usuario.
+        const elVisible = (f.type === 'buscar_destinatario') ? document.getElementById('destinatarioBuscar') : el;
+        elVisible.classList.add('ring-2', 'ring-coral');
+        elVisible.focus();
+        toast('Completa el campo "' + f.label + '"', 'err');
+        return;
+      }
+      data[f.key] = v;
+    }
+
+    // ---- Usuarios: el correo es único (es el usuario de login) ----
+    if (entity === 'usuarios' && data.email) {
+      const emailDuplicado = (await Store.list('usuarios')).some(u => u.id !== id && u.email.toLowerCase() === data.email.toLowerCase());
+      if (emailDuplicado) {
+        toast('Ya existe otro usuario con el correo "' + data.email + '"', 'err');
+        return;
+      }
+    }
+
+    // ---- Usuarios: no permitir matricular un estudiante en una cohorte sin cupos ----
+    // Se cuentan los inscritos reales (contarInscritos) contra el total de cupos de
+    // la cohorte. Si el estudiante ya pertenecía a esa misma cohorte, no se bloquea
+    // (no está ocupando un cupo nuevo, solo se está editando su registro).
+    if (entity === 'usuarios' && data.rol === 'Estudiante' && data.cohorte) {
+      const cohorteObj = (await Store.list('modulos')).find(m => m.nombre === data.cohorte);
+      if (cohorteObj) {
+        const registroPrevio = id ? (await Store.list('usuarios')).find(r => r.id === id) : null;
+        const yaEstabaEnEstaCohorte = registroPrevio && registroPrevio.cohorte === data.cohorte;
+        const inscritosActuales = await contarInscritos(data.cohorte);
+        if (!yaEstabaEnEstaCohorte && cohorteObj.cupos && inscritosActuales >= cohorteObj.cupos) {
+          toast('La cohorte "' + data.cohorte + '" ya no tiene cupos disponibles (' + inscritosActuales + '/' + cohorteObj.cupos + ')', 'err');
+          return;
+        }
+      }
+    }
+
+    // ---- Usuarios: mantener el Horario consistente con el nombre/rol del Docente ----
+    // El Horario es la ÚNICA fuente para asignar materias a un docente (ver
+    // renderMateriasAssignSection), así que aquí solo se hace mantenimiento:
+    // si le cambian el nombre, se renombra en sus celdas; si deja de ser
+    // Docente, se liberan las celdas donde aparecía.
+    let horariosChanged = false;
+    if (entity === 'usuarios' && id) {
+      const previousRecord = (await Store.list('usuarios')).find(r => r.id === id);
+      const previousNombre = previousRecord ? previousRecord.nombre : null;
+      const dejaDeSerDocente = previousRecord && previousRecord.rol === 'Docente' && data.rol !== 'Docente';
+      const cambioNombre = previousRecord && previousNombre && previousNombre !== data.nombre;
+
+      if (previousRecord && previousRecord.rol === 'Docente' && (dejaDeSerDocente || cambioNombre)) {
+        const registrosHorario = await Store.list('horarios');
+        registrosHorario.forEach(h => {
+          (h.franjas || []).forEach(f => {
+            if (f.docente === previousNombre) {
+              f.docente = dejaDeSerDocente ? '' : data.nombre;
+              horariosChanged = true;
+            }
+          });
+        });
+        if (horariosChanged) await Store.save('horarios', registrosHorario);
+      }
+
+      // ---- Si deja de ser Estudiante (pasa a Docente, Administrador, etc.):
+      //      se marca fueEstudiante=true y se conserva su última cohorte en
+      //      cohorteAnterior, ANTES de que data.cohorte la pise. Así el
+      //      Historial Trainee lo sigue encontrando y muestra que fue
+      //      estudiante, con todo lo que ya tenía (memorandos, asistencia,
+      //      PQR, notas, archivos) intacto — esos datos ya estaban
+      //      guardados por su nombre/id y no se tocan. ----
+      const dejaDeSerEstudiante = previousRecord && previousRecord.rol === 'Estudiante' && data.rol !== 'Estudiante';
+      if (dejaDeSerEstudiante) {
+        data.fueEstudiante = true;
+        data.cohorteAnterior = previousRecord.cohorte || '';
+      }
+    }
+
+    // ---- Usuarios: perfiles seleccionados (checkboxes fuera de schema.fields) ----
+    if (entity === 'usuarios') {
+      data.perfiles = Array.from(document.querySelectorAll('.perfil-asignado-checkbox:checked')).map(chk => chk.value);
+    }
+
+    const records = await Store.list(entity);
+    const esEdicion = !!id;
+    if (id) {
+      const idx = records.findIndex(r => r.id === id);
+      if (idx > -1) records[idx] = { ...records[idx], ...data };
+    } else {
+      data.id = uid(entity.slice(0, 2));
+      records.unshift(data);
+    }
+    // El aviso se da DESPUÉS de guardar y según el resultado real: antes
+    // se mostraba "creado/actualizado correctamente" antes siquiera de
+    // intentar el guardado, así que un fallo del servidor quedaba oculto
+    // y parecía que sí se había guardado.
+    const resultado = await Store.save(entity, records);
+    if (resultado && resultado.remoto === false) {
+      toast('No se pudo guardar en el servidor — el cambio solo quedó en este navegador. Revisa la conexión con la base de datos.', 'err');
+    } else {
+      toast(schema.label + (esEdicion ? ' actualizado correctamente' : ' creado correctamente'), 'ok');
+    }
+
+    // Memorando ENVIADO (no Borrador) con archivo dirigido a UN estudiante
+    // puntual (por su correo exacto, no a "Todos"/"Todos los
+    // estudiantes"/una cohorte completa): se archiva también una copia en
+    // su Historial Trainee. Un Borrador no genera copia todavía — recién
+    // cuando se edita y pasa a "Enviado" debe aparecer.
+    if (entity === 'memorandos' && data.estado === 'Enviado' && data.archivoDatos && data.destinatario) {
+      const destinatarioEsEstudiante = (await Store.list('usuarios')).some(u =>
+        u.rol === 'Estudiante' && (u.email || '').toLowerCase() === String(data.destinatario).toLowerCase());
+      if (destinatarioEsEstudiante) {
+        copiarArchivoATraineeDeEstudiante(data.destinatario, {
+          nombre: data.archivoNombre, tipo: data.archivoTipo, datos: data.archivoDatos,
+          origen: `Memorando: ${data.titulo || ''}`,
+        });
+      }
+    }
+
+    closeModal();
+    if (panelActivoAdmin && RENDERERS[panelActivoAdmin]) await RENDERERS[panelActivoAdmin]();
+    if (RENDERERS[entity] && panelActivoAdmin !== entity) await RENDERERS[entity]();
+    if (horariosChanged && panelActivoAdmin !== 'modulos' && RENDERERS['modulos']) await RENDERERS['modulos']();
+    if (panelActivoAdmin === 'resumen') await renderAdminBannerStats();
+    if (entity === 'usuarios') renderConstellation();
+  }
+
+  // async: 'usuarios' habla con MySQL ahora.
+  async function askDelete(entity, id) {
+    if (entity === 'usuarios') {
+      const record = (await Store.list('usuarios')).find(r => r.id === id);
+      if (record && (record.rol === 'Coordinador' || record.rol === 'Administrador') && currentAdminRole !== 'superadmin') {
+        toast('Solo el Superadmin puede eliminar una cuenta de Administrador', 'err');
+        return;
+      }
+    }
+    if (entity === 'perfiles') {
+      const perfil = (await Store.list('perfiles')).find(r => r.id === id);
+      if (perfil && perfil.esSistema) {
+        toast('Este es un perfil de sistema y no se puede eliminar', 'err');
+        return;
+      }
+      const enUso = (await Store.list('usuarios')).filter(u => (u.perfiles || []).includes(id)).length;
+      if (enUso > 0) {
+        toast(`No se puede eliminar: ${enUso} usuario${enUso === 1 ? '' : 's'} tiene${enUso === 1 ? '' : 'n'} este perfil asignado`, 'err');
+        return;
+      }
+    }
+    deleteCtx = { entity, id };
+    document.getElementById('confirmModal').classList.remove('hidden');
+  }
+  function closeConfirm() {
+    document.getElementById('confirmModal').classList.add('hidden');
+    deleteCtx = { entity: null, id: null };
+  }
+  // async: 'usuarios' habla con MySQL ahora (aplica cuando entity==='usuarios').
+  async function confirmDelete() {
+    const { entity, id } = deleteCtx;
+    if (!entity || !id) return closeConfirm();
+    const records = (await Store.list(entity)).filter(r => r.id !== id);
+    await Store.save(entity, records);
+    closeConfirm();
+    if (panelActivoAdmin && RENDERERS[panelActivoAdmin]) await RENDERERS[panelActivoAdmin]();
+    if (RENDERERS[entity] && panelActivoAdmin !== entity) await RENDERERS[entity]();
+    if (panelActivoAdmin === 'resumen') await renderAdminBannerStats();
+    if (entity === 'usuarios') renderConstellation();
+    toast('Registro eliminado', 'ok');
+  }
+
+  /* =====================================================================
+     NOTA HISTÓRICA — módulo "Cohortes + Administrador exclusivo" retirado
+     ---------------------------------------------------------------------
+     Existía aquí un segundo sistema de "Administrador" en paralelo al real
+     (Store('administradores') con aislamiento multi-tenant por cohorteId),
+     pensado para que cada cohorte tuviera su propio admin exclusivo. Nunca
+     llegó a conectarse a la interfaz: su render (que pintaba la tabla y el
+     botón que abría el modal de creación) apuntaba a un contenedor
+     ("mount-cohorte-admin") que no existe en ningún tab del menú, así que
+     ese botón jamás se mostraba y el modal de creación era inalcanzable.
+     El Administrador real de la app es el rol "Coordinador" dentro de
+     Store('usuarios'), gestionado por completo desde el panel
+     "Administradores" (ver renderAdministradores() más abajo).
+     Se eliminó código muerto: crearCohorteConAdmin(), abrirModalCohorteAdmin(),
+     cerrarModalCohorteAdmin(), guardarCohorteAdmin(), renderCohorteAdminModule()
+     y el modal #modalCohorteAdmin en index.html. No afecta ninguna
+     funcionalidad visible: nada de eso se ejecutaba nunca.
+     ===================================================================== */
+
+  // ---------- Exportar CSV ----------
+  // async porque algunas entidades (pqr, auditoria_*, y las que se vayan
+  // migrando) ya viven en MySQL vía Store — Store.list() para esas
+  // devuelve una Promise, no un array directo.
+  async function exportCSV(entity, excludeKeys) {
+    excludeKeys = excludeKeys || [];
+    const records = await Store.list(entity);
+    if (!records.length) { toast('No hay datos para exportar', 'err'); return; }
+    const keys = Object.keys(records[0]).filter(k => k !== 'id' && !excludeKeys.includes(k));
+    const rows = [keys.join(',')].concat(
+      records.map(r => keys.map(k => '"' + String(r[k] ?? '').replace(/"/g, '""') + '"').join(','))
+    );
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = entity + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast('Archivo CSV exportado', 'ok');
+  }
+
+  // (Se quitó exportarKnowledgeJsonParaChat: ahora que chat_voz_conocimiento
+  // vive en MySQL, ver-el-backend/db.py lee esa tabla directamente en cada
+  // pregunta — ya no hace falta exportar/subir un knowledge.json a mano.)
+
+  // ---------- Búsqueda de tablas ----------
+  function filterTable(entity, term) {
+    term = term.toLowerCase();
+    document.querySelectorAll('#table-' + entity + ' tbody tr').forEach(tr => {
+      tr.style.display = tr.dataset.search.includes(term) ? '' : 'none';
+    });
+  }
+
+  // ---------- Recarga en vivo bajo demanda (al clic) ----------
+  async function recargarPanelActual() {
+    if (currentAdminRole || currentAdminUser) {
+      if (panelActivoAdmin && RENDERERS[panelActivoAdmin]) {
+        await RENDERERS[panelActivoAdmin]();
+      }
+      if (panelActivoAdmin === 'resumen') await renderAdminBannerStats();
+      actualizarBadgePqrAdmin();
+    } else if (currentDocente) {
+      if (panelActivoDocente && RENDERERS_DOCENTE[panelActivoDocente]) {
+        await RENDERERS_DOCENTE[panelActivoDocente]();
+      }
+    } else if (currentEstudiante) {
+      if (panelActivoEstudiante && RENDERERS_ESTUDIANTE[panelActivoEstudiante]) {
+        await RENDERERS_ESTUDIANTE[panelActivoEstudiante]();
+      }
+    }
+    toast('Datos actualizados en vivo', 'ok');
+  }
+  window.recargarPanelActual = recargarPanelActual;
+
+  // ---------- Helper: encabezado de sección con botón "Nuevo" + buscador ----------
+  function sectionHeader(entity, title, subtitle, extraBtn, showNewButton, csvExcludeKeys) {
+    if (showNewButton === undefined) showNewButton = true;
+    const excludeArg = csvExcludeKeys && csvExcludeKeys.length ? ', ' + JSON.stringify(csvExcludeKeys) : '';
+    return `
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-gray-100">
+        <div>
+          <h2 class="text-lg font-extrabold text-ink">${title}</h2>
+          <p class="text-sm text-slate2 mt-0.5">${subtitle}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="relative">
+            <input oninput="filterTable('${entity}', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+            <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <button onclick="recargarPanelActual()" title="Actualizar datos en vivo" class="rounded-xl border border-gray-200 text-slate2 hover:text-morado hover:bg-morado/5 text-sm font-semibold px-3 py-2 transition flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span class="hidden md:inline">Actualizar</span>
+          </button>
+          <button onclick="exportCSV('${entity}'${excludeArg})" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+          ${extraBtn || ''}
+          ${showNewButton ? `<button onclick="openModal('${entity}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-sm font-semibold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5 shadow-sm">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Nuevo
+          </button>` : ''}
+        </div>
+      </div>`;
+  }
+
+  function emptyRow(colspan, entity) {
+    return `<tr><td colspan="${colspan}">
+      <div class="admin-empty-state">
+        <svg class="w-8 h-8 text-slate2/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-6-4h6m2 11H7a2 2 0 01-2-2V4a2 2 0 012-2h7l5 5v12a2 2 0 01-2 2z"/></svg>
+        <p class="text-sm">Aún no hay registros. Haz clic en <span class="text-ink font-semibold">"Nuevo"</span> para crear el primero.</p>
+      </div>
+    </td></tr>`;
+  }
+
+  function statusPill(value, map) {
+    const c = (map && map[value]) || { bg: '#5B647214', text: '#5B6472' };
+    return `<span class="text-xs font-semibold px-2.5 py-1 rounded-full" style="background:${c.bg};color:${c.text}">${escapeHtml(value)}</span>`;
+  }
+
+  const ESTADO_COLORS = {
+    'Activo': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Inactivo': { bg: '#5B647214', text: '#5B6472' },
+    'En curso': { bg: '#8B5CF61A', text: '#8B5CF6' }, 'Planeada': { bg: '#F5A6231A', text: '#b5790f' }, 'Finalizada': { bg: '#5B647214', text: '#5B6472' },
+    'Enviado': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Borrador': { bg: '#5B647214', text: '#5B6472' },
+    'Abierto': { bg: '#F0455C1A', text: '#F0455C' }, 'En proceso': { bg: '#F5A6231A', text: '#b5790f' }, 'Cerrado': { bg: '#1FC8C01A', text: '#0f8f89' },
+    'Pendiente': { bg: '#F5A6231A', text: '#b5790f' },
+    'Programada': { bg: '#8B5CF61A', text: '#8B5CF6' }, 'Realizada': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Cancelada': { bg: '#F0455C1A', text: '#F0455C' },
+    'Abierta': { bg: '#8B5CF61A', text: '#8B5CF6' },
+    'Publicada': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Oculta': { bg: '#5B647214', text: '#5B6472' },
+  };
+
+  // ---------- Superadmin — vista Resumen (diseño corporativo) ----------
+  const SUPERADMIN_CARD_ICONS = {
+    usuarios: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m5-5.13a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 10-3.87-5"/></svg>',
+    cohortes: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.25v13.5M4.75 8.5L12 6.25l7.25 2.25v9L12 19.75l-7.25-2.25v-9z"/></svg>',
+    calificaciones: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6a2 2 0 012-2h2a2 2 0 012 2v6m-6 0h6m-6 0H6a1 1 0 01-1-1V6a2 2 0 012-2h10a2 2 0 012 2v10a1 1 0 01-1 1h-2"/></svg>',
+    configuracion: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    riesgo: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86l-8.18 14.18A1.5 1.5 0 003.5 20.5h17a1.5 1.5 0 001.39-2.46L13.71 3.86a1.5 1.5 0 00-2.42 0z"/></svg>',
+  };
+
+  // =====================================================================
+  // SISTEMA VISUAL DE DASHBOARDS — compartido por Resumen (Superadmin,
+  // Docente, Estudiante). Un solo elemento distintivo (el anillo de
+  // progreso) se repite en los 3, con el color de marca correspondiente,
+  // en vez de decorar cada panel con algo distinto.
+  // =====================================================================
+
+  // Anillo de progreso SVG hecho a mano (sin librerías): recibe 0-100 y
+  // devuelve un <svg> circular con el trazo proporcional al valor. track
+  // es el color de fondo del anillo (siempre tenue); color es el trazo.
+  function anilloProgreso(pct, color, size, grosor) {
+    const s = size || 88;
+    const stroke = grosor || 8;
+    const r = (s - stroke) / 2;
+    const c = 2 * Math.PI * r;
+    const clamped = Math.max(0, Math.min(100, pct));
+    const offset = c * (1 - clamped / 100);
+    return `
+      <svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" class="-rotate-90">
+        <circle cx="${s/2}" cy="${s/2}" r="${r}" fill="none" stroke="${color}1F" stroke-width="${stroke}" />
+        <circle cx="${s/2}" cy="${s/2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round"
+          stroke-dasharray="${c}" stroke-dashoffset="${offset}" style="transition:stroke-dashoffset .6s ease" />
+      </svg>`;
+  }
+
+  // Tarjeta de estadística con degradado de marca sutil e icono — el
+  // reemplazo con más carácter de la tarjeta plana genérica. clickPanel es
+  // opcional: si se da, la tarjeta completa navega a ese panel.
+  function statCardBrand(opts) {
+    const clickAttr = opts.clickPanel ? `onclick="showPanel${opts.showPanelFn || ''}('${opts.clickPanel}')" role="button" tabindex="0"` : '';
+    return `
+      <div ${clickAttr} class="dash-stat-card group ${opts.clickPanel ? 'cursor-pointer' : ''}" style="--brand:${opts.color}">
+        <div class="flex items-start justify-between mb-4">
+          <div class="dash-stat-icon" style="background:${opts.color}14;color:${opts.color}">${opts.icon || ''}</div>
+          ${opts.trend !== undefined ? `<span class="text-[11px] font-bold ${opts.trend >= 0 ? 'text-turquesa' : 'text-coral'} flex items-center gap-0.5">${opts.trend >= 0 ? '↑' : '↓'} ${Math.abs(opts.trend)}%</span>` : ''}
+        </div>
+        <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">${escapeHtml(opts.label)}</p>
+        <p class="font-display text-3xl font-bold text-ink mt-1 leading-none">${escapeHtml(String(opts.value))}</p>
+        <p class="text-xs text-slate2 mt-2">${escapeHtml(opts.sub || '')}</p>
+      </div>`;
+  }
+
+  // NOTA: existía aquí una variante anterior de esta tarjeta
+  // (renderSuperadminSummaryCard, clickeable con onclick="showPanel(...)")
+  // que quedó sin usar en ningún lado tras el rediseño a la versión de
+  // solo lectura de abajo. Se retiró por ser código muerto.
+
+  // Tarjeta de resumen de SOLO LECTURA: overline arriba a la izquierda,
+  // valor grande debajo, icono circular a la derecha. Sin onclick, sin
+  // cursor pointer y sin hover de navegación — a propósito no llevan a
+  // ningún panel, para que el dashboard sea puramente informativo.
+  function renderSuperadminSummaryCardReadonly(opts) {
+    return `
+      <article class="superadmin-card superadmin-card-readonly">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="superadmin-card-title">${escapeHtml(opts.title)}</p>
+            <p class="superadmin-card-value">${escapeHtml(String(opts.value))}</p>
+          </div>
+          <div class="superadmin-card-icon shrink-0" style="background:${opts.color}1A;color:${opts.color}">${SUPERADMIN_CARD_ICONS[opts.icon] || ''}</div>
+        </div>
+      </article>`;
+  }
+
+  // Serie mensual real del promedio general: agrega TODAS las notas de
+  // TODAS las cohortes/docentes agrupadas por el campo "mes" que ya trae
+  // cada registro en notas_modulos. No se inventa ningún dato: si un mes
+  // no tiene notas cargadas, simplemente no aparece en la serie.
+  async function tendenciaPromedioGeneralMensual() {
+    const registros = await Store.list('notas_modulos');
+    const usuarios = (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && u.cohorte);
+    const porMes = {};
+    MESES_ES.forEach(m => { porMes[m] = []; });
+
+    registros.forEach(rec => {
+      if (!rec.mes || !porMes.hasOwnProperty(rec.mes)) return;
+      const estudiantesCohorte = usuarios.filter(u => u.cohorte === rec.cohorte);
+      estudiantesCohorte.forEach(u => {
+        const resultado = calcularNotaFinal(rec, u.nombre);
+        if (resultado && !resultado.pendiente) porMes[rec.mes].push(resultado.valor);
+      });
+    });
+
+    return MESES_ES
+      .map(m => ({
+        mes: m,
+        promedio: porMes[m].length ? porMes[m].reduce((a, b) => a + b, 0) / porMes[m].length : null,
+      }))
+      .filter(p => p.promedio !== null);
+  }
+
+  // Mini gráfico de línea/área SVG (sin librerías), en el mismo espíritu
+  // que anilloProgreso: recibe una serie de puntos {label, value} y un
+  // color, y devuelve un <svg> con área + línea + eje de etiquetas.
+  function miniLineaTendencia(puntos, color, w, h) {
+    const width = w || 520;
+    const height = h || 160;
+    const padX = 8;
+    const padTop = 14;
+    const padBottom = 26;
+    if (!puntos.length) {
+      return `<div class="grid place-items-center text-xs text-slate2" style="height:${height}px">Aún no hay datos suficientes para mostrar una tendencia.</div>`;
+    }
+    const valores = puntos.map(p => p.value);
+    const min = Math.min(...valores);
+    const max = Math.max(...valores);
+    const rango = (max - min) || 1;
+    const plotW = width - padX * 2;
+    const plotH = height - padTop - padBottom;
+    const step = puntos.length > 1 ? plotW / (puntos.length - 1) : 0;
+
+    const coords = puntos.map((p, i) => {
+      const x = padX + step * i;
+      const y = padTop + plotH - ((p.value - min) / rango) * plotH;
+      return { x, y, label: p.label };
+    });
+
+    const linePath = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+    const areaPath = `${linePath} L${coords[coords.length - 1].x.toFixed(1)},${padTop + plotH} L${coords[0].x.toFixed(1)},${padTop + plotH} Z`;
+    const gradId = 'tendGrad' + Math.random().toString(36).slice(2, 8);
+
+    return `
+      <svg viewBox="0 0 ${width} ${height}" class="w-full" style="height:${height}px" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.28"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="${areaPath}" fill="url(#${gradId})" stroke="none"/>
+        <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        ${coords.map(c => `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3" fill="#fff" stroke="${color}" stroke-width="2"/>`).join('')}
+        ${coords.map(c => `<text x="${c.x.toFixed(1)}" y="${height - 6}" font-size="10" fill="#8891A0" text-anchor="middle">${escapeHtml(c.label.slice(0, 3))}</text>`).join('')}
+      </svg>`;
+  }
+
+  // Mini gráfico de barras SVG para distribución de usuarios por rol.
+  function miniBarrasRoles(datos, w, h) {
+    const width = w || 420;
+    const height = h || 170;
+    const padBottom = 34;
+    const padTop = 10;
+    const plotH = height - padTop - padBottom;
+    const max = Math.max(1, ...datos.map(d => d.value));
+    const gap = 18;
+    const barW = (width - gap * (datos.length + 1)) / datos.length;
+
+    return `
+      <svg viewBox="0 0 ${width} ${height}" class="w-full" style="height:${height}px" preserveAspectRatio="none">
+        ${datos.map((d, i) => {
+          const bh = Math.max(3, (d.value / max) * plotH);
+          const x = gap + i * (barW + gap);
+          const y = padTop + (plotH - bh);
+          return `
+            <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="6" fill="${d.color}"/>
+            <text x="${(x + barW / 2).toFixed(1)}" y="${height - 20}" font-size="10.5" fill="rgba(255,255,255,0.55)" text-anchor="middle">${escapeHtml(d.label)}</text>
+            <text x="${(x + barW / 2).toFixed(1)}" y="${height - 6}" font-size="11.5" font-weight="800" fill="#fff" text-anchor="middle">${d.value}</text>`;
+        }).join('')}
+      </svg>`;
+  }
+
+  // Cohorte elegida en el filtro del card "Promedio" del Resumen Superadmin.
+  // '' = Promedio general (todas las cohortes).
+  let resumenSuperadminCohorte = '';
+
+  // Calcula el promedio a mostrar en el card "Promedio" del Resumen:
+  // si hay una cohorte elegida, promedia solo los estudiantes de esa
+  // cohorte; si no, promedia todos los estudiantes con cohorte (general).
+  // async: promedioGeneralEstudianteCohorte() ahora es async.
+  async function promedioResumenSuperadmin(usuarios, cohorteFiltro) {
+    const estudiantesConCohorte = usuarios.filter(u => u.rol === 'Estudiante' && u.cohorte && (!cohorteFiltro || u.cohorte === cohorteFiltro));
+    const resultados = await Promise.all(estudiantesConCohorte.map(e => promedioGeneralEstudianteCohorte(e.nombre, e.cohorte, null)));
+    const promediosValidos = resultados.filter(Boolean).map(r => r.promedio);
+    return promediosValidos.length ? (promediosValidos.reduce((a, b) => a + b, 0) / promediosValidos.length) : null;
+  }
+
+  function onCambiaResumenSuperadminCohorte(valor) {
+    resumenSuperadminCohorte = valor || '';
+    renderResumenSuperadmin();
+  }
+
+  // async: 'usuarios' vía MySQL + contarInscritos() (que también es
+  // async) se resuelven con Promise.all antes de calcular inscritos.
+  async function renderResumenSuperadmin() {
+    const usuarios = await Store.list('usuarios');
+    const modulos = await Store.list('modulos');
+    const enCurso = modulos.filter(m => m.estado === 'En curso').length;
+    const cupos = modulos.reduce((a, m) => a + Number(m.cupos || 0), 0);
+    // CORREGIDO: antes se sumaba m.inscritos, un campo que ya no existe en
+    // el formulario de Cohorte (ver comentario en SCHEMAS.modulos) y por lo
+    // tanto siempre daba 0 — "Ocupación de cupos" marcaba 0% sin importar
+    // cuántos estudiantes reales tuviera cada cohorte (se veía en la tarjeta
+    // "Ocupación de cupos" del Resumen). Ahora se cuenta con contarInscritos(),
+    // la misma fuente real (estudiantes con esa cohorte asignada) que ya usa
+    // la tabla "Cohortes registradas".
+    const inscritosPorModulo = await Promise.all(modulos.map(m => contarInscritos(m.nombre)));
+    const inscritos = inscritosPorModulo.reduce((a, b) => a + b, 0);
+    const ocupacion = cupos ? Math.round((inscritos / cupos) * 100) : 0;
+
+    // Si la cohorte guardada ya no existe (fue eliminada), se vuelve a
+    // "Promedio general" para no quedar apuntando a un valor inválido.
+    if (resumenSuperadminCohorte && !modulos.some(m => m.nombre === resumenSuperadminCohorte)) {
+      resumenSuperadminCohorte = '';
+    }
+
+    // Promedio real: promedia el promedio de cada estudiante con cohorte
+    // (misma fuente que el panel Calificaciones), filtrado por la cohorte
+    // elegida en el selector, o todas las cohortes si no hay ninguna
+    // seleccionada ("Promedio general").
+    const promedioGeneral = await promedioResumenSuperadmin(usuarios, resumenSuperadminCohorte);
+    const enRiesgo = (await computeSemaforo()).filter(s => s.riesgo === 'Rojo').length;
+
+    const cards = [
+      {
+        icon: 'usuarios', title: 'Usuarios', color: '#1FC8C0',
+        value: usuarios.length,
+      },
+      {
+        icon: 'cohortes', title: 'Cohortes', color: '#8B5CF6',
+        value: modulos.length,
+      },
+      {
+        icon: 'riesgo', title: 'En riesgo', color: '#F0455C',
+        value: enRiesgo,
+      },
+    ];
+
+    const rolesData = [
+      { label: 'Estudiantes', value: usuarios.filter(u => u.rol === 'Estudiante').length, color: '#1FC8C0' },
+      { label: 'Docentes', value: usuarios.filter(u => u.rol === 'Docente').length, color: '#8B5CF6' },
+      { label: 'Admin.', value: usuarios.filter(u => u.rol === 'Coordinador' || u.rol === 'Administrador').length, color: '#F5A623' },
+    ];
+
+    const tendencia = await tendenciaPromedioGeneralMensual();
+    const puntosTendencia = tendencia.map(t => ({ label: t.mes, value: t.promedio }));
+    const tendenciaSubiendo = tendencia.length >= 2 && tendencia[tendencia.length - 1].promedio >= tendencia[0].promedio;
+
+    document.getElementById('mount-resumen').innerHTML = `
+      <div class="superadmin-cards mb-6">
+        ${renderSuperadminSummaryCardReadonly(cards[0])}
+        ${renderSuperadminSummaryCardReadonly(cards[1])}
+        <article class="superadmin-card superadmin-card-readonly">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <label for="resumenSuperadminCohorteSelect" class="superadmin-card-title block">Promedio</label>
+              <p class="superadmin-card-value">${promedioGeneral !== null ? promedioGeneral.toFixed(1) : '—'}</p>
+              <select id="resumenSuperadminCohorteSelect" onchange="onCambiaResumenSuperadminCohorte(this.value)" class="mt-2 w-full max-w-[160px] rounded-lg border border-morado/25 bg-morado/5 px-2 py-1 text-[11px] font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+                <option value="" ${!resumenSuperadminCohorte ? 'selected' : ''}>Promedio general</option>
+                ${modulos.map(m => `<option value="${escapeHtml(m.nombre)}" ${resumenSuperadminCohorte === m.nombre ? 'selected' : ''}>${escapeHtml(m.nombre)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="superadmin-card-icon shrink-0" style="background:#F5A6231A;color:#F5A623">${SUPERADMIN_CARD_ICONS['calificaciones'] || ''}</div>
+          </div>
+        </article>
+        ${renderSuperadminSummaryCardReadonly(cards[2])}
+      </div>
+
+      <div class="grid lg:grid-cols-[1.4fr_1fr] gap-5 mb-5">
+        <div class="dashboard-hero-banner p-7 sm:p-8 flex items-center justify-between gap-6">
+          <div>
+            <h3 class="text-lg sm:text-xl font-extrabold text-white">Fundación A<span class="text-coral">+</span></h3>
+            <p class="text-sm text-white/75 mt-1.5 max-w-sm leading-relaxed">Panel administrativo institucional, ahora con vista de solo lectura.</p>
+          </div>
+          <svg class="w-14 h-14 text-white/85 shrink-0 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M4 21V9l8-6 8 6v12M9 21v-6h6v6M4 9h16"/></svg>
+        </div>
+
+        <div class="dashboard-dark-card p-6 sm:p-7">
+          <p class="text-sm font-extrabold text-white">Ocupación de cupos</p>
+          <p class="font-display text-3xl font-bold text-white mt-2">${ocupacion}%</p>
+          <div class="dashboard-progress-track mt-3">
+            <div class="dashboard-progress-fill" style="width:${Math.max(0, Math.min(100, ocupacion))}%"></div>
+          </div>
+          <p class="text-xs text-white/55 mt-2.5">${inscritos} de ${cupos || 0} cupos usados</p>
+        </div>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-5">
+        <div class="dashboard-dark-card p-6 sm:p-7">
+          <p class="text-sm font-extrabold text-white">Usuarios por rol</p>
+          <p class="text-xs text-white/50 mt-0.5 mb-4">Distribución actual</p>
+          ${miniBarrasRoles(rolesData)}
+        </div>
+        <div class="admin-panel-card p-6 sm:p-7">
+          <p class="text-sm font-extrabold text-ink">Promedio general</p>
+          <p class="text-xs mt-0.5 mb-2 ${tendencia.length >= 2 ? (tendenciaSubiendo ? 'text-turquesa' : 'text-coral') : 'text-slate2'}">
+            ${tendencia.length >= 2 ? `${tendenciaSubiendo ? '↑' : '↓'} tendencia ${tendenciaSubiendo ? 'estable' : 'a la baja'} este período` : 'Sin histórico suficiente aún'}
+          </p>
+          ${miniLineaTendencia(puntosTendencia, '#8B5CF6')}
+        </div>
+      </div>
+
+      <h3 class="text-sm font-extrabold text-ink mt-8 mb-3">Más indicadores</h3>
+      <div class="grid lg:grid-cols-2 gap-5">
+        ${await renderIndicadorPqr()}
+        ${await renderIndicadorActividadReciente()}
+      </div>
+
+      <p class="text-xs text-slate2 mt-6 flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m0-11a4 4 0 014 4c0 1.5-1 2-2 3s-1 1.5-1 2m-6 6h10a2 2 0 002-2V8a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        Vista de solo lectura: los datos se administran desde cada apartado del menú.
+      </p>`;
+  }
+
+  // ---------- Indicador: PQR abiertas (Pendiente) vs resueltas (Activo) ----------
+  // "Abiertas" = estado "Pendiente" (aún no la abre/descarga ningún admin);
+  // "Resueltas" = estado "Activo" (ya fue descargada/atendida). Son los
+  // ÚNICOS dos estados reales que usa este flujo (ver descargarPqrAdmin),
+  // así que no se contempla "Cerrado"/"Resuelto" porque no ocurren en la
+  // práctica con el código actual.
+  // async: 'pqr' vía MySQL.
+  async function renderIndicadorPqr() {
+    const pqr = await Store.list('pqr');
+    const abiertas = pqr.filter(p => p.estado === 'Pendiente').length;
+    const resueltas = pqr.filter(p => p.estado === 'Activo').length;
+    const total = pqr.length;
+    const pctResueltas = total ? Math.round((resueltas / total) * 100) : 0;
+
+    return `
+      <div class="admin-panel-card p-6 sm:p-7">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <p class="text-sm font-extrabold text-ink">PQR: abiertas vs resueltas</p>
+            <p class="text-xs text-slate2 mt-0.5">${total} PQR en total registradas</p>
+          </div>
+          <div class="superadmin-card-icon shrink-0" style="background:#F0455C1A;color:#F0455C">${SUPERADMIN_CARD_ICONS['riesgo'] || ''}</div>
+        </div>
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <p class="font-display text-2xl font-bold text-coral">${abiertas}</p>
+            <p class="text-xs text-slate2 mt-0.5">Abiertas (Pendiente)</p>
+          </div>
+          <div>
+            <p class="font-display text-2xl font-bold text-turquesa">${resueltas}</p>
+            <p class="text-xs text-slate2 mt-0.5">Resueltas (Activo)</p>
+          </div>
+        </div>
+        <div class="dashboard-progress-track" style="background:#F0455C1A">
+          <div class="dashboard-progress-fill" style="width:${pctResueltas}%;background:linear-gradient(90deg,#1FC8C0,#4FE0D8)"></div>
+        </div>
+        <p class="text-xs text-slate2 mt-2">${pctResueltas}% resueltas${!total ? ' — aún no hay PQR registradas' : ''}</p>
+      </div>`;
+  }
+
+  // ---------- Indicador: Actividad reciente (últimos 7 días) ----------
+  // Combina las dos bitácoras reales: auditoria_login (logins exitosos de
+  // cualquier rol: Superadmin/Coordinador/Docente/Estudiante) y
+  // auditoria_acciones (acciones dentro del sistema, hoy solo "Notas
+  // actualizadas" por un docente — ver guardarNotasModuloRecord). Se
+  // muestran los eventos más recientes, ya ordenados porque ambas
+  // bitácoras se guardan con unshift() (más nuevo primero).
+  async function renderIndicadorActividadReciente() {
+    const hace7dias = new Date();
+    hace7dias.setDate(hace7dias.getDate() - 7);
+    const hace7diasISO = hace7dias.toISOString().slice(0, 10);
+
+    const logins = (await Store.list('auditoria_login'))
+      .filter(l => l.resultado === 'Exitoso' && l.fecha >= hace7diasISO)
+      .map(l => ({ fecha: l.fecha, hora: l.hora, texto: `${l.rol || 'Usuario'} inició sesión`, detalle: l.email }));
+
+    const acciones = (await Store.list('auditoria_acciones'))
+      .filter(a => a.fecha >= hace7diasISO)
+      .map(a => ({ fecha: a.fecha, hora: a.hora, texto: `${a.actor} — ${a.tipo}`, detalle: a.detalle }));
+
+    const eventos = [...logins, ...acciones]
+      .sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora))
+      .slice(0, 8);
+
+    return `
+      <div class="admin-panel-card p-6 sm:p-7">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <p class="text-sm font-extrabold text-ink">Actividad reciente</p>
+            <p class="text-xs text-slate2 mt-0.5">Últimos 7 días · logins y acciones registradas</p>
+          </div>
+          <div class="superadmin-card-icon shrink-0" style="background:#8B5CF61A;color:#8B5CF6">${SUPERADMIN_CARD_ICONS['cohortes'] || ''}</div>
+        </div>
+        ${eventos.length ? `
+          <ul class="space-y-3">
+            ${eventos.map(e => `
+              <li class="flex items-start justify-between gap-3 text-sm">
+                <div class="min-w-0">
+                  <p class="font-semibold text-ink truncate">${escapeHtml(e.texto)}</p>
+                  ${e.detalle ? `<p class="text-xs text-slate2 truncate">${escapeHtml(e.detalle)}</p>` : ''}
+                </div>
+                <span class="text-xs text-slate2 shrink-0 whitespace-nowrap">${fmtDate(e.fecha)}</span>
+              </li>`).join('')}
+          </ul>`
+          : `<p class="text-sm text-slate2">Sin actividad registrada en los últimos 7 días.</p>`}
+      </div>`;
+  }
+
+  // ---------- RENDER: Resumen ----------
+  // ---------- RENDER: Resumen ----------
+  // async: 'usuarios' vía MySQL + contarInscritos() async.
+  async function renderResumen() {
+    if (currentAdminRole === 'superadmin') {
+      await renderResumenSuperadmin();
+      return;
+    }
+
+    const usuarios = await Store.list('usuarios');
+    const modulos = await Store.list('modulos');
+    const pqr = await Store.list('pqr');
+    const semaforo = await computeSemaforo();
+
+    const docentes = usuarios.filter(u => u.rol === 'Docente' && u.estado === 'Activo').length;
+    const enCurso = modulos.filter(m => m.estado === 'En curso').length;
+    const conPromedio = semaforo.filter(s => s.promedio !== '—');
+    const promedio = conPromedio.length ? (conPromedio.reduce((a, s) => a + Number(s.promedio), 0) / conPromedio.length).toFixed(1) : '—';
+    const enRiesgo = semaforo.filter(s => s.riesgo === 'Rojo').length;
+    const enAlerta = semaforo.filter(s => s.riesgo === 'Amarillo').length;
+    const pqrAbiertos = pqr.filter(p => p.estado === 'Pendiente').length;
+    const cupos = modulos.reduce((a, m) => a + Number(m.cupos || 0), 0);
+    // CORREGIDO: antes se sumaba m.inscritos, un campo que ya no existe en
+    // el formulario de Cohorte (ver comentario en SCHEMAS.modulos) y por lo
+    // tanto siempre daba 0 — "Ocupación de cupos" marcaba 0% sin importar
+    // cuántos estudiantes reales tuviera cada cohorte. Ahora se cuenta con
+    // contarInscritos(), la misma fuente real (estudiantes con esa cohorte
+    // asignada) que ya usa la tabla "Cohortes registradas".
+    const inscritosPorModulo = await Promise.all(modulos.map(m => contarInscritos(m.nombre)));
+    const inscritos = inscritosPorModulo.reduce((a, b) => a + b, 0);
+    const ocupacion = cupos ? Math.round((inscritos / cupos) * 100) : 0;
+
+    const iconUsuarios = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m5-5.13a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 10-3.87-5"/></svg>';
+    const iconRiesgo = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.008M10.29 3.86L1.82 18a1.5 1.5 0 001.29 2.25h17.78A1.5 1.5 0 0022.18 18L13.71 3.86a1.5 1.5 0 00-2.42 0z"/></svg>';
+    const iconPromedio = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6a2 2 0 012-2h2a2 2 0 012 2v6m-6 0h6m-6 0H6a1 1 0 01-1-1V6a2 2 0 012-2h10a2 2 0 012 2v10a1 1 0 01-1 1h-2"/></svg>';
+    const iconCohortes = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.25v13.5M4.75 8.5L12 6.25l7.25 2.25v9L12 19.75l-7.25-2.25v-9z"/></svg>';
+    const iconOcupacion = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5M3.75 3h16.5M21.75 3h-1.5m0 0v11.25a2.25 2.25 0 01-2.25 2.25h-2.25m0 0V21m0-4.5H9m6 4.5H9m0 0V16.5"/></svg>';
+    const iconPqr = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>';
+    const iconAlerta = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/></svg>';
+
+    const cardsHtml = [
+      statCardBrand({ label: 'Usuarios registrados', value: usuarios.length, sub: docentes + ' docentes activos', color: '#1FC8C0', icon: iconUsuarios, clickPanel: 'usuarios' }),
+      statCardBrand({ label: 'Estudiantes en riesgo', value: enRiesgo, sub: 'Requieren acompañamiento', color: '#F0455C', icon: iconRiesgo, clickPanel: 'semaforo' }),
+      // CORREGIDO: decía "Sobre 5.0" pero el sistema califica sobre 10 (ver
+      // calcularNotaFinal() y calificacionCualitativa(): Desempeño Superior
+      // desde 9, Alto desde 7, Básico desde 6 — todo en escala 0-10). Ese
+      // texto era un remanente de un diseño anterior y quedaba engañoso.
+      statCardBrand({ label: 'Promedio general', value: promedio, sub: 'Sobre 10.0, todas las cohortes', color: '#F5A623', icon: iconPromedio, clickPanel: 'calificaciones' }),
+      statCardBrand({ label: 'Cohortes en curso', value: enCurso, sub: modulos.length + ' registradas en total', color: '#8B5CF6', icon: iconCohortes, clickPanel: 'modulos' }),
+      statCardBrand({ label: 'Ocupación de cupos', value: ocupacion + '%', sub: inscritos + ' de ' + cupos + ' cupos', color: '#EC4899', icon: iconOcupacion, clickPanel: 'modulos' }),
+      statCardBrand({ label: 'PQR pendientes', value: pqrAbiertos, sub: 'A la espera de revisión', color: '#9A5B3F', icon: iconPqr, clickPanel: 'pqr' }),
+      statCardBrand({ label: 'Alertas en amarillo', value: enAlerta, sub: 'Cerca del umbral mínimo', color: '#F5A623', icon: iconAlerta, clickPanel: 'semaforo' }),
+      statCardBrand({ label: 'Alertas totales', value: enRiesgo + enAlerta, sub: 'Rojas + amarillas', color: '#F0455C', icon: iconAlerta, clickPanel: 'semaforo' }),
+    ].join('');
+
+    const ranking = [...semaforo].filter(s => s.promedio !== '—').sort((a, b) => Number(b.promedio) - Number(a.promedio)).slice(0, 5);
+    const rankHtml = ranking.length ? ranking.map((r, i) => `
+      <div class="flex items-center gap-3">
+        <span class="w-6 h-6 rounded-full ${i === 0 ? 'bg-oro/15 text-oro' : 'bg-gray-100 text-slate2'} text-xs font-bold grid place-items-center shrink-0">${i + 1}</span>
+        <span class="flex-1 text-sm text-ink font-medium truncate">${escapeHtml(r.nombre)}</span>
+        <span class="text-sm font-bold" style="color:${r.riesgo === 'Rojo' ? '#F0455C' : r.riesgo === 'Amarillo' ? '#F5A623' : '#14181F'}">${r.promedio}</span>
+      </div>`).join('') : `<p class="text-sm text-slate2">Aún no hay calificaciones registradas.</p>`;
+
+    const alerts = [];
+    semaforo.filter(s => s.riesgo === 'Rojo').forEach(s => alerts.push({ c: '#F0455C', txt: `<span class="text-ink font-semibold">${escapeHtml(s.nombre)}:</span> riesgo crítico${s.motivo ? ' — ' + escapeHtml(s.motivo).toLowerCase() : ''}.` }));
+    pqr.filter(p => p.estado === 'Pendiente').forEach(p => alerts.push({ c: '#F5A623', txt: `<span class="text-ink font-semibold">PQR ${escapeHtml(p.tipo)} de ${escapeHtml(p.solicitante)}:</span> "${escapeHtml(p.asunto)}" sin revisar.` }));
+    // CORREGIDO: mismo problema que "Ocupación de cupos" arriba — m.inscritos
+    // nunca se llena, así que esta alerta nunca disparaba aunque una cohorte
+    // sí estuviera llena en la realidad. Se usa contarInscritos() (conteo real).
+    // Reutiliza inscritosPorModulo (ya calculado arriba, mismo orden que
+    // modulos) en vez de volver a llamar contarInscritos() por cohorte.
+    modulos.filter((m, i) => m.cupos && inscritosPorModulo[i] >= m.cupos).forEach(m => alerts.push({ c: '#8B5CF6', txt: `<span class="text-ink font-semibold">${escapeHtml(m.nombre)}:</span> cupos completos.` }));
+    const alertsHtml = alerts.length ? alerts.slice(0, 6).map(a => `
+      <div class="flex items-start gap-3">
+        <span class="w-2 h-2 rounded-full mt-1.5 shrink-0" style="background:${a.c}"></span>
+        <p class="text-sm text-slate2">${a.txt}</p>
+      </div>`).join('') : `<p class="text-sm text-slate2">No hay alertas activas por ahora.</p>`;
+
+    document.getElementById('mount-resumen').innerHTML = `
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">${cardsHtml}</div>
+      <div class="grid lg:grid-cols-2 gap-5 mt-5">
+        <div class="admin-panel-card p-6">
+          <div class="flex items-center justify-between mb-5">
+            <p class="font-bold text-ink text-sm">Ranking académico</p>
+            <span class="text-xs text-slate2">Top 5</span>
+          </div>
+          <div class="space-y-3">${rankHtml}</div>
+        </div>
+        <div class="admin-panel-card p-6">
+          <div class="flex items-center justify-between mb-5">
+            <p class="font-bold text-ink text-sm">Alertas del sistema</p>
+            ${alerts.length ? '<span class="w-2 h-2 rounded-full bg-coral animate-pulse"></span>' : ''}
+          </div>
+          <div class="space-y-4">${alertsHtml}</div>
+        </div>
+      </div>`;
+  }
+
+  // Resumen de materias/horas que un Docente tiene asignadas, según el Horario.
+  // async: getSlotsDocente() ahora es async.
+  async function getDocenteResumenMaterias(nombreDocente) {
+    const slots = await getSlotsDocente(nombreDocente);
+    if (!slots.length) return null;
+    const totalHoras = slots.reduce((acc, s) => acc + s.horas, 0);
+    return { count: slots.length, totalHoras };
+  }
+
+  // ---------- RENDER: Usuarios ----------
+  // ---------- CURSOS (catálogo general de programas, independiente de Pensum) ----------
+  // ---------- HISTORIAL TRAINEE (ficha centralizada del estudiante) ----------
+  // Reúne, de solo lectura, todo lo que ya existe en otros módulos sobre un
+  // estudiante puntual (Memorandos, Asistencia, PQR, Calificaciones), más
+  // una sección de Archivos (imágenes/PDF) que SOLO existe aquí — se
+  // guardan como Data URL en localStorage (Store 'trainee_archivos'), con
+  // un límite de tamaño razonable por archivo para no saturar el navegador.
+  const TRAINEE_ARCHIVO_MAX_BYTES = 3 * 1024 * 1024; // 3 MB por archivo
+  let traineeState = { estudianteId: null, busquedaArchivo: '' };
+
+  function renderTrainee() {
+    document.getElementById('mount-trainee').innerHTML = `
+      <div class="mb-5">
+        <h2 class="text-lg font-extrabold text-ink">Historial Trainee</h2>
+        <p class="text-sm text-slate2 mt-0.5">Todo lo que ha pasado con un estudiante en la fundación: memorandos, asistencia, PQR, calificaciones y archivos. Incluye a quienes fueron estudiantes y ahora tienen otro rol.</p>
+      </div>
+      <div class="admin-panel-card p-6 mb-6">
+        <label class="block text-xs font-semibold text-slate2 mb-1.5" for="traineeBusquedaEmail">Buscar por correo electrónico o nombre</label>
+        <div class="relative w-full sm:max-w-sm">
+          <input id="traineeBusquedaEmail" type="text" oninput="onBuscaTraineeEmail(this.value)" autocomplete="off" placeholder="Correo o nombre..."
+            class="w-full rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          <svg class="w-4 h-4 text-slate2 absolute left-3 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
+        <div id="traineeBusquedaResultados" class="mt-2"></div>
+      </div>
+      <div id="traineeFicha"></div>`;
+
+    renderTraineeFicha();
+  }
+
+  // Busca por coincidencia parcial de correo O nombre, y solo entre quienes
+  // son o fueron Estudiante — nunca se listan nombres/correos de antemano,
+  // solo aparecen como resultado de escribir algo que coincide.
+  // async: 'usuarios' vía MySQL.
+  async function onBuscaTraineeEmail(valor) {
+    const wrap = document.getElementById('traineeBusquedaResultados');
+    const q = valor.trim().toLowerCase();
+    if (q.length < 3) { wrap.innerHTML = ''; return; }
+
+    const coincidencias = (await Store.list('usuarios'))
+      .filter(u => (u.rol === 'Estudiante' || u.fueEstudiante) &&
+        ((u.email || '').toLowerCase().includes(q) || (u.nombre || '').toLowerCase().includes(q)))
+      .slice(0, 8);
+
+    if (!coincidencias.length) {
+      wrap.innerHTML = `<p class="text-xs text-slate2 mt-1">Sin coincidencias.</p>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <div class="border border-gray-100 rounded-xl divide-y divide-gray-50 overflow-hidden">
+        ${coincidencias.map(u => `
+          <button onclick="onCambiaTraineeEstudiante('${u.id}')" class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-gray-50 transition flex items-center justify-between gap-3">
+            <span class="min-w-0">
+              <span class="block text-ink font-medium truncate">${escapeHtml(u.nombre)}</span>
+              <span class="block text-xs text-slate2 truncate">${escapeHtml(u.email)}</span>
+            </span>
+            <span class="text-xs text-slate2 shrink-0">${u.rol === 'Estudiante' ? '' : 'Fue estudiante · ahora ' + escapeHtml(u.rol)}</span>
+          </button>`).join('')}
+      </div>`;
+  }
+
+  async function onCambiaTraineeEstudiante(estudianteId) {
+    traineeState.estudianteId = estudianteId;
+    const input = document.getElementById('traineeBusquedaEmail');
+    const persona = (await Store.list('usuarios')).find(u => u.id === estudianteId);
+    if (input && persona) input.value = persona.email;
+    document.getElementById('traineeBusquedaResultados').innerHTML = '';
+    renderTraineeFicha();
+  }
+
+  // Se puede llamar desde afuera (ej. desde el panel Usuarios) para abrir
+  // directamente la ficha de un estudiante puntual.
+  async function abrirHistorialTrainee(estudianteId) {
+    traineeState.estudianteId = estudianteId;
+    showPanel('trainee');
+    // showPanel ya volvió a montar renderTrainee() con el input vacío —
+    // se rellena aparte, después de que el DOM nuevo exista.
+    const persona = (await Store.list('usuarios')).find(u => u.id === estudianteId);
+    const input = document.getElementById('traineeBusquedaEmail');
+    if (input && persona) input.value = persona.email;
+  }
+
+  async function renderTraineeFicha() {
+    const wrap = document.getElementById('traineeFicha');
+    if (!wrap) return;
+    if (!traineeState.estudianteId) {
+      wrap.innerHTML = `<div class="admin-panel-card p-10 text-center"><p class="text-sm text-slate2">Selecciona un estudiante para ver su historial.</p></div>`;
+      return;
+    }
+    const est = (await Store.list('usuarios')).find(u => u.id === traineeState.estudianteId);
+    if (!est) { wrap.innerHTML = `<div class="admin-panel-card p-10 text-center"><p class="text-sm text-slate2">Este estudiante ya no existe.</p></div>`; return; }
+
+    // Si ya no es Estudiante (cambió a Docente, Administrador, etc.), la
+    // cohorte relevante para todo el historial es la que tenía CUANDO era
+    // estudiante (cohorteAnterior, ver saveModal), no la actual — est.cohorte
+    // puede estar vacía o ser otra cosa para un Docente/Administrador.
+    const esEstudianteActual = est.rol === 'Estudiante';
+    const cohorteHistorica = esEstudianteActual ? est.cohorte : est.cohorteAnterior;
+
+    // ---- Memorandos: mismo criterio que memorandosParaEstudiante() (case-
+    //      insensitive en el email, incluye envíos a "Todos", "Todos los
+    //      estudiantes", o a toda la cohorte del estudiante), y solo los
+    //      que ya están en estado "Enviado" — un Borrador tampoco debe
+    //      aparecer aquí, igual que no aparece para el propio destinatario.
+    //      Se recalcula aquí en vez de reusar esa función porque ella
+    //      depende de currentEstudiante (la sesión activa), no de un id
+    //      elegido. ----
+    const emailLower = (est.email || '').toLowerCase();
+    const memos = [...(await Store.list('memorandos'))].filter(m => {
+      if (m.estado !== 'Enviado') return false;
+      const dest = m.destinatario || '';
+      return dest.toLowerCase() === emailLower
+        || dest === 'Todos'
+        || dest === 'Todos los estudiantes'
+        || (cohorteHistorica && dest === cohorteHistorica);
+    }).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+
+    // ---- Asistencia ----
+    const asistencia = [...(await Store.list('asistencia'))].filter(a => a.estudiante === est.nombre).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const totalesAsist = { Presente: 0, Tarde: 0, Falla: 0 };
+    asistencia.forEach(a => { if (totalesAsist[a.estado] !== undefined) totalesAsist[a.estado]++; });
+    const pctAsistencia = asistencia.length ? Math.round((totalesAsist.Presente / asistencia.length) * 100) : null;
+
+    // ---- Calificaciones: promedio general por cohorte (reusa el mismo
+    //      cálculo que ve Administración en el panel Calificaciones), MÁS
+    //      el desglose mes a mes (unión de todos los meses con notas de
+    //      cualquier docente de esa cohorte, ver Etapa 5). ----
+    const promedioGeneral = cohorteHistorica ? await promedioGeneralEstudianteCohorte(est.nombre, cohorteHistorica, null) : null;
+    let calificacionesPorMes = [];
+    if (cohorteHistorica) {
+      const mesesUnicos = new Set();
+      const docentesHistorico = await docentesDeCohorte(cohorteHistorica);
+      for (const d of docentesHistorico) {
+        (await mesesConNotasDocenteCohorte(d, cohorteHistorica)).forEach(m => mesesUnicos.add(m));
+      }
+      const mesesOrdenados = [...mesesUnicos].sort().reverse();
+      const resultadosPorMes = await Promise.all(mesesOrdenados.map(m => promedioGeneralEstudianteCohorte(est.nombre, cohorteHistorica, m)));
+      calificacionesPorMes = mesesOrdenados.map((m, i) => ({
+        mes: m,
+        resultado: resultadosPorMes[i]
+      })).filter(r => r.resultado); // solo meses donde este estudiante puntual sí tiene nota
+    }
+
+    // ---- Archivos (única sección con datos propios de este módulo) ----
+    // Filtro por nombre: se aplica sobre TODOS los archivos de este
+    // estudiante, sin importar mayúsculas/acentos, buscando coincidencia
+    // parcial dentro del nombre que se le puso a cada archivo.
+    // CORREGIDO: Store.list('trainee_archivos') se llamaba de forma
+    // síncrona (sin await) — funcionaba "por accidente" porque esta
+    // entidad vivía solo en localStorage y Store.get() para entidades NO
+    // migradas es síncrono. Ahora que trainee_archivos SÍ está en
+    // ENTIDADES_MYSQL (ver db.js), Store.list() devuelve una Promise; sin
+    // el await, "archivosTodos" habría quedado como esa Promise en vez
+    // del array, rompiendo el .filter() de abajo.
+    const archivosTodos = (await Store.list('trainee_archivos')).filter(a => a.estudianteId === est.id).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const filtroArchivo = (traineeState.busquedaArchivo || '').trim().toLowerCase();
+    const archivos = filtroArchivo
+      ? archivosTodos.filter(a => (a.nombre || '').toLowerCase().includes(filtroArchivo))
+      : archivosTodos;
+
+    const iniciales = escapeHtml((est.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+
+    wrap.innerHTML = `
+      <div class="admin-panel-card p-6 mb-6">
+        <div class="flex items-center gap-4">
+          <div class="w-16 h-16 rounded-full grid place-items-center text-xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <p class="text-base font-extrabold text-ink">${escapeHtml(est.nombre)}</p>
+              ${!esEstudianteActual ? `<span class="text-[10px] font-bold uppercase tracking-wide text-morado bg-morado/10 rounded-full px-2 py-0.5">Fue estudiante · ahora ${escapeHtml(est.rol)}</span>` : ''}
+            </div>
+            <p class="text-sm text-slate2">${escapeHtml(est.email || '')} ${cohorteHistorica ? '· ' + escapeHtml(cohorteHistorica) + (esEstudianteActual ? '' : ' (cohorte cuando fue estudiante)') : ''}</p>
+          </div>
+          ${statusPill(est.estado || 'Activo', ESTADO_COLORS)}
+        </div>
+        <div class="grid grid-cols-2 gap-3 mt-5 pt-5 border-t border-gray-100">
+          <div><p class="text-[11px] font-semibold text-slate2 uppercase tracking-wide">Asistencia</p><p class="text-lg font-extrabold text-ink mt-0.5">${pctAsistencia !== null ? pctAsistencia + '%' : '—'}</p></div>
+          <div><p class="text-[11px] font-semibold text-slate2 uppercase tracking-wide">Promedio</p><p class="text-lg font-extrabold text-ink mt-0.5">${promedioGeneral ? promedioGeneral.promedio.toFixed(1) : '—'}</p></div>
+        </div>
+      </div>
+
+      <div class="admin-panel-card p-6 mb-6">
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <p class="text-sm font-bold text-ink">Calificaciones por mes</p>
+          <span class="text-xs text-slate2">Promedio general: <span class="font-bold" style="color:${promedioGeneral ? colorCualitativa(promedioGeneral.promedio) : '#5B6472'}">${promedioGeneral ? promedioGeneral.promedio.toFixed(1) : '—'}</span></span>
+        </div>
+        ${calificacionesPorMes.length ? `
+        <div class="overflow-x-auto">
+          <table class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-2 px-3">Mes</th><th class="py-2 px-3">Promedio del mes</th><th class="py-2 px-3">Profesores</th></tr></thead>
+            <tbody>${calificacionesPorMes.map(r => `
+              <tr class="border-b border-gray-50 last:border-0">
+                <td class="py-2 px-3 text-sm text-ink font-medium">${escapeHtml(mesLabel(r.mes))}</td>
+                <td class="py-2 px-3 text-sm"><span class="font-bold" style="color:${colorCualitativa(r.resultado.promedio)}">${r.resultado.promedio.toFixed(1)}</span></td>
+                <td class="py-2 px-3 text-sm text-slate2">${r.resultado.profesores}</td>
+              </tr>`).join('')}</tbody>
+          </table>
+        </div>` : '<p class="text-sm text-slate2">Sin calificaciones registradas por mes todavía.</p>'}
+      </div>
+
+      <div class="admin-panel-card p-6 mb-6">
+        <p class="text-sm font-bold text-ink mb-4">Memorandos (${memos.length})</p>
+        ${memos.length ? memos.map(m => `
+          <div class="flex items-start justify-between gap-3 py-3 border-b border-gray-50 last:border-0">
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-ink">${escapeHtml(m.titulo)}</p>
+              <p class="text-xs text-slate2">${fmtDate(m.fecha)}</p>
+            </div>
+            <button onclick="abrirMemorandoCarta('${m.id}')" class="text-xs font-semibold text-morado hover:underline shrink-0">Ver carta</button>
+          </div>`).join('') : '<p class="text-sm text-slate2">Sin memorandos registrados.</p>'}
+      </div>
+
+      <div class="admin-panel-card p-6 mb-6">
+        <p class="text-sm font-bold text-ink mb-4">Asistencia reciente</p>
+        ${asistencia.length ? `
+        <div class="overflow-x-auto">
+          <table class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-2 px-3">Fecha</th><th class="py-2 px-3">Curso</th><th class="py-2 px-3">Estado</th></tr></thead>
+            <tbody>${asistencia.slice(0, 10).map(a => `
+              <tr class="border-b border-gray-50 last:border-0">
+                <td class="py-2 px-3 text-sm text-ink">${fmtDate(a.fecha)}</td>
+                <td class="py-2 px-3 text-sm text-slate2">${escapeHtml(a.modulo || '—')}</td>
+                <td class="py-2 px-3">${statusPill(a.estado, { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'] })}</td>
+              </tr>`).join('')}</tbody>
+          </table>
+        </div>
+        ${asistencia.length > 10 ? `<p class="text-xs text-slate2 mt-2">Mostrando los 10 registros más recientes de ${asistencia.length}.</p>` : ''}` : '<p class="text-sm text-slate2">Sin registros de asistencia.</p>'}
+      </div>
+
+      <div class="admin-panel-card p-6">
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <p class="text-sm font-bold text-ink">Archivos (${archivosTodos.length})</p>
+          <div class="flex items-center gap-2">
+            <input id="traineeArchivoBusqueda" type="text" value="${escapeHtml(traineeState.busquedaArchivo || '')}" placeholder="Buscar por nombre de archivo..." oninput="buscarArchivoTrainee(this.value)" class="rounded-full border border-gray-200 px-3.5 py-1.5 text-xs w-48 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+            <label class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-semibold px-4 py-2 hover:opacity-90 transition cursor-pointer whitespace-nowrap">
+              + Añadir archivo
+              <input type="file" accept="image/*,.pdf,application/pdf" class="hidden" onchange="abrirNombreArchivoTrainee(this)" />
+            </label>
+          </div>
+        </div>
+        <p class="text-xs text-slate2 mb-4">Imágenes o PDF. Máximo 3 MB por archivo. Al subir uno puedes ponerle un nombre; si lo dejas vacío se usa el nombre original del archivo.</p>
+        <div id="traineeArchivoNombreWrap" class="mb-4"></div>
+        <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+          ${archivos.map(a => `
+            <div class="rounded-xl border border-gray-100 p-3">
+              ${a.tipo.startsWith('image/')
+                ? `<img src="${a.datos}" alt="${escapeHtml(a.nombre)}" class="w-full h-28 object-cover rounded-lg mb-2" />`
+                : `<div class="w-full h-28 rounded-lg bg-gray-50 grid place-items-center mb-2"><svg class="w-8 h-8 text-slate2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>`}
+              <p class="text-xs font-semibold text-ink truncate">${escapeHtml(a.nombre)}</p>
+              <p class="text-[11px] text-slate2">${fmtDate(a.fecha)}</p>
+              ${a.origen ? `<p class="text-[10px] text-morado font-semibold mt-0.5 truncate" title="${escapeHtml(a.origen)}">${escapeHtml(a.origen)}</p>` : ''}
+              <div class="flex items-center justify-between mt-2">
+                <a href="${a.datos}" download="${escapeHtml(a.nombre)}" class="text-[11px] font-semibold text-morado hover:underline">Descargar</a>
+                <button onclick="eliminarArchivoTrainee('${a.id}')" class="text-[11px] font-semibold text-coral hover:underline">Eliminar</button>
+              </div>
+            </div>`).join('') || (filtroArchivo
+              ? `<p class="text-sm text-slate2 col-span-full">Ningún archivo coincide con "${escapeHtml(traineeState.busquedaArchivo)}".</p>`
+              : '<p class="text-sm text-slate2 col-span-full">Sin archivos adjuntos.</p>')}
+        </div>
+      </div>`;
+  }
+
+  // Escribe en traineeState y vuelve a pintar la ficha para aplicar el
+  // filtro — se hace en cada tecla (oninput), como el resto de buscadores
+  // de la plataforma (ver p. ej. buscarUsuarios).
+  function buscarArchivoTrainee(valor) {
+    traineeState.busquedaArchivo = valor;
+    renderTraineeFicha();
+    // Devuelve el foco al campo de búsqueda: renderTraineeFicha reconstruye
+    // todo el HTML de la tarjeta, así que el input original se reemplaza
+    // por uno nuevo y perdería el foco/cursor si no se restaura aquí.
+    const input = document.getElementById('traineeArchivoBusqueda');
+    if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+  }
+
+  // Paso intermedio entre elegir el archivo y guardarlo: pide el nombre
+  // (opcional) antes de leerlo/guardarlo, para no tener que rediseñar el
+  // <input type="file"> nativo del navegador (que no permite pedir texto
+  // adicional en el mismo diálogo).
+  function abrirNombreArchivoTrainee(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const wrap = document.getElementById('traineeArchivoNombreWrap');
+    if (!wrap) { agregarArchivoTrainee(file, file.name); return; }
+
+    // DataTransfer para poder recuperar el mismo File tras el re-render del
+    // botón "Guardar" (el <input> original se pierde al tocar innerHTML).
+    window.__traineeArchivoPendiente = file;
+
+    wrap.innerHTML = `
+      <div class="rounded-xl border border-morado/25 bg-morado/5 p-4">
+        <label class="block text-xs font-bold text-ink mb-1.5">Nombre del archivo (opcional)</label>
+        <div class="flex items-center gap-2 flex-wrap">
+          <input id="traineeArchivoNombreInput" type="text" placeholder="${escapeHtml(file.name)}" class="flex-1 min-w-[180px] rounded-lg border border-morado/25 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          <button onclick="confirmarSubidaArchivoTrainee()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-semibold px-4 py-2 hover:opacity-90 transition">Guardar archivo</button>
+          <button onclick="cancelarSubidaArchivoTrainee()" class="text-xs font-semibold text-slate2 hover:text-coral transition">Cancelar</button>
+        </div>
+        <p class="text-[11px] text-slate2 mt-1.5">Archivo seleccionado: ${escapeHtml(file.name)} — déjalo vacío para usar ese mismo nombre.</p>
+      </div>`;
+    const nombreInput = document.getElementById('traineeArchivoNombreInput');
+    if (nombreInput) nombreInput.focus();
+  }
+
+  function cancelarSubidaArchivoTrainee() {
+    window.__traineeArchivoPendiente = null;
+    const wrap = document.getElementById('traineeArchivoNombreWrap');
+    if (wrap) wrap.innerHTML = '';
+  }
+
+  function confirmarSubidaArchivoTrainee() {
+    const file = window.__traineeArchivoPendiente;
+    if (!file) return;
+    const nombreInput = document.getElementById('traineeArchivoNombreInput');
+    const nombrePersonalizado = nombreInput ? nombreInput.value.trim() : '';
+    window.__traineeArchivoPendiente = null;
+    const wrap = document.getElementById('traineeArchivoNombreWrap');
+    if (wrap) wrap.innerHTML = '';
+    agregarArchivoTrainee(file, nombrePersonalizado || file.name);
+  }
+
+  // CORREGIDO: guardaba con Store.set('trainee_archivos', arrayCompleto)
+  // — eso solo persistía en localStorage (trainee_archivos no estaba en
+  // ENTIDADES_MYSQL), por eso los archivos no aparecían al entrar desde
+  // otro navegador o dispositivo. Ahora usa Store.agregarArchivo(), que
+  // sube SOLO este archivo al servidor (POST puntual — ver comentario en
+  // ENTIDADES_MYSQL en db.js sobre por qué no usa el Store.set genérico).
+  async function agregarArchivoTrainee(file, nombre) {
+    const esValido = file.type.startsWith('image/') || file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!esValido) { toast('Solo se permiten imágenes o archivos PDF', 'err'); return; }
+    if (file.size > TRAINEE_ARCHIVO_MAX_BYTES) { toast('El archivo no puede superar 3 MB', 'err'); return; }
+
+    const datos = await leerArchivoComoDataURL(file);
+    const nuevoRegistro = {
+      id: 'ta_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36),
+      estudianteId: traineeState.estudianteId,
+      nombre: (nombre || file.name).trim() || file.name,
+      tipo: file.type || 'application/pdf',
+      datos,
+      fecha: new Date().toISOString().slice(0, 10),
+    };
+
+    let resultado;
+    if (typeof Store !== 'undefined' && typeof Store.agregarArchivo === 'function') {
+      resultado = await Store.agregarArchivo(nuevoRegistro);
+    } else if (typeof apiFetch === 'function') {
+      try {
+        await apiFetch('trainee_archivos', { method: 'POST', body: JSON.stringify(nuevoRegistro) });
+        resultado = { ok: true, remoto: true };
+      } catch (e) {
+        resultado = { ok: false, remoto: false, error: e.message };
+      }
+    } else {
+      resultado = { ok: false, remoto: false };
+    }
+
+    toast(resultado && resultado.remoto ? 'Archivo guardado en la base de datos' : 'No se pudo guardar el archivo en el servidor, intenta de nuevo', resultado && resultado.remoto ? 'ok' : 'err');
+    renderTraineeFicha();
+  }
+
+  async function eliminarArchivoTrainee(archivoId) {
+    // Limpia del localStorage de inmediato por si el archivo provenía de caché local
+    try {
+      const locales = JSON.parse(localStorage.getItem('aplus_admin_v1_trainee_archivos') || '[]');
+      localStorage.setItem('aplus_admin_v1_trainee_archivos', JSON.stringify(locales.filter(a => a.id !== archivoId)));
+    } catch (e) {}
+
+    let resultado;
+    if (typeof Store !== 'undefined' && typeof Store.eliminarArchivo === 'function') {
+      resultado = await Store.eliminarArchivo(archivoId);
+    } else if (typeof apiFetch === 'function') {
+      try {
+        await apiFetch('trainee_archivos?id=' + encodeURIComponent(archivoId), {
+          method: 'DELETE',
+          body: JSON.stringify({ id: archivoId }),
+        });
+        resultado = { ok: true, remoto: true };
+      } catch (e) {
+        resultado = { ok: false, remoto: false, error: e.message };
+      }
+    } else {
+      resultado = { ok: true, remoto: false };
+    }
+
+    toast(resultado && resultado.remoto ? 'Archivo eliminado de la base de datos' : 'Archivo eliminado', 'ok');
+    renderTraineeFicha();
+  }
+
+  // async: 'cursos' vía MySQL.
+  async function renderCursos() {
+    const records = [...(await Store.list('cursos'))].sort((a, b) => a.nombre.localeCompare(b.nombre));
+    const rows = records.map(c => `
+      <tr data-search="${escapeHtml((c.nombre + ' ' + (c.descripcion || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(c.nombre)}</td>
+        <td class="py-3 px-4 text-sm text-slate2 max-w-md">${escapeHtml(c.descripcion || '—')}</td>
+        <td class="py-3 px-4">${statusPill(c.estado, ESTADO_COLORS)}</td>
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          <button onclick="openModal('cursos','${c.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
+          <button onclick="askDelete('cursos','${c.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
+        </td>
+      </tr>`).join('');
+
+    document.getElementById('mount-cursos').innerHTML = `
+      <div class="admin-panel-card p-6">
+        ${sectionHeader('cursos', 'Cursos', records.length + ' curso' + (records.length === 1 ? '' : 's') + ' en el catálogo')}
+        <div class="overflow-x-auto">
+          <table id="table-cursos" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Nombre</th><th class="py-2.5 px-4">Descripción</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+            </tr></thead>
+            <tbody>${rows || emptyRow(4)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  /* =====================================================================
+     MÓDULO: Chat conocimiento
+     ---------------------------------------------------------------------
+     Estado actual:
+     - El chat con IA (widget flotante visible en el sitio, texto — no de
+       voz pese al nombre interno que quedó de una fase anterior) YA está
+       implementado (backend_chat/, Groq/Gemini) y responde en producción.
+     - Este panel de Superadmin alimenta la "Base de conocimiento" (temas
+       generales tipo "¿Cuándo se abren las convocatorias?") que el chat
+       consulta cuando no encuentra la respuesta en los datos propios del
+       sistema. Vive en MySQL (Fase 6) — lo que se guarda aquí lo lee el
+       backend directo en cada pregunta, sin exportar/subir ningún archivo
+       a mano.
+     - Regla de negocio (ver campo "visibilidad" en SCHEMAS):
+         · Visitante SIN sesión -> el chat solo puede usar entradas
+           "Pública" de esta base, y nunca datos internos del sistema
+           (notas, usuarios, etc.).
+         · Usuario CON sesión (Estudiante/Docente/Administración) -> el
+           chat puede usar TODA esta base ("Pública" + "Solo usuarios con
+           sesión") y además, cuando corresponda, datos propios de ESE
+           usuario (sus notas, su asistencia, etc. — nunca de otro usuario).
+     - buscarEnBaseConocimientoChatVoz() más abajo es un placeholder VIEJO
+       que ya no usa el chat real — quedó de antes de conectar el backend
+       Python; el chat real resuelve esto en backend_chat/db.py, leyendo
+       la misma tabla MySQL directamente con IA (no búsqueda de texto).
+     Persistencia: Store('chat_voz_conocimiento').
+     ===================================================================== */
+  // async: 'chat_voz_conocimiento' vía MySQL (Fase 6).
+  async function renderChatVozConocimiento() {
+    const records = [...(await Store.list('chat_voz_conocimiento'))].sort((a, b) => (a.titulo || '').localeCompare(b.titulo || ''));
+
+    const visibilidadBadge = (v) => v === 'Solo usuarios con sesión'
+      ? '<span class="text-xs font-semibold rounded-full px-2.5 py-1" style="background:#8B5CF61A;color:#8B5CF6">Solo con sesión</span>'
+      : '<span class="text-xs font-semibold rounded-full px-2.5 py-1" style="background:#1FC8C01A;color:#0f8f89">Pública</span>';
+
+    const rows = records.map(r => `
+      <tr data-search="${escapeHtml((r.titulo + ' ' + (r.categoria || '') + ' ' + r.contenido).toLowerCase())}" class="border-b border-gray-50 last:border-0 align-top">
+        <td class="py-3 px-4 text-sm font-semibold text-ink max-w-xs">${escapeHtml(r.titulo)}</td>
+        <td class="py-3 px-4 text-sm text-slate2 max-w-md">${escapeHtml((r.contenido || '').slice(0, 140))}${(r.contenido || '').length > 140 ? '…' : ''}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(r.categoria || '—')}</td>
+        <td class="py-3 px-4">${visibilidadBadge(r.visibilidad)}</td>
+        <td class="py-3 px-4">${statusPill(r.estado, ESTADO_COLORS)}</td>
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          <button onclick="openModal('chat_voz_conocimiento','${r.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
+          <button onclick="askDelete('chat_voz_conocimiento','${r.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
+        </td>
+      </tr>`).join('');
+
+    document.getElementById('mount-chatvoz').innerHTML = `
+      <div class="admin-panel-card p-6 mb-6 border-l-4" style="border-left-color:#8B5CF6">
+        <h3 class="text-sm font-extrabold text-ink mb-1">Chat de la Fundación A+ — de texto, por ahora</h3>
+        <p class="text-xs text-slate2 leading-relaxed">El widget de chat ya es visible en el sitio (botón flotante abajo a la derecha), tanto para visitantes como dentro de cualquier login. Es un chat de TEXTO — la parte de voz (micrófono, respuestas habladas) todavía no está implementada. El backend que responde corre aparte (Python + Gemini/Groq) y ya está conectado a esta misma base de datos MySQL — lo que guardes aquí llega directo al chat, sin pasos manuales. <strong>El campo "Tema" es solo un TEMA de referencia, no una pregunta exacta que el visitante deba escribir igual</strong>: el chat usa IA para responder cualquier forma de preguntar sobre ese tema, así que redacta cada entrada como un tema amplio (ej. "Convocatorias e inscripciones: cuándo abren y cómo aplicar") y en "Información" pon todo lo que el chat pueda necesitar sobre ese tema, no una frase única para leer literal.</p>
+      </div>
+      <div class="admin-panel-card p-6">
+        ${sectionHeader('chat_voz_conocimiento', 'Base de conocimiento', records.length + ' entrada' + (records.length === 1 ? '' : 's') + ' registrada' + (records.length === 1 ? '' : 's'))}
+        <div class="overflow-x-auto">
+          <table id="table-chat_voz_conocimiento" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Tema</th><th class="py-2.5 px-4">Información</th><th class="py-2.5 px-4">Categoría</th><th class="py-2.5 px-4">Visibilidad</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+            </tr></thead>
+            <tbody>${rows || emptyRow(6)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * PLACEHOLDER — punto de entrada real para cuando se implemente el motor
+   * del chat de voz. Hoy hace una búsqueda de texto simple (coincidencia de
+   * palabras) sobre la base de conocimiento, respetando la regla de
+   * visibilidad. El futuro motor de voz/IA debería llamar a esta función (o
+   * reemplazarla) para obtener el contexto/las respuestas permitidas antes
+   * de responderle a la persona.
+   *
+   * @param {string} textoConsulta - lo que la persona preguntó (transcrito de voz o texto)
+   * @param {boolean} haySesionActiva - true si quien pregunta tiene una sesión iniciada (Estudiante/Docente/Administración/Superadmin)
+   * @returns {Array<{pregunta:string, respuesta:string, categoria:string}>} coincidencias permitidas, más relevantes primero
+   */
+  function buscarEnBaseConocimientoChatVoz(textoConsulta, haySesionActiva) {
+    const texto = (textoConsulta || '').trim().toLowerCase();
+    if (!texto) return [];
+
+    const visibilidadesPermitidas = haySesionActiva
+      ? ['Pública', 'Solo usuarios con sesión']
+      : ['Pública']; // visitante sin sesión: NUNCA entradas "Solo usuarios con sesión"
+
+    const candidatos = Store.list('chat_voz_conocimiento')
+      .filter(r => r.estado === 'Activa' && visibilidadesPermitidas.includes(r.visibilidad));
+
+    const palabras = texto.split(/\s+/).filter(Boolean);
+    const puntuados = candidatos.map(r => {
+      const base = (r.pregunta + ' ' + (r.categoria || '')).toLowerCase();
+      const coincidencias = palabras.filter(p => base.includes(p)).length;
+      return { r, coincidencias };
+    }).filter(x => x.coincidencias > 0);
+
+    puntuados.sort((a, b) => b.coincidencias - a.coincidencias);
+    return puntuados.map(x => ({ pregunta: x.r.pregunta, respuesta: x.r.respuesta, categoria: x.r.categoria || '' }));
+  }
+
+  // async: 'usuarios' vía MySQL.
+  async function renderUsuarios() {
+    // Los Administradores (rol Coordinador) ya no aparecen aquí: tienen su
+    // propio apartado exclusivo del Superadmin (ver renderAdministradores()).
+    // Las solicitudes de autorregistro (estadoRegistro='Pendiente') tampoco
+    // aparecen en la tabla normal: se muestran arriba, en su propia sección,
+    // hasta que el Superadmin las aprueba o rechaza.
+    const todosUsuarios = await Store.list('usuarios');
+    const pendientes = todosUsuarios.filter(u => u.estadoRegistro === 'Pendiente');
+    const records = todosUsuarios.filter(u => u.rol !== 'Coordinador' && u.rol !== 'Administrador' && u.estadoRegistro !== 'Pendiente');
+
+    const filasPendientes = pendientes.map(u => `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(u.nombre)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.email)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.telefono || '—')}</td>
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          <button onclick="aprobarRegistroPendiente('${u.id}')" class="text-xs font-semibold text-turquesa hover:underline mr-3">Aprobar</button>
+          <button onclick="rechazarRegistroPendiente('${u.id}')" class="text-xs font-semibold text-coral hover:underline">Rechazar</button>
+        </td>
+      </tr>`).join('');
+
+    const seccionPendientes = pendientes.length ? `
+      <div class="admin-panel-card p-6 mb-6 border-l-4" style="border-left-color:#F5A623">
+        <h3 class="text-sm font-extrabold text-ink mb-1">Solicitudes de registro pendientes (${pendientes.length})</h3>
+        <p class="text-xs text-slate2 mb-4">Personas que se autorregistraron desde el sitio público y esperan aprobación. Al aprobar, se abre su ficha para asignarle un perfil.</p>
+        <div class="overflow-x-auto">
+          <table class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Nombre</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Teléfono</th><th class="py-2.5 px-4"></th>
+            </tr></thead>
+            <tbody>${filasPendientes}</tbody>
+          </table>
+        </div>
+      </div>` : '';
+
+    const resumenesMaterias = await Promise.all(records.map(u => u.rol === 'Docente' ? getDocenteResumenMaterias(u.nombre) : null));
+    const rows = records.map((u, i) => {
+      let cohorteCell = escapeHtml(u.cohorte || '—');
+      if (u.rol === 'Docente') {
+        const resumen = resumenesMaterias[i];
+        cohorteCell = resumen
+          ? `${resumen.count} materia${resumen.count === 1 ? '' : 's'} · ${resumen.totalHoras} h`
+          : '<span class="text-slate2">Sin materias asignadas</span>';
+      }
+      return `
+      <tr data-search="${escapeHtml((u.nombre + ' ' + u.email + ' ' + u.rol + ' ' + u.cohorte).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">
+          ${escapeHtml(u.nombre)}
+          ${u.fueEstudiante ? `<button onclick="abrirHistorialTrainee('${u.id}')" title="Fue estudiante — ver su historial" class="align-middle ml-1.5 text-[10px] font-bold uppercase tracking-wide text-morado bg-morado/10 hover:bg-morado/20 rounded-full px-2 py-0.5 transition">Fue estudiante</button>` : ''}
+        </td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.email)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.rol)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${cohorteCell}</td>
+        <td class="py-3 px-4">${statusPill(u.estado, ESTADO_COLORS)}</td>
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
+          <button onclick="askDelete('usuarios','${u.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('mount-usuarios').innerHTML = `
+      ${seccionPendientes}
+      <div class="admin-panel-card p-6">
+        ${sectionHeader('usuarios', 'Usuarios', records.length + ' cuentas registradas en la plataforma')}
+        <div class="overflow-x-auto">
+          <table id="table-usuarios" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Nombre</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Cohorte / Materias</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+            </tr></thead>
+            <tbody>${rows || emptyRow(6)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  // ---------- Notificación por correo del estado de autorregistro (EmailJS) ----------
+  // Todo el proyecto corre localmente (sin backend propio), así que el
+  // correo se envía directo desde el navegador con EmailJS (servicio
+  // gratuito pensado justo para esto: manda correos desde JS puro, sin
+  // servidor). Configuración necesaria una sola vez, más abajo en
+  // EMAILJS_CONFIG. Es "best-effort": si falla (sin configurar, sin
+  // internet, etc.) no bloquea aprobar/rechazar — solo avisa con un toast.
+  //
+  // Pasos para activarlo (una sola vez, gratis):
+  //   1. Crea una cuenta en https://www.emailjs.com/
+  //   2. "Email Services" → conecta tu Gmail/Outlook (o el que uses) →
+  //      copia el "Service ID".
+  //   3. "Email Templates" → crea una plantilla con estas variables:
+  //      {{to_email}} {{to_name}} {{subject}} {{message}}
+  //      → copia el "Template ID".
+  //   4. "Account" → "General" → copia tu "Public Key".
+  //   5. Reemplaza los 3 valores de EMAILJS_CONFIG abajo.
+  //   6. Agrega este script en index.html, ANTES de app.js:
+  //      <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  const EMAILJS_CONFIG = {
+    publicKey: 'elyshGVkR2fYZQJfO',
+    serviceId: 'service_20mxfgu',
+    templateId: 'template_qvmzl1l',
+  };
+
+  let emailjsInicializado = false;
+  function asegurarEmailJsInicializado() {
+    if (emailjsInicializado || typeof emailjs === 'undefined') return;
+    emailjs.init({ publicKey: EMAILJS_CONFIG.publicKey });
+    emailjsInicializado = true;
+  }
+
+  async function notificarEstadoRegistroPorCorreo(email, nombre, tipo) {
+    if (typeof emailjs === 'undefined') {
+      toast('La solicitud se procesó, pero falta cargar EmailJS en index.html para enviar el correo', 'err');
+      return;
+    }
+    if (EMAILJS_CONFIG.publicKey.startsWith('TU_')) {
+      toast('La solicitud se procesó, pero falta configurar EmailJS (ver EMAILJS_CONFIG en app.js)', 'err');
+      return;
+    }
+    asegurarEmailJsInicializado();
+
+    const nombreFundacion = 'Fundación A+';
+    const esAprobado = tipo === 'aprobado';
+    const subject = esAprobado
+      ? `Tu registro en ${nombreFundacion} fue aprobado`
+      : `Tu registro en ${nombreFundacion} no fue aprobado`;
+    const message = esAprobado
+      ? `Hola ${nombre},\n\nBuenas noticias: tu solicitud de registro en ${nombreFundacion} fue APROBADA.\nYa puedes iniciar sesión con el correo y la contraseña que creaste.\n\n— ${nombreFundacion}`
+      : `Hola ${nombre},\n\nTe escribimos para informarte que tu solicitud de registro en ${nombreFundacion} no fue aprobada en esta ocasión.\n\nSi crees que se trata de un error, contáctanos.\n\n— ${nombreFundacion}`;
+
+    try {
+      await emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, {
+        to_email: email,
+        to_name: nombre,
+        subject,
+        message,
+      });
+    } catch (err) {
+      toast('La solicitud se procesó, pero no se pudo enviar el correo de aviso a ' + email, 'err');
+    }
+  }
+
+  // Aprobar: quita el candado (estadoRegistro) y abre de inmediato el editor
+  // del usuario para que el Superadmin le asigne un perfil — sin perfil,
+  // aprobar no sirve de mucho (podría entrar pero no vería ningún panel).
+  // Aprobar: quita el candado (estadoRegistro) y abre de inmediato el editor
+  // del usuario para que el Superadmin le asigne un perfil — sin perfil,
+  // aprobar no sirve de mucho (podría entrar pero no vería ningún panel).
+  async function aprobarRegistroPendiente(id) {
+    const usuarios = await Store.list('usuarios');
+    const u = usuarios.find(x => x.id === id);
+    if (!u) return;
+    delete u.estadoRegistro;
+    await Store.set('usuarios', usuarios);
+    notificarEstadoRegistroPorCorreo(u.email, u.nombre, 'aprobado');
+    toast('Solicitud aprobada. Ahora asígnale un perfil.', 'ok');
+    await renderUsuarios();
+    await renderAdminBannerStats();
+    renderConstellation();
+    await openModal('usuarios', id);
+  }
+
+  async function rechazarRegistroPendiente(id) {
+    const usuarios = await Store.list('usuarios');
+    const u = usuarios.find(x => x.id === id);
+    await Store.set('usuarios', usuarios.filter(x => x.id !== id));
+    if (u) notificarEstadoRegistroPorCorreo(u.email, u.nombre, 'rechazado');
+    toast('Solicitud rechazada', 'ok');
+    await renderUsuarios();
+    await renderAdminBannerStats();
+  }
+
+  // ---------- PERFILES Y PERMISOS (exclusivo Superadmin) ----------
+  // async: 'perfiles' vía MySQL (Fase 4).
+  async function renderPerfiles() {
+    const perfiles = [...(await Store.list('perfiles'))].sort((a, b) => a.nombre.localeCompare(b.nombre));
+    const usuarios = await Store.list('usuarios');
+    const rows = perfiles.map(p => {
+      const enUso = usuarios.filter(u => (u.perfiles || []).includes(p.id)).length;
+      const totalPaneles = CATALOGO_PANELES.filter(pan => pan.categoria === p.categoria).length;
+      const conVer = Object.values(p.permisos || {}).filter(x => x.ver).length;
+      return `
+      <tr data-search="${escapeHtml((p.nombre + ' ' + p.categoria).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(p.nombre)} ${p.esSistema ? '<span class="text-[10px] font-bold uppercase tracking-wide text-slate2 bg-gray-100 rounded-full px-2 py-0.5 ml-1.5">Sistema</span>' : ''}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(p.categoria)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${conVer} / ${totalPaneles} paneles</td>
+        <td class="py-3 px-4 text-sm text-slate2">${enUso} usuario${enUso === 1 ? '' : 's'}</td>
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          <button onclick="abrirEditorPerfil('${p.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
+          ${p.esSistema ? '' : `<button onclick="askDelete('perfiles','${p.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>`}
+        </td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('mount-perfiles').innerHTML = `
+      <div class="admin-panel-card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-gray-100">
+          <div>
+            <h2 class="text-lg font-extrabold text-ink">Perfiles y permisos</h2>
+            <p class="text-sm text-slate2 mt-0.5">Cada perfil marca qué paneles puede Ver, Crear, Editar o Eliminar. Un usuario puede tener varios perfiles a la vez.</p>
+          </div>
+          <button onclick="abrirEditorPerfil()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-sm font-semibold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5 shadow-sm">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Nuevo perfil
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Nombre</th><th class="py-2.5 px-4">Categoría</th><th class="py-2.5 px-4">Acceso</th><th class="py-2.5 px-4">En uso</th><th class="py-2.5 px-4"></th>
+            </tr></thead>
+            <tbody>${rows || emptyRow(5)}</tbody>
+          </table>
+        </div>
+      </div>
+      <div id="perfilEditorWrap"></div>`;
+  }
+
+  let perfilEditorId = null; // null = creando uno nuevo
+
+  // async: 'perfiles' vía MySQL (Fase 4).
+  async function abrirEditorPerfil(id) {
+    perfilEditorId = id || null;
+    const perfil = id ? (await Store.list('perfiles')).find(p => p.id === id) : null;
+    const esNuevo = !perfil;
+    const categoria = perfil ? perfil.categoria : 'Administrativo';
+    const permisos = perfil ? perfil.permisos : {};
+
+    const filasPorCategoria = (cat) => CATALOGO_PANELES.filter(p => p.categoria === cat).map(p => {
+      const perm = permisos[p.codigo] || {};
+      return `
+        <tr class="border-b border-gray-50 last:border-0">
+          <td class="py-2 px-3 text-sm text-ink font-medium">${escapeHtml(p.etiqueta)}</td>
+          ${['ver', 'crear', 'editar', 'eliminar'].map(accion => `
+            <td class="py-2 px-3 text-center">
+              <input type="checkbox" data-panel-codigo="${p.codigo}" data-accion="${accion}"
+                class="perfil-permiso-checkbox w-4 h-4 rounded border-gray-300 text-morado focus:ring-morado/40"
+                ${perm[accion] ? 'checked' : ''} />
+            </td>`).join('')}
+        </tr>`;
+    }).join('');
+
+    document.getElementById('perfilEditorWrap').innerHTML = `
+      <div class="fixed inset-0 bg-ink/40 z-40 flex items-start sm:items-center justify-center p-4 overflow-y-auto" onclick="if(event.target===this) cerrarEditorPerfil()">
+        <div class="bg-white rounded-2xl shadow-softLg max-w-2xl w-full my-8">
+          <div class="p-6 border-b border-morado/10">
+            <p class="text-xs font-bold uppercase tracking-widest text-morado">${esNuevo ? 'Crear nuevo' : 'Editar'}</p>
+            <h3 class="text-lg font-extrabold text-ink mt-0.5">Perfil</h3>
+          </div>
+          <div class="p-6 space-y-4 max-h-[65vh] overflow-y-auto">
+            <div class="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label class="text-xs font-semibold text-slate2 block mb-1.5">Nombre del perfil</label>
+                <input id="perfil_nombre" type="text" value="${escapeHtml(perfil ? perfil.nombre : '')}" placeholder="Ej. Coordinador Académico"
+                  ${perfil && perfil.esSistema ? 'disabled' : ''}
+                  class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado disabled:bg-gray-50 disabled:text-slate2" />
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-slate2 block mb-1.5">Categoría</label>
+                <select id="perfil_categoria" onchange="abrirEditorPerfil_cambiarCategoria(this.value)"
+                  ${perfil && perfil.esSistema ? 'disabled' : ''}
+                  class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado disabled:bg-gray-50 disabled:text-slate2">
+                  ${['Administrativo', 'Docente', 'Estudiante'].map(c => `<option value="${c}" ${c === categoria ? 'selected' : ''}>${c}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate2 block mb-1.5">Descripción (opcional)</label>
+              <input id="perfil_descripcion" type="text" value="${escapeHtml(perfil ? (perfil.descripcion || '') : '')}" placeholder="Para qué sirve este perfil"
+                class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+            </div>
+            <div>
+              <p class="text-xs font-semibold text-slate2 mb-2">Permisos por panel — categoría ${escapeHtml(categoria)}</p>
+              <div class="overflow-x-auto border border-gray-100 rounded-xl">
+                <table id="perfilPermisosTabla" class="w-full">
+                  <thead><tr class="text-left text-[11px] font-bold uppercase tracking-wide text-slate2 bg-gray-50 border-b border-gray-100">
+                    <th class="py-2 px-3">Panel</th><th class="py-2 px-3 text-center">Ver</th><th class="py-2 px-3 text-center">Crear</th><th class="py-2 px-3 text-center">Editar</th><th class="py-2 px-3 text-center">Eliminar</th>
+                  </tr></thead>
+                  <tbody id="perfilPermisosFilas">${filasPorCategoria(categoria)}</tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="p-6 border-t border-morado/10 flex items-center justify-end gap-3">
+            <button onclick="cerrarEditorPerfil()" class="rounded-full border border-morado/25 text-slate2 hover:bg-morado/5 text-sm font-semibold px-4 py-2.5 transition">Cancelar</button>
+            <button onclick="withBotonCargando(this, guardarPerfil)" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-2.5 px-6 hover:opacity-90 transition">Guardar perfil</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Al cambiar la categoría de un perfil NUEVO, se recalculan las filas de
+  // permisos para esa categoría (los checkboxes marcados se pierden, porque
+  // son paneles distintos). No aplica a perfiles ya guardados (esSistema o
+  // no) porque el <select> queda deshabilitado para perfiles de sistema, y
+  // cambiar la categoría de un perfil ya en uso sería confuso — si hace
+  // falta, se crea un perfil nuevo.
+  function abrirEditorPerfil_cambiarCategoria(categoria) {
+    document.getElementById('perfilPermisosFilas').innerHTML = CATALOGO_PANELES.filter(p => p.categoria === categoria).map(p => `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-2 px-3 text-sm text-ink font-medium">${escapeHtml(p.etiqueta)}</td>
+        ${['ver', 'crear', 'editar', 'eliminar'].map(accion => `
+          <td class="py-2 px-3 text-center">
+            <input type="checkbox" data-panel-codigo="${p.codigo}" data-accion="${accion}" class="perfil-permiso-checkbox w-4 h-4 rounded border-gray-300 text-morado focus:ring-morado/40" />
+          </td>`).join('')}
+      </tr>`).join('');
+  }
+
+  function cerrarEditorPerfil() {
+    perfilEditorId = null;
+    const wrap = document.getElementById('perfilEditorWrap');
+    if (wrap) wrap.innerHTML = '';
+  }
+
+  async function guardarPerfil() {
+    const nombre = document.getElementById('perfil_nombre').value.trim();
+    const categoria = document.getElementById('perfil_categoria').value;
+    const descripcion = document.getElementById('perfil_descripcion').value.trim();
+    if (!nombre) { toast('Ponle un nombre al perfil', 'err'); return; }
+
+    // async: 'perfiles' vía MySQL (Fase 4).
+    const perfiles = await Store.list('perfiles');
+    const duplicado = perfiles.find(p => p.nombre.toLowerCase() === nombre.toLowerCase() && p.id !== perfilEditorId);
+    if (duplicado) { toast('Ya existe un perfil con ese nombre', 'err'); return; }
+
+    const permisos = {};
+    document.querySelectorAll('#perfilPermisosFilas .perfil-permiso-checkbox').forEach(chk => {
+      const codigo = chk.dataset.panelCodigo;
+      const accion = chk.dataset.accion;
+      if (!permisos[codigo]) permisos[codigo] = { ver: false, crear: false, editar: false, eliminar: false };
+      permisos[codigo][accion] = chk.checked;
+      // "Crear/Editar/Eliminar" sin "Ver" no tiene sentido en esta interfaz
+      // (todos los renders filtran primero por "ver"): si se marca alguna
+      // acción, se activa "ver" automáticamente para que el permiso sea usable.
+      if (chk.checked && accion !== 'ver') permisos[codigo].ver = true;
+    });
+
+    let perfil = perfilEditorId ? perfiles.find(p => p.id === perfilEditorId) : null;
+    if (perfil) {
+      perfil.nombre = nombre;
+      perfil.descripcion = descripcion;
+      perfil.permisos = permisos;
+      // categoria y esSistema no se tocan al editar uno existente.
+    } else {
+      perfiles.push({ id: uid('perf'), nombre, categoria, descripcion, esSistema: false, permisos });
+    }
+    await Store.set('perfiles', perfiles);
+    cerrarEditorPerfil();
+    renderPerfiles();
+    toast('Perfil guardado', 'ok');
+  }
+
+  // ---------- ADMINISTRADORES (apartado exclusivo del Superadmin) ----------
+  // A diferencia de "Usuarios" (Estudiantes/Docentes), este apartado solo
+  // existe para que el Superadmin cree, edite o elimine cuentas con rol
+  // "Coordinador" (mostradas aquí como "Administrador"). Reutiliza el mismo
+  // modal/CRUD de 'usuarios', pero con el rol fijo en 'Coordinador' y sin
+  // mostrar los campos de rol/cohorte (openModal('usuarios', id, 'Coordinador')).
+  // async: 'usuarios' vía MySQL.
+  async function renderAdministradores() {
+    const records = (await Store.list('usuarios')).filter(u => u.rol === 'Coordinador' || u.rol === 'Administrador');
+    const rows = records.map(u => `
+      <tr data-search="${escapeHtml((u.nombre + ' ' + u.email).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(u.nombre)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.email)}</td>
+        <td class="py-3 px-4">${statusPill(u.estado, ESTADO_COLORS)}</td>
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          <button onclick="openModal('usuarios','${u.id}','Coordinador')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
+          <button onclick="askDelete('usuarios','${u.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
+        </td>
+      </tr>`).join('');
+
+    document.getElementById('mount-administradores').innerHTML = `
+      <div class="admin-panel-card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-gray-100">
+          <div>
+            <h2 class="text-lg font-extrabold text-ink">Administradores</h2>
+            <p class="text-sm text-slate2 mt-0.5">${records.length} administrador${records.length === 1 ? '' : 'es'} con acceso al panel de Administración.</p>
+          </div>
+          <button onclick="openModal('usuarios', null, 'Coordinador')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-sm font-semibold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5 whitespace-nowrap shadow-sm">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Nuevo administrador
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table id="table-administradores" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Nombre</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+            </tr></thead>
+            <tbody>${rows || emptyRow(4)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  // ---------- HORARIO (antes "Módulos y cohortes") ----------
+  // Estado en memoria de la grilla que se está armando/editando.
+  let horarioState = { cohorte: null, mes: null, incluyeSabado: false };
+
+  // async: contarInscritos(), docentesDeCohorte() y 'modulos' vía MySQL.
+  async function renderModulos() {
+    const cohortes = await Store.list('modulos');
+    const inscritosPorCohorte = await Promise.all(cohortes.map(m => contarInscritos(m.nombre)));
+    const docentesPorCohorte = await Promise.all(cohortes.map(m => docentesDeCohorte(m.nombre)));
+
+    const rows = cohortes.map((m, i) => {
+      const inscritos = inscritosPorCohorte[i];
+      const docentes = docentesPorCohorte[i];
+      const pct = m.cupos ? Math.min(100, Math.round((inscritos / m.cupos) * 100)) : 0;
+      const llena = m.cupos && inscritos >= m.cupos;
+      return `
+      <tr data-search="${escapeHtml((m.nombre + ' ' + m.modulo + ' ' + docentes.join(' ')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(m.nombre)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${fmtDate(m.fechaInicio)} – ${fmtDate(m.fechaFin)}</td>
+        <td class="py-3 px-4 text-sm text-slate2 min-w-[110px]">
+          <div class="flex items-center gap-2">
+            <div class="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden"><div class="h-full ${llena ? 'bg-coral' : 'bg-morado'}" style="width:${pct}%"></div></div>
+            <span class="text-xs shrink-0">${inscritos}/${m.cupos}</span>
+          </div>
+        </td>
+        <td class="py-3 px-4">${statusPill(m.estado, ESTADO_COLORS)}</td>
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          <button onclick="openModal('modulos','${m.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
+          <button onclick="askDelete('modulos','${m.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('mount-modulos').innerHTML = `
+      <div class="admin-panel-card p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-gray-100">
+          <div>
+            <h2 class="text-lg font-extrabold text-ink">Horario</h2>
+            <p class="text-sm text-slate2 mt-0.5">Elige una cohorte y un mes: la grilla aparece automáticamente para asignar materia y docente en cada franja.</p>
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="horarioCohorteSelect">Cohorte</label>
+            <select id="horarioCohorteSelect" onchange="onCambiaHorarioCohorte()" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+              <option value="">Selecciona una cohorte...</option>
+              ${cohortes.map(c => `<option value="${escapeHtml(c.nombre)}" ${horarioState.cohorte === c.nombre ? 'selected' : ''}>${escapeHtml(c.nombre)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="horarioMesSelect">Mes</label>
+            <select id="horarioMesSelect" onchange="onCambiaHorarioMes()" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" ${horarioState.cohorte ? '' : 'disabled'}>
+              <option value="">Selecciona un mes...</option>
+            </select>
+          </div>
+          <div class="flex items-end pb-1">
+            <label class="inline-flex items-center gap-2 text-sm text-slate2 select-none">
+              <input id="horarioSabadoCheck" type="checkbox" onchange="onToggleHorarioSabado()" class="w-4 h-4 rounded border-gray-300 text-morado focus:ring-morado/30" ${horarioState.incluyeSabado ? 'checked' : ''} />
+              Incluir sábado <span class="text-slate2/70">(opcional)</span>
+            </label>
+          </div>
+        </div>
+        <div id="horarioGridWrap" class="mt-5"></div>
+      </div>
+
+      <div class="admin-panel-card p-6">
+        ${sectionHeader('modulos', 'Cohortes registradas', cohortes.length + ' cohortes del Training de 100 a 1000+')}
+        <div class="overflow-x-auto">
+          <table id="table-modulos" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Fechas</th><th class="py-2.5 px-4">Cupos</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+            </tr></thead>
+            <tbody>${rows || emptyRow(6)}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    poblarMesesHorario();
+    renderHorarioGrid();
+  }
+
+  // async: 'modulos' vía MySQL.
+  async function poblarMesesHorario() {
+    const mesSelect = document.getElementById('horarioMesSelect');
+    if (!mesSelect) return;
+    if (!horarioState.cohorte) {
+      mesSelect.innerHTML = '<option value="">Selecciona un mes...</option>';
+      mesSelect.disabled = true;
+      return;
+    }
+    const cohorte = (await Store.list('modulos')).find(c => c.nombre === horarioState.cohorte);
+    const opciones = generarOpcionesMes(cohorte);
+    mesSelect.disabled = false;
+    mesSelect.innerHTML = '<option value="">Selecciona un mes...</option>' +
+      opciones.map(o => `<option value="${o.value}" ${horarioState.mes === o.value ? 'selected' : ''}>${o.label}</option>`).join('');
+  }
+
+  function onCambiaHorarioCohorte() {
+    const sel = document.getElementById('horarioCohorteSelect');
+    horarioState.cohorte = sel.value || null;
+    horarioState.mes = null;
+    horarioState.incluyeSabado = false;
+    poblarMesesHorario();
+    renderHorarioGrid();
+  }
+
+  // async: getHorario ahora es async.
+  async function onCambiaHorarioMes() {
+    const sel = document.getElementById('horarioMesSelect');
+    horarioState.mes = sel.value || null;
+    const existente = (horarioState.cohorte && horarioState.mes) ? await getHorario(horarioState.cohorte, horarioState.mes) : null;
+    horarioState.incluyeSabado = existente ? !!existente.incluyeSabado : false;
+    const chk = document.getElementById('horarioSabadoCheck');
+    if (chk) chk.checked = horarioState.incluyeSabado;
+    renderHorarioGrid();
+  }
+
+  function onToggleHorarioSabado() {
+    const chk = document.getElementById('horarioSabadoCheck');
+    horarioState.incluyeSabado = chk.checked;
+    renderHorarioGrid();
+  }
+
+  // Color de acento por estado, para la barra lateral de cada tarjeta de franja.
+  const FRANJA_ESTADO_COLOR = { Activo: '#1FC8C0', Inactivo: '#5B6472' };
+
+  // async: getHorario ahora es async.
+  async function renderHorarioGrid() {
+    const wrap = document.getElementById('horarioGridWrap');
+    if (!wrap) return;
+    if (!horarioState.cohorte || !horarioState.mes) {
+      wrap.innerHTML = `<p class="text-sm text-slate2 text-center py-10 border border-dashed border-gray-200 rounded-2xl">Selecciona una cohorte y un mes para gestionar su horario.</p>`;
+      return;
+    }
+    const existente = await getHorario(horarioState.cohorte, horarioState.mes);
+    const franjas = existente && existente.franjas ? existente.franjas : [];
+    const dias = horarioState.incluyeSabado ? DIAS_HORARIO : DIAS_HORARIO.slice(0, 5);
+    const totalHorasActivas = franjasActivas(existente).reduce((acc, f) => acc + horasFranja(f), 0);
+
+    // Vista tipo agenda: una columna por día, franjas ordenadas por hora de
+    // inicio dentro de cada columna, como tarjetas compactas — mejor uso
+    // del espacio que una tabla con muchas celdas vacías (la mayoría de
+    // franjas no cubren todo el día ni todos los días).
+    const columnas = dias.map(dia => {
+      const franjasDelDia = franjas
+        .filter(f => f.dia === dia)
+        .sort((a, b) => a.inicio.localeCompare(b.inicio));
+
+      const tarjetas = franjasDelDia.map(f => {
+        const color = FRANJA_ESTADO_COLOR[f.estado] || FRANJA_ESTADO_COLOR.Activo;
+        const inactiva = f.estado === 'Inactivo';
+        return `
+          <div class="horario-franja-card rounded-xl border border-gray-100 p-3 mb-2 ${inactiva ? 'opacity-55' : ''}" style="border-left:3px solid ${color}">
+            <div class="flex items-start justify-between gap-2">
+              <p class="text-xs font-bold text-ink leading-snug">${escapeHtml(f.curso || '(sin curso)')}</p>
+              <button onclick="eliminarFranjaHorario('${f.id}')" title="Eliminar franja" class="text-slate2 hover:text-coral transition shrink-0 -mt-0.5 -mr-0.5">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <p class="text-[11px] text-slate2 mt-1">${f.inicio}–${f.fin} · ${horasFranja(f)} h</p>
+            <p class="text-[11px] text-slate2 mt-0.5">${f.docente ? escapeHtml(f.docente) : '<span class="italic">Sin trainer asignado</span>'}</p>
+            <button onclick="toggleEstadoFranjaHorario('${f.id}')" class="text-[10px] font-bold uppercase tracking-wide mt-2 inline-block px-2 py-0.5 rounded-full" style="background:${color}1A;color:${color}">${f.estado || 'Activo'}</button>
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="horario-dia-col">
+          <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2 px-0.5">${dia}</p>
+          ${tarjetas || '<p class="text-[11px] text-slate2/60 italic px-0.5">Sin franjas</p>'}
+        </div>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <p class="text-xs text-slate2">${franjasActivas(existente).length} franja${franjasActivas(existente).length === 1 ? '' : 's'} activa${franjasActivas(existente).length === 1 ? '' : 's'} · <span class="font-semibold text-ink">${totalHorasActivas} h</span> por semana</p>
+        <div class="flex items-center gap-2">
+          <button onclick="descargarPlantillaCSVHorario()" title="Descargar plantilla CSV" class="rounded-full border border-morado/25 text-slate2 hover:bg-morado/5 text-xs font-semibold px-3.5 py-2 transition flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+            Descargar plantilla
+          </button>
+          <button onclick="document.getElementById('horarioCsvInput').click()" title="Subir CSV de franjas" class="rounded-full border border-morado/25 text-slate2 hover:bg-morado/5 text-xs font-semibold px-3.5 py-2 transition flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21V9m0 0l-4 4m4-4l4 4M4 7V5a2 2 0 012-2h12a2 2 0 012 2v2"/></svg>
+            Subir CSV
+          </button>
+          <input id="horarioCsvInput" type="file" accept=".csv,text/csv" class="hidden" onchange="onSeleccionaCSVHorario(event)" />
+          <button onclick="abrirFormFranjaHorario()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-semibold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Añadir franja
+          </button>
+        </div>
+      </div>
+      <div id="horarioFormFranjaWrap" class="mb-4"></div>
+      <div id="horarioCsvResultWrap" class="mb-4"></div>
+      <div class="grid gap-3" style="grid-template-columns:repeat(${dias.length}, minmax(150px, 1fr))">
+        ${columnas}
+      </div>`;
+  }
+
+  // Formulario inline para añadir una franja nueva — horas totalmente
+  // libres (el Superadmin escribe cualquier inicio/fin), Curso tomado del
+  // catálogo real de Store('cursos'), Trainer tomado de los Docentes reales.
+  // async: 'usuarios' y 'cursos' vía MySQL.
+  async function abrirFormFranjaHorario() {
+    const dias = horarioState.incluyeSabado ? DIAS_HORARIO : DIAS_HORARIO.slice(0, 5);
+    const cursos = (await Store.list('cursos')).filter(c => c.estado === 'Activo');
+    const docentes = (await Store.list('usuarios')).filter(u => u.rol === 'Docente');
+    document.getElementById('horarioFormFranjaWrap').innerHTML = `
+      <div class="rounded-xl border border-gray-200 p-4 bg-gray-50/60">
+        <div class="grid sm:grid-cols-5 gap-2.5">
+          <select id="ff_dia" class="rounded-lg border border-morado/25 bg-morado/5 px-2.5 py-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+            ${dias.map(d => `<option value="${d}">${d}</option>`).join('')}
+          </select>
+          <select id="ff_curso" class="rounded-lg border border-morado/25 bg-morado/5 px-2.5 py-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+            <option value="">Curso...</option>
+            ${cursos.map(c => `<option value="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</option>`).join('')}
+            ${!cursos.length ? '' : ''}
+          </select>
+          <select id="ff_docente" class="rounded-lg border border-morado/25 bg-morado/5 px-2.5 py-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+            <option value="">— Sin asignar —</option>
+            ${docentes.map(d => `<option value="${escapeHtml(d.nombre)}">${escapeHtml(d.nombre)}</option>`).join('')}
+          </select>
+          <input id="ff_inicio" type="time" value="08:00" class="rounded-lg border border-morado/25 bg-morado/5 px-2.5 py-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          <input id="ff_fin" type="time" value="10:00" class="rounded-lg border border-morado/25 bg-morado/5 px-2.5 py-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+        </div>
+        ${!cursos.length ? '<p class="text-[11px] text-coral mt-2">No hay cursos activos en el catálogo — ve al panel "Cursos" para crear uno primero.</p>' : ''}
+        <div class="flex justify-end gap-2 mt-3">
+          <button onclick="document.getElementById('horarioFormFranjaWrap').innerHTML=''" class="rounded-full border border-morado/25 text-slate2 hover:bg-morado/5 text-xs font-semibold px-3 py-2 transition">Cancelar</button>
+          <button onclick="guardarNuevaFranjaHorario()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-semibold px-4 py-2 hover:opacity-90 transition">Guardar franja</button>
+        </div>
+      </div>`;
+  }
+
+  // Dos franjas de horario se solapan si una empieza antes de que la otra
+  // termine y termina después de que la otra empiece (comparación de
+  // rangos real, no coincidencia exacta de hora de inicio) — así se
+  // detecta también el caso "ya tiene clase 08:00–12:00, no puede
+  // agregarse otra 10:00–14:00" o "01:00pm–05:00pm" que sí se solapa con
+  // un fin de jornada distinto.
+  function franjasSeSolapan(inicioA, finA, inicioB, finB) {
+    const a1 = minutosDesdeHora(inicioA), a2 = minutosDesdeHora(finA);
+    const b1 = minutosDesdeHora(inicioB), b2 = minutosDesdeHora(finB);
+    return a1 < b2 && b1 < a2;
+  }
+
+  // async: 'horarios' vía MySQL.
+  async function guardarNuevaFranjaHorario() {
+    if (!horarioState.cohorte || !horarioState.mes) { toast('Selecciona una cohorte y un mes primero', 'err'); return; }
+    const dia = document.getElementById('ff_dia').value;
+    const curso = document.getElementById('ff_curso').value;
+    const docente = document.getElementById('ff_docente').value;
+    const inicio = document.getElementById('ff_inicio').value;
+    const fin = document.getElementById('ff_fin').value;
+
+    if (!curso) { toast('Selecciona un curso', 'err'); return; }
+    if (!inicio || !fin) { toast('Completa hora de inicio y fin', 'err'); return; }
+    if (minutosDesdeHora(fin) <= minutosDesdeHora(inicio)) { toast('La hora de fin debe ser después de la hora de inicio', 'err'); return; }
+
+    const registros = await Store.list('horarios');
+
+    // ── Validación: el docente ya tiene una franja que se SOLAPA en ese
+    //    día dentro del mismo mes (mes = "YYYY-MM" o etiqueta que identifica
+    //    el período). Se compara: mismo docente (si se eligió uno) + mismo
+    //    día + rango de horas que se cruza, en CUALQUIER horario que
+    //    comparta el mismo mes, sin importar la cohorte, porque un docente
+    //    es una persona, no un recurso de una sola cohorte.
+    if (docente) {
+      const conflicto = registros
+        .filter(h => h.mes === horarioState.mes)           // mismo mes/año
+        .flatMap(h => (h.franjas || []))
+        .filter(f => f.estado !== 'Inactivo')              // solo activas
+        .find(f =>
+          f.docente === docente &&
+          f.dia     === dia &&
+          franjasSeSolapan(inicio, fin, f.inicio, f.fin)   // rango de horas se cruza
+        );
+      if (conflicto) {
+        toast(`${docente} ya tiene una clase el ${dia} de ${conflicto.inicio} a ${conflicto.fin} en este mes, y se cruza con ese horario. Elige otro horario o día.`, 'err');
+        return;
+      }
+    }
+
+    let idx = registros.findIndex(h => h.cohorte === horarioState.cohorte && h.mes === horarioState.mes);
+    if (idx === -1) {
+      registros.push({ id: uid('ho'), cohorte: horarioState.cohorte, mes: horarioState.mes, incluyeSabado: horarioState.incluyeSabado, franjas: [] });
+      idx = registros.length - 1;
+    }
+    const nuevaFranja = { id: uid('fr'), dia, curso, docente, inicio, fin, estado: 'Activo' };
+    registros[idx].franjas = registros[idx].franjas || [];
+    registros[idx].franjas.push(nuevaFranja);
+    registros[idx].incluyeSabado = horarioState.incluyeSabado;
+    await Store.save('horarios', registros);
+
+    await registrarAuditoriaHorario(horarioState.cohorte, horarioState.mes, franjaLabel(nuevaFranja), 'Franja creada', '', curso + (docente ? ' · ' + docente : ''));
+
+    toast('Franja añadida al horario', 'ok');
+    document.getElementById('horarioFormFranjaWrap').innerHTML = '';
+    renderHorarioGrid();
+    // Solo si el panel Usuarios es el que se está viendo ahora mismo:
+    // refresca la columna "materias · horas" de los docentes, que se
+    // calcula a partir del Horario. Si el admin está en otro panel (lo
+    // más común al editar el Horario), no tiene sentido gastar esa
+    // consulta extra en una tabla que ni siquiera se está mostrando.
+    if (panelActivoAdmin === 'usuarios' && RENDERERS['usuarios']) RENDERERS['usuarios']();
+  }
+
+  // Estado Activo/Inactivo en vez de eliminar: una franja Inactiva deja de
+  // contar para la carga del docente, la vista del estudiante, etc. (ver
+  // franjasActivas()), pero queda en el historial de ese horario.
+  // async: 'horarios' vía MySQL.
+  async function toggleEstadoFranjaHorario(franjaId) {
+    const registros = await Store.list('horarios');
+    const horario = registros.find(h => h.cohorte === horarioState.cohorte && h.mes === horarioState.mes);
+    if (!horario) return;
+    const franja = (horario.franjas || []).find(f => f.id === franjaId);
+    if (!franja) return;
+    const estadoAnterior = franja.estado || 'Activo';
+    franja.estado = estadoAnterior === 'Activo' ? 'Inactivo' : 'Activo';
+    await Store.save('horarios', registros);
+    await registrarAuditoriaHorario(horarioState.cohorte, horarioState.mes, franjaLabel(franja), 'Estado', estadoAnterior, franja.estado);
+    renderHorarioGrid();
+    // Solo si el panel Usuarios es el que se está viendo ahora mismo:
+    // refresca la columna "materias · horas" de los docentes, que se
+    // calcula a partir del Horario. Si el admin está en otro panel (lo
+    // más común al editar el Horario), no tiene sentido gastar esa
+    // consulta extra en una tabla que ni siquiera se está mostrando.
+    if (panelActivoAdmin === 'usuarios' && RENDERERS['usuarios']) RENDERERS['usuarios']();
+  }
+
+  // async: 'horarios' vía MySQL.
+  async function eliminarFranjaHorario(franjaId) {
+    const registros = await Store.list('horarios');
+    const horario = registros.find(h => h.cohorte === horarioState.cohorte && h.mes === horarioState.mes);
+    if (!horario) return;
+    const franja = (horario.franjas || []).find(f => f.id === franjaId);
+    horario.franjas = (horario.franjas || []).filter(f => f.id !== franjaId);
+    await Store.save('horarios', registros);
+    if (franja) await registrarAuditoriaHorario(horarioState.cohorte, horarioState.mes, franjaLabel(franja), 'Franja eliminada', franja.curso, '');
+    toast('Franja eliminada', 'ok');
+    renderHorarioGrid();
+    // Solo si el panel Usuarios es el que se está viendo ahora mismo:
+    // refresca la columna "materias · horas" de los docentes, que se
+    // calcula a partir del Horario. Si el admin está en otro panel (lo
+    // más común al editar el Horario), no tiene sentido gastar esa
+    // consulta extra en una tabla que ni siquiera se está mostrando.
+    if (panelActivoAdmin === 'usuarios' && RENDERERS['usuarios']) RENDERERS['usuarios']();
+  }
+
+  // ---------- HORARIO: carga masiva de franjas por CSV ----------
+  // Complementa el alta manual (abrirFormFranjaHorario/guardarNuevaFranjaHorario):
+  // sube varias franjas a la vez para la Cohorte/Mes ya seleccionados arriba.
+  // Validación todo-o-nada: si cualquier fila falla, no se guarda ninguna —
+  // se listan todos los errores encontrados para que el usuario corrija el
+  // archivo y lo vuelva a subir.
+  //
+  // Separador ";" (no ","): Excel en español interpreta "," como separador
+  // decimal, así que un CSV separado por comas abierto con doble clic cae
+  // todo en la columna A. ";" es el separador que Excel en configuración
+  // regional español espera por defecto, y así cada dato cae en su propia
+  // columna al abrirlo directamente.
+  const HORARIO_CSV_HEADERS = ['dia', 'curso', 'docente', 'inicio', 'fin'];
+  const HORARIO_CSV_SEP = ';';
+
+  // Excel auto-formatea columnas que "parecen hora" a su propio formato
+  // regional al escribir en ellas (ej. "13:00" se convierte en
+  // "1:00:00 p. m." al guardar como CSV). Esta función acepta esos
+  // formatos además del HH:MM esperado, y siempre devuelve HH:MM de 24h —
+  // así el resto de la validación no tiene que conocer estos casos.
+  // Formatos aceptados: "13:00", "8:00", "1:00:00 p.m.", "1:00 pm",
+  // "13:00:00", "08:00 a. m.".
+  function normalizarHoraCSV(valor) {
+    if (!valor) return null;
+    const v = valor.trim().toLowerCase()
+      .replace(/\./g, '')      // "p.m." / "a. m." -> "pm" / "a m"
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // HH:MM o HH:MM:SS en 24h (ya en el formato esperado, o con segundos).
+    let m = v.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (m && !/[ap] ?m$/.test(v)) {
+      const h = parseInt(m[1], 10), min = parseInt(m[2], 10);
+      if (h <= 23 && min <= 59) return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+      return null;
+    }
+
+    // HH:MM[:SS] am/pm (formato de 12h que Excel genera para "hora").
+    m = v.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm|a m|p m)$/);
+    if (m) {
+      let h = parseInt(m[1], 10);
+      const min = parseInt(m[2], 10);
+      const esPM = m[3].startsWith('p');
+      if (h < 1 || h > 12 || min > 59) return null;
+      if (h === 12) h = 0;
+      if (esPM) h += 12;
+      return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+    }
+
+    return null; // formato irreconocible
+  }
+
+
+  function descargarPlantillaCSVHorario() {
+    const dias = horarioState.incluyeSabado ? DIAS_HORARIO : DIAS_HORARIO.slice(0, 5);
+    const filas = [
+      HORARIO_CSV_HEADERS,
+      ['Lunes', 'Nombre exacto del curso', 'Nombre exacto del docente', '08:00', '10:00'],
+      ['Martes', 'Nombre exacto del curso', '', '10:00', '12:00'],
+    ];
+    const rows = filas.map(fila => fila.map(v => `"${v}"`).join(HORARIO_CSV_SEP));
+    const comentario = `"# Dias validos: ${dias.join(', ')}. Formato de hora: HH:MM (24h). El curso debe existir tal cual en el panel Cursos. El docente es opcional, dejalo vacio si no aplica."`;
+    // BOM UTF-8 al inicio: sin esto, Excel abre el archivo asumiendo otra
+    // codificación y las tildes/eñes se ven como caracteres corruptos.
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + rows.join('\n') + '\n' + comentario], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'plantilla_horario.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast('Plantilla CSV descargada', 'ok');
+  }
+
+  // Parser CSV: soporta "," y ";" como separador (Excel en español exporta
+  // con ";"; muchas otras herramientas usan ","), y comillas dobles
+  // alrededor de campos. Ignora líneas vacías y líneas que empiezan con
+  // "#" (comentarios, como la que agrega descargarPlantillaCSVHorario al
+  // final del archivo). Detecta el separador real mirando la línea de
+  // encabezado, para no mezclar ambos dentro del mismo archivo.
+  function parsearFilasCSV(texto) {
+    const limpio = texto.replace(/^\uFEFF/, ''); // quita el BOM si viene de nuestra propia plantilla
+    const lineas = limpio.split(/\r\n|\n|\r/).filter(l => l.trim() !== '' && !l.trim().startsWith('#'));
+    if (!lineas.length) return [];
+    const primeraLinea = lineas[0];
+    const sep = (primeraLinea.match(/;/g) || []).length >= (primeraLinea.match(/,/g) || []).length ? ';' : ',';
+    return lineas.map(linea => {
+      const campos = [];
+      let actual = '', dentroComillas = false;
+      for (let i = 0; i < linea.length; i++) {
+        const ch = linea[i];
+        if (ch === '"') { dentroComillas = !dentroComillas; }
+        else if (ch === sep && !dentroComillas) { campos.push(actual); actual = ''; }
+        else { actual += ch; }
+      }
+      campos.push(actual);
+      return campos.map(c => c.trim());
+    });
+  }
+
+  function onSeleccionaCSVHorario(evt) {
+    const input = evt.target;
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    if (!horarioState.cohorte || !horarioState.mes) {
+      toast('Selecciona una cohorte y un mes antes de subir el CSV', 'err');
+      input.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      procesarCSVHorario(String(reader.result || ''));
+      input.value = ''; // permite volver a subir el mismo archivo si se corrige y reintenta
+    };
+    reader.onerror = () => {
+      toast('No se pudo leer el archivo', 'err');
+      input.value = '';
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  // async: 'usuarios' vía MySQL.
+  async function procesarCSVHorario(textoCSV) {
+    const resultWrap = document.getElementById('horarioCsvResultWrap');
+    const filas = parsearFilasCSV(textoCSV);
+    if (!filas.length) {
+      mostrarErroresCSVHorario(['El archivo está vacío.']);
+      return;
+    }
+
+    // La primera fila debe ser el encabezado esperado (permite validar que
+    // no suban un CSV de otro panel por error).
+    const encabezado = filas[0].map(h => h.toLowerCase());
+    const encabezadoValido = HORARIO_CSV_HEADERS.every((h, i) => encabezado[i] === h);
+    if (!encabezadoValido) {
+      mostrarErroresCSVHorario([`El encabezado debe ser exactamente: ${HORARIO_CSV_HEADERS.join(', ')}`]);
+      return;
+    }
+
+    const filasDatos = filas.slice(1);
+    if (!filasDatos.length) {
+      mostrarErroresCSVHorario(['El archivo no tiene filas de datos, solo el encabezado.']);
+      return;
+    }
+
+    const dias = horarioState.incluyeSabado ? DIAS_HORARIO : DIAS_HORARIO.slice(0, 5);
+    const cursosValidos = (await Store.list('cursos')).filter(c => c.estado === 'Activo').map(c => c.nombre);
+    const docentesValidos = (await Store.list('usuarios')).filter(u => u.rol === 'Docente').map(u => u.nombre);
+    const registros = await Store.list('horarios');
+    const horarioExistente = registros.find(h => h.cohorte === horarioState.cohorte && h.mes === horarioState.mes);
+    const franjasExistentesActivas = horarioExistente ? franjasActivas(horarioExistente) : [];
+
+    // Conflictos de docente en TODO el mes (misma regla que el alta manual:
+    // cualquier cohorte, no solo la seleccionada): se comparan por
+    // solapamiento real de rango de horas, no por coincidencia exacta de
+    // hora de inicio — así se detecta también un cruce como "ya tiene
+    // 08:00–12:00, esta fila trae 10:00–14:00" o "01:00pm–05:00pm".
+    const franjasOcupadasDocenteMes = registros
+      .filter(h => h.mes === horarioState.mes)
+      .flatMap(h => (h.franjas || []))
+      .filter(f => f.estado !== 'Inactivo' && f.docente);
+
+    const errores = [];
+    const franjasNuevas = [];
+    // Copia mutable: cada franja nueva del CSV que pasa validación se suma
+    // aquí también, para detectar conflictos ENTRE filas del propio archivo.
+    const franjasParaChequear = franjasOcupadasDocenteMes.slice();
+
+    filasDatos.forEach((campos, idx) => {
+      const numFila = idx + 2; // +1 por encabezado, +1 porque las filas se cuentan desde 1
+      const [dia, curso, docente, inicio, fin] = campos;
+
+      if (!dia || !curso || !inicio || !fin) {
+        errores.push(`Fila ${numFila}: faltan datos obligatorios (día, curso, inicio y fin son requeridos).`);
+        return;
+      }
+      if (!dias.includes(dia)) {
+        errores.push(`Fila ${numFila}: "${dia}" no es un día válido para este horario (${dias.join(', ')}).`);
+        return;
+      }
+      if (!cursosValidos.includes(curso)) {
+        errores.push(`Fila ${numFila}: el curso "${curso}" no existe en el catálogo de cursos activos.`);
+        return;
+      }
+      if (docente && !docentesValidos.includes(docente)) {
+        errores.push(`Fila ${numFila}: el docente "${docente}" no existe o no tiene rol Docente.`);
+        return;
+      }
+      const inicioNorm = normalizarHoraCSV(inicio);
+      const finNorm = normalizarHoraCSV(fin);
+      if (!inicioNorm || !finNorm) {
+        errores.push(`Fila ${numFila}: formato de hora inválido (usa HH:MM, ej. 13:00), inicio="${inicio}" fin="${fin}".`);
+        return;
+      }
+      if (minutosDesdeHora(finNorm) <= minutosDesdeHora(inicioNorm)) {
+        errores.push(`Fila ${numFila}: la hora de fin (${finNorm}) debe ser después de la hora de inicio (${inicioNorm}).`);
+        return;
+      }
+      if (docente) {
+        const conflicto = franjasParaChequear.find(f =>
+          f.docente === docente &&
+          f.dia === dia &&
+          franjasSeSolapan(inicioNorm, finNorm, f.inicio, f.fin)
+        );
+        if (conflicto) {
+          errores.push(`Fila ${numFila}: ${docente} ya tiene una clase el ${dia} de ${conflicto.inicio} a ${conflicto.fin} en este mes, y se cruza con ${inicioNorm}–${finNorm}.`);
+          return;
+        }
+      }
+
+      const nuevaFranja = { id: uid('fr'), dia, curso, docente: docente || '', inicio: inicioNorm, fin: finNorm, estado: 'Activo' };
+      franjasNuevas.push(nuevaFranja);
+      if (docente) franjasParaChequear.push(nuevaFranja);
+    });
+
+    if (errores.length) {
+      mostrarErroresCSVHorario(errores);
+      return;
+    }
+
+    // Todo-o-nada: solo llegamos aquí si CADA fila pasó todas las validaciones.
+    let idx = registros.findIndex(h => h.cohorte === horarioState.cohorte && h.mes === horarioState.mes);
+    if (idx === -1) {
+      registros.push({ id: uid('ho'), cohorte: horarioState.cohorte, mes: horarioState.mes, incluyeSabado: horarioState.incluyeSabado, franjas: [] });
+      idx = registros.length - 1;
+    }
+    registros[idx].franjas = registros[idx].franjas || [];
+    registros[idx].franjas.push(...franjasNuevas);
+    registros[idx].incluyeSabado = horarioState.incluyeSabado;
+    await Store.save('horarios', registros);
+
+    for (const f of franjasNuevas) {
+      await registrarAuditoriaHorario(horarioState.cohorte, horarioState.mes, franjaLabel(f), 'Franja creada por CSV', '', f.curso + (f.docente ? ' · ' + f.docente : ''));
+    }
+
+    if (resultWrap) resultWrap.innerHTML = '';
+    toast(`${franjasNuevas.length} franja${franjasNuevas.length === 1 ? '' : 's'} añadida${franjasNuevas.length === 1 ? '' : 's'} desde el CSV`, 'ok');
+    renderHorarioGrid();
+    // Solo si el panel Usuarios es el que se está viendo ahora mismo:
+    // refresca la columna "materias · horas" de los docentes, que se
+    // calcula a partir del Horario. Si el admin está en otro panel (lo
+    // más común al editar el Horario), no tiene sentido gastar esa
+    // consulta extra en una tabla que ni siquiera se está mostrando.
+    if (panelActivoAdmin === 'usuarios' && RENDERERS['usuarios']) RENDERERS['usuarios']();
+  }
+
+  function mostrarErroresCSVHorario(errores) {
+    const resultWrap = document.getElementById('horarioCsvResultWrap');
+    if (!resultWrap) { toast('El CSV tiene errores — revisa el formato', 'err'); return; }
+    resultWrap.innerHTML = `
+      <div class="rounded-xl border border-coral/25 bg-coral/5 p-4">
+        <p class="text-xs font-bold text-coral mb-2">No se subió ningún dato: el CSV tiene ${errores.length} error${errores.length === 1 ? '' : 'es'}. Corrige el archivo y vuelve a intentarlo.</p>
+        <ul class="text-[11px] text-ink/80 space-y-1 list-disc list-inside max-h-40 overflow-y-auto">
+          ${errores.map(e => `<li>${escapeHtml(e)}</li>`).join('')}
+        </ul>
+        <button onclick="document.getElementById('horarioCsvResultWrap').innerHTML=''" class="text-[11px] font-semibold text-coral hover:underline mt-3">Cerrar</button>
+      </div>`;
+    toast('El CSV tiene errores — ninguna franja fue guardada', 'err');
+  }
+
+  // ---------- RENDER: Pensum curricular ----------
+  // Abre en una pestaña nueva el archivo adjunto de un tema del pensum
+  // (guardado como data URL). Usado desde el panel admin y el de estudiante.
+  function verArchivoPensum(id) {
+    // window.open() se llama de inmediato y de forma síncrona (mismo tick
+    // del clic) para que los navegadores no lo bloqueen como popup — el
+    // contenido se rellena después, cuando llegan los datos de MySQL.
+    const win = window.open();
+    if (!win) { toast('Habilita las ventanas emergentes para ver el archivo', 'err'); return; }
+    Store.list('pensum').then(records => {
+      const p = records.find(x => x.id === id);
+      if (!p || !p.archivoDatos) { win.close(); toast('Este tema aún no tiene un archivo adjunto', 'info'); return; }
+      win.document.write(`<iframe src="${p.archivoDatos}" style="border:0;width:100%;height:100vh"></iframe>`);
+      win.document.title = p.archivoNombre || p.tema;
+    });
+  }
+
+  async function renderPensum() {
+    const records = [...(await Store.list('pensum'))].sort((a, b) => (a.modulo > b.modulo ? 1 : -1) || (a.orden - b.orden));
+    const grouped = {};
+    records.forEach(p => { (grouped[p.modulo] = grouped[p.modulo] || []).push(p); });
+
+    const groupsHtml = Object.keys(grouped).length ? Object.keys(grouped).map(mod => `
+      <div class="mb-5 last:mb-0">
+        <p class="text-xs font-bold uppercase tracking-wide text-morado mb-2">${escapeHtml(mod)}</p>
+        <div class="rounded-xl border border-gray-100 divide-y divide-gray-50">
+          ${grouped[mod].map(p => `
+            <div data-search="${escapeHtml((p.modulo + ' ' + p.tema + ' ' + p.docente).toLowerCase())}" class="flex items-center gap-3 px-4 py-3">
+              <span class="w-6 h-6 rounded-full bg-gray-100 text-slate2 text-xs font-bold grid place-items-center shrink-0">${p.orden}</span>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-ink truncate">${escapeHtml(p.tema)}</p>
+                <p class="text-xs text-slate2">${escapeHtml(p.docente || '—')} · ${p.horas} h${p.archivoNombre ? ' · 📎 ' + escapeHtml(p.archivoNombre) : ''}</p>
+              </div>
+              ${p.archivoDatos ? `<button onclick="verArchivoPensum('${p.id}')" class="text-xs font-semibold text-turquesa hover:underline mr-3">Ver archivo</button>` : ''}
+              <button onclick="openModal('pensum','${p.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
+              <button onclick="askDelete('pensum','${p.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
+            </div>`).join('')}
+        </div>
+      </div>`).join('') : `<p class="text-sm text-slate2 text-center py-10">Aún no hay temas curriculares. Haz clic en "Nuevo" para crear el primero.</p>`;
+
+    document.getElementById('mount-pensum').innerHTML = `
+      <div class="admin-panel-card p-6">
+        ${sectionHeader('pensum', 'Pensum curricular', records.length + ' temas distribuidos por módulo', null, true, ['archivoDatos'])}
+        <div id="table-pensum">${groupsHtml}</div>
+      </div>`;
+  }
+
+  // ---------- Semáforo de riesgo — 100% AUTOMÁTICO ----------
+  // Ya no admite ajustes manuales: el riesgo se calcula siempre a partir de
+  // datos reales de la plataforma —
+  //   - Promedio: promedioGeneralEstudianteCohorte() (Etapa 5), la misma
+  //     fuente que ve Administración en el panel Calificaciones.
+  //   - Asistencia: % real de "Presente" sobre el total de registros en
+  //     Store('asistencia') para ese estudiante (la misma fuente que ve el
+  //     estudiante en su propio panel y el Trainee en su historial).
+  // Un estudiante sin notas o sin registros de asistencia aún no entra en
+  // "Rojo/Amarillo" por falta de datos — queda en Verde hasta que haya
+  // suficiente información real para evaluarlo.
+  // async: 'usuarios' vía MySQL + promedioGeneralEstudianteCohorte() (que
+  // también es async, usa 'horarios' vía MySQL) resueltos con Promise.all
+  // ANTES del .map() que arma cada fila (ese .map() no puede usar await).
+  async function computeSemaforo() {
+    const usuarios = (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante');
+    const asistenciaTodos = await Store.list('asistencia');
+    const cfg = (await Store.get('configuracion')) || SEED.configuracion;
+    const resultadosPromedio = await Promise.all(usuarios.map(u => u.cohorte ? promedioGeneralEstudianteCohorte(u.nombre, u.cohorte, null) : null));
+
+    return usuarios.map((u, i) => {
+      const resultado = resultadosPromedio[i];
+      const promedio = resultado ? resultado.promedio : null;
+
+      const registrosAsistencia = asistenciaTodos.filter(a => a.estudiante === u.nombre);
+      const presentes = registrosAsistencia.filter(a => a.estado === 'Presente').length;
+      const asistencia = registrosAsistencia.length ? Math.round((presentes / registrosAsistencia.length) * 100) : null;
+
+      let riesgo = 'Verde';
+      const promedioBajo = promedio !== null && promedio < NOTA_MINIMA_APROBACION;
+      const promedioAlerta = promedio !== null && promedio < NOTA_MINIMA_APROBACION + 0.5;
+      const asistenciaBaja = asistencia !== null && asistencia < cfg.asistenciaMinima;
+      const asistenciaAlerta = asistencia !== null && asistencia < cfg.asistenciaMinima + 10;
+      if (promedioBajo || asistenciaBaja) riesgo = 'Rojo';
+      else if (promedioAlerta || asistenciaAlerta) riesgo = 'Amarillo';
+
+      return {
+        id: u.id, nombre: u.nombre, cohorte: u.cohorte,
+        promedio: promedio !== null ? promedio.toFixed(1) : '—',
+        asistencia: asistencia !== null ? asistencia : '—',
+        riesgo,
+        motivo: promedioBajo ? 'Promedio bajo el mínimo' : asistenciaBaja ? 'Asistencia bajo el mínimo' : (promedioAlerta || asistenciaAlerta) ? 'Cerca del mínimo' : ''
+      };
+    });
+  }
+
+  async function renderSemaforo() {
+    const data = await computeSemaforo();
+    const riesgoColor = { Verde: { bg: '#1FC8C01A', text: '#0f8f89', dot: '#1FC8C0' }, Amarillo: { bg: '#F5A6231A', text: '#b5790f', dot: '#F5A623' }, Rojo: { bg: '#F0455C1A', text: '#F0455C', dot: '#F0455C' } };
+
+    const rows = data.map(s => `
+      <tr data-search="${escapeHtml((s.nombre + ' ' + s.cohorte).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">
+          <span class="inline-block w-2 h-2 rounded-full mr-2" style="background:${riesgoColor[s.riesgo].dot}"></span>${escapeHtml(s.nombre)}
+        </td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(s.cohorte || '—')}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${s.promedio}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${s.asistencia === '—' ? '—' : s.asistencia + '%'}</td>
+        <td class="py-3 px-4">
+          <span class="text-xs font-semibold rounded-full px-2.5 py-1" style="background:${riesgoColor[s.riesgo].bg};color:${riesgoColor[s.riesgo].text}">${s.riesgo}</span>
+        </td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(s.motivo) || '—'}</td>
+      </tr>`).join('');
+
+    document.getElementById('mount-semaforo').innerHTML = `
+      <div class="admin-panel-card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+          <div>
+            <h2 class="text-lg font-extrabold text-ink">Semáforo de riesgo</h2>
+            <p class="text-sm text-slate2 mt-0.5">100% automático: calculado con el promedio real de calificaciones y el % real de asistencia de cada estudiante. Solo lectura — ajusta los umbrales desde Configuración si necesitas cambiar la sensibilidad.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="relative">
+              <input oninput="filterTable('semaforo', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+              <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <button onclick="exportarSemaforoCSV()" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table id="table-semaforo" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Promedio</th><th class="py-2.5 px-4">Asistencia</th><th class="py-2.5 px-4">Riesgo</th><th class="py-2.5 px-4">Motivo</th>
+            </tr></thead>
+            <tbody>${rows || emptyRow(6)}</tbody>
+          </table>
+        </div>
+        ${!data.length ? '<p class="text-sm text-slate2 text-center py-4">Crea usuarios con rol "Estudiante" para que aparezcan aquí.</p>' : ''}
+      </div>`;
+  }
+
+  // El semáforo se calcula en vivo (no vive en Store como lista), así que
+  // no puede usar exportCSV(entity) genérico — arma el CSV directamente
+  // desde computeSemaforo().
+  async function exportarSemaforoCSV() {
+    const data = await computeSemaforo();
+    if (!data.length) { toast('No hay datos para exportar', 'err'); return; }
+    const keys = ['nombre', 'cohorte', 'promedio', 'asistencia', 'riesgo', 'motivo'];
+    const rows = [keys.join(',')].concat(
+      data.map(r => keys.map(k => '"' + String(r[k] ?? '').replace(/"/g, '""') + '"').join(','))
+    );
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'semaforo.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast('Archivo CSV exportado', 'ok');
+  }
+
+  // ---------- Memorandos: helpers compartidos (admin + estudiante) ----------
+  // async: 'usuarios' vía MySQL.
+  async function usuarioPorEmail(email) {
+    const e = (email || '').toLowerCase();
+    return (await Store.list('usuarios')).find(u => (u.email || '').toLowerCase() === e) || null;
+  }
+
+  function rolLabelCarta(rol) {
+    const map = { Estudiante: 'Trainee', Docente: 'Docente', Coordinador: 'Coordinador', Administrador: 'Administrador' };
+    return map[rol] || (rol || '');
+  }
+
+  // Etiqueta amigable del destinatario para las tablas del panel admin
+  // (el valor guardado en el registro es el correo del usuario, o un grupo).
+  async function destinatarioLabelAdmin(destinatario) {
+    const u = await usuarioPorEmail(destinatario);
+    if (u) return `${u.nombre} (${u.rol})`;
+    return destinatario || '—';
+  }
+
+  // ---------- Buscador de destinatario (Memorandos) ----------
+  // Filtra window.__catalogoDestinatarios (armado en el render del campo,
+  // ver type 'buscar_destinatario') por nombre o correo, y pinta hasta 8
+  // resultados en el desplegable debajo del input.
+  function buscarDestinatarioInput(texto) {
+    const cont = document.getElementById('destinatarioResultados');
+    const hidden = document.getElementById('field_destinatario');
+    if (!cont || !hidden) return;
+    const catalogo = window.__catalogoDestinatarios || [];
+    const q = (texto || '').trim().toLowerCase();
+
+    // Si el texto escrito ya no coincide con la última selección, se limpia
+    // el valor real guardado — así no se puede enviar un memorando a medio
+    // escribir un nombre distinto al que quedó seleccionado por última vez.
+    const actual = catalogo.find(o => o.value === hidden.value);
+    if (!actual || actual.label.toLowerCase() !== q) hidden.value = '';
+
+    const resultados = (q === ''
+      ? catalogo
+      : catalogo.filter(o => o.label.toLowerCase().includes(q))
+    ).slice(0, 8);
+
+    if (!resultados.length) {
+      cont.innerHTML = `<p class="px-3.5 py-2.5 text-sm text-slate2">Sin resultados para "${escapeHtml(texto)}"</p>`;
+    } else {
+      cont.innerHTML = resultados.map(o => `
+        <button type="button" onmousedown="elegirDestinatario('${escapeHtml(o.value)}','${escapeHtml(o.label)}')"
+          class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-morado/5 border-b border-gray-50 last:border-0 transition">
+          ${escapeHtml(o.label)}
+        </button>`).join('');
+    }
+    cont.classList.remove('hidden');
+  }
+
+  // Se llama al hacer click (onmousedown, para disparar ANTES del blur del
+  // input) sobre un resultado del buscador de destinatario: fija el correo
+  // real (o el nombre del grupo) en el input oculto que lee saveModal(), y
+  // muestra la etiqueta legible en el input visible.
+  function elegirDestinatario(value, label) {
+    const visible = document.getElementById('destinatarioBuscar');
+    const hidden = document.getElementById('field_destinatario');
+    const cont = document.getElementById('destinatarioResultados');
+    if (visible) visible.value = label;
+    if (hidden) hidden.value = value;
+    if (cont) cont.classList.add('hidden');
+  }
+
+  // Memorandos dirigidos al usuario actualmente logueado (Estudiante o
+  // Docente): por su correo exacto, por los grupos generales, por su grupo
+  // de rol (estudiantes/docentes), o (compatibilidad con datos antiguos)
+  // por su cohorte si es estudiante.
+  async function memorandosParaUsuarioActual() {
+    const doc = currentEstudiante || currentDocente || {};
+    const esDocente = !!currentDocente;
+    const email = (doc.email || '').toLowerCase();
+    return [...(await Store.list('memorandos'))].filter(m => {
+      if (m.estado !== 'Enviado') return false; // un Borrador nunca es visible para el destinatario, solo para Administración
+      const dest = m.destinatario || '';
+      return dest.toLowerCase() === email
+        || dest === 'Todos'
+        || (esDocente ? dest === 'Todos los docentes' : dest === 'Todos los estudiantes')
+        || (!esDocente && doc.cohorte && dest === doc.cohorte);
+    }).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  }
+  // Alias por compatibilidad: código existente que llamaba a la función
+  // con su nombre anterior (solo tenía en cuenta al estudiante) sigue
+  // funcionando igual — ahora resuelve el rol real de currentEstudiante.
+  async function memorandosParaEstudiante() { return await memorandosParaUsuarioActual(); }
+
+  // Seguimiento de lectura por usuario: { [memorandoId]: { [email]: true } }.
+  // Se guarda aparte (no en el registro del memorando) porque un mismo memorando
+  // puede estar dirigido a varios destinatarios (grupo) y cada uno lee por su lado.
+  async function memorandoLeidoPorEmail(memorandoId, email) {
+    const mapa = (await Store.get('memorandos_leidos')) || {};
+    return !!(mapa[memorandoId] && mapa[memorandoId][email]);
+  }
+  async function marcarMemorandoLeidoPorEmail(memorandoId, email) {
+    if (!email) return;
+    const mapa = (await Store.get('memorandos_leidos')) || {};
+    if (!mapa[memorandoId]) mapa[memorandoId] = {};
+    if (mapa[memorandoId][email]) return;
+    mapa[memorandoId][email] = true;
+    await Store.set('memorandos_leidos', mapa);
+  }
+  // Actualiza el badge de "no leídos" del rol que esté logueado ahora
+  // mismo (el estudiante tiene el suyo, memorandosBadge; el docente tiene
+  // el suyo aparte, memorandosBadgeDocente — nunca los dos a la vez).
+  async function updateMemorandosBadge() {
+    const doc = currentEstudiante || currentDocente || {};
+    const email = (doc.email || '').toLowerCase();
+    const [memos, mapaLeidos] = await Promise.all([
+      memorandosParaUsuarioActual(),
+      Store.get('memorandos_leidos'),
+    ]);
+    const mapa = mapaLeidos || {};
+    const noLeidos = memos.filter(m => !(mapa[m.id] && mapa[m.id][email])).length;
+    const badgeId = currentDocente ? 'memorandosBadgeDocente' : 'memorandosBadge';
+    const badge = document.getElementById(badgeId);
+    if (!badge) return;
+    if (noLeidos > 0) { badge.textContent = noLeidos; badge.classList.remove('hidden'); }
+    else { badge.classList.add('hidden'); }
+  }
+
+  // Construye el HTML completo del memorando en formato de carta institucional
+  // (logo Fundación A+, marca Training, encabezado PARA/DE/ASUNTO, cuerpo libre
+  // de hasta decenas de miles de caracteres) y lo abre en una pestaña nueva,
+  // lista para imprimir o "Guardar como PDF" desde el navegador.
+  // async: usuarioPorEmail ahora es async (usa 'usuarios' vía MySQL).
+  async function construirCartaMemorandoHTML(m) {
+    const cfg = (await Store.get('configuracion')) || SEED.configuracion;
+    const destinatarioUsuario = await usuarioPorEmail(m.destinatario);
+    const nombreDestinatario = destinatarioUsuario ? destinatarioUsuario.nombre : (
+      m.destinatario === 'Todos los docentes' ? 'Docentes de la Fundación A+' :
+      m.destinatario === 'Todos los estudiantes' ? 'Trainees de la Fundación A+' :
+      m.destinatario === 'Todos' ? 'Comunidad Fundación A+' : (m.destinatario || '—')
+    );
+    const rolDestinatario = destinatarioUsuario ? rolLabelCarta(destinatarioUsuario.rol) : '';
+    const nombrePila = destinatarioUsuario ? nombreDestinatario.split(' ')[0] : nombreDestinatario;
+
+    return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Memorando — ${escapeHtml(m.titulo)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Georgia, 'Times New Roman', serif; color:#14181F; background:#e9e9ec; margin:0; padding:32px 16px; }
+  .hoja { max-width: 800px; margin: 0 auto 32px; background:#fff; border:1px solid #14181F; padding: 48px 56px 64px; }
+  .encabezado { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:8px; }
+  .marca { display:flex; align-items:center; gap:10px; font-family:'Inter',Arial,sans-serif; }
+  .marca img.logo-real { height:34px; width:auto; flex-shrink:0; }
+  .marca-texto { font-size:16px; font-weight:800; color:#14181F; }
+  .marca-texto b { color:#F0455C; }
+  .training-mark { display:flex; align-items:center; gap:6px; font-family:'Inter',Arial,sans-serif; color:#14181F; }
+  .training-mark .chevron { font-size:24px; color:#F5A623; font-weight:900; line-height:1; }
+  .training-mark .txt { font-size:14px; font-weight:800; letter-spacing:.2px; }
+  .training-mark .txt .ai { color:#8B5CF6; }
+  .training-mark .num { font-size:11px; font-weight:700; color:#5B6472; margin-left:2px; }
+  hr.linea { border:none; border-top:2px solid #14181F; margin: 18px 0 26px; }
+  h1.titulo-memo { text-align:center; font-size:16px; letter-spacing:2.5px; margin: 0 0 26px; }
+  .meta-fecha { margin-bottom: 22px; font-size:14px; }
+  table.campos { width:100%; border-collapse:collapse; margin-bottom: 24px; font-size:14px; }
+  table.campos td { padding: 3px 0; vertical-align:top; }
+  table.campos td.etiqueta { width:82px; font-weight:700; }
+  .cuerpo { font-size:14px; line-height:1.7; }
+  .cuerpo p { margin: 0 0 14px; text-align: justify; }
+  .firma { margin-top: 48px; font-size:14px; }
+  .barra-accion { max-width:800px; margin: 0 auto 18px; display:flex; justify-content:flex-end; gap:10px; font-family:'Inter',Arial,sans-serif; }
+  .barra-accion button { border:none; border-radius:9999px; padding:10px 22px; font-size:13px; font-weight:700; cursor:pointer; background:#14181F; color:#fff; }
+  .barra-accion button:hover { background:#8B5CF6; }
+  .barra-accion button.adjunto { background:#F5A623; }
+  .barra-accion button.adjunto:hover { background:#8B5CF6; }
+  @media print {
+    body { background:#fff; padding:0; }
+    .hoja { border:1px solid #14181F; margin:0; max-width:none; }
+    .barra-accion { display:none; }
+  }
+</style></head>
+<body>
+  <div class="barra-accion">
+    ${m.archivoDatos ? `<button class="adjunto" onclick="window.open('${m.archivoDatos}','_blank')">📎 Ver archivo adjunto</button>` : ''}
+    <button onclick="window.print()">Descargar / Imprimir</button>
+  </div>
+  <div class="hoja">
+    <div class="encabezado">
+      <div class="marca">
+        <img class="logo-real" src="${LOGO_FUNDACION_DATAURL}" alt="Fundación A+" />
+        <span class="marca-texto">Fundación A<b>+</b></span>
+      </div>
+      <div class="training-mark">
+        <span class="chevron">‹</span>
+        <span class="txt">Tr<span class="ai">AI</span>ning</span>
+        <span class="num">100 → 1000+</span>
+      </div>
+    </div>
+    <hr class="linea" />
+    <h1 class="titulo-memo">MEMORANDO</h1>
+    <p class="meta-fecha">${escapeHtml(cfg.ciudad || 'Quibdó')}, ${fmtDate(m.fecha)}</p>
+    <table class="campos">
+      <tr><td class="etiqueta">PARA:</td><td>${escapeHtml(nombreDestinatario)}${rolDestinatario ? ', ' + escapeHtml(rolDestinatario) : ''}</td></tr>
+      <tr><td class="etiqueta">DE:</td><td>EQUIPO DIRECTIVO FUNDACIÓN A+</td></tr>
+      <tr><td class="etiqueta">ASUNTO:</td><td>${escapeHtml(m.titulo)}</td></tr>
+    </table>
+    <div class="cuerpo">
+      <p>Estimado/a ${escapeHtml(nombrePila)},</p>
+      <p>Por medio del presente memorando, la Fundación A+ le informa que el documento oficial correspondiente a este comunicado se encuentra adjunto.</p>
+      ${m.archivoDatos ? `<p style="text-align:center;margin:22px 0"><button class="adjunto" onclick="window.open('${m.archivoDatos}','_blank')" style="border:none;border-radius:9999px;padding:12px 28px;font-size:14px;font-weight:700;cursor:pointer;background:#F5A623;color:#fff;font-family:'Inter',Arial,sans-serif">📎 Abrir ${escapeHtml(m.archivoNombre || 'documento adjunto')}</button></p>` : '<p><em>Este memorando no tiene un archivo adjunto.</em></p>'}
+      <div class="firma">
+        <p>Cordialmente,</p>
+        <p><strong>Equipo Directivo</strong><br/>Fundación A+</p>
+      </div>
+    </div>
+  </div>
+</body></html>`;
+  }
+
+  // Abre el memorando ya renderizado como carta en una pestaña nueva.
+  // IMPORTANTE: window.open() se llama de forma SÍNCRONA, antes de
+  // cualquier await — así el navegador la asocia al click original del
+  // usuario y no la bloquea como popup. El contenido (que sí depende de
+  // una consulta async a 'usuarios') se escribe después, cuando esté listo.
+  async function abrirMemorandoCarta(id) {
+    const win = window.open('', '_blank');
+    if (!win) { toast('Habilita las ventanas emergentes para ver el memorando', 'err'); return; }
+    const m = (await Store.list('memorandos')).find(x => x.id === id);
+    if (!m) { win.close(); toast('No se encontró el memorando', 'err'); return; }
+    const html = await construirCartaMemorandoHTML(m);
+    win.document.write(html);
+    win.document.close();
+  }
+
+  // Igual que abrirMemorandoCarta, pero además marca el memorando como
+  // leído por el usuario actual (Estudiante o Docente) y refresca su
+  // badge de notificaciones y su propia lista.
+  async function verMemorandoUsuarioActual(id) {
+    const doc = currentEstudiante || currentDocente || {};
+    const email = (doc.email || '').toLowerCase();
+    // Se espera a que quede guardado como "leído" ANTES de refrescar la
+    // lista/el badge: si no se espera, el re-render de abajo podría leer
+    // el mapa de memorandos_leidos todavía sin esta marca (condición de
+    // carrera contra la propia petición que la está guardando).
+    await marcarMemorandoLeidoPorEmail(id, email);
+    abrirMemorandoCarta(id);
+    await updateMemorandosBadge();
+    if (currentDocente) renderMemorandosDocente();
+    else renderMemorandosEstudiante();
+  }
+  // Alias por compatibilidad con el nombre anterior (solo asumía estudiante).
+  async function verMemorandoEstudiante(id) { await verMemorandoUsuarioActual(id); }
+
+  // ---------- RENDER: Memorandos ----------
+  // async: destinatarioLabelAdmin ahora es async (usa 'usuarios' vía MySQL) —
+  // se resuelve una vez por registro con Promise.all ANTES del .map() que
+  // arma las filas, porque ese .map() no puede usar await dentro.
+  async function renderMemorandos() {
+    const records = await Store.list('memorandos');
+    const labels = await Promise.all(records.map(m => destinatarioLabelAdmin(m.destinatario)));
+    const rows = records.map((m, i) => `
+      <tr data-search="${escapeHtml((m.titulo + ' ' + labels[i]).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(m.titulo)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(labels[i])}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${fmtDate(m.fecha)}</td>
+        <td class="py-3 px-4">${statusPill(m.estado, ESTADO_COLORS)}</td>
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          <button onclick="abrirMemorandoCarta('${m.id}')" class="text-xs font-semibold text-turquesa hover:underline mr-3">Ver carta</button>
+          ${m.archivoDatos ? `<button onclick="verArchivoMemorando('${m.id}')" class="text-xs font-semibold text-oro hover:underline mr-3">📎 Archivo</button>` : ''}
+          <button onclick="openModal('memorandos','${m.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
+          <button onclick="askDelete('memorandos','${m.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
+        </td>
+      </tr>`).join('');
+
+    document.getElementById('mount-memorandos').innerHTML = `
+      <div class="admin-panel-card p-6">
+        ${sectionHeader('memorandos', 'Memorandos', records.length + ' comunicaciones internas', null, true, ['archivoDatos'])}
+        <div class="overflow-x-auto">
+          <table id="table-memorandos" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Título</th><th class="py-2.5 px-4">Destinatario</th><th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+            </tr></thead>
+            <tbody>${rows || emptyRow(5)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  // Abre el archivo adjunto de un memorando (PDF/Word/PowerPoint) en una
+  // pestaña nueva — mismo patrón que verArchivoPensum()/descargarPqrAdmin().
+  function verArchivoMemorando(id) {
+    // window.open() síncrono primero, mismo patrón que verArchivoPensum().
+    const win = window.open('', '_blank');
+    if (!win) { toast('Habilita las ventanas emergentes para ver el archivo', 'err'); return; }
+    Store.list('memorandos').then(records => {
+      const m = records.find(x => x.id === id);
+      if (!m || !m.archivoDatos) { win.close(); toast('Este memorando no tiene un archivo adjunto', 'info'); return; }
+      win.document.write(`<iframe src="${m.archivoDatos}" style="border:0;width:100%;height:100vh"></iframe>`);
+    });
+  }
+
+  // ---------- RENDER: PQR ----------
+  // El administrador (Superadmin o Administración) NO puede editar ni crear
+  // PQR: cada solicitud la envía el Docente o el Estudiante como archivo PDF.
+  // El estado pasa de "Pendiente" a "Activo" automáticamente la primera vez
+  // que el administrador abre/descarga el PDF (ver descargarPqrAdmin).
+  //
+  // Quién ve estas PQR: cualquier administrador con permiso "ver" sobre
+  // admin.pqr en su perfil — el Superadmin siempre (acceso total), y cada
+  // Coordinador solo si su perfil tiene ese módulo habilitado. Eso ya lo
+  // resuelve el sistema de permisos existente (oculta el botón/panel
+  // completo si no tiene el permiso); no hace falta elegir un destinatario
+  // al enviar la PQR — llega automáticamente a "quien tenga PQR habilitado".
+  // async: 'pqr' vía MySQL.
+  async function actualizarBadgePqrAdmin() {
+    const pendientes = (await Store.list('pqr')).filter(p => p.estado === 'Pendiente').length;
+    const badge = document.getElementById('pqrBadgeAdmin');
+    if (!badge) return;
+    if (pendientes > 0) { badge.textContent = pendientes; badge.classList.remove('hidden'); }
+    else { badge.classList.add('hidden'); }
+  }
+
+  // async: actualizarBadgePqrAdmin() y 'pqr' vía MySQL.
+  async function renderPqr() {
+    await actualizarBadgePqrAdmin();
+    const records = [...(await Store.list('pqr'))].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const rows = records.map(p => `
+      <tr data-search="${escapeHtml((p.tipo + ' ' + p.solicitante + ' ' + p.asunto).toLowerCase())}" class="border-b border-gray-50 last:border-0 align-top">
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(p.tipo)}</td>
+        <td class="py-3 px-4 text-sm">
+          <p class="font-semibold text-ink">${escapeHtml(p.solicitante)}</p>
+          <p class="text-xs text-slate2 mt-0.5">${escapeHtml(p.remitenteRol || '—')}</p>
+        </td>
+        <td class="py-3 px-4 text-sm text-ink max-w-xs">${escapeHtml(p.asunto)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${fmtDate(p.fecha)}</td>
+        <td class="py-3 px-4">${statusPill(p.estado, ESTADO_COLORS)}</td>
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          ${p.archivoDatos
+            ? `<button onclick="descargarPqrAdmin('${p.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Descargar PDF</button>`
+            : `<span class="text-xs text-slate2 mr-3">Sin archivo</span>`}
+          <button onclick="askDelete('pqr','${p.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
+        </td>
+      </tr>`).join('');
+
+    document.getElementById('mount-pqr').innerHTML = `
+      <div class="admin-panel-card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-gray-100">
+          <div>
+            <h2 class="text-lg font-extrabold text-ink">PQR</h2>
+            <p class="text-sm text-slate2 mt-0.5">${records.length} peticiones, quejas y reclamos enviados por docentes y estudiantes como PDF</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="relative">
+              <input oninput="filterTable('pqr', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+              <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <button onclick="exportCSV('pqr', ['archivoDatos'])" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+          </div>
+        </div>
+        <p class="text-xs text-slate2 -mt-2 mb-4">Solo lectura: el administrador no puede editar ni crear PQR. El estado cambia a <span class="font-semibold text-ink">Activo</span> automáticamente al descargar el PDF por primera vez.</p>
+        <div class="overflow-x-auto">
+          <table id="table-pqr" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Tipo</th><th class="py-2.5 px-4">Remitente</th><th class="py-2.5 px-4">Asunto</th><th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+            </tr></thead>
+            <tbody>${rows || emptyRow(6)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  // Abre el PDF de una PQR en una pestaña nueva y, la primera vez que el
+  // administrador lo hace, cambia el estado de "Pendiente" a "Activo".
+  // async: 'pqr' vía MySQL. window.open() se llama SÍNCRONAMENTE antes de
+  // cualquier await, para no activar el bloqueador de popups (mismo
+  // cuidado que en abrirMemorandoCarta/descargarPensumEstudiante).
+  async function descargarPqrAdmin(id) {
+    const win = window.open('', '_blank');
+    const registros = await Store.list('pqr');
+    const p = registros.find(r => r.id === id);
+    if (!p || !p.archivoDatos) { toast('Esta PQR no tiene un archivo adjunto', 'info'); win.close(); return; }
+
+    win.document.write(`<iframe src="${p.archivoDatos}" style="border:0;width:100%;height:100vh"></iframe>`);
+    win.document.title = p.archivoNombre || p.asunto;
+
+    if (p.estado !== 'Activo') {
+      p.estado = 'Activo';
+      p.fechaActivacion = new Date().toISOString().slice(0, 10);
+      await Store.set('pqr', registros);
+      renderPqr();
+      toast('PDF descargado. Estado actualizado a Activo.', 'ok');
+    }  }
+
+  // Estado del filtro del panel Calificaciones (Admin). mes=null significa
+  // "General": promedia TODOS los meses con notas de cada docente en esa
+  // cohorte, en vez de solo el mes vigente.
+  let calificacionesAdminState = { cohorte: null, mes: null };
+
+  // Todos los meses (con notas registradas) que un docente ha dictado en
+  // una cohorte — se usa para poblar el selector de mes y para el cálculo
+  // "General".
+  // async: 'notas_modulos' vía MySQL.
+  async function mesesConNotasDocenteCohorte(docenteNombre, cohorteNombre) {
+    return (await Store.list('notas_modulos'))
+      .filter(r => r.docente === docenteNombre && r.cohorte === cohorteNombre && r.mes)
+      .map(r => r.mes);
+  }
+
+  // Promedio general de un estudiante en una cohorte, para UN mes puntual
+  // (mes=null => promedia sobre TODOS los meses con notas de cada docente,
+  // es decir la vista "General").
+  // async: docentesDeCohorte() y mesesConNotasDocenteCohorte() ahora son
+  // async — se usa for...of en vez de forEach para poder hacer await
+  // dentro del bucle con claridad.
+  async function promedioGeneralEstudianteCohorte(estudianteNombre, cohorteNombre, mes) {
+    const docentes = await docentesDeCohorte(cohorteNombre);
+    const registros = await Store.list('notas_modulos');
+    const notasPorProfesor = [];
+    for (const docenteNombre of docentes) {
+      const mesesDelDocente = mes ? [mes] : await mesesConNotasDocenteCohorte(docenteNombre, cohorteNombre);
+      const valoresDelDocente = [];
+      mesesDelDocente.forEach(m => {
+        const rec = registros.find(r => r.docente === docenteNombre && r.cohorte === cohorteNombre && r.mes === m);
+        if (!rec) return;
+        const resultado = calcularNotaFinal(rec, estudianteNombre);
+        if (resultado && !resultado.pendiente) valoresDelDocente.push(resultado.valor);
+      });
+      if (valoresDelDocente.length) {
+        // Si es "General" y el docente tiene notas en varios meses, se
+        // promedia primero dentro del docente, así un profesor con muchos
+        // periodos no pesa más que uno con pocos.
+        notasPorProfesor.push(valoresDelDocente.reduce((a, b) => a + b, 0) / valoresDelDocente.length);
+      }
+    }
+    if (!notasPorProfesor.length) return null;
+    const promedio = notasPorProfesor.reduce((a, b) => a + b, 0) / notasPorProfesor.length;
+    return { promedio, profesores: notasPorProfesor.length };
+  }
+
+  // Desglose de la nota de UN estudiante, docente por docente (vista
+  // "General": promedia todos los meses con notas de cada uno), para que
+  // el chat pueda decir en cuáles va bien o mal — no solo el promedio
+  // general. Se reutiliza la misma lógica de promedioGeneralEstudianteCohorte,
+  // solo que sin colapsar el resultado final en un único número.
+  // async: docentesDeCohorte() y mesesConNotasDocenteCohorte() ahora son async.
+  async function desgloseNotasEstudianteCohorte(estudianteNombre, cohorteNombre) {
+    const docentes = await docentesDeCohorte(cohorteNombre);
+    const registros = await Store.list('notas_modulos');
+    const detalle = [];
+    for (const docenteNombre of docentes) {
+      const meses = await mesesConNotasDocenteCohorte(docenteNombre, cohorteNombre);
+      const valores = [];
+      meses.forEach(m => {
+        const rec = registros.find(r => r.docente === docenteNombre && r.cohorte === cohorteNombre && r.mes === m);
+        if (!rec) return;
+        const resultado = calcularNotaFinal(rec, estudianteNombre);
+        if (resultado && !resultado.pendiente) valores.push(resultado.valor);
+      });
+      if (valores.length) {
+        detalle.push({ docente: docenteNombre, nota: valores.reduce((a, b) => a + b, 0) / valores.length });
+      } else {
+        detalle.push({ docente: docenteNombre, nota: null }); // aún sin nota registrada con ese docente
+      }
+    }
+    return detalle;
+  }
+
+  // Notas que UN docente le puso a sus propios estudiantes en una cohorte,
+  // usando el mes más reciente con notas registradas por él ahí (o el
+  // único mes si solo tiene uno). Es la vista del propio docente, así que
+  // nunca mezcla notas de otros profesores. Se usa para que el chat pueda
+  // decir qué estudiantes van bajos en SU materia.
+  // async: 'usuarios' vía MySQL.
+  async function notasDocenteEnCohorte(docenteNombre, cohorteNombre) {
+    const meses = await mesesConNotasDocenteCohorte(docenteNombre, cohorteNombre);
+    if (!meses.length) return [];
+    const mesReciente = [...meses].sort().pop();
+    const registros = await Store.list('notas_modulos');
+    const rec = registros.find(r => r.docente === docenteNombre && r.cohorte === cohorteNombre && r.mes === mesReciente);
+    if (!rec) return [];
+    const estudiantes = ((await Store.list('usuarios')) || []).filter(u => u.rol === 'Estudiante' && u.cohorte === cohorteNombre);
+    return estudiantes.map(e => {
+      const resultado = calcularNotaFinal(rec, e.nombre);
+      return { nombre: e.nombre, nota: (resultado && !resultado.pendiente) ? resultado.valor : null, mes: mesReciente };
+    });
+  }
+
+  // async: 'modulos' vía MySQL.
+  async function renderCalificaciones() {
+    // Vista de SOLO LECTURA para Superadmin y Administración (Coordinador):
+    // el administrador elige Cohorte y Mes (o "General" = todos los meses),
+    // y la tabla de estudiantes de esa cohorte se trae automáticamente con
+    // su promedio general, calculado sobre las notas de todos los
+    // profesores que le dictan clase. No se muestran notas individuales por
+    // docente ni la valoración cualitativa (esa vive solo en el Informe).
+    const cohortes = await Store.list('modulos');
+
+    document.getElementById('mount-calificaciones').innerHTML = `
+      <div class="mb-5">
+        <h2 class="text-lg font-extrabold text-ink">Calificaciones</h2>
+        <p class="text-sm text-slate2 mt-0.5">Elige una cohorte y un mes (o "General" para el promedio acumulado): los estudiantes de esa cohorte aparecen automáticamente con su promedio.</p>
+      </div>
+      <div class="admin-panel-card p-6 mb-6">
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="califAdminCohorteSelect">Cohorte</label>
+            <select id="califAdminCohorteSelect" onchange="onCambiaCalifAdminCohorte()" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+              <option value="">Selecciona una cohorte...</option>
+              ${cohortes.map(c => `<option value="${escapeHtml(c.nombre)}" ${calificacionesAdminState.cohorte === c.nombre ? 'selected' : ''}>${escapeHtml(c.nombre)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="califAdminMesSelect">Periodo</label>
+            <select id="califAdminMesSelect" onchange="onCambiaCalifAdminMes()" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" ${calificacionesAdminState.cohorte ? '' : 'disabled'}>
+              <option value="">General (todos los meses)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="califAdminResultado"></div>`;
+
+    poblarMesesCalifAdmin();
+    renderCalifAdminResultado();
+  }
+
+  // async: docentesDeCohorte() ahora es async.
+  async function poblarMesesCalifAdmin() {
+    const mesSelect = document.getElementById('califAdminMesSelect');
+    if (!mesSelect) return;
+    if (!calificacionesAdminState.cohorte) {
+      mesSelect.innerHTML = '<option value="">General (todos los meses)</option>';
+      mesSelect.disabled = true;
+      return;
+    }
+    // Unión de todos los meses con notas de cualquier docente de esta cohorte.
+    const docentes = await docentesDeCohorte(calificacionesAdminState.cohorte);
+    const meses = new Set();
+    for (const d of docentes) {
+      (await mesesConNotasDocenteCohorte(d, calificacionesAdminState.cohorte)).forEach(m => meses.add(m));
+    }
+    const mesesOrdenados = [...meses].sort().reverse();
+    mesSelect.disabled = false;
+    mesSelect.innerHTML = '<option value="">General (todos los meses)</option>' +
+      mesesOrdenados.map(m => `<option value="${m}" ${calificacionesAdminState.mes === m ? 'selected' : ''}>${mesLabel(m)}</option>`).join('');
+  }
+
+  function onCambiaCalifAdminCohorte() {
+    const sel = document.getElementById('califAdminCohorteSelect');
+    calificacionesAdminState.cohorte = sel.value || null;
+    calificacionesAdminState.mes = null;
+    poblarMesesCalifAdmin();
+    renderCalifAdminResultado();
+  }
+
+  function onCambiaCalifAdminMes() {
+    const sel = document.getElementById('califAdminMesSelect');
+    calificacionesAdminState.mes = sel.value || null;
+    renderCalifAdminResultado();
+  }
+
+  // async: 'usuarios' vía MySQL.
+  async function renderCalifAdminResultado() {
+    const wrap = document.getElementById('califAdminResultado');
+    if (!wrap) return;
+    if (!calificacionesAdminState.cohorte) {
+      wrap.innerHTML = `<div class="admin-panel-card p-10 text-center"><p class="text-sm text-slate2">Selecciona una cohorte para ver sus calificaciones.</p></div>`;
+      return;
+    }
+    const estudiantes = (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && u.cohorte === calificacionesAdminState.cohorte);
+    const docentesCohorte = await docentesDeCohorte(calificacionesAdminState.cohorte);
+    const resultadosPorEstudiante = await Promise.all(estudiantes.map(e => promedioGeneralEstudianteCohorte(e.nombre, calificacionesAdminState.cohorte, calificacionesAdminState.mes)));
+
+    const filas = estudiantes.map((e, i) => {
+      const resultado = resultadosPorEstudiante[i];
+      const promedioHtml = resultado
+        ? `<span class="font-bold" style="color:${colorCualitativa(resultado.promedio)}">${resultado.promedio.toFixed(1)}</span>
+           <span class="text-[11px] text-slate2 ml-1">(${resultado.profesores} profesor${resultado.profesores !== 1 ? 'es' : ''})</span>`
+        : `<span class="text-slate2 text-xs">Sin notas aún</span>`;
+      return `
+      <tr data-search="${escapeHtml(e.nombre.toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(e.nombre)}</td>
+        <td class="py-3 px-4 text-sm">${promedioHtml}</td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <div class="admin-panel-card p-6">
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <div>
+            <p class="text-sm font-bold text-ink">${escapeHtml(calificacionesAdminState.cohorte)}</p>
+            <p class="text-xs text-slate2">${calificacionesAdminState.mes ? escapeHtml(mesLabel(calificacionesAdminState.mes)) : 'General — promedio de todos los meses con notas'}</p>
+          </div>
+          <span class="text-xs text-slate2">${docentesCohorte.length} profesor${docentesCohorte.length !== 1 ? 'es' : ''} · ${estudiantes.length} estudiante${estudiantes.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Promedio${calificacionesAdminState.mes ? '' : ' general'}</th>
+            </tr></thead>
+            <tbody>${filas || emptyRow(2)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  // ---------- RENDER: Informes enviados por docentes (agrupados por profesor) ----------
+  // Estado del filtro del panel Informes (Admin). mes=null = "General"
+  // (todos los informes de la cohorte, sin filtrar por periodo).
+  let informesAdminState = { cohorte: null, mes: null };
+
+  // async: 'modulos' vía MySQL.
+  async function renderInformesAdmin() {
+    // Vista de SOLO LECTURA para Superadmin y Administración: el
+    // administrador elige Cohorte y Mes (o "General"), y se traen
+    // automáticamente los informes de los estudiantes de esa cohorte que
+    // los docentes ya enviaron (ver enviarInformeDocente). Un informe se
+    // ubica en el mes de su campo "fecha".
+    const cohortes = await Store.list('modulos');
+
+    document.getElementById('mount-informes-admin').innerHTML = `
+      <div class="mb-5">
+        <h2 class="text-lg font-extrabold text-ink">Informes de docentes</h2>
+        <p class="text-sm text-slate2 mt-0.5">Elige una cohorte y un mes (o "General"): los informes de esa cohorte aparecen automáticamente, agrupados por profesor.</p>
+      </div>
+      <div class="admin-panel-card p-6 mb-6">
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="infAdminCohorteSelect">Cohorte</label>
+            <select id="infAdminCohorteSelect" onchange="onCambiaInfAdminCohorte()" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+              <option value="">Selecciona una cohorte...</option>
+              ${cohortes.map(c => `<option value="${escapeHtml(c.nombre)}" ${informesAdminState.cohorte === c.nombre ? 'selected' : ''}>${escapeHtml(c.nombre)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="infAdminMesSelect">Periodo</label>
+            <select id="infAdminMesSelect" onchange="onCambiaInfAdminMes()" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" ${informesAdminState.cohorte ? '' : 'disabled'}>
+              <option value="">General (todos los meses)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="infAdminResultado"></div>`;
+
+    await poblarMesesInfAdmin();
+    await renderInfAdminResultado();
+  }
+
+  // async: 'informes_docente' vía MySQL.
+  async function poblarMesesInfAdmin() {
+    const mesSelect = document.getElementById('infAdminMesSelect');
+    if (!mesSelect) return;
+    if (!informesAdminState.cohorte) {
+      mesSelect.innerHTML = '<option value="">General (todos los meses)</option>';
+      mesSelect.disabled = true;
+      return;
+    }
+    const meses = new Set();
+    (await Store.list('informes_docente'))
+      .filter(i => i.cohorte === informesAdminState.cohorte && i.estado === 'Enviado' && i.fecha)
+      .forEach(i => meses.add(i.fecha.slice(0, 7)));
+    const mesesOrdenados = [...meses].sort().reverse();
+    mesSelect.disabled = false;
+    mesSelect.innerHTML = '<option value="">General (todos los meses)</option>' +
+      mesesOrdenados.map(m => `<option value="${m}" ${informesAdminState.mes === m ? 'selected' : ''}>${mesLabel(m)}</option>`).join('');
+  }
+
+  // async: 'informes_docente' vía MySQL.
+  async function onCambiaInfAdminCohorte() {
+    const sel = document.getElementById('infAdminCohorteSelect');
+    informesAdminState.cohorte = sel.value || null;
+    informesAdminState.mes = null;
+    await poblarMesesInfAdmin();
+    await renderInfAdminResultado();
+  }
+
+  // async: 'informes_docente' vía MySQL.
+  async function onCambiaInfAdminMes() {
+    const sel = document.getElementById('infAdminMesSelect');
+    informesAdminState.mes = sel.value || null;
+    await renderInfAdminResultado();
+  }
+
+  // async: 'informes_docente' vía MySQL.
+  async function renderInfAdminResultado() {
+    const wrap = document.getElementById('infAdminResultado');
+    if (!wrap) return;
+    if (!informesAdminState.cohorte) {
+      wrap.innerHTML = `<div class="admin-panel-card p-10 text-center"><p class="text-sm text-slate2">Selecciona una cohorte para ver sus informes.</p></div>`;
+      return;
+    }
+    // Solo informes ENVIADOS: un borrador que el docente está
+    // autoguardando mientras escribe no debería aparecer aquí todavía
+    // (ver autoguardarBorradorInforme() en el panel del docente).
+    const informes = (await Store.list('informes_docente')).filter(i =>
+      i.cohorte === informesAdminState.cohorte && i.estado === 'Enviado' &&
+      (!informesAdminState.mes || (i.fecha || '').slice(0, 7) === informesAdminState.mes));
+
+    const porDocente = {};
+    informes.forEach(i => { (porDocente[i.docente] = porDocente[i.docente] || []).push(i); });
+    const docentesConInformes = Object.keys(porDocente).sort((a, b) => a.localeCompare(b));
+
+    const bloquesDocente = docentesConInformes.map(nombreDocente => {
+      const lista = porDocente[nombreDocente].slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+      const filas = lista.map(i => `
+        <tr class="border-b border-gray-50 last:border-0">
+          <td class="py-3 px-4 text-sm font-semibold text-ink">${nombrePersonaClicable(i.estudiante, 'Estudiante')}</td>
+          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(i.materia || '—')}</td>
+          <td class="py-3 px-4 text-sm text-slate2">${i.fecha ? fmtDate(i.fecha) : '—'}</td>
+          <td class="py-3 px-4 text-sm text-slate2">${i.asistenciaPct !== null && i.asistenciaPct !== undefined ? i.asistenciaPct + '%' : 'Sin datos'}</td>
+          <td class="py-3 px-4 text-sm">${i.promedio !== null && i.promedio !== undefined
+            ? `<span class="font-bold" style="color:${colorCualitativa(i.promedio)}">${Number(i.promedio).toFixed(1)}</span> <span class="text-[11px] text-slate2">(${escapeHtml(i.cualitativa || '')})</span>`
+            : '<span class="text-slate2 text-xs">Sin datos</span>'}</td>
+          <td class="py-3 px-4 text-sm text-ink max-w-xs">${i.observaciones ? escapeHtml(i.observaciones) : '<span class="text-slate2 italic">Sin observaciones</span>'}</td>
+        </tr>`).join('');
+
+      return `
+      <div class="admin-panel-card p-6 mb-6">
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <p class="text-sm font-bold text-ink">${nombrePersonaClicable(nombreDocente, 'Docente')}</p>
+          <span class="text-xs text-slate2">${lista.length} informe${lista.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Materia</th><th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Asistencia</th><th class="py-2.5 px-4">Nota</th><th class="py-2.5 px-4">Observaciones</th>
+            </tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <p class="text-xs text-slate2 mb-4">${escapeHtml(informesAdminState.cohorte)} · ${informesAdminState.mes ? escapeHtml(mesLabel(informesAdminState.mes)) : 'General — todos los meses'}</p>
+      ${bloquesDocente || `<div class="admin-panel-card p-8 text-center"><p class="text-sm text-slate2">No hay informes para este filtro todavía.</p></div>`}`;
+  }
+
+  // ---------- RENDER: Encuestas de satisfacción ----------
+  // async: 'encuestas' vía MySQL.
+  async function renderEncuestas() {
+    // Tanto Superadmin como Administración pueden crear y editar encuestas.
+    const puedeEditar = true;
+    const records = [...(await Store.list('encuestas'))].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const rows = records.map(e => `
+      <tr data-search="${escapeHtml((e.titulo + ' ' + (e.cohorte || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(e.titulo)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(e.cohorte || '—')}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${fmtDate(e.fecha)}</td>
+        <td class="py-3 px-4 text-sm">${e.url ? `<a href="${escapeHtml(e.url)}" target="_blank" rel="noopener" class="text-morado font-semibold hover:underline">Abrir link ↗</a>` : '—'}</td>
+        <td class="py-3 px-4">${statusPill(e.estado, ESTADO_COLORS)}</td>
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          ${puedeEditar ? `<button onclick="openModal('encuestas','${e.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
+          <button onclick="askDelete('encuestas','${e.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>` : `<span class="text-xs text-slate2">Solo lectura</span>`}
+        </td>
+      </tr>`).join('');
+
+    document.getElementById('mount-encuestas').innerHTML = `
+      <div class="admin-panel-card p-6">
+        ${sectionHeader('encuestas', 'Encuestas de satisfacción', 'Link externo (Google Forms u otro) enviado a los estudiantes de la cohorte elegida', null, puedeEditar)}
+        ${!puedeEditar ? `<p class="text-xs text-slate2 -mt-2 mb-4">Acceso de solo lectura: la cuenta de Administración puede consultar las encuestas, pero no editarlas ni crear nuevas.</p>` : ''}
+        <p class="text-xs text-slate2 -mt-2 mb-4">Las respuestas y su análisis se consultan directamente en la herramienta externa (ej. Google Forms) — la plataforma solo guarda el link y a quién se le envió.</p>
+        <div class="overflow-x-auto">
+          <table id="table-encuestas" class="w-full admin-table">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Encuesta</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Link</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+            </tr></thead>
+            <tbody>${rows || emptyRow(6)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  // ---------- RENDER: Configuración ----------
+  // ---------- RENDER: Auditoría (solo Superadmin) ----------
+  // Tres bitácoras de solo lectura: intentos de login (cualquier rol),
+  // acciones dentro del sistema, y cambios de Materia/Docente en el
+  // Horario (quién, cuándo, antes→ahora). Las tres ya viven en MySQL.
+  // async: 'auditoria_login'/'auditoria_acciones'/'auditoria_horario' vía MySQL.
+  async function renderAuditoria() {
+    const logins = await Store.list('auditoria_login');
+    const cambios = await Store.list('auditoria_horario');
+    const acciones = await Store.list('auditoria_acciones');
+
+    const filasLogin = logins.map(l => `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(l.fecha)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(l.hora)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(l.rol || 'Superadmin')}</td>
+        <td class="py-2.5 px-4 text-sm text-ink font-semibold">${escapeHtml(l.email)}</td>
+        <td class="py-2.5 px-4">${statusPill(l.resultado, { 'Exitoso': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Fallido': { bg: '#F0455C1A', text: '#F0455C' } })}</td>
+      </tr>`).join('');
+
+    const filasAcciones = acciones.map(a => `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(a.fecha)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(a.hora)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(a.rol || '—')}</td>
+        <td class="py-2.5 px-4 text-sm text-ink font-semibold">${escapeHtml(a.actor)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(a.tipo)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(a.detalle || '—')}</td>
+      </tr>`).join('');
+
+    const filasCambios = cambios.map(c => `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(c.fecha)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(c.hora)}</td>
+        <td class="py-2.5 px-4 text-sm text-ink font-semibold">${escapeHtml(c.autor)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(c.cohorte)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(c.mes)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(c.franja)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(c.campo)}</td>
+        <td class="py-2.5 px-4 text-sm text-coral">${escapeHtml(c.valorAnterior)}</td>
+        <td class="py-2.5 px-4 text-sm text-turquesa font-semibold">${escapeHtml(c.valorNuevo)}</td>
+      </tr>`).join('');
+
+    document.getElementById('mount-auditoria').innerHTML = `
+      <div class="admin-panel-card p-6 mb-6">
+        <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+          <div>
+            <h2 class="text-lg font-extrabold text-ink">Auditoría de accesos</h2>
+            <p class="text-sm text-slate2 mt-0.5">${logins.length} intento${logins.length === 1 ? '' : 's'} de inicio de sesión registrado${logins.length === 1 ? '' : 's'} (Superadmin, Coordinador, Docente y Estudiante).</p>
+          </div>
+          <button onclick="exportCSV('auditoria_login')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+        </div>
+        <div class="overflow-x-auto mt-4">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Resultado</th>
+            </tr></thead>
+            <tbody>${filasLogin || emptyRow(5)}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="admin-panel-card p-6 mb-6">
+        <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+          <div>
+            <h2 class="text-lg font-extrabold text-ink">Auditoría de acciones</h2>
+            <p class="text-sm text-slate2 mt-0.5">${acciones.length} acción${acciones.length === 1 ? '' : 'es'} registrada${acciones.length === 1 ? '' : 's'} dentro del sistema (ej. notas actualizadas por un docente).</p>
+          </div>
+          <button onclick="exportCSV('auditoria_acciones')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+        </div>
+        <div class="overflow-x-auto mt-4">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Quién</th><th class="py-2.5 px-4">Acción</th><th class="py-2.5 px-4">Detalle</th>
+            </tr></thead>
+            <tbody>${filasAcciones || emptyRow(6)}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="admin-panel-card p-6">
+        <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+          <div>
+            <h2 class="text-lg font-extrabold text-ink">Auditoría de cambios en el Horario</h2>
+            <p class="text-sm text-slate2 mt-0.5">${cambios.length} cambio${cambios.length === 1 ? '' : 's'} de Materia o Docente registrado${cambios.length === 1 ? '' : 's'}, con quién lo hizo y cuándo.</p>
+          </div>
+          <button onclick="exportCSV('auditoria_horario')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+        </div>
+        <div class="overflow-x-auto mt-4">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Autor</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Mes</th><th class="py-2.5 px-4">Franja</th><th class="py-2.5 px-4">Campo</th><th class="py-2.5 px-4">Antes</th><th class="py-2.5 px-4">Ahora</th>
+            </tr></thead>
+            <tbody>${filasCambios || emptyRow(9)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  // async: 'configuracion' y 'superadmin_credentials' vía MySQL (Fase 4).
+  async function renderConfiguracion() {
+    const cfg = (await Store.get('configuracion')) || SEED.configuracion;
+    const cred = (await Store.get('superadmin_credentials')) || SEED.superadmin_credentials;
+    const seguridadSuperadmin = currentAdminRole === 'superadmin' ? `
+      <div class="admin-panel-card p-6 sm:p-8 max-w-2xl mt-6">
+        <h2 class="text-lg font-extrabold text-ink mb-1">Seguridad del Superadmin</h2>
+        <p class="text-sm text-slate2 mb-6">Cambia el correo y/o la contraseña con los que inicias sesión como Superadmin. Debes confirmar tu contraseña actual para guardar cambios.</p>
+        <form onsubmit="event.preventDefault(); guardarCredencialesSuperadmin();" class="grid gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Correo de acceso</label>
+            <input id="sa_email" type="email" value="${escapeHtml(cred.email)}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Contraseña actual</label>
+            <input id="sa_actual" type="text" autocomplete="off" placeholder="Requerida para confirmar el cambio" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Nueva contraseña</label>
+            <input id="sa_nueva" type="text" autocomplete="new-password" placeholder="Déjala en blanco para no cambiarla" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          </div>
+        </form>
+        <div class="mt-6 pt-5 border-t border-gray-100">
+          <button onclick="guardarCredencialesSuperadmin()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition shadow-sm">Guardar credenciales</button>
+        </div>
+      </div>` : '';
+
+    document.getElementById('mount-configuracion').innerHTML = `
+      <div class="admin-panel-card p-6 sm:p-8 max-w-2xl">
+        <h2 class="text-lg font-extrabold text-ink mb-1">Configuración general</h2>
+        <p class="text-sm text-slate2 mb-6">Parámetros institucionales que usa el panel para calcular alertas y el semáforo de riesgo.</p>
+        <form id="configForm" onsubmit="event.preventDefault(); saveConfiguracion();" class="grid sm:grid-cols-2 gap-4">
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Nombre de la fundación</label>
+            <input id="cfg_nombre" type="text" value="${escapeHtml(cfg.nombre)}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Ciudad (para cartas y memorandos)</label>
+            <input id="cfg_ciudad" type="text" value="${escapeHtml(cfg.ciudad || '')}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Dirección</label>
+            <input id="cfg_direccion" type="text" placeholder="Ej: Calle 10 #5-20, Quibdó" value="${escapeHtml(cfg.direccion || '')}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Correo de contacto</label>
+            <input id="cfg_correo" type="email" value="${escapeHtml(cfg.correo)}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Teléfono</label>
+            <input id="cfg_telefono" type="text" value="${escapeHtml(cfg.telefono)}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Asistencia mínima (%)</label>
+            <input id="cfg_asistencia" type="number" value="${cfg.asistenciaMinima}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+            <p class="text-xs text-slate2 mt-1.5">Solo se usa como referencia en el Semáforo de riesgo — la aprobación de notas depende únicamente del promedio (mínimo 6.0/10, fijo).</p>
+          </div>
+          <div class="sm:col-span-2 flex items-center gap-6 mt-1">
+            <label class="flex items-center gap-2 text-sm text-ink"><input id="cfg_notifEmail" type="checkbox" ${cfg.notificacionesEmail ? 'checked' : ''} class="rounded" /> Notificaciones por correo</label>
+            <label class="flex items-center gap-2 text-sm text-ink"><input id="cfg_notifIA" type="checkbox" ${cfg.notificacionesIA ? 'checked' : ''} class="rounded" /> Alertas generadas por IA</label>
+          </div>
+        </form>
+        <div class="mt-6 pt-5 border-t border-gray-100">
+          <button onclick="saveConfiguracion()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition shadow-sm">Guardar configuración</button>
+        </div>
+      </div>
+
+      <div class="admin-panel-card p-6 sm:p-8 max-w-2xl mt-6">
+        <h2 class="text-lg font-extrabold text-ink mb-1">Postulación pública</h2>
+        <p class="text-sm text-slate2 mb-6">Controla el botón "Postular" del sitio público. Pega aquí el link del cuestionario externo (Google Forms u otro) donde los interesados dejan sus datos, y actívalo cuando quieras recibir postulaciones.</p>
+        <form onsubmit="event.preventDefault(); saveConfiguracion();" class="grid gap-4">
+          <label class="flex items-center gap-2 text-sm text-ink">
+            <input id="cfg_postulacionHabilitada" type="checkbox" ${cfg.postulacionHabilitada ? 'checked' : ''} class="rounded" />
+            Habilitar postulación en el sitio público
+          </label>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Link del cuestionario</label>
+            <input id="cfg_postulacionUrl" type="url" placeholder="https://forms.gle/..." value="${escapeHtml(cfg.postulacionUrl || '')}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+            <p class="text-xs text-slate2 mt-1.5">Mientras esté deshabilitada, el botón "Postular" del sitio mostrará un aviso de que las postulaciones están cerradas, sin importar el link que hayas guardado aquí.</p>
+          </div>
+        </form>
+        <div class="mt-6 pt-5 border-t border-gray-100">
+          <button onclick="saveConfiguracion()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition shadow-sm">Guardar configuración</button>
+        </div>
+      </div>
+      ${seguridadSuperadmin}`;
+  }
+
+  // Cambia el correo y/o la contraseña con los que se inicia sesión como
+  // Superadmin. Exige la contraseña actual para confirmar el cambio; si
+  // "Nueva contraseña" se deja en blanco, conserva la que ya tenía.
+  // async: 'superadmin_credentials' vía MySQL (Fase 4).
+  async function guardarCredencialesSuperadmin() {
+    const cred = (await Store.get('superadmin_credentials')) || SEED.superadmin_credentials;
+    const nuevoEmail = document.getElementById('sa_email').value.trim();
+    const actual = document.getElementById('sa_actual').value;
+    const nueva = document.getElementById('sa_nueva').value;
+
+    if (!nuevoEmail) { toast('El correo no puede quedar vacío', 'err'); return; }
+    if (actual !== cred.password) { toast('La contraseña actual no es correcta', 'err'); return; }
+
+    await Store.set('superadmin_credentials', { email: nuevoEmail, password: nueva !== '' ? nueva : cred.password });
+    document.getElementById('sa_actual').value = '';
+    document.getElementById('sa_nueva').value = '';
+    toast('Credenciales del Superadmin actualizadas', 'ok');
+  }
+
+  // async: 'configuracion' vía MySQL (Fase 4).
+  async function saveConfiguracion() {
+    const urlPostulacion = document.getElementById('cfg_postulacionUrl').value.trim();
+    const habilitarPostulacion = document.getElementById('cfg_postulacionHabilitada').checked;
+
+    if (habilitarPostulacion && !urlPostulacion) {
+      toast('Para habilitar la postulación primero pega el link del cuestionario', 'err');
+      return;
+    }
+
+    const cfg = {
+      nombre: document.getElementById('cfg_nombre').value.trim(),
+      ciudad: document.getElementById('cfg_ciudad').value.trim(),
+      direccion: document.getElementById('cfg_direccion').value.trim(),
+      correo: document.getElementById('cfg_correo').value.trim(),
+      telefono: document.getElementById('cfg_telefono').value.trim(),
+      asistenciaMinima: parseFloat(document.getElementById('cfg_asistencia').value) || 0,
+      notificacionesEmail: document.getElementById('cfg_notifEmail').checked,
+      notificacionesIA: document.getElementById('cfg_notifIA').checked,
+      postulacionHabilitada: habilitarPostulacion,
+      postulacionUrl: urlPostulacion,
+    };
+    await Store.set('configuracion', cfg);
+    toast('Configuración guardada', 'ok');
+    renderSemaforo();
+    renderResumen();
+    // El sitio público (Contáctanos + botón Postular) vive en el mismo
+    // documento que el panel Admin, así que se actualiza al instante.
+    renderContactoPublico();
+    actualizarBotonesPostular();
+  }
+
+  // ---------- Sitio público: Contáctanos + Postular (alimentados por Configuración) ----------
+
+  /** Pinta el bloque "Contacto" del footer público con los datos reales de la fundación. */
+  // async: 'configuracion' vía MySQL (Fase 4).
+  async function renderContactoPublico() {
+    const el = document.getElementById('contactoPublico');
+    if (!el) return; // el sitio público aún no está en el DOM (no debería pasar, pero por seguridad)
+    const cfg = (await Store.get('configuracion')) || SEED.configuracion;
+
+    const filas = [];
+    if (cfg.correo) filas.push(`<a href="mailto:${escapeHtml(cfg.correo)}" class="flex items-center gap-2 hover:text-ink transition">${escapeHtml(cfg.correo)}</a>`);
+    if (cfg.telefono) filas.push(`<a href="tel:${escapeHtml(cfg.telefono.replace(/\s+/g, ''))}" class="flex items-center gap-2 hover:text-ink transition">${escapeHtml(cfg.telefono)}</a>`);
+    if (cfg.direccion) filas.push(`<span class="flex items-center gap-2">${escapeHtml(cfg.direccion)}${cfg.ciudad ? ', ' + escapeHtml(cfg.ciudad) : ''}</span>`);
+    else if (cfg.ciudad) filas.push(`<span class="flex items-center gap-2">${escapeHtml(cfg.ciudad)}</span>`);
+
+    el.innerHTML = filas.join('') || '<span class="text-slate2">Datos de contacto próximamente.</span>';
+  }
+
+  /** Activa/desactiva y enlaza los botones "Postular" del sitio con el link que definió el Superadmin. */
+  // async: 'configuracion' vía MySQL (Fase 4).
+  async function actualizarBotonesPostular() {
+    const cfg = (await Store.get('configuracion')) || SEED.configuracion;
+    const habilitada = !!(cfg.postulacionHabilitada && cfg.postulacionUrl);
+    document.querySelectorAll('.btn-postular').forEach(btn => {
+      btn.classList.toggle('opacity-50', !habilitada);
+      btn.title = habilitada ? 'Postula al programa' : 'Las postulaciones no están abiertas en este momento';
+    });
+  }
+
+  /** onclick de los botones "Postular": abre el cuestionario externo o avisa que está cerrado. */
+  // async: 'configuracion' vía MySQL (Fase 4).
+  async function abrirPostulacion(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    const cfg = (await Store.get('configuracion')) || SEED.configuracion;
+    if (cfg.postulacionHabilitada && cfg.postulacionUrl) {
+      window.open(cfg.postulacionUrl, '_blank', 'noopener');
+    } else {
+      toast('Las postulaciones no están abiertas en este momento. Vuelve pronto.', 'info');
+    }
+  }
+
+  const RENDERERS = {
+    resumen: renderResumen,
+    usuarios: renderUsuarios,
+    perfiles: renderPerfiles,
+    administradores: renderAdministradores,
+    modulos: renderModulos,
+    cursos: renderCursos,
+    trainee: renderTrainee,
+    codigosqr: renderCodigosQr,
+    pensum: renderPensum,
+    semaforo: renderSemaforo,
+    memorandos: renderMemorandos,
+    pqr: renderPqr,
+    calificaciones: renderCalificaciones,
+    informesAdmin: renderInformesAdmin,
+    encuestas: renderEncuestas,
+    auditoria: renderAuditoria,
+    chatvoz: renderChatVozConocimiento,
+    configuracion: renderConfiguracion,
+  };
+
+  // async porque hace await de seedIfEmpty() (que sí toca 'usuarios',
+  // migrada a MySQL) — submitLogin ya la llama con await.
+  async function initAdmin() {
+    await seedIfEmpty();
+    if (!ADMIN_BOOTED) {
+      ADMIN_BOOTED = true;
+    }
+    actualizarBadgePqrAdmin();
+  }
+
+  /* =====================================================================
+     PANEL DOCENTE — módulos funcionales
+     Persistencia: localStorage (misma capa Store del panel administrativo).
+     Todas las entidades nuevas (notas_modulos, informes_docente,
+     agenda_docente) arrancan vacías: sin datos ficticios, listas para que
+     el docente las llene con información real.
+     ===================================================================== */
+
+  // Cohortes/módulos que dicta el docente que inició sesión.
+  // Se calcula a partir del Horario real (docentesDeCohorte), que es la
+  // única fuente de verdad de qué docente dicta qué cohorte — el campo
+  // "docente" que traía la cohorte ya no se usa para esto.
+  // async: 'modulos' vía MySQL.
+  async function docenteModulosActivos() {
+    const doc = currentDocente || {};
+    if (!doc.nombre) return [];
+    // docentesDeCohorte() es async (consulta MySQL) — no se puede usar
+    // dentro de un .filter() normal (callback síncrono) sin resolver antes
+    // cada promesa, o "docentesDeCohorte(...).includes" revienta porque se
+    // llama sobre la Promise en vez de sobre el array ya resuelto.
+    const modulos = await Store.list('modulos');
+    const pertenece = await Promise.all(modulos.map(m => docentesDeCohorte(m.nombre)));
+    return modulos.filter((m, i) => pertenece[i].includes(doc.nombre));
+  }
+  // Estudiantes matriculados en una cohorte (por nombre de cohorte).
+  // async: 'usuarios' vía MySQL.
+  async function docenteEstudiantesDeCohorte(cohorteNombre) {
+    return (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && u.cohorte === cohorteNombre);
+  }
+
+  // ---------- RENDER: Resumen (docente) ----------
+  // ---------- PERFIL (docente) ----------
+  // Foto de perfil y descripción breve, ambas opcionales. Ambas viven en
+  // Store('usuarios') (MySQL, columnas foto_url/descripcion) — la foto se
+  // guarda como data URL (base64) directamente en esa columna.
+  function renderPerfilDocente() {
+    const doc = currentDocente || {};
+    const iniciales = escapeHtml((doc.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+    const avatarHtml = doc.fotoUrl
+      ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100" />`
+      : `<div class="w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>`;
+
+    document.getElementById('mount-t-perfil').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 sm:p-8 max-w-2xl">
+        <div class="flex items-center gap-5 mb-6">
+          ${avatarHtml}
+          <div>
+            <p class="text-base font-extrabold text-ink">${escapeHtml(doc.nombre || '')}</p>
+            <p class="text-sm text-slate2">${escapeHtml(doc.email || '')}</p>
+            <div class="flex items-center gap-3 mt-1.5">
+              <label class="text-xs font-semibold text-morado hover:underline cursor-pointer">
+                Cambiar foto
+                <input id="perfil_foto_input" type="file" accept="image/*" class="hidden" onchange="subirFotoPerfilDocente(this)" />
+              </label>
+              ${doc.fotoUrl ? `<button onclick="quitarFotoPerfilDocente()" class="text-xs font-semibold text-coral hover:underline">Quitar foto</button>` : ''}
+            </div>
+            <p class="text-[11px] text-slate2 mt-1">Foto opcional · JPG o PNG, máx. 2 MB</p>
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4 mb-6">
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Nombre completo</label>
+            <input id="perfil_nombre" type="text" value="${escapeHtml(doc.nombre || '')}" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-turquesa/30" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Correo electrónico</label>
+            <input type="email" value="${escapeHtml(doc.email || '')}" disabled class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm bg-gray-50 text-slate2" />
+          </div>
+        </div>
+        <div class="mb-6">
+          <label class="block text-xs font-semibold text-slate2 mb-1.5">Descripción breve</label>
+          <textarea id="perfil_descripcion" rows="3" maxlength="280" placeholder="Ej: Docente de Desarrollo Web, apasionado por enseñar buenas prácticas de programación (opcional)" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-turquesa/30 resize-none">${escapeHtml(doc.descripcion || '')}</textarea>
+          <p class="text-[11px] text-slate2 mt-1">Opcional · máx. 280 caracteres</p>
+        </div>
+        <div class="border-t border-gray-100 pt-6">
+          <p class="text-sm font-bold text-ink mb-3">Cambiar contraseña</p>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <input id="perfil_pass1" type="text" placeholder="Nueva contraseña" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-turquesa/30" />
+            <input id="perfil_pass2" type="text" placeholder="Confirmar contraseña" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-turquesa/30" />
+          </div>
+        </div>
+        <button onclick="guardarPerfilDocente()" class="mt-6 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition">Guardar cambios</button>
+      </div>`;
+    habilitarEnterEnFormulario('mount-t-perfil', null, false);
+  }
+
+  // async: 'usuarios' vía MySQL.
+  async function actualizarUsuarioDocenteActual(cambios) {
+    const usuarios = (await Store.list('usuarios')).map(u => u.id === currentDocente.id ? { ...u, ...cambios } : u);
+    await Store.set('usuarios', usuarios);
+    currentDocente = { ...currentDocente, ...cambios };
+  }
+
+  // CORREGIDO (2): subir/quitar foto llamaba a renderPerfilDocente() al
+  // terminar, que reconstruye TODO el formulario con innerHTML —
+  // incluido el <textarea id="perfil_descripcion">, que se repone con
+  // doc.descripcion (el valor guardado, no lo que el usuario tuviera
+  // escrito sin guardar todavía). Si escribías la descripción y LUEGO
+  // subías la foto, el texto se perdía antes de que pudieras darle a
+  // "Guardar cambios" — parecía que la descripción "no se guardaba"
+  // cuando en realidad se borraba sola de la pantalla. Ahora solo se
+  // actualiza la imagen del avatar y el botón "Quitar foto" en el DOM,
+  // sin tocar el resto del formulario.
+  function actualizarAvatarDocenteEnDom(fotoUrl) {
+    const cont = document.getElementById('mount-t-perfil');
+    if (!cont) return;
+    const avatarActual = cont.querySelector('img[alt="Foto de perfil"], div.rounded-full.grid');
+    if (avatarActual) {
+      if (fotoUrl) {
+        const img = document.createElement('img');
+        img.src = fotoUrl;
+        img.alt = 'Foto de perfil';
+        img.className = avatarActual.className.includes('w-20') ? avatarActual.className : 'w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100';
+        avatarActual.replaceWith(img);
+      } else if (avatarActual.tagName === 'IMG') {
+        const doc = currentDocente || {};
+        const iniciales = escapeHtml((doc.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+        const div = document.createElement('div');
+        div.className = 'w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0';
+        div.style = 'background:linear-gradient(135deg,#1FC8C0,#8B5CF6)';
+        div.textContent = iniciales;
+        avatarActual.replaceWith(div);
+      }
+    }
+    const btnQuitar = cont.querySelector('button[onclick="quitarFotoPerfilDocente()"]');
+    if (fotoUrl && !btnQuitar) {
+      const label = cont.querySelector('label.cursor-pointer');
+      if (label) label.insertAdjacentHTML('afterend', ' <button onclick="quitarFotoPerfilDocente()" class="text-xs font-semibold text-coral hover:underline">Quitar foto</button>');
+    } else if (!fotoUrl && btnQuitar) {
+      btnQuitar.remove();
+    }
+  }
+
+  function subirFotoPerfilDocente(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast('El archivo debe ser una imagen', 'err'); return; }
+    if (file.size > 2 * 1024 * 1024) { toast('La imagen no debe superar 2 MB', 'err'); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const resultado = await Store.actualizarPerfilPropio({ fotoUrl: reader.result });
+      currentDocente = { ...currentDocente, fotoUrl: reader.result };
+      toast(resultado.remoto ? 'Foto de perfil actualizada' : 'Foto guardada solo en este navegador (sin conexión con el servidor)', resultado.remoto ? 'ok' : 'err');
+      actualizarAvatarDocenteEnDom(reader.result);
+    };
+    reader.onerror = () => toast('No se pudo leer la imagen', 'err');
+    reader.readAsDataURL(file);
+  }
+
+  async function quitarFotoPerfilDocente() {
+    const resultado = await Store.actualizarPerfilPropio({ fotoUrl: '' });
+    currentDocente = { ...currentDocente, fotoUrl: '' };
+    toast(resultado.remoto ? 'Foto de perfil eliminada' : 'No se pudo eliminar la foto en el servidor', resultado.remoto ? 'ok' : 'err');
+    actualizarAvatarDocenteEnDom('');
+  }
+
+  // async: actualizarUsuarioDocenteActual ahora es async.
+  async function guardarPerfilDocente() {
+    const nombre = document.getElementById('perfil_nombre').value.trim();
+    const descripcion = document.getElementById('perfil_descripcion').value.trim();
+    const p1 = document.getElementById('perfil_pass1').value;
+    const p2 = document.getElementById('perfil_pass2').value;
+    if (p1 || p2) {
+      if (p1.length < 6) { toast('La nueva contraseña debe tener al menos 6 caracteres', 'err'); return; }
+      if (p1 !== p2) { toast('Las contraseñas no coinciden', 'err'); return; }
+    }
+    const cambios = {};
+    if (nombre) cambios.nombre = nombre;
+    cambios.descripcion = descripcion; // opcional: puede quedar vacía
+    // CORREGIDO: la nueva contraseña se validaba arriba pero nunca se
+    // agregaba a "cambios" — el formulario decía "Perfil actualizado
+    // correctamente" pero la contraseña jamás cambiaba de verdad.
+    if (p1) cambios.password = p1;
+    // CORREGIDO: usaba actualizarUsuarioDocenteActual() ->
+    // Store.set('usuarios', ...), que exige rol Superadmin/Coordinador
+    // en el backend — el docente veía "Perfil actualizado correctamente"
+    // pero nombre/descripción/password nunca llegaban a MySQL. Ver
+    // manejarPerfilPropio() en api/index.php.
+    const resultado = await Store.actualizarPerfilPropio(cambios);
+    currentDocente = { ...currentDocente, ...cambios };
+    delete currentDocente.password; // no guardar el texto plano en memoria
+    toast(resultado.remoto ? 'Perfil actualizado correctamente' : 'No se pudo guardar en el servidor, intenta de nuevo', resultado.remoto ? 'ok' : 'err');
+    renderPerfilDocente();
+  }
+
+  // async: contarInscritos() ahora es async.
+  async function renderResumenDocente() {
+    const doc = currentDocente || {};
+    const modulos = await docenteModulosActivos();
+    const pensumItems = (await Store.list('pensum')).filter(p => p.docente === doc.nombre);
+    const inscritosPorModulo = await Promise.all(modulos.map(m => contarInscritos(m.nombre)));
+    const totalEstudiantes = inscritosPorModulo.reduce((a, b) => a + b, 0);
+    const enCurso = modulos.filter(m => m.estado === 'En curso').length;
+
+    // Riesgo real de los estudiantes en sus cohortes (misma fuente que
+    // renderRiesgoDocente), para el anillo de "en buen camino".
+    const cohortesNombres = modulos.map(m => m.nombre);
+    const semaforoDocente = (await computeSemaforo()).filter(s => cohortesNombres.includes(s.cohorte));
+    const enRiesgo = semaforoDocente.filter(s => s.riesgo === 'Rojo').length;
+    const pctBienEncaminados = semaforoDocente.length ? Math.round(((semaforoDocente.length - enRiesgo) / semaforoDocente.length) * 100) : 100;
+
+    const modulosRows = modulos.map((m, i) => `
+      <div class="flex items-center justify-between py-3 px-4 border-b border-gray-50 last:border-0">
+        <div>
+          <p class="text-sm font-semibold text-ink">${escapeHtml(m.modulo)}</p>
+          <p class="text-xs text-slate2">${escapeHtml(m.nombre)} · ${inscritosPorModulo[i]}/${m.cupos} estudiantes</p>
+        </div>
+        ${statusPill(m.estado, ESTADO_COLORS)}
+      </div>`).join('');
+
+    const iniciales = escapeHtml((doc.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+    const avatarHtml = doc.fotoUrl
+      ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" class="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-white/30" />`
+      : `<div class="w-14 h-14 rounded-full grid place-items-center text-lg font-bold text-white shrink-0 bg-white/15 border-2 border-white/30">${iniciales}</div>`;
+
+    document.getElementById('mount-t-resumen').innerHTML = `
+      <div class="dash-hero p-6 sm:p-8 mb-6" style="--hero-gradient:linear-gradient(120deg,#0D9488 0%,#1FC8C0 55%,#0EA5A0 100%)">
+        <div class="flex items-center gap-4">
+          ${avatarHtml}
+          <div class="min-w-0">
+            <p class="text-[11px] font-bold uppercase tracking-wider text-white/70">Panel docente</p>
+            <h2 class="font-display text-xl sm:text-2xl font-bold text-white truncate">${escapeHtml(doc.nombre || 'Docente')}</h2>
+            <p class="text-sm text-white/80 truncate">${escapeHtml(doc.email || '')}</p>
+          </div>
+        </div>
+        ${doc.descripcion ? `<p class="text-sm text-white/85 mt-4 italic border-t border-white/15 pt-4">"${escapeHtml(doc.descripcion)}"</p>` : ''}
+      </div>
+
+      <div class="grid sm:grid-cols-3 gap-5 mb-6">
+        <div class="dash-stat-card" style="--brand:#1FC8C0">
+          <div class="dash-stat-icon mb-4" style="background:#1FC8C014;color:#1FC8C0"><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.25v13.5M4.75 8.5L12 6.25l7.25 2.25v9L12 19.75l-7.25-2.25v-9z"/></svg></div>
+          <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">Módulos asignados</p>
+          <p class="font-display text-3xl font-bold text-ink mt-1 leading-none">${modulos.length}</p>
+          <p class="text-xs text-slate2 mt-2">${enCurso} en curso</p>
+        </div>
+        <div class="dash-stat-card" style="--brand:#8B5CF6">
+          <div class="dash-stat-icon mb-4" style="background:#8B5CF614;color:#8B5CF6"><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m5-5.13a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 10-3.87-5"/></svg></div>
+          <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">Estudiantes a cargo</p>
+          <p class="font-display text-3xl font-bold text-ink mt-1 leading-none">${totalEstudiantes}</p>
+          <p class="text-xs text-slate2 mt-2">En tus cohortes activas</p>
+        </div>
+        <div class="dash-stat-card flex items-center gap-4" style="--brand:#F5A623">
+          <div class="relative shrink-0">
+            ${anilloProgreso(pctBienEncaminados, enRiesgo > 0 ? '#F5A623' : '#1FC8C0', 64, 6)}
+            <div class="absolute inset-0 grid place-items-center">
+              <span class="font-display text-sm font-bold text-ink">${pctBienEncaminados}%</span>
+            </div>
+          </div>
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">En buen camino</p>
+            <p class="text-xs text-slate2 mt-1">${enRiesgo > 0 ? enRiesgo + ' en riesgo crítico' : 'Nadie en riesgo'}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="admin-panel-card p-6">
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-xs font-bold uppercase tracking-wide text-slate2">Tus módulos y cohortes</p>
+          <p class="text-xs text-slate2">${pensumItems.length} tema${pensumItems.length === 1 ? '' : 's'} de pensum a tu cargo</p>
+        </div>
+        ${modulosRows || '<p class="text-sm text-slate2 text-center py-6">Aún no tienes módulos asignados. El administrador puede asignarlos desde el panel.</p>'}
+      </div>`;
+  }
+
+  // ---------- RENDER: Mi horario (docente) ----------
+  // async: getSlotsDocente() ahora es async.
+  async function renderHorarioDocente() {
+    const doc = currentDocente || {};
+    const slots = await getSlotsDocente(doc.nombre);
+    const totalHoras = slots.reduce((acc, s) => acc + s.horas, 0);
+
+    // Agrupar por Cohorte + Mes para mostrar mini-tablas separadas
+    const grupos = {};
+    slots.forEach(s => {
+      const k = s.cohorte + '|' + s.mes;
+      (grupos[k] = grupos[k] || { cohorte: s.cohorte, mes: s.mes, items: [] }).items.push(s);
+    });
+
+    const gruposHtml = Object.keys(grupos).length ? Object.keys(grupos).map(k => {
+      const g = grupos[k];
+      return `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden mb-5">
+        <div class="px-6 pt-5 pb-3 flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <p class="text-sm font-bold text-ink">${escapeHtml(g.cohorte)}</p>
+            <p class="text-xs text-slate2">${escapeHtml(mesLabel(g.mes))}</p>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-6">Día</th><th class="py-2.5 px-4">Horario</th><th class="py-2.5 px-4">Materia</th><th class="py-2.5 px-4">Horas</th>
+            </tr></thead>
+            <tbody>${g.items.map(s => `
+              <tr class="border-b border-gray-50 last:border-0">
+                <td class="py-2.5 px-6 text-sm font-semibold text-ink">${escapeHtml(s.dia)}</td>
+                <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${s.inicio}–${s.fin}</td>
+                <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(s.materia)}</td>
+                <td class="py-2.5 px-4 text-sm text-slate2">${s.horas} h</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    }).join('') : `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
+        <p class="text-sm text-slate2">Aún no apareces en ningún horario. El administrador te asignará materias y horas desde el panel "Horario".</p>
+      </div>`;
+
+    document.getElementById('mount-t-modulos').innerHTML = `
+      ${slots.length ? `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5 flex items-center justify-between flex-wrap gap-3">
+        <p class="text-sm text-slate2">Total de horas semanales asignadas</p>
+        <p class="text-2xl font-extrabold text-ink">${totalHoras} h</p>
+      </div>` : ''}
+      ${gruposHtml}`;
+  }
+
+  // ---------- Códigos QR reales de asistencia (imprimibles y reutilizables) ----------
+  // Cada cohorte tiene DOS códigos QR ESTABLES (se generan una sola vez y no
+  // cambian día a día — se imprimen y listo, "al otro día es lo mismo"):
+  //  - QR del DOCENTE: al abrirlo (escaneándolo con la cámara) activa la
+  //    sesión de asistencia de HOY para esa cohorte.
+  //  - QR del ESTUDIANTE: al abrirlo, pide el correo con el que fue
+  //    registrado en el sistema y aplica su asistencia según la hora.
+  // Ambos códigos codifican una URL real a esta misma página
+  // (?qr=docente|estudiante&t=TOKEN) para que abrirlos con la cámara de un
+  // celular funcione de verdad en cuanto el sitio esté publicado en una URL.
+  // async: 'qr_tokens' vía MySQL.
+  async function getOrCrearTokenQR(tipo, cohorteNombre, docenteNombre) {
+    const tokens = await Store.list('qr_tokens');
+    let rec = tokens.find(t => t.tipo === tipo && t.cohorte === cohorteNombre && t.docente === docenteNombre);
+    if (!rec) {
+      rec = { id: uid('qr'), tipo, cohorte: cohorteNombre, docente: docenteNombre, token: Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4) };
+      tokens.push(rec);
+      await Store.set('qr_tokens', tokens);
+    }
+    return rec.token;
+  }
+
+  // El curso que dicta un docente específico dentro de una cohorte, según
+  // el Horario (solo franjas Activas). Si el docente tiene varias franjas,
+  // se usa la primera como etiqueta.
+  // async: 'horarios' vía MySQL.
+  async function materiaDeDocenteEnCohorte(cohorteNombre, docenteNombre) {
+    const horarios = (await Store.list('horarios')).filter(h => h.cohorte === cohorteNombre);
+    for (const h of horarios) {
+      const franja = franjasActivas(h).find(f => f.docente === docenteNombre && f.curso);
+      if (franja) return franja.curso;
+    }
+    return null;
+  }
+
+  function urlQr(tipo, token) {
+    return location.origin + location.pathname + '?qr=' + tipo + '&t=' + token;
+  }
+
+  // Dibuja un QR real (librería qrcodejs, cargada en index.html) dentro de divId.
+  function pintarQrImprimible(divId, texto) {
+    const cont = document.getElementById(divId);
+    if (!cont) return;
+    cont.innerHTML = '';
+    if (typeof QRCode === 'undefined') {
+      cont.innerHTML = '<p class="text-xs text-coral px-2">No se pudo cargar la librería de códigos QR (revisa tu conexión a internet).</p>';
+      return;
+    }
+    new QRCode(cont, { text: texto, width: 152, height: 152, correctLevel: QRCode.CorrectLevel.M });
+  }
+
+  // Abre una ventana lista para imprimir/descargar el QR ya dibujado en divId.
+  function imprimirQr(titulo, subtitulo, divId) {
+    const cont = document.getElementById(divId);
+    const el = cont ? cont.querySelector('img, canvas') : null;
+    const src = el ? (el.tagName === 'CANVAS' ? el.toDataURL('image/png') : el.src) : '';
+    if (!src) { toast('El código QR aún no está listo, espera un momento', 'err'); return; }
+    const win = window.open('', '_blank');
+    if (!win) { toast('Habilita las ventanas emergentes para imprimir el QR', 'err'); return; }
+    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${escapeHtml(titulo)}</title>
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;color:#14181F;text-align:center;padding:60px 20px;}
+      h1{font-size:20px;margin-bottom:4px;} p{color:#5B6472;font-size:13px;margin-top:0;}
+      img{margin:28px 0;width:260px;height:260px;}
+      button{margin-top:10px;border:none;border-radius:9999px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer;background:#14181F;color:#fff;}
+      @media print{button{display:none;}}
+    </style></head><body>
+    <button onclick="window.print()">Descargar / Imprimir</button>
+    <h1>${escapeHtml(titulo)}</h1>
+    <p>${escapeHtml(subtitulo)}</p>
+    <img src="${src}" alt="Código QR" />
+    <p>Fundación A+ — Training de 100 a 1000+</p>
+    </body></html>`);
+    win.document.close();
+  }
+
+  // ---------- Asistencia automatizada por código de sesión (docente + estudiante) ----------
+  // El docente "habilita" el código de la sesión de hoy para su cohorte
+  // (equivalente a mostrar el QR en el salón). A partir de esa hora de
+  // inicio, el sistema calcula el estado de cada estudiante SOLO con el
+  // tiempo transcurrido — nadie marca asistencia manualmente:
+  //   0–20 min desde el inicio   -> Puntual (Presente)
+  //   20–50 min desde el inicio  -> Tarde
+  //   +50 min sin escanear       -> Ausente (Falla), se registra solo
+  const VENTANA_PUNTUAL_MIN = 20;
+  const VENTANA_TARDE_MIN = 50; // 20 + 30 minutos de tolerancia
+
+  function generarCodigoSesion() {
+    return Math.random().toString(36).slice(2, 8).toUpperCase();
+  }
+
+  // async: 'sesiones_asistencia' vía MySQL.
+  async function sesionAsistenciaHoy(cohorteNombre, docenteNombre) {
+    const hoy = new Date().toISOString().slice(0, 10);
+    return (await Store.list('sesiones_asistencia')).find(s => s.cohorte === cohorteNombre && s.fecha === hoy && s.iniciadaPor === docenteNombre) || null;
+  }
+
+  function minutosTranscurridos(horaInicioISO) {
+    return (Date.now() - new Date(horaInicioISO).getTime()) / 60000;
+  }
+
+  function estadoPorTiempo(mins) {
+    if (mins <= VENTANA_PUNTUAL_MIN) return 'Presente';
+    if (mins <= VENTANA_TARDE_MIN) return 'Tarde';
+    return 'Falla';
+  }
+
+  // Una vez cerrada la ventana (50 min), a quien nunca escaneó se le crea
+  // automáticamente el registro "Falla". Se llama cada vez que se pinta el
+  // panel de asistencia (docente o estudiante), así todo queda al día solo.
+  // Se compara por sesionId (única por docente+cohorte+día), así la
+  // asistencia de cada materia queda completamente separada.
+  // async: 'asistencia' vía MySQL.
+  async function sincronizarAusentesSesion(sesion, estudiantesCohorte) {
+    if (!sesion) return;
+    if (minutosTranscurridos(sesion.horaInicio) <= VENTANA_TARDE_MIN) return;
+    const registros = await Store.list('asistencia');
+    let cambiado = false;
+    estudiantesCohorte.forEach(e => {
+      const yaTiene = registros.some(r => r.estudiante === e.nombre && r.sesionId === sesion.id);
+      if (!yaTiene) {
+        registros.push({ id: uid('as'), estudiante: e.nombre, modulo: sesion.modulo, docente: sesion.iniciadaPor, materia: sesion.materia || sesion.modulo, fecha: sesion.fecha, estado: 'Falla', sesionId: sesion.id, automatico: true });
+        cambiado = true;
+      }
+    });
+    if (cambiado) await Store.set('asistencia', registros);
+  }
+
+  function estadoVentanaSesion(sesion) {
+    const mins = minutosTranscurridos(sesion.horaInicio);
+    if (mins <= VENTANA_PUNTUAL_MIN) return { texto: `Ventana de puntualidad activa — quedan ${Math.ceil(VENTANA_PUNTUAL_MIN - mins)} min`, color: '#0f8f89' };
+    if (mins <= VENTANA_TARDE_MIN) return { texto: `Ventana de tolerancia (llegada tarde) activa — quedan ${Math.ceil(VENTANA_TARDE_MIN - mins)} min`, color: '#b5790f' };
+    return { texto: 'Sesión cerrada — quien no escaneó quedó automáticamente como ausente', color: '#F0455C' };
+  }
+
+  // async: 'asistencia' vía MySQL.
+  async function estadoActualEstudianteSesion(sesion, estudianteNombreVal) {
+    if (!sesion) return { estado: 'Sin sesión', automatico: false };
+    const registro = (await Store.list('asistencia')).find(r => r.estudiante === estudianteNombreVal && r.sesionId === sesion.id);
+    if (registro) return { estado: registro.estado, automatico: !!registro.automatico };
+    return minutosTranscurridos(sesion.horaInicio) <= VENTANA_TARDE_MIN
+      ? { estado: 'Esperando escaneo', automatico: false }
+      : { estado: 'Falla', automatico: true };
+  }
+
+  // ---------- RENDER: Asistencia (QR automático) — docente ----------
+  let docenteAsistCohorte = null;
+  let asistenciaDocenteTimer = null;
+
+  // async: docenteEstudiantesDeCohorte ahora es async (usa 'usuarios' vía
+  // MySQL). El setInterval de más abajo sigue funcionando igual con un
+  // callback async — no espera a que termine antes de la siguiente vuelta,
+  // mismo comportamiento que ya tenía.
+  async function renderAsistenciaDocente() {
+    if (asistenciaDocenteTimer) clearInterval(asistenciaDocenteTimer);
+    const doc = currentDocente || {};
+
+    const modulos = await docenteModulosActivos();
+    if (!docenteAsistCohorte || !modulos.some(m => m.nombre === docenteAsistCohorte)) {
+      docenteAsistCohorte = modulos.length ? modulos[0].nombre : null;
+    }
+    const moduloSel = modulos.find(m => m.nombre === docenteAsistCohorte) || null;
+
+    if (!modulos.length) {
+      document.getElementById('mount-t-asistencia').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
+        <p class="text-sm text-slate2">Aún no tienes cohortes asignadas. El coordinador debe asignarte una desde el panel administrativo para poder abrir la asistencia.</p>
+      </div>`;
+      return;
+    }
+
+    const estudiantes = await docenteEstudiantesDeCohorte(moduloSel.nombre);
+    const sesion = await sesionAsistenciaHoy(moduloSel.nombre, doc.nombre);
+    if (sesion) await sincronizarAusentesSesion(sesion, estudiantes);
+
+    const pillMap = { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'], 'Esperando escaneo': { bg: '#5B647214', text: '#5B6472' }, 'Sin sesión': { bg: '#5B647214', text: '#5B6472' } };
+
+    const selector = `<select onchange="cambiarCohorteAsistDocente(this.value)" class="rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+      ${modulos.map(m => `<option value="${escapeHtml(m.nombre)}" ${m.nombre === docenteAsistCohorte ? 'selected' : ''}>${escapeHtml(m.nombre)} — ${escapeHtml(m.modulo)}</option>`).join('')}
+    </select>`;
+
+    const materiaDoc = (await materiaDeDocenteEnCohorte(moduloSel.nombre, doc.nombre)) || moduloSel.modulo;
+    const tokenDocente = await getOrCrearTokenQR('docente', moduloSel.nombre, doc.nombre);
+    const tokenEstudiante = await getOrCrearTokenQR('estudiante', moduloSel.nombre, doc.nombre);
+
+    const tarjetasQr = `
+      <div class="grid sm:grid-cols-2 gap-5 mb-6">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 text-center">
+          <p class="text-sm font-bold text-ink mb-1">Tu código — actívalo cada día</p>
+          <p class="text-xs text-slate2 mb-4">Este código es solo tuyo, para <strong>${escapeHtml(materiaDoc)}</strong>. Imprímelo una sola vez. Escanéalo al empezar tu clase para activar la ventana de asistencia de hoy; al día siguiente funciona igual.</p>
+          <div id="qrDocenteImg" class="flex justify-center mb-4"></div>
+          <button onclick="imprimirQr('Código del docente — ${escapeHtml(materiaDoc)}','Escanéalo para activar la asistencia de hoy','qrDocenteImg')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 text-center">
+          <p class="text-sm font-bold text-ink mb-1">Código para tus estudiantes</p>
+          <p class="text-xs text-slate2 mb-4">Imprímelo y pégalo en el salón. Solo aplica para <strong>${escapeHtml(materiaDoc)}</strong>: cada estudiante lo escanea, escribe su correo registrado y su asistencia se aplica sola según la hora.</p>
+          <div id="qrEstudianteImg" class="flex justify-center mb-4"></div>
+          <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(materiaDoc)}','Escanéalo e ingresa tu correo institucional','qrEstudianteImg')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+        </div>
+      </div>`;
+
+    let tarjetaSesion;
+    if (!sesion) {
+      tarjetaSesion = `
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <p class="text-sm font-bold text-ink">Asistencia de hoy: sin activar</p>
+            <p class="text-xs text-slate2 mt-1">Actívala escaneando tu código QR de arriba, o con este botón si estás en este mismo dispositivo. Desde ahí, tus estudiantes tendrán ${VENTANA_PUNTUAL_MIN} minutos para llegar puntuales y hasta ${VENTANA_TARDE_MIN} para llegar tarde. Después, quien no escaneó queda ausente solo.</p>
+          </div>
+          <button onclick="habilitarSesionAsistenciaDocente()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-2.5 px-6 hover:bg-morado transition shrink-0">Activar ahora</button>
+        </div>`;
+    } else {
+      const ventana = estadoVentanaSesion(sesion);
+      tarjetaSesion = `
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+          <p class="text-sm font-bold text-ink">Asistencia de hoy: activa</p>
+          <p class="text-xs text-slate2 mt-1">Activada a las ${new Date(sesion.horaInicio).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}${sesion.iniciadaPor ? ' por ' + escapeHtml(sesion.iniciadaPor) : ''}.</p>
+          <p class="text-xs font-bold mt-2" style="color:${ventana.color}">${ventana.texto}</p>
+        </div>`;
+    }
+
+    const infoPorEstudiante = await Promise.all(estudiantes.map(e => estadoActualEstudianteSesion(sesion, e.nombre)));
+    const filasHoy = estudiantes.length ? estudiantes.map((e, i) => {
+      const info = infoPorEstudiante[i];
+      const etiqueta = info.estado === 'Falla' && info.automatico ? 'Falla (automático)' : info.estado;
+      return `<tr class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(e.nombre)}</td>
+        <td class="py-3 px-4">${statusPill(info.estado === 'Falla' ? 'Falla' : info.estado, pillMap)}${info.automatico && info.estado === 'Falla' ? '<span class="text-[10px] text-slate2 ml-2">automático</span>' : ''}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="2" class="text-sm text-slate2 text-center py-6">Esta cohorte aún no tiene estudiantes matriculados.</td></tr>`;
+
+    const asistenciaTodos = await Store.list('asistencia');
+    const historial = estudiantes.map(e => {
+      const regs = asistenciaTodos.filter(a => a.estudiante === e.nombre && a.modulo === moduloSel.modulo && a.docente === doc.nombre);
+      const presentes = regs.filter(r => r.estado === 'Presente').length;
+      const pct = regs.length ? Math.round((presentes / regs.length) * 100) : null;
+      const color = pct === null ? '#5B6472' : pct >= 80 ? '#0f8f89' : pct >= 60 ? '#b5790f' : '#F0455C';
+      return `<tr class="border-b border-gray-50 last:border-0">
+        <td class="py-2.5 px-4 text-sm font-semibold text-ink">${escapeHtml(e.nombre)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2">${regs.length} sesión${regs.length === 1 ? '' : 'es'} registrada${regs.length === 1 ? '' : 's'}</td>
+        <td class="py-2.5 px-4 text-sm font-bold" style="color:${color}">${pct === null ? '—' : pct + '%'}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('mount-t-asistencia').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p class="text-sm font-bold text-ink">Asistencia de hoy — ${escapeHtml(moduloSel.modulo)}</p>
+            <p class="text-xs text-slate2 mt-0.5">${fmtDate(new Date().toISOString().slice(0, 10))} · Todo se calcula automáticamente por tiempo, sin marcado manual.</p>
+          </div>
+          ${selector}
+        </div>
+      </div>
+      ${tarjetaSesion}
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden mb-6">
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Estudiante</th><th class="py-3 px-4">Estado hoy</th></tr></thead>
+            <tbody>${filasHoy}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 px-6 pt-5 pb-2">Historial de asistencia — ${escapeHtml(moduloSel.modulo)}</p>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Sesiones</th><th class="py-2.5 px-4">% Asistencia</th></tr></thead>
+            <tbody>${historial || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Sin registros todavía.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    asistenciaDocenteTimer = setInterval(() => {
+      const panel = document.getElementById('panel-t-asistencia');
+      if (panel && !panel.classList.contains('hidden')) renderAsistenciaDocente();
+      else clearInterval(asistenciaDocenteTimer);
+    }, 15000);
+  }
+
+  // ---------- RENDER: Códigos QR (admin) ----------
+  // Junta, a partir del Horario, cada combinación real de Docente + Cohorte +
+  // Materia, y genera (o reutiliza) el par de QR estables de cada una — así
+  // el administrador puede imprimirlos todos sin depender de que cada
+  // docente entre primero a su propio panel.
+  // async: 'horarios' vía MySQL.
+  async function combosDocenteCohorte() {
+    const registros = await Store.list('horarios');
+    const vistos = new Set();
+    const combos = [];
+    registros.forEach(h => {
+      franjasActivas(h).forEach(f => {
+        if (!f.docente) return;
+        const key = f.docente + '|' + h.cohorte;
+        if (vistos.has(key)) return;
+        vistos.add(key);
+        combos.push({ docente: f.docente, cohorte: h.cohorte, materia: f.curso || h.modulo || h.cohorte });
+      });
+    });
+    combos.sort((a, b) => a.cohorte.localeCompare(b.cohorte) || a.docente.localeCompare(b.docente));
+    return combos;
+  }
+
+  // async: 'modulos'/'horarios'/'qr_tokens' vía MySQL.
+  async function renderCodigosQr() {
+    const combos = await combosDocenteCohorte();
+    const cohortes = await Store.list('modulos');
+
+    if (!combos.length) {
+      document.getElementById('mount-codigosqr').innerHTML = `
+        <div class="admin-panel-card p-10 text-center">
+          <p class="font-bold text-ink mb-1.5">Aún no hay códigos QR para generar</p>
+          <p class="text-sm text-slate2">Primero asigna un docente a alguna franja en el panel <span class="font-semibold text-ink">Cohortes → Horario</span>. En cuanto un docente quede asignado a una materia, sus dos códigos (el suyo y el de sus estudiantes) aparecerán aquí listos para imprimir.</p>
+        </div>`;
+      return;
+    }
+
+    const tokensDoc = await Promise.all(combos.map(c => getOrCrearTokenQR('docente', c.cohorte, c.docente)));
+    const tokensEst = await Promise.all(combos.map(c => getOrCrearTokenQR('estudiante', c.cohorte, c.docente)));
+
+    const tarjetas = combos.map((combo, i) => {
+      const modulo = cohortes.find(c => c.nombre === combo.cohorte);
+      const tokenDoc = tokensDoc[i];
+      const tokenEst = tokensEst[i];
+      const idDoc = 'qrAdminDoc_' + i;
+      const idEst = 'qrAdminEst_' + i;
+      return {
+        html: `
+        <div class="admin-panel-card p-6">
+          <div class="flex items-center justify-between gap-2 mb-4 flex-wrap">
+            <div>
+              <p class="text-sm font-bold text-ink">${escapeHtml(combo.cohorte)}</p>
+              <p class="text-xs text-slate2">${escapeHtml(combo.materia)} · ${modulo ? escapeHtml(modulo.modulo) : ''}</p>
+            </div>
+            <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-morado/10 text-morado">${escapeHtml(combo.docente)}</span>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <div class="rounded-2xl border border-gray-100 p-4 text-center">
+              <p class="text-xs font-bold text-ink mb-3">QR del docente</p>
+              <div id="${idDoc}" class="flex justify-center mb-3"></div>
+              <button onclick="imprimirQr('Código del docente — ${escapeHtml(combo.docente)} · ${escapeHtml(combo.materia)}','Escanéalo para activar la asistencia de hoy','${idDoc}')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+            </div>
+            <div class="rounded-2xl border border-gray-100 p-4 text-center">
+              <p class="text-xs font-bold text-ink mb-3">QR de estudiantes</p>
+              <div id="${idEst}" class="flex justify-center mb-3"></div>
+              <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(combo.cohorte)} · ${escapeHtml(combo.materia)}','Escanéalo e ingresa tu correo institucional','${idEst}')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+            </div>
+          </div>
+        </div>`,
+        idDoc, idEst, tokenDoc, tokenEst
+      };
+    });
+
+    document.getElementById('mount-codigosqr').innerHTML = `
+      <div class="admin-panel-card p-6 mb-6">
+        <h2 class="text-lg font-extrabold text-ink">Códigos QR de asistencia</h2>
+        <p class="text-sm text-slate2 mt-1">Un par de códigos estables por cada docente + cohorte, calculados a partir del panel <span class="font-semibold text-ink">Horario</span>. Imprímelos una sola vez y entrégalos: el docente escanea el suyo para activar la clase, los estudiantes escanean el de la cohorte para registrar su asistencia.</p>
+      </div>
+      <div class="grid lg:grid-cols-2 gap-5">${tarjetas.map(t => t.html).join('')}</div>`;
+
+    // El QR se dibuja DESPUÉS de insertar el HTML (necesita el contenedor ya en el DOM).
+    tarjetas.forEach(t => {
+      pintarQrImprimible(t.idDoc, urlQr('docente', t.tokenDoc));
+      pintarQrImprimible(t.idEst, urlQr('estudiante', t.tokenEst));
+    });
+  }
+
+  function cambiarCohorteAsistDocente(value) {
+    docenteAsistCohorte = value;
+    renderAsistenciaDocente();
+  }
+
+  // async: docenteModulosActivos() ahora es async.
+  async function habilitarSesionAsistenciaDocente() {
+    const doc = currentDocente || {};
+    const moduloSel = (await docenteModulosActivos()).find(m => m.nombre === docenteAsistCohorte);
+    if (!moduloSel) return;
+    if (await sesionAsistenciaHoy(moduloSel.nombre, doc.nombre)) { toast('Ya hay un código de asistencia activo hoy para tu materia', 'info'); renderAsistenciaDocente(); return; }
+    const sesiones = await Store.list('sesiones_asistencia');
+    sesiones.push({
+      id: uid('ses'), cohorte: moduloSel.nombre, modulo: moduloSel.modulo,
+      materia: (await materiaDeDocenteEnCohorte(moduloSel.nombre, doc.nombre)) || moduloSel.modulo, fecha: new Date().toISOString().slice(0, 10),
+      horaInicio: new Date().toISOString(), codigo: generarCodigoSesion(), iniciadaPor: doc.nombre
+    });
+    await Store.set('sesiones_asistencia', sesiones);
+    toast('Código habilitado: los estudiantes tienen ' + VENTANA_PUNTUAL_MIN + ' minutos para llegar puntuales', 'ok');
+    renderAsistenciaDocente();
+  }
+
+  /* =====================================================================
+     ESCANEO REAL DE LOS QR IMPRESOS (?qr=docente|estudiante&t=TOKEN)
+     ---------------------------------------------------------------------
+     Al abrir con la cámara del celular la URL codificada en el QR, esta
+     pantalla (qrView) toma el control ANTES de cualquier login: el token
+     ya identifica sin ambigüedad la cohorte + docente + materia, así que
+     no hace falta iniciar sesión para activar o registrar asistencia.
+     ===================================================================== */
+
+  function qrLandingShell(icono, color, titulo, subtitulo, cuerpoHtml) {
+    return `
+      <div class="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-5" style="background:${color}1A">
+        <span class="text-2xl">${icono}</span>
+      </div>
+      <h1 class="text-xl font-extrabold text-ink mb-1.5">${escapeHtml(titulo)}</h1>
+      <p class="text-sm text-slate2 mb-6">${subtitulo}</p>
+      ${cuerpoHtml}
+      <p class="text-xs text-slate2 mt-8">Fundación A+ — Training de 100 a 1000+</p>`;
+  }
+
+  function fmtHora(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return isNaN(d) ? iso : d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
+
+  // Copia el enlace de asistencia para compartirlo con los estudiantes
+  function copiarEnlaceEstudiante(token) {
+    const enlace = urlQr('estudiante', token);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(enlace).then(() => {
+        toast('Enlace de asistencia copiado al portapapeles', 'ok');
+      }).catch(() => {
+        prompt('Copia este enlace para tus estudiantes:', enlace);
+      });
+    } else {
+      prompt('Copia este enlace para tus estudiantes:', enlace);
+    }
+  }
+  window.copiarEnlaceEstudiante = copiarEnlaceEstudiante;
+
+  // Re-consulta el estado del QR del estudiante (por si el docente recién lo activó)
+  async function verificarSesionEstudianteQr(token) {
+    toast('Verificando si el docente activó la clase...', 'info');
+    await manejarQrEnURL();
+  }
+  window.verificarSesionEstudianteQr = verificarSesionEstudianteQr;
+
+  // Re-consulta las asistencias en la pantalla del docente
+  async function recargarEstadoDocenteQr(token) {
+    await manejarQrEnURL();
+    toast('Lista de asistencias actualizada', 'ok');
+  }
+  window.recargarEstadoDocenteQr = recargarEstadoDocenteQr;
+
+  // async: 'qr_asistencia' endpoint en backend PHP.
+  async function manejarQrEnURL() {
+    const params = new URLSearchParams(location.search);
+    const tipo = params.get('qr');
+    const token = params.get('t');
+    if (!tipo || !token) return;
+
+    document.getElementById('siteView').classList.add('hidden');
+    const qrView = document.getElementById('qrView');
+    if (qrView) qrView.classList.remove('hidden');
+
+    try {
+      const resp = await fetch(API_BASE_URL + '/api/qr_asistencia?tipo=' + encodeURIComponent(tipo) + '&token=' + encodeURIComponent(token), {
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      const datos = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        document.getElementById('qrViewCard').innerHTML = `
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center max-w-md mx-auto">
+            <div class="w-14 h-14 rounded-full bg-coral/10 text-coral flex items-center justify-center mx-auto mb-4 text-2xl">⚠️</div>
+            <h2 class="text-xl font-bold text-ink mb-2">Código no válido o expirado</h2>
+            <p class="text-sm text-slate2 mb-6">${escapeHtml(datos.error || 'Este QR no corresponde a ninguna cohorte activa.')}</p>
+            <a href="${location.pathname}" class="inline-block rounded-full bg-morado text-white text-xs font-semibold px-6 py-2.5 hover:opacity-90 transition">Volver al inicio</a>
+          </div>`;
+        return;
+      }
+
+      if (tipo === 'docente') {
+        renderQrLandingDocente(datos);
+      } else {
+        renderQrLandingEstudianteGoogleForm(datos);
+      }
+    } catch (e) {
+      document.getElementById('qrViewCard').innerHTML = `
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center max-w-md mx-auto">
+          <div class="w-14 h-14 rounded-full bg-coral/10 text-coral flex items-center justify-center mx-auto mb-4 text-2xl">⚠️</div>
+          <h2 class="text-xl font-bold text-ink mb-2">Error de conexión</h2>
+          <p class="text-sm text-slate2 mb-6">No se pudo conectar con el servidor local. Verifica que XAMPP (Apache y MySQL) esté iniciado.</p>
+        </div>`;
+    }
+  }
+
+  // ---- Landing del QR del DOCENTE: activa la sesión de hoy y proyecta el QR del estudiante ----
+  function renderQrLandingDocente(datos) {
+    const { registro, sesion, recienActivada, tokenEstudiante, totalAsistencias } = datos;
+    const ventana = estadoVentanaSesion(sesion);
+    const idQrEst = 'qrDocenteEstudianteScreen';
+
+    const qrEstudianteHtml = tokenEstudiante ? `
+      <div class="bg-white rounded-2xl border border-gray-200 p-6 mb-5 shadow-sm text-center">
+        <p class="text-xs font-bold text-morado tracking-wide uppercase mb-1">Código QR para tus estudiantes</p>
+        <p class="text-sm font-semibold text-ink mb-4">Muestra este código a tus estudiantes para que lo escaneen y confirmen su asistencia:</p>
+        <div id="${idQrEst}" class="flex justify-center mb-4"></div>
+        <div class="flex items-center justify-center gap-3">
+          <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(registro.cohorte)} · ${escapeHtml(sesion.materia)}','Escanéalo para ingresar tu usuario de asistencia','${idQrEst}')" class="text-xs font-semibold text-morado hover:underline flex items-center gap-1.5 cursor-pointer">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+            Imprimir / Agrandar
+          </button>
+          <span class="text-slate2/40">•</span>
+          <button onclick="copiarEnlaceEstudiante('${tokenEstudiante}')" class="text-xs font-semibold text-turquesa hover:underline flex items-center gap-1.5 cursor-pointer">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            Copiar enlace
+          </button>
+        </div>
+      </div>
+    ` : '';
+
+    const cuerpo = `
+      <div class="flex flex-col gap-4">
+        <div class="rounded-2xl p-5 border-l-4" style="background:#1FC8C014; border-left-color:#1FC8C0">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-lg">✅</span>
+            <p class="text-base font-extrabold text-ink">${recienActivada ? '¡Asistencia de hoy activada!' : 'Sesión activa para hoy'}</p>
+          </div>
+          <p class="text-xs font-semibold mt-1" style="color:${ventana.color}">${ventana.texto}</p>
+          <p class="text-xs text-slate2 mt-2">Hora de inicio: <strong>${fmtHora(sesion.horaInicio)}</strong></p>
+        </div>
+
+        ${qrEstudianteHtml}
+
+        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs text-slate2">Asistencias registradas hoy en esta clase:</p>
+              <p class="text-2xl font-extrabold text-ink mt-0.5" id="contadorAsistenciasHoy">${totalAsistencias} estudiante${totalAsistencias === 1 ? '' : 's'}</p>
+            </div>
+            <button onclick="recargarEstadoDocenteQr('${registro.token}')" class="rounded-xl border border-gray-200 text-slate2 hover:text-morado hover:bg-morado/5 text-xs font-semibold px-3 py-2 transition flex items-center gap-1 cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Actualizar
+            </button>
+          </div>
+        </div>
+
+        <div class="text-center mt-2">
+          <a href="${location.pathname}" class="text-xs text-slate2 hover:text-ink underline">Ir al portal de la Fundación</a>
+        </div>
+      </div>`;
+
+    document.getElementById('qrViewCard').innerHTML = `
+      <div class="bg-white rounded-3xl shadow-softLg border border-gray-100 p-8 max-w-lg mx-auto">
+        <div class="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-4" style="background:#8B5CF61A">
+          <span class="text-2xl">👨‍🏫</span>
+        </div>
+        <h1 class="text-xl font-extrabold text-ink mb-1">Docente: ${escapeHtml(registro.docente)}</h1>
+        <p class="text-xs text-slate2 mb-6">Cohorte <strong class="text-ink">${escapeHtml(registro.cohorte)}</strong> · ${escapeHtml(sesion.materia)}</p>
+        ${cuerpo}
+      </div>`;
+
+    if (tokenEstudiante) {
+      pintarQrImprimible(idQrEst, urlQr('estudiante', tokenEstudiante));
+    }
+  }
+
+  // ---- Landing del QR del ESTUDIANTE: Formulario estilo Google Forms ----
+  function renderQrLandingEstudianteGoogleForm(datos) {
+    const { registro, sesionActiva, sesion } = datos;
+    const token = registro.token;
+    const hoy = new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    let estadoSesionHtml = '';
+    if (sesionActiva) {
+      const ventana = estadoVentanaSesion(sesion);
+      estadoSesionHtml = `
+        <div class="rounded-xl p-3.5 mb-5 text-left flex items-start gap-2.5" style="background:#1FC8C014; border-left: 4px solid #1FC8C0;">
+          <span class="text-base leading-none mt-0.5">🟢</span>
+          <div>
+            <p class="text-xs font-bold text-ink">Sesión abierta por el docente</p>
+            <p class="text-[11px] font-semibold mt-0.5" style="color:${ventana.color}">${ventana.texto}</p>
+          </div>
+        </div>`;
+    } else {
+      estadoSesionHtml = `
+        <div class="rounded-xl p-3.5 mb-5 text-left flex items-start gap-2.5" style="background:#F5A62314; border-left: 4px solid #F5A623;">
+          <span class="text-base leading-none mt-0.5">⏳</span>
+          <div>
+            <p class="text-xs font-bold text-ink">Sesión aún no activada por el docente</p>
+            <p class="text-[11px] text-slate2 mt-0.5">El docente (${escapeHtml(registro.docente)}) aún no ha escaneado su código de inicio de clase. Espera a que lo active y haz clic en verificar.</p>
+            <button onclick="verificarSesionEstudianteQr('${token}')" class="mt-2 text-xs font-bold text-morado hover:underline flex items-center gap-1 cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Comprobar si ya fue activada
+            </button>
+          </div>
+        </div>`;
+    }
+
+    document.getElementById('qrViewCard').innerHTML = `
+      <div class="space-y-4 max-w-xl mx-auto">
+        <!-- Card 1: Encabezado estilo Google Forms con franja morada superior -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="h-3 w-full" style="background: #673ab7;"></div>
+          <div class="p-6 text-left">
+            <h1 class="text-2xl font-bold text-[#202124] tracking-tight mb-2">Registro de Asistencia — Fundación A+</h1>
+            <div class="text-xs text-[#5f6368] space-y-1 mb-4">
+              <p>Cohorte: <strong class="text-[#202124]">${escapeHtml(registro.cohorte)}</strong></p>
+              <p>Docente: <strong class="text-[#202124]">${escapeHtml(registro.docente)}</strong></p>
+              <p>Fecha: <span class="capitalize">${hoy}</span></p>
+            </div>
+            ${estadoSesionHtml}
+            <div class="border-t border-gray-100 pt-3 flex items-center justify-between text-xs text-[#d93025]">
+              <span>* Indica que la pregunta es obligatoria</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Pregunta / Formulario estilo Google Forms -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-left transition" id="cardPreguntaUsuario">
+          <label for="googleFormUsuarioInput" class="block text-sm font-semibold text-[#202124] mb-1">
+            Correo institucional o Usuario asignado <span class="text-[#d93025]">*</span>
+          </label>
+          <p class="text-xs text-[#5f6368] mb-4">Ingresa tu correo institucional asignado (ej. estudiante@aplus.org) o tu nombre de usuario para confirmar la asistencia en el sistema.</p>
+          
+          <div class="relative mb-2">
+            <input 
+              id="googleFormUsuarioInput" 
+              type="text" 
+              autocomplete="email" 
+              placeholder="Tu respuesta" 
+              class="w-full text-sm text-[#202124] py-2.5 px-3 border-b-2 border-gray-300 focus:border-[#673ab7] focus:outline-none transition bg-transparent placeholder-gray-400"
+            />
+          </div>
+          <div id="googleFormErrorMsg" class="hidden text-xs text-[#d93025] mt-1.5 flex items-center gap-1">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+            <span id="googleFormErrorText"></span>
+          </div>
+        </div>
+
+        <!-- Card 3: Botón de Enviar -->
+        <div class="flex items-center justify-between pt-1">
+          <button 
+            type="button" 
+            onclick="enviarFormularioAsistencia('${token}')" 
+            id="btnEnviarAsistencia"
+            class="rounded-lg text-white font-medium text-sm px-7 py-2.5 shadow hover:shadow-md transition flex items-center gap-2 cursor-pointer"
+            style="background: #673ab7;"
+          >
+            <span id="btnEnviarText">Enviar</span>
+            <svg id="btnEnviarSpinner" class="hidden animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+          </button>
+          <button 
+            type="button" 
+            onclick="document.getElementById('googleFormUsuarioInput').value='';" 
+            class="text-xs font-semibold text-[#5f6368] hover:text-[#202124] transition cursor-pointer"
+          >
+            Borrar formulario
+          </button>
+        </div>
+
+        <div class="text-center pt-4">
+          <p class="text-[11px] text-[#5f6368]">Formulario de asistencia automatizada · Fundación A+</p>
+        </div>
+      </div>`;
+
+    const input = document.getElementById('googleFormUsuarioInput');
+    if (input) {
+      input.focus();
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') enviarFormularioAsistencia(token);
+      });
+    }
+  }
+
+  // Envía la respuesta del formulario y la procesa en MySQL
+  async function enviarFormularioAsistencia(token) {
+    const input = document.getElementById('googleFormUsuarioInput');
+    const valor = (input ? input.value : '').trim();
+    const errorEl = document.getElementById('googleFormErrorMsg');
+    const errorText = document.getElementById('googleFormErrorText');
+    const cardPregunta = document.getElementById('cardPreguntaUsuario');
+    const btn = document.getElementById('btnEnviarAsistencia');
+    const btnText = document.getElementById('btnEnviarText');
+    const btnSpinner = document.getElementById('btnEnviarSpinner');
+
+    if (!valor) {
+      if (errorEl && errorText) {
+        errorText.textContent = 'Esta pregunta es obligatoria';
+        errorEl.classList.remove('hidden');
+        if (cardPregunta) cardPregunta.classList.add('border-red-400');
+        if (input) input.focus();
+      }
+      return;
+    }
+
+    if (errorEl) errorEl.classList.add('hidden');
+    if (cardPregunta) cardPregunta.classList.remove('border-red-400');
+
+    if (btn) btn.disabled = true;
+    if (btnText) btnText.textContent = 'Enviando...';
+    if (btnSpinner) btnSpinner.classList.remove('hidden');
+
+    try {
+      const resp = await fetch(API_BASE_URL + '/api/qr_asistencia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        body: JSON.stringify({ token, usuario: valor })
+      });
+      const res = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        if (btn) btn.disabled = false;
+        if (btnText) btnText.textContent = 'Enviar';
+        if (btnSpinner) btnSpinner.classList.add('hidden');
+        if (errorEl && errorText) {
+          errorText.textContent = res.error || 'Error al registrar asistencia.';
+          errorEl.classList.remove('hidden');
+          if (cardPregunta) cardPregunta.classList.add('border-red-400');
+        }
+        return;
+      }
+
+      renderConfirmacionGoogleForm(res, token);
+    } catch (err) {
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.textContent = 'Enviar';
+      if (btnSpinner) btnSpinner.classList.add('hidden');
+      if (errorEl && errorText) {
+        errorText.textContent = 'No se pudo comunicar con el servidor local.';
+        errorEl.classList.remove('hidden');
+      }
+    }
+  }
+  window.enviarFormularioAsistencia = enviarFormularioAsistencia;
+
+  // Pantalla de confirmación estilo Google Forms
+  function renderConfirmacionGoogleForm(res, token) {
+    const estadoBadge = res.estado === 'Presente' 
+      ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-white" style="background:#0f8f89;">✓ Presente (Puntual)</span>'
+      : '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-white" style="background:#b5790f;">⏰ Llegada con retraso (Tarde)</span>';
+
+    document.getElementById('qrViewCard').innerHTML = `
+      <div class="space-y-4 text-left max-w-xl mx-auto">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="h-3 w-full" style="background: #673ab7;"></div>
+          <div class="p-6">
+            <h1 class="text-2xl font-bold text-[#202124] tracking-tight mb-2">Registro de Asistencia — Fundación A+</h1>
+            <p class="text-sm text-[#202124] mb-4">${res.yaRegistrado ? 'Tu asistencia ya había sido registrada previamente para esta clase.' : 'Se ha registrado tu respuesta correctamente en el sistema.'}</p>
+            
+            <div class="rounded-xl p-4 bg-gray-50 border border-gray-200 space-y-2 mb-6">
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-slate2">Estudiante:</span>
+                <span class="text-sm font-bold text-ink">${escapeHtml(res.estudiante)}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-slate2">Estado:</span>
+                <span>${estadoBadge}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-slate2">Cohorte / Materia:</span>
+                <span class="text-xs font-medium text-ink">${escapeHtml(res.cohorte)} · ${escapeHtml(res.materia)}</span>
+              </div>
+              ${res.hora ? `
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-slate2">Hora de registro:</span>
+                <span class="text-xs font-semibold text-slate2">${escapeHtml(res.hora)}</span>
+              </div>` : ''}
+            </div>
+
+            <div class="pt-2">
+              <a href="javascript:void(0)" onclick="location.reload()" class="text-xs font-semibold text-[#1a73e8] hover:underline cursor-pointer">
+                Enviar otra respuesta
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-center pt-2">
+          <p class="text-[11px] text-[#5f6368]">Fundación A+ — Sistema de Control de Asistencia</p>
+        </div>
+      </div>`;
+  }
+  window.renderConfirmacionGoogleForm = renderConfirmacionGoogleForm;
+
+
+  // ---------- RENDER: Semáforo de riesgo — docente ----------
+  async function renderRiesgoDocente() {
+    const cohortes = (await docenteModulosActivos()).map(m => m.nombre);
+    const data = (await computeSemaforo()).filter(s => cohortes.includes(s.cohorte));
+    const riesgoColor = { Verde: { bg: '#1FC8C01A', text: '#0f8f89', dot: '#1FC8C0' }, Amarillo: { bg: '#F5A6231A', text: '#b5790f', dot: '#F5A623' }, Rojo: { bg: '#F0455C1A', text: '#F0455C', dot: '#F0455C' } };
+
+    const rows = data.map(s => `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink"><span class="inline-block w-2 h-2 rounded-full mr-2" style="background:${riesgoColor[s.riesgo].dot}"></span>${escapeHtml(s.nombre)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(s.cohorte || '—')}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${s.promedio}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${s.asistencia === '—' ? '—' : s.asistencia + '%'}</td>
+        <td class="py-3 px-4"><span class="text-xs font-semibold px-2.5 py-1 rounded-full" style="background:${riesgoColor[s.riesgo].bg};color:${riesgoColor[s.riesgo].text}">${s.riesgo}</span></td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(s.motivo) || '—'}</td>
+      </tr>`).join('');
+
+    document.getElementById('mount-t-riesgo').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6">
+        <div class="mb-5">
+          <p class="text-sm font-bold text-ink">Semáforo de riesgo académico</p>
+          <p class="text-xs text-slate2 mt-0.5">100% automático: calculado con el promedio real de notas y el % real de asistencia de tus estudiantes.</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+              <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Promedio</th><th class="py-2.5 px-4">Asistencia</th><th class="py-2.5 px-4">Riesgo</th><th class="py-2.5 px-4">Motivo</th>
+            </tr></thead>
+            <tbody>${rows || '<tr><td colspan="6" class="text-sm text-slate2 text-center py-6">Aún no tienes estudiantes en tus cohortes asignadas.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  // ---------- Calificaciones (docente) — notas de 0.0 a 10.0, ponderadas ----------
+  // Una cohorte + docente + MES = un registro con "criterios" (notas
+  // configurables por el docente: nombre + peso %) y "valores" (nota
+  // 0.0–10.0 de cada estudiante por criterio). Arranca vacío: sin criterios
+  // ni notas de ejemplo.
+  //
+  // Separación por mes: cada vez que se crea un Horario nuevo (nuevo mes)
+  // para una cohorte, el docente asignado ve una hoja de calificación NUEVA
+  // y en blanco para ese mes — las notas de meses anteriores no se tocan ni
+  // se mezclan, quedan disponibles como historial de solo lectura (tanto
+  // para el docente como para el estudiante, ver renderCalificacionesEstudiante).
+  let docenteCalifSeleccion = null; // "cohorte__mes"
+
+  // Mes calendario real de hoy, en el mismo formato "YYYY-MM" que usa el
+  // campo `mes` en toda la plataforma — punto único de esta comparación,
+  // usado por mesActualParaDocenteCohorte() y por el cálculo de "esFuturo"
+  // en los selectores de Calificaciones e Informes.
+  function mesActualReal() {
+    const hoy = new Date();
+    return hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0');
+  }
+
+  // Mes más reciente en el que un docente tiene una franja de Horario para
+  // una cohorte dada, PERO nunca más adelante que el mes calendario real de
+  // hoy — ese es el "periodo actual" y el único editable.
+  // CORREGIDO: antes se tomaba el mes más reciente que existiera en el
+  // Horario sin importar la fecha real, así que si ya se creaba el
+  // horario de un mes futuro (ej. octubre creado en septiembre), ese mes
+  // futuro quedaba marcado como "actual" y editable de inmediato — un
+  // docente podía enviar calificaciones/informes de un mes que todavía no
+  // había llegado. Ahora se compara contra hoy (formato "YYYY-MM", el
+  // mismo que usa el campo `mes` en toda la plataforma, así que la
+  // comparación de strings basta) y se toma el mes más reciente que no la
+  // supere. Si el docente solo tiene franjas en meses futuros (ningún mes
+  // ya llegó todavía), no hay ningún mes editable — se devuelve null.
+  // async: getSlotsDocente() ahora es async.
+  async function mesActualParaDocenteCohorte(docenteNombre, cohorteNombre) {
+    const mesHoy = mesActualReal();
+    const meses = (await getSlotsDocente(docenteNombre))
+      .filter(s => s.cohorte === cohorteNombre)
+      .map(s => s.mes)
+      .filter(Boolean)
+      .filter(m => m <= mesHoy); // descarta cualquier mes que todavía no haya llegado
+    if (!meses.length) return null;
+    return meses.reduce((a, b) => (b > a ? b : a));
+  }
+
+  // Migración: asigna un "mes" a cualquier registro de notas_modulos que se
+  // haya creado antes de separar las calificaciones por periodo. Se corre
+  // una sola vez al cargar la página (ver el arranque, al final del archivo).
+  // async: 'notas_modulos' vía MySQL + mesActualParaDocenteCohorte() (que
+  // también es async, usa 'horarios' vía MySQL).
+  async function migrarNotasModulosSinMes() {
+    const registros = await Store.list('notas_modulos');
+    const sinMes = registros.filter(r => !r.mes);
+    if (!sinMes.length) return;
+    const mesesResueltos = await Promise.all(sinMes.map(r => mesActualParaDocenteCohorte(r.docente, r.cohorte)));
+    sinMes.forEach((r, i) => { r.mes = mesesResueltos[i] || '0000-00'; });
+    await Store.set('notas_modulos', registros);
+  }
+
+  // async: 'notas_modulos' vía MySQL.
+  async function getNotasModuloRecord(cohorteNombre, mes, crear) {
+    const doc = currentDocente || {};
+    const registros = await Store.list('notas_modulos');
+    let rec = registros.find(r => r.docente === doc.nombre && r.cohorte === cohorteNombre && r.mes === mes);
+    if (!rec && crear) {
+      // Migración suave: si existe un registro de antes de separar las notas
+      // por mes (sin campo "mes") para este mismo docente+cohorte, se adopta
+      // en vez de perder esas calificaciones ya cargadas.
+      const legacy = registros.find(r => r.docente === doc.nombre && r.cohorte === cohorteNombre && !r.mes);
+      if (legacy) {
+        legacy.mes = mes;
+        rec = legacy;
+        await Store.set('notas_modulos', registros);
+      } else {
+        rec = { id: uid('nm'), docente: doc.nombre, cohorte: cohorteNombre, mes, criterios: [], valores: {} };
+        registros.push(rec);
+        await Store.set('notas_modulos', registros);
+      }
+    }
+    return rec || null;
+  }
+
+  // async: 'notas_modulos' vía MySQL.
+  async function guardarNotasModuloRecord(rec) {
+    const registros = await Store.list('notas_modulos');
+    const idx = registros.findIndex(r => r.id === rec.id);
+    if (idx >= 0) registros[idx] = rec; else registros.push(rec);
+    await Store.set('notas_modulos', registros);
+    // Deja rastro en "Actividad reciente" del dashboard: quién subió/editó
+    // notas, en qué cohorte y mes. currentDocente siempre está disponible
+    // aquí porque los 4 llamadores de esta función viven en el panel Docente.
+    if (currentDocente) {
+      await registrarAuditoriaAccion('Notas actualizadas', currentDocente.nombre, 'Docente', `${rec.cohorte || ''} · ${rec.mes || ''}`.trim());
+    }
+  }
+
+  function pesoTotalCriterios(rec) {
+    return (rec.criterios || []).reduce((a, c) => a + (Number(c.peso) || 0), 0);
+  }
+
+  // Nota cuantitativa ponderada (0.0–10.0). Se normaliza sobre el peso total
+  // definido (aunque no sume exactamente 100%) para que el cálculo nunca
+  // quede roto, pero la interfaz igual avisa si el peso no suma 100%.
+  function calcularNotaFinal(rec, estudianteNombre) {
+    const criterios = rec.criterios || [];
+    if (!criterios.length) return null;
+    const valores = (rec.valores && rec.valores[estudianteNombre]) || {};
+    let sumaPeso = 0, sumaPonderada = 0, faltan = false;
+    criterios.forEach(c => {
+      const peso = Number(c.peso) || 0;
+      sumaPeso += peso;
+      const v = valores[c.id];
+      if (v === undefined || v === null || v === '') { faltan = true; return; }
+      sumaPonderada += Number(v) * peso;
+    });
+    if (!sumaPeso) return null;
+    if (faltan) return { pendiente: true };
+    return { valor: sumaPonderada / sumaPeso, pendiente: false };
+  }
+
+  function calificacionCualitativa(nota) {
+    if (nota === null || nota === undefined || isNaN(nota)) return '—';
+    if (nota >= 9) return 'Desempeño Superior';
+    if (nota >= 7) return 'Desempeño Alto';
+    if (nota >= 6) return 'Desempeño Básico';
+    return 'Desempeño Bajo';
+  }
+  function colorCualitativa(nota) {
+    if (nota === null || nota === undefined || isNaN(nota)) return '#5B6472';
+    if (nota >= 9) return '#1FC8C0';
+    if (nota >= 7) return '#0f8f89';
+    if (nota >= 6) return '#F5A623';
+    return '#F0455C';
+  }
+
+  // Opciones para el selector de "Calificar estudiantes": una por cada
+  // combinación real Cohorte+Mes que aparece en el Horario del docente
+  // (no solo por cohorte). Más recientes primero.
+  // async: getSlotsDocente() y mesActualParaDocenteCohorte() ahora son async.
+  async function docenteCalifOpciones() {
+    const doc = currentDocente || {};
+    if (!doc.nombre) return [];
+    const mapa = new Map();
+    (await getSlotsDocente(doc.nombre)).forEach(s => {
+      const key = s.cohorte + '__' + s.mes;
+      if (!mapa.has(key)) mapa.set(key, { cohorte: s.cohorte, mes: s.mes, materias: new Set() });
+      if (s.materia) mapa.get(key).materias.add(s.materia);
+    });
+    const entradas = [...mapa.entries()];
+    const esActualPorEntrada = await Promise.all(entradas.map(([, o]) => mesActualParaDocenteCohorte(doc.nombre, o.cohorte)));
+    const mesHoy = mesActualReal();
+    const arr = entradas.map(([key, o], i) => ({
+      key, cohorte: o.cohorte, mes: o.mes,
+      materia: [...o.materias].filter(Boolean).join(' / ') || '(sin materia)',
+      esActual: o.mes === esActualPorEntrada[i],
+      esFuturo: o.mes > mesHoy, // mes que en el calendario real todavía no llega — distinto de "historial" (un mes ya pasado)
+    }));
+    arr.sort((a, b) => b.mes.localeCompare(a.mes) || a.cohorte.localeCompare(b.cohorte));
+    return arr;
+  }
+
+  // async: docenteEstudiantesDeCohorte ahora es async.
+  async function renderCalificacionesDocente() {
+    const opciones = await docenteCalifOpciones();
+    if (!docenteCalifSeleccion || !opciones.some(o => o.key === docenteCalifSeleccion)) {
+      docenteCalifSeleccion = opciones.length ? opciones[0].key : null;
+    }
+    const sel = opciones.find(o => o.key === docenteCalifSeleccion) || null;
+
+    if (!opciones.length) {
+      document.getElementById('mount-t-calificaciones').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
+        <p class="text-sm text-slate2">Aún no tienes cohortes/módulos asignados. El coordinador debe asignarte uno desde el panel administrativo (Horario) para poder subir calificaciones.</p>
+      </div>`;
+      return;
+    }
+
+    const rec = (await getNotasModuloRecord(sel.cohorte, sel.mes, false)) || { criterios: [], valores: {} };
+    const pesoTotal = pesoTotalCriterios(rec);
+    const pesoOk = pesoTotal === 100;
+    const estudiantes = await docenteEstudiantesDeCohorte(sel.cohorte);
+    const editable = sel.esActual;
+
+    const selector = `<select onchange="cambiarCalifDocente(this.value)" class="rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+      ${opciones.map(o => `<option value="${escapeHtml(o.key)}" ${o.key === docenteCalifSeleccion ? 'selected' : ''}>${escapeHtml(o.cohorte)} — ${escapeHtml(mesLabel(o.mes))} — ${escapeHtml(o.materia)}${o.esActual ? '' : (o.esFuturo ? ' (aún no disponible)' : ' (historial)')}</option>`).join('')}
+    </select>`;
+
+    const avisoHistorial = !editable ? `<p class="text-xs font-semibold text-morado bg-morado/10 rounded-xl px-4 py-2.5 mb-4">Estás viendo un periodo anterior (${escapeHtml(mesLabel(sel.mes))}). Quedó guardado como historial y ya no se puede editar — el periodo activo para calificar es el mes más reciente que te asignaron en el Horario.</p>` : '';
+
+    const criteriosFilas = (rec.criterios || []).map(c => `
+      <div class="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-2.5">
+        <input type="text" value="${escapeHtml(c.nombre)}" ${editable ? `onchange="actualizarCriterioCalif('${sel.cohorte}','${sel.mes}','${c.id}','nombre', this.value)"` : 'disabled'} class="flex-1 bg-white text-sm font-semibold text-ink focus:outline-none disabled:opacity-60 rounded-lg border border-gray-100 px-2 py-1" placeholder="Nombre de la nota (ej. Taller 1)" />
+        <div class="flex items-center gap-1.5 shrink-0">
+          <input type="number" min="0" max="100" step="1" value="${c.peso}" ${editable ? `onchange="actualizarCriterioCalif('${sel.cohorte}','${sel.mes}','${c.id}','peso', this.value)"` : 'disabled'} class="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-right disabled:opacity-60" />
+          <span class="text-xs text-slate2 font-semibold">%</span>
+        </div>
+        ${editable ? `<button onclick="eliminarCriterioCalif('${sel.cohorte}','${sel.mes}','${c.id}')" class="text-coral hover:opacity-70 shrink-0" title="Eliminar nota">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>` : ''}
+      </div>`).join('');
+
+    let tablaNotas;
+    if (!rec.criterios || !rec.criterios.length) {
+      tablaNotas = `<p class="text-sm text-slate2 text-center py-8">${editable ? 'Agrega al menos una nota (por ejemplo, "Taller 1") para empezar a calificar a tus estudiantes.' : 'Este periodo no llegó a tener notas de evaluación definidas.'}</p>`;
+    } else if (!estudiantes.length) {
+      tablaNotas = `<p class="text-sm text-slate2 text-center py-8">Esta cohorte aún no tiene estudiantes matriculados.</p>`;
+    } else {
+      const headerCriterios = rec.criterios.map(c => `<th class="py-2.5 px-3 text-center">${escapeHtml(c.nombre)}<br/><span class="text-[10px] font-normal normal-case text-slate2">${c.peso}%</span></th>`).join('');
+      const filas = estudiantes.map(e => {
+        const valores = (rec.valores && rec.valores[e.nombre]) || {};
+        const celdas = rec.criterios.map(c => `
+          <td class="py-2 px-3 text-center">
+            <input type="number" min="0" max="10" step="0.1" value="${valores[c.id] !== undefined ? valores[c.id] : ''}" placeholder="0.0" ${editable ? '' : 'disabled'}
+              onchange="guardarNotaCriterio('${sel.cohorte}','${sel.mes}','${e.id}','${c.id}', this.value)"
+              class="w-16 rounded-lg border border-morado/25 bg-morado/5 px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado disabled:opacity-60" />
+          </td>`).join('');
+        const resultado = calcularNotaFinal(rec, e.nombre);
+        const nota = resultado && !resultado.pendiente ? resultado.valor : null;
+        const cuantHtml = nota !== null ? `<span class="font-bold" style="color:${colorCualitativa(nota)}">${nota.toFixed(1)}</span>` : `<span class="text-slate2 text-xs">Incompleta</span>`;
+        // Nota: la "Cualitativa" (Desempeño Superior/Alto/Básico/Bajo) ya NO se muestra
+        // aquí. Esa valoración cualitativa vive únicamente en el Informe que el docente
+        // genera para el estudiante/administrador (ver renderInformesDocente).
+        return `<tr class="border-b border-gray-50 last:border-0">
+          <td class="py-2.5 px-4 text-sm font-semibold text-ink whitespace-nowrap">${nombrePersonaClicable(e.nombre, 'Estudiante')}</td>
+          ${celdas}
+          <td class="py-2.5 px-3 text-center">${cuantHtml}</td>
+        </tr>`;
+      }).join('');
+      tablaNotas = `<div class="overflow-x-auto rounded-xl border border-gray-100">
+        <table class="w-full">
+          <thead><tr class="text-left text-[10px] font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+            <th class="py-2.5 px-4">Estudiante</th>${headerCriterios}<th class="py-2.5 px-3 text-center">Cuantitativa</th>
+          </tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>`;
+    }
+
+    document.getElementById('mount-t-calificaciones').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p class="text-sm font-bold text-ink">Calificaciones por cohorte y mes</p>
+            <p class="text-xs text-slate2 mt-0.5">Escala de 0.0 a 10.0. Cada mes/materia asignada en tu Horario tiene su propia hoja de calificación — el mes más reciente es el periodo activo; los anteriores quedan como historial de solo lectura.</p>
+          </div>
+          ${selector}
+        </div>
+      </div>
+      ${avisoHistorial}
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <p class="text-sm font-bold text-ink">Notas de evaluación — ${escapeHtml(sel.materia)} · ${escapeHtml(mesLabel(sel.mes))}</p>
+          <span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${pesoOk ? '#1FC8C01A' : '#F0455C1A'};color:${pesoOk ? '#0f8f89' : '#F0455C'}">Peso total: ${pesoTotal}%${pesoOk ? '' : ' — debe sumar 100%'}</span>
+        </div>
+        <div class="space-y-2.5 mb-4">${criteriosFilas || '<p class="text-sm text-slate2">Aún no has definido notas para este periodo.</p>'}</div>
+        ${editable ? `<button onclick="agregarCriterioCalif('${sel.cohorte}','${sel.mes}')" class="rounded-xl border border-dashed border-gray-300 text-slate2 hover:text-ink hover:border-ink text-sm font-semibold px-4 py-2.5 transition">+ Agregar nota</button>` : ''}
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6">
+        <p class="text-sm font-bold text-ink mb-4">Calificar estudiantes</p>
+        ${tablaNotas}
+      </div>`;
+  }
+
+  function cambiarCalifDocente(value) {
+    docenteCalifSeleccion = value;
+    renderCalificacionesDocente();
+  }
+
+  // async: 'notas_modulos' vía MySQL.
+  async function agregarCriterioCalif(cohorteNombre, mes) {
+    const rec = await getNotasModuloRecord(cohorteNombre, mes, true);
+    rec.criterios = rec.criterios || [];
+    rec.criterios.push({ id: uid('cr'), nombre: 'Nota ' + (rec.criterios.length + 1), peso: 0 });
+    await guardarNotasModuloRecord(rec);
+    renderCalificacionesDocente();
+  }
+
+  async function actualizarCriterioCalif(cohorteNombre, mes, criterioId, campo, valor) {
+    const rec = await getNotasModuloRecord(cohorteNombre, mes, true);
+    const c = (rec.criterios || []).find(x => x.id === criterioId);
+    if (!c) return;
+    if (campo === 'peso') {
+      let n = parseFloat(valor);
+      if (isNaN(n) || n < 0) n = 0;
+      if (n > 100) n = 100;
+      c.peso = n;
+    } else {
+      c.nombre = valor.trim() || c.nombre;
+    }
+    await guardarNotasModuloRecord(rec);
+    renderCalificacionesDocente();
+  }
+
+  async function eliminarCriterioCalif(cohorteNombre, mes, criterioId) {
+    const rec = await getNotasModuloRecord(cohorteNombre, mes, true);
+    rec.criterios = (rec.criterios || []).filter(c => c.id !== criterioId);
+    Object.keys(rec.valores || {}).forEach(est => { if (rec.valores[est]) delete rec.valores[est][criterioId]; });
+    await guardarNotasModuloRecord(rec);
+    toast('Nota de evaluación eliminada', 'ok');
+    renderCalificacionesDocente();
+  }
+
+  // async: 'usuarios' y 'notas_modulos' vía MySQL.
+  async function guardarNotaCriterio(cohorteNombre, mes, estudianteId, criterioId, valorStr) {
+    const est = (await Store.list('usuarios')).find(u => u.id === estudianteId);
+    if (!est) return;
+    let n = valorStr === '' ? null : parseFloat(valorStr);
+    if (n !== null) {
+      if (isNaN(n)) { toast('Ingresa un número válido entre 0.0 y 10.0', 'err'); renderCalificacionesDocente(); return; }
+      if (n < 0) n = 0;
+      if (n > 10) n = 10;
+    }
+    const rec = await getNotasModuloRecord(cohorteNombre, mes, true);
+    rec.valores = rec.valores || {};
+    rec.valores[est.nombre] = rec.valores[est.nombre] || {};
+    if (n === null) delete rec.valores[est.nombre][criterioId];
+    else rec.valores[est.nombre][criterioId] = n;
+    await guardarNotasModuloRecord(rec);
+    renderCalificacionesDocente();
+  }
+
+  // ---------- Informes docentes (autocompletado inteligente) ----------
+  // Mismo patrón que docenteCalifSeleccion/docenteCalifOpciones (ver
+  // arriba): un informe nuevo e independiente por cada combinación
+  // Cohorte+Mes real que aparece en el Horario del docente. Al pasar a
+  // octubre, en cuanto exista una franja de Horario de octubre para esa
+  // cohorte, aparece un informe NUEVO y en blanco para ese mes — el
+  // informe de septiembre (si ya fue Enviado) queda intacto, como
+  // historial de solo lectura, y nunca se reabre ni se sobrescribe.
+  let docenteInformesSeleccion = null; // "cohorte__mes"
+
+  // async: 'asistencia' y 'notas_modulos' vía MySQL.
+  async function generarDatosInformeEstudiante(estudianteNombre, cohorteNombre, materiaNombre, mes) {
+    const asistReg = (await Store.list('asistencia')).filter(a => a.estudiante === estudianteNombre && a.modulo === materiaNombre);
+    const presentes = asistReg.filter(a => a.estado === 'Presente').length;
+    const pctAsistencia = asistReg.length ? Math.round((presentes / asistReg.length) * 100) : null;
+
+    // CORREGIDO: llamaba a getNotasModuloRecord(cohorteNombre, false) —
+    // el segundo parámetro de esa función es "mes", no "crear" (el
+    // tercer parámetro, que aquí faltaba, es el que significa "crear").
+    // Con 'false' como mes nunca existía un registro con ese mes, así
+    // que la nota cuantitativa del informe siempre salía "Sin datos".
+    const rec = await getNotasModuloRecord(cohorteNombre, mes, false);
+    const resultado = rec ? calcularNotaFinal(rec, estudianteNombre) : null;
+    const nota = resultado && !resultado.pendiente ? resultado.valor : null;
+
+    const partes = [];
+    if (pctAsistencia !== null) partes.push('una asistencia del ' + pctAsistencia + '%');
+    if (nota !== null) partes.push('una nota cuantitativa de ' + nota.toFixed(1) + ' (' + calificacionCualitativa(nota) + ')');
+    const conclusion = partes.length
+      ? 'Durante el módulo, el/la estudiante registró ' + partes.join(' y ') + '.'
+      : 'Aún no hay suficientes datos de asistencia o calificaciones para generar una conclusión automática.';
+
+    return { pctAsistencia, nota, cualitativa: nota !== null ? calificacionCualitativa(nota) : null, conclusion };
+  }
+
+  // Opciones para el selector de Informes: una por cada combinación real
+  // Cohorte+Mes que aparece en el Horario del docente — igual que
+  // docenteCalifOpciones(). "esActual" marca el mes más reciente (según
+  // el Horario) para esa cohorte; los meses anteriores se muestran como
+  // historial de solo lectura si ya fueron enviados.
+  // async: getSlotsDocente() y mesActualParaDocenteCohorte() ahora son async.
+  async function docenteInformesOpciones() {
+    const doc = currentDocente || {};
+    if (!doc.nombre) return [];
+    const mapa = new Map();
+    (await getSlotsDocente(doc.nombre)).forEach(s => {
+      const key = s.cohorte + '__' + s.mes;
+      if (!mapa.has(key)) mapa.set(key, { cohorte: s.cohorte, mes: s.mes, materias: new Set() });
+      if (s.materia) mapa.get(key).materias.add(s.materia);
+    });
+    const entradas = [...mapa.entries()];
+    const esActualPorEntrada = await Promise.all(entradas.map(([, o]) => mesActualParaDocenteCohorte(doc.nombre, o.cohorte)));
+    const mesHoy = mesActualReal();
+    const arr = entradas.map(([key, o], i) => ({
+      key, cohorte: o.cohorte, mes: o.mes,
+      materia: [...o.materias].filter(Boolean).join(' / ') || '(sin materia)',
+      esActual: o.mes === esActualPorEntrada[i],
+      esFuturo: o.mes > mesHoy, // mes que en el calendario real todavía no llega — distinto de "historial" (un mes ya pasado)
+    }));
+    arr.sort((a, b) => b.mes.localeCompare(a.mes) || a.cohorte.localeCompare(b.cohorte));
+    return arr;
+  }
+
+  // async: docenteEstudiantesDeCohorte ahora es async.
+  async function renderInformesDocente() {
+    const opciones = await docenteInformesOpciones();
+    if (!docenteInformesSeleccion || !opciones.some(o => o.key === docenteInformesSeleccion)) {
+      docenteInformesSeleccion = opciones.length ? opciones[0].key : null;
+    }
+    const sel = opciones.find(o => o.key === docenteInformesSeleccion) || null;
+
+    if (!opciones.length) {
+      document.getElementById('mount-t-informes').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
+        <p class="text-sm text-slate2">Aún no tienes cohortes asignadas para generar informes.</p>
+      </div>`;
+      return;
+    }
+
+    const estudiantes = await docenteEstudiantesDeCohorte(sel.cohorte);
+    const doc = currentDocente || {};
+    const guardados = (await Store.list('informes_docente')).filter(i => i.docente === doc.nombre && i.cohorte === sel.cohorte && i.mes === sel.mes);
+
+    const selector = `<select onchange="cambiarSeleccionInformesDocente(this.value)" class="rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+      ${opciones.map(o => `<option value="${escapeHtml(o.key)}" ${o.key === docenteInformesSeleccion ? 'selected' : ''}>${escapeHtml(o.cohorte)} — ${escapeHtml(mesLabel(o.mes))}${o.esActual ? '' : (o.esFuturo ? ' (aún no disponible)' : ' (historial)')}</option>`).join('')}
+    </select>`;
+
+    const datosPorEstudiante = await Promise.all(estudiantes.map(e => generarDatosInformeEstudiante(e.nombre, sel.cohorte, sel.materia, sel.mes)));
+    const tarjetas = estudiantes.length ? estudiantes.map((e, i) => {
+      const datos = datosPorEstudiante[i];
+      const guardado = guardados.find(g => g.estudiante === e.nombre);
+      const enviado = guardado && guardado.estado === 'Enviado';
+      return `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4">
+        <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <p class="text-sm font-bold text-ink">${escapeHtml(e.nombre)}</p>
+          <div class="flex items-center gap-2">
+            ${enviado ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-turquesa/10 text-turquesa">Enviado</span>` : ''}
+            ${datos.nota !== null ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${colorCualitativa(datos.nota)}1A;color:${colorCualitativa(datos.nota)}">${datos.cualitativa}</span>` : ''}
+          </div>
+        </div>
+        <p class="text-xs text-slate2 mb-1">Asistencia: <strong class="text-ink">${datos.pctAsistencia !== null ? datos.pctAsistencia + '%' : 'Sin datos'}</strong> · Nota cuantitativa: <strong class="text-ink">${datos.nota !== null ? datos.nota.toFixed(1) : 'Sin datos'}</strong></p>
+        <p class="text-sm text-ink mb-3">${escapeHtml(datos.conclusion)}</p>
+        <label class="block text-xs font-semibold text-slate2 mb-1.5">Observaciones personales del docente</label>
+        <textarea id="obs_${e.id}" rows="2" placeholder="Ej. Durante las clases mostró mayor liderazgo." ${enviado ? 'disabled' : `oninput="autoguardarBorradorInforme('${e.id}','${sel.cohorte}','${sel.mes}')"`} class="w-full rounded-xl border border-morado/25 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado ${enviado ? 'bg-gray-50 text-slate2 cursor-not-allowed' : 'bg-morado/5'}">${escapeHtml(guardado ? guardado.observaciones : '')}</textarea>
+        <div class="flex items-center gap-3 mt-3">
+          ${enviado
+            ? `<span class="text-xs text-slate2">Informe enviado el ${fmtDate(guardado.fecha)} · ya no se puede editar</span>`
+            : `<button onclick="enviarInformeDocente('${e.id}','${sel.cohorte}','${sel.mes}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-xs py-2.5 px-5 hover:bg-morado transition">Enviar informe</button>
+               <span id="autoguardado_${e.id}" class="text-xs text-slate2"></span>`}
+        </div>
+      </div>`;
+    }).join('') : '<p class="text-sm text-slate2 text-center py-8">Esta cohorte aún no tiene estudiantes matriculados.</p>';
+
+    document.getElementById('mount-t-informes').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p class="text-sm font-bold text-ink">Autocompletado inteligente de informes</p>
+            <p class="text-xs text-slate2 mt-0.5">El sistema completa asistencia, nota y conclusión automáticamente a partir de tus datos reales. Tu observación se guarda sola mientras escribes; al enviar, el informe queda definitivo y no se puede editar más. Cada mes del Horario tiene su propio informe, independiente de los demás.</p>
+          </div>
+          ${selector}
+        </div>
+      </div>
+      ${tarjetas}`;
+  }
+
+  async function cambiarCohorteInformesDocente(value) {
+    docenteInformesCohorte = value;
+    await renderInformesDocente();
+  }
+
+  // async: 'usuarios' vía MySQL.
+  // guardarInformeDocenteInterno(): helper compartido por el autoguardado
+  // de borrador y por el envío definitivo — arma y persiste el registro,
+  // sin decidir el "estado" final (eso lo decide quien llama).
+  async function guardarInformeDocenteInterno(estudianteId, cohorteNombre, estadoFinal) {
+    const est = (await Store.list('usuarios')).find(u => u.id === estudianteId);
+    const doc = currentDocente || {};
+    const moduloSel = (await docenteModulosActivos()).find(m => m.nombre === cohorteNombre);
+    if (!est || !moduloSel) return null;
+    const textarea = document.getElementById('obs_' + estudianteId);
+    const observaciones = textarea ? textarea.value.trim() : '';
+    const datos = await generarDatosInformeEstudiante(est.nombre, cohorteNombre, moduloSel.modulo);
+    const registros = await Store.list('informes_docente');
+    const idx = registros.findIndex(r => r.docente === doc.nombre && r.estudiante === est.nombre && r.cohorte === cohorteNombre);
+    // CORREGIDO: si el informe ya estaba Enviado, nunca se vuelve a
+    // tocar desde aquí (ni el autoguardado ni un doble clic accidental
+    // en enviar deberían poder alterarlo) — el backend también lo
+    // protege, pero conviene no ni intentarlo desde el frontend.
+    if (idx >= 0 && registros[idx].estado === 'Enviado') return registros[idx];
+    const registro = {
+      id: idx >= 0 ? registros[idx].id : uid('inf'),
+      docente: doc.nombre, estudiante: est.nombre, cohorte: cohorteNombre, materia: moduloSel.modulo,
+      fecha: new Date().toISOString().slice(0, 10),
+      asistenciaPct: datos.pctAsistencia, promedio: datos.nota, cualitativa: datos.cualitativa,
+      conclusion: datos.conclusion, observaciones,
+      estado: estadoFinal,
+    };
+    if (idx >= 0) registros[idx] = registro; else registros.push(registro);
+    await Store.set('informes_docente', registros);
+    return registro;
+  }
+
+  // Autoguardado silencioso mientras el docente escribe la observación
+  // (debounce de 900ms) — así el texto no se pierde si recarga la
+  // página o cambia de cohorte antes de enviar. Queda como 'Borrador':
+  // NO envía el informe ni lo hace definitivo, solo lo respalda.
+  let _timersAutoguardadoInforme = {};
+  function autoguardarBorradorInforme(estudianteId, cohorteNombre) {
+    clearTimeout(_timersAutoguardadoInforme[estudianteId]);
+    const indicador = document.getElementById('autoguardado_' + estudianteId);
+    if (indicador) indicador.textContent = 'Guardando borrador…';
+    _timersAutoguardadoInforme[estudianteId] = setTimeout(async () => {
+      await guardarInformeDocenteInterno(estudianteId, cohorteNombre, 'Borrador');
+      const ind = document.getElementById('autoguardado_' + estudianteId);
+      if (ind) ind.textContent = 'Borrador guardado automáticamente';
+    }, 900);
+  }
+
+  // Envío definitivo: pide confirmación porque, una vez enviado, el
+  // informe ya no se puede editar (ni el docente ni nadie más desde
+  // este panel) — tanto aquí como en el backend (ver manejarInformesDocente()
+  // en api/index.php, que ignora cualquier cambio posterior a un
+  // informe con estado 'Enviado').
+  async function enviarInformeDocente(estudianteId, cohorteNombre) {
+    const est = (await Store.list('usuarios')).find(u => u.id === estudianteId);
+    const confirmado = confirm(`¿Enviar el informe de ${est ? est.nombre : 'este estudiante'}?\n\nUna vez enviado no podrás editarlo.`);
+    if (!confirmado) return;
+    const registro = await guardarInformeDocenteInterno(estudianteId, cohorteNombre, 'Enviado');
+    if (registro) toast('Informe enviado: ' + registro.estudiante, 'ok');
+    await renderInformesDocente();
+  }
+
+  // ---------- Pensum curricular (docente) ----------
+  async function renderPensumDocente() {
+    const doc = currentDocente || {};
+    const items = [...(await Store.list('pensum'))].filter(p => p.docente === doc.nombre).sort((a, b) => (a.orden || 0) - (b.orden || 0));
+    const totalHoras = items.reduce((a, p) => a + (Number(p.horas) || 0), 0);
+
+    const rows = items.map(p => `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-2.5 px-4 text-sm font-semibold text-ink">${escapeHtml(p.modulo)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(p.tema)}</td>
+        <td class="py-2.5 px-4 text-sm text-slate2">${p.horas} h</td>
+      </tr>`).join('');
+
+    document.getElementById('mount-t-pensum').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <p class="text-sm font-bold text-ink">Pensum curricular</p>
+          <p class="text-xs text-slate2 mt-0.5">${items.length} tema${items.length === 1 ? '' : 's'} asignado${items.length === 1 ? '' : 's'} a tu perfil · ${totalHoras} h en total</p>
+        </div>
+        <button onclick="descargarPensumDocente()" ${items.length ? '' : 'disabled'} class="rounded-xl ${items.length ? 'bg-gradient-to-r from-morado to-turquesa text-white hover:bg-morado' : 'bg-gray-100 text-slate2 cursor-not-allowed'} font-semibold text-sm py-2.5 px-5 transition">Descargar PDF</button>
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Módulo / Asignatura</th><th class="py-3 px-4">Tema</th><th class="py-3 px-4">Intensidad horaria</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Aún no tienes temas asignados en el pensum.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  function descargarPensumDocente() {
+    const doc = currentDocente || {};
+    // window.open() primero y de forma síncrona (mismo tick del clic) para
+    // que el navegador no lo trate como popup bloqueado.
+    const win = window.open('', '_blank');
+    if (!win) { toast('Habilita las ventanas emergentes para descargar el PDF', 'err'); return; }
+    Store.list('pensum').then(registros => {
+      const items = [...registros].filter(p => p.docente === doc.nombre).sort((a, b) => (a.orden || 0) - (b.orden || 0));
+      if (!items.length) { win.close(); toast('Aún no tienes temas asignados en el pensum', 'info'); return; }
+      const filas = items.map(p => `<tr><td>${escapeHtml(p.modulo)}</td><td>${escapeHtml(p.tema)}</td><td>${p.horas} h</td></tr>`).join('');
+      win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Pensum — ${escapeHtml(doc.nombre || '')}</title>
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif;color:#14181F;padding:40px;}
+        h1{font-size:20px;margin-bottom:4px;} p.sub{color:#5B6472;margin-top:0;margin-bottom:24px;font-size:13px;}
+        table{width:100%;border-collapse:collapse;} th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #eee;font-size:13px;}
+        th{text-transform:uppercase;font-size:11px;letter-spacing:.05em;color:#5B6472;}
+        button{margin-bottom:20px;border:none;border-radius:9999px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer;background:#14181F;color:#fff;}
+        @media print{button{display:none;}}
+      </style></head><body>
+      <button onclick="window.print()">Descargar / Imprimir</button>
+      <h1>Pensum curricular — Fundación A+</h1>
+      <p class="sub">Docente: ${escapeHtml(doc.nombre || '')}</p>
+      <table><thead><tr><th>Módulo / Asignatura</th><th>Tema</th><th>Intensidad horaria</th></tr></thead><tbody>${filas}</tbody></table>
+      </body></html>`);
+      win.document.close();
+    });
+  }
+
+  // ---------- Agenda personal (docente) ----------
+  // async: 'agenda_docente' vía MySQL.
+  async function renderAgendaDocente() {
+    const doc = currentDocente || {};
+    const eventos = [...(await Store.list('agenda_docente'))].filter(a => a.docente === doc.nombre).sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+    document.getElementById('mount-t-agenda').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+        <p class="text-sm font-bold text-ink mb-4">Agregar evento a mi agenda</p>
+        <div class="grid sm:grid-cols-4 gap-3 mb-3">
+          <input id="ag_t_titulo" type="text" placeholder="Título" class="sm:col-span-2 w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          <select id="ag_t_tipo" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+            <option>Clase</option><option>Taller</option><option>Quiz</option><option>Entrega</option><option>Reunión</option><option>Recordatorio</option>
+          </select>
+          <input id="ag_t_fecha" type="date" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+        </div>
+        <button onclick="agregarEventoAgendaDocente()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition">Agregar</button>
+      </div>
+      <div class="space-y-3">
+        ${eventos.map(a => `
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 flex items-center justify-between gap-4">
+            <div>
+              <p class="text-sm font-bold text-ink">${escapeHtml(a.titulo)}</p>
+              <p class="text-xs text-slate2 mt-0.5">${escapeHtml(a.tipo)} · ${fmtDate(a.fecha)}</p>
+            </div>
+            <button onclick="eliminarEventoAgendaDocente('${a.id}')" class="text-xs font-semibold text-coral hover:underline shrink-0">Eliminar</button>
+          </div>`).join('') || '<p class="text-sm text-slate2 text-center py-8">No tienes eventos en tu agenda personal.</p>'}
+      </div>`;
+  }
+
+  // async: 'agenda_docente' vía MySQL.
+  async function agregarEventoAgendaDocente() {
+    const doc = currentDocente || {};
+    const titulo = document.getElementById('ag_t_titulo').value.trim();
+    const tipo = document.getElementById('ag_t_tipo').value;
+    const fecha = document.getElementById('ag_t_fecha').value;
+    if (!titulo || !fecha) { toast('Completa el título y la fecha', 'err'); return; }
+    const registros = await Store.list('agenda_docente');
+    registros.push({ id: uid('ag'), docente: doc.nombre, titulo, tipo, fecha, hora: '', notas: '' });
+    await Store.set('agenda_docente', registros);
+    toast('Evento agregado a tu agenda', 'ok');
+    renderAgendaDocente();
+  }
+
+  // async: 'agenda_docente' vía MySQL.
+  async function eliminarEventoAgendaDocente(id) {
+    const doc = currentDocente || {};
+    const registros = (await Store.list('agenda_docente')).filter(a => !(a.id === id && a.docente === doc.nombre));
+    await Store.set('agenda_docente', registros);
+    toast('Evento eliminado', 'ok');
+    renderAgendaDocente();
+  }
+
+  const RENDERERS_DOCENTE = {
+    resumen: renderResumenDocente,
+    perfil: renderPerfilDocente,
+    asistencia: renderAsistenciaDocente,
+    riesgo: renderRiesgoDocente,
+    informes: renderInformesDocente,
+    modulos: renderHorarioDocente,
+    calificaciones: renderCalificacionesDocente,
+    pensum: renderPensumDocente,
+    memorandos: renderMemorandosDocente,
+    pqr: renderPqrDocente,
+    agenda: renderAgendaDocente,
+  };
+
+  // ---------- PQR (docente) ----------
+  // Reutiliza subirPqrArchivo() y filaPqrPropia() (definidos en el módulo
+  // PQR del panel Estudiante) para no duplicar la lógica de subida de PDF.
+  // async: 'pqr' vía MySQL.
+  async function renderPqrDocente() {
+    const doc = currentDocente || {};
+    const propias = [...(await Store.list('pqr'))].filter(p => p.solicitante === doc.nombre).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    document.getElementById('mount-t-pqr').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+        <p class="text-sm font-bold text-ink mb-4">Enviar una nueva solicitud</p>
+        <p class="text-xs text-slate2 mb-4">Adjunta tu petición, queja o reclamo como archivo PDF. Quedará en estado <span class="font-semibold text-ink">Pendiente</span> hasta que el administrador lo descargue.</p>
+        <div class="grid sm:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Tipo</label>
+            <select id="pqr_t_tipo" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+              <option>Petición</option><option>Queja</option><option>Reclamo</option><option>Sugerencia</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Asunto</label>
+            <input id="pqr_t_asunto" type="text" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          </div>
+        </div>
+        <label class="block text-xs font-semibold text-slate2 mb-1.5">Archivo PDF</label>
+        <input id="pqr_t_archivo" type="file" accept=".pdf,application/pdf" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-morado/15 file:text-morado file:px-3 file:py-1.5 file:text-xs file:font-semibold focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+        <button onclick="enviarPqrDocente()" class="mt-4 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition">Enviar solicitud</button>
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 px-6 pt-5 pb-2">Mis solicitudes</p>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Tipo</th><th class="py-3 px-4">Asunto</th><th class="py-3 px-4">Estado</th><th class="py-3 px-4">Archivo</th></tr></thead>
+            <tbody>${propias.map(filaPqrPropia).join('') || '<tr><td colspan="4" class="text-sm text-slate2 text-center py-6">Aún no has enviado solicitudes.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  async function enviarPqrDocente() {
+    const doc = currentDocente || {};
+    const ok = await subirPqrArchivo({ tipoId: 'pqr_t_tipo', asuntoId: 'pqr_t_asunto', fileId: 'pqr_t_archivo', solicitante: doc.nombre, remitenteRol: 'Docente' });
+    if (!ok) return;
+    toast('Solicitud enviada correctamente', 'ok');
+    renderPqrDocente();
+  }
+
+  /* =====================================================================
+     PANEL ESTUDIANTE — módulo completo
+     Persistencia: localStorage (misma capa Store del panel administrativo)
+     ===================================================================== */
+
+  const PANEL_COLOR_ESTUDIANTE = '#F5A623';
+
+  const MENSAJES_MOTIVACIONALES = [
+    'Cada tema que dominas hoy es un paso más cerca de tu meta. ¡Vas muy bien!',
+    'Los errores no son fracasos, son la evidencia de que estás intentando aprender algo nuevo.',
+    'Tu constancia de hoy es el resultado que vas a celebrar mañana.',
+    'No compares tu proceso con el de otros: compáralo con el tuyo de la semana pasada.',
+    'Un pequeño avance diario, sostenido en el tiempo, construye grandes resultados.',
+    'Pregunta, participa y equivócate: así es como se aprende de verdad.',
+    'Tu esfuerzo de hoy en el Training de 100 a 1000+ ya está marcando la diferencia.',
+  ];
+
+  const INSIGNIAS_CATALOGO = [
+    { nombre: 'Primeros pasos', descripcion: 'Completaste tu primera semana en la plataforma.', color: '#1FC8C0' },
+    { nombre: 'Asistencia perfecta', descripcion: 'Sin fallas durante un módulo completo.', color: '#F5A623' },
+    { nombre: 'Mente analítica', descripcion: 'Obtuviste una nota sobresaliente en una evaluación.', color: '#8B5CF6' },
+    { nombre: 'Participación activa', descripcion: 'Respondiste todas las encuestas de satisfacción disponibles.', color: '#EC4899' },
+    { nombre: 'Ruta cumplida', descripcion: 'Completaste una ruta de aprendizaje sugerida por la IA.', color: '#F0455C' },
+    { nombre: 'Colaborador A+', descripcion: 'Participaste en una reunión virtual institucional.', color: '#9A5B3F' },
+  ];
+
+  function estudianteNombre() {
+    return (currentEstudiante && currentEstudiante.nombre) || '';
+  }
+
+  // async: 'modulos' vía MySQL.
+  async function estudianteModulo() {
+    // El módulo activo del estudiante se deriva de su cohorte asignada.
+    const doc = currentEstudiante || {};
+    const modulos = await Store.list('modulos');
+    return modulos.find(m => m.nombre === doc.cohorte) || null;
+  }
+
+  // async porque hace await de seedIfEmpty() (que sí toca 'usuarios',
+  // migrada a MySQL) — submitLogin ya la llama con await.
+  async function initEstudiante() {
+    await seedIfEmpty();
+    const nombre = estudianteNombre();
+    const msg = MENSAJES_MOTIVACIONALES[Math.abs(hashCode(nombre + new Date().toDateString())) % MENSAJES_MOTIVACIONALES.length];
+    const box = document.getElementById('mensajeMotivacional');
+    document.getElementById('mensajeMotivacionalTexto').textContent = msg;
+    box.classList.remove('hidden');
+    await updateMemorandosBadge();
+  }
+
+  function hashCode(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) { h = (h << 5) - h + str.charCodeAt(i); h |= 0; }
+    return h;
+  }
+
+  let panelActivoEstudiante = null; // último panel mostrado, para no recorrer todo el DOM en cada clic
+  async function showPanelEstudiante(panel) {
+    if (!(await permisoUsuarioSobrePanel(currentEstudiante, 'estudiante.' + panel)).ver) return;
+    if (panelActivoEstudiante && panelActivoEstudiante !== panel) {
+      const prevContent = document.getElementById('panel-s-' + panelActivoEstudiante);
+      if (prevContent) prevContent.classList.add('hidden');
+      const prevTab = document.querySelector('.panel-tab-s[data-spanel="' + panelActivoEstudiante + '"]');
+      if (prevTab) {
+        prevTab.classList.remove('font-semibold');
+        prevTab.style.borderLeftColor = 'transparent';
+        prevTab.style.background = '';
+        prevTab.style.color = '#5B6472';
+      }
+    }
+    const content = document.getElementById('panel-s-' + panel);
+    if (content) content.classList.remove('hidden');
+    const tab = document.querySelector('.panel-tab-s[data-spanel="' + panel + '"]');
+    if (tab) {
+      tab.classList.add('font-semibold');
+      tab.style.borderLeftColor = PANEL_COLOR_ESTUDIANTE;
+      tab.style.background = PANEL_COLOR_ESTUDIANTE + '0D';
+      tab.style.color = '#14181F';
+    }
+    panelActivoEstudiante = panel;
+    if (RENDERERS_ESTUDIANTE[panel]) await RENDERERS_ESTUDIANTE[panel]();
+  }
+
+  // ---------- RESUMEN ----------
+  // async: 'modulos' vía MySQL.
+  async function renderResumenEstudiante() {
+    const nombre = estudianteNombre();
+    const est = currentEstudiante || {};
+    const mod = await estudianteModulo();
+    const asistenciaReg = (await Store.list('asistencia')).filter(a => a.estudiante === nombre);
+    const presentes = asistenciaReg.filter(a => a.estado === 'Presente').length;
+    const pctAsistencia = asistenciaReg.length ? Math.round((presentes / asistenciaReg.length) * 100) : 100;
+    const agenda = [...(await Store.list('agenda_estudiante'))].filter(a => a.estudiante === nombre)
+      .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '')).slice(0, 3);
+
+    // Promedio real: misma fuente que Calificaciones/Semáforo/Historial
+    // Trainee, no la entidad genérica "calificaciones" (nunca se llena).
+    const resultado = est.cohorte ? await promedioGeneralEstudianteCohorte(nombre, est.cohorte, null) : null;
+    const promedio = resultado ? resultado.promedio.toFixed(1) : '—';
+
+    const agendaRows = agenda.map(a => `
+      <div class="flex items-center justify-between py-3 px-4 border-b border-gray-50 last:border-0">
+        <div>
+          <p class="text-sm font-semibold text-ink">${escapeHtml(a.titulo)}</p>
+          <p class="text-xs text-slate2">${escapeHtml(a.tipo)} · ${fmtDate(a.fecha)}${a.hora ? ' · ' + escapeHtml(a.hora) : ''}</p>
+        </div>
+      </div>`).join('');
+
+    const iniciales = escapeHtml((nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+    const avatarHtml = est.fotoUrl
+      ? `<img src="${escapeHtml(est.fotoUrl)}" alt="Foto de perfil" class="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-white/30" />`
+      : `<div class="w-14 h-14 rounded-full grid place-items-center text-lg font-bold text-white shrink-0 bg-white/15 border-2 border-white/30">${iniciales}</div>`;
+
+    document.getElementById('mount-s-resumen').innerHTML = `
+      <div class="dash-hero p-6 sm:p-8 mb-6" style="--hero-gradient:linear-gradient(120deg,#7C3AED 0%,#8B5CF6 50%,#EC4899 100%)">
+        <div class="flex items-center gap-4">
+          ${avatarHtml}
+          <div class="min-w-0">
+            <p class="text-[11px] font-bold uppercase tracking-wider text-white/70">Panel estudiante</p>
+            <h2 class="font-display text-xl sm:text-2xl font-bold text-white truncate">${escapeHtml(nombre || 'Estudiante')}</h2>
+            <p class="text-sm text-white/80 truncate">${mod ? escapeHtml(mod.modulo) + ' · ' + escapeHtml(mod.nombre) : 'Sin módulo asignado'}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid sm:grid-cols-3 gap-5 mb-6">
+        <div class="dash-stat-card flex items-center gap-4" style="--brand:#1FC8C0">
+          <div class="relative shrink-0">
+            ${anilloProgreso(pctAsistencia, pctAsistencia >= 90 ? '#1FC8C0' : pctAsistencia >= 75 ? '#F5A623' : '#F0455C', 64, 6)}
+            <div class="absolute inset-0 grid place-items-center">
+              <span class="font-display text-sm font-bold text-ink">${pctAsistencia}%</span>
+            </div>
+          </div>
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">Asistencia</p>
+            <p class="text-xs text-slate2 mt-1">${asistenciaReg.length} registro${asistenciaReg.length === 1 ? '' : 's'}</p>
+          </div>
+        </div>
+        <div class="dash-stat-card" style="--brand:#F5A623">
+          <div class="dash-stat-icon mb-4" style="background:#F5A62314;color:#F5A623"><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6a2 2 0 012-2h2a2 2 0 012 2v6m-6 0h6m-6 0H6a1 1 0 01-1-1V6a2 2 0 012-2h10a2 2 0 012 2v10a1 1 0 01-1 1h-2"/></svg></div>
+          <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">Promedio</p>
+          <p class="font-display text-3xl font-bold text-ink mt-1 leading-none">${promedio}</p>
+          <!-- CORREGIDO: decía "Sobre 5.0" pero el sistema califica sobre 10
+               (ver calcularNotaFinal()/calificacionCualitativa()). -->
+          <p class="text-xs text-slate2 mt-2">Sobre 10.0</p>
+        </div>
+        <div class="dash-stat-card" style="--brand:#8B5CF6">
+          <div class="dash-stat-icon mb-4" style="background:#8B5CF614;color:#8B5CF6"><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg></div>
+          <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">Módulo activo</p>
+          <p class="font-display text-lg font-bold text-ink mt-1 leading-tight truncate">${mod ? escapeHtml(mod.modulo) : 'Sin asignar'}</p>
+          <p class="text-xs text-slate2 mt-2 truncate">${mod ? escapeHtml(mod.nombre) : ''}</p>
+        </div>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="admin-panel-card p-6">
+          <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">Próximo en tu agenda</p>
+          ${agendaRows || '<p class="text-sm text-slate2 text-center py-4">No tienes eventos próximos en tu agenda personal.</p>'}
+        </div>
+        <div class="admin-panel-card p-6">
+          <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-3">Accesos rápidos</p>
+          <div class="grid grid-cols-2 gap-3">
+            <button onclick="showPanelEstudiante('asistencia')" class="text-left rounded-xl border border-gray-100 p-4 hover:border-turquesa hover:bg-turquesa/5 transition"><p class="text-sm font-semibold text-ink">Registrar asistencia</p><p class="text-xs text-slate2 mt-0.5">Escanea el QR de hoy</p></button>
+            <button onclick="showPanelEstudiante('pensum')" class="text-left rounded-xl border border-gray-100 p-4 hover:border-morado hover:bg-morado/5 transition"><p class="text-sm font-semibold text-ink">Ver pensum</p><p class="text-xs text-slate2 mt-0.5">Temas de tu módulo</p></button>
+            <button onclick="showPanelEstudiante('calificaciones')" class="text-left rounded-xl border border-gray-100 p-4 hover:border-oro hover:bg-oro/5 transition"><p class="text-sm font-semibold text-ink">Mis calificaciones</p><p class="text-xs text-slate2 mt-0.5">Por materia y mes</p></button>
+            <button onclick="showPanelEstudiante('memorandos')" class="text-left rounded-xl border border-gray-100 p-4 hover:border-coral hover:bg-coral/5 transition"><p class="text-sm font-semibold text-ink">Memorandos</p><p class="text-xs text-slate2 mt-0.5">Comunicaciones internas</p></button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ---------- PERFIL ----------
+  function renderPerfilEstudiante() {
+    const doc = currentEstudiante || {};
+    const iniciales = escapeHtml((doc.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+    const avatarHtml = doc.fotoUrl
+      ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100" />`
+      : `<div class="w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>`;
+
+    document.getElementById('mount-s-perfil').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 sm:p-8 max-w-2xl">
+        <div class="flex items-center gap-5 mb-6">
+          ${avatarHtml}
+          <div>
+            <p class="text-base font-extrabold text-ink">${escapeHtml(doc.nombre || '')}</p>
+            <p class="text-sm text-slate2">${escapeHtml(doc.cohorte || '')}</p>
+            <div class="flex items-center gap-3 mt-1.5">
+              <label class="text-xs font-semibold text-morado hover:underline cursor-pointer">
+                Cambiar foto
+                <input id="perfil_foto_input" type="file" accept="image/*" class="hidden" onchange="subirFotoPerfilEstudiante(this)" />
+              </label>
+              ${doc.fotoUrl ? `<button onclick="quitarFotoPerfilEstudiante()" class="text-xs font-semibold text-coral hover:underline">Quitar foto</button>` : ''}
+            </div>
+            <p class="text-[11px] text-slate2 mt-1">Foto opcional · JPG o PNG, máx. 2 MB</p>
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4 mb-6">
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Nombre completo</label>
+            <input id="perfil_nombre" type="text" value="${escapeHtml(doc.nombre || '')}" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Correo electrónico</label>
+            <input type="email" value="${escapeHtml(doc.email || '')}" disabled class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm bg-gray-50 text-slate2" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Cohorte</label>
+            <input type="text" value="${escapeHtml(doc.cohorte || '')}" disabled class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm bg-gray-50 text-slate2" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Estado</label>
+            ${statusPill(doc.estado || 'Activo', ESTADO_COLORS)}
+          </div>
+        </div>
+        <div class="mb-6">
+          <label class="block text-xs font-semibold text-slate2 mb-1.5">Descripción breve</label>
+          <textarea id="perfil_descripcion" rows="3" maxlength="280" placeholder="Cuéntale algo breve sobre ti a tus profesores y compañeros (opcional)" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30 resize-none">${escapeHtml(doc.descripcion || '')}</textarea>
+          <p class="text-[11px] text-slate2 mt-1">Opcional · máx. 280 caracteres</p>
+        </div>
+        <div class="border-t border-gray-100 pt-6">
+          <p class="text-sm font-bold text-ink mb-3">Cambiar contraseña</p>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <input id="perfil_pass1" type="text" placeholder="Nueva contraseña" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30" />
+            <input id="perfil_pass2" type="text" placeholder="Confirmar contraseña" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30" />
+          </div>
+        </div>
+        <button onclick="guardarPerfilEstudiante()" class="mt-6 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition">Guardar cambios</button>
+      </div>`;
+    habilitarEnterEnFormulario('mount-s-perfil', null, false);
+  }
+
+  // async: 'usuarios' vía MySQL.
+  async function actualizarUsuarioEstudianteActual(cambios) {
+    const usuarios = (await Store.list('usuarios')).map(u => u.id === currentEstudiante.id ? { ...u, ...cambios } : u);
+    await Store.set('usuarios', usuarios);
+    currentEstudiante = { ...currentEstudiante, ...cambios };
+  }
+
+  // CORREGIDO (2): mismo bug que en Docente — ver el comentario en
+  // actualizarAvatarDocenteEnDom()/subirFotoPerfilDocente(). Al subir o
+  // quitar la foto, ya no se reconstruye todo el formulario (eso borraba
+  // la descripción que el usuario tuviera escrita y sin guardar); solo
+  // se actualiza el avatar y el botón "Quitar foto" en el DOM.
+  function actualizarAvatarEstudianteEnDom(fotoUrl) {
+    const cont = document.getElementById('mount-s-perfil');
+    if (!cont) return;
+    const avatarActual = cont.querySelector('img[alt="Foto de perfil"], div.rounded-full.grid');
+    if (avatarActual) {
+      if (fotoUrl) {
+        const img = document.createElement('img');
+        img.src = fotoUrl;
+        img.alt = 'Foto de perfil';
+        img.className = avatarActual.className.includes('w-20') ? avatarActual.className : 'w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100';
+        avatarActual.replaceWith(img);
+      } else if (avatarActual.tagName === 'IMG') {
+        const doc = currentEstudiante || {};
+        const iniciales = escapeHtml((doc.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+        const div = document.createElement('div');
+        div.className = 'w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0';
+        div.style = 'background:linear-gradient(135deg,#1FC8C0,#8B5CF6)';
+        div.textContent = iniciales;
+        avatarActual.replaceWith(div);
+      }
+    }
+    const btnQuitar = cont.querySelector('button[onclick="quitarFotoPerfilEstudiante()"]');
+    if (fotoUrl && !btnQuitar) {
+      const label = cont.querySelector('label.cursor-pointer');
+      if (label) label.insertAdjacentHTML('afterend', ' <button onclick="quitarFotoPerfilEstudiante()" class="text-xs font-semibold text-coral hover:underline">Quitar foto</button>');
+    } else if (!fotoUrl && btnQuitar) {
+      btnQuitar.remove();
+    }
+  }
+
+  function subirFotoPerfilEstudiante(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast('El archivo debe ser una imagen', 'err'); return; }
+    if (file.size > 2 * 1024 * 1024) { toast('La imagen no debe superar 2 MB', 'err'); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const resultado = await Store.actualizarPerfilPropio({ fotoUrl: reader.result });
+      currentEstudiante = { ...currentEstudiante, fotoUrl: reader.result };
+      toast(resultado.remoto ? 'Foto de perfil actualizada' : 'Foto guardada solo en este navegador (sin conexión con el servidor)', resultado.remoto ? 'ok' : 'err');
+      actualizarAvatarEstudianteEnDom(reader.result);
+    };
+    reader.onerror = () => toast('No se pudo leer la imagen', 'err');
+    reader.readAsDataURL(file);
+  }
+
+  async function quitarFotoPerfilEstudiante() {
+    const resultado = await Store.actualizarPerfilPropio({ fotoUrl: '' });
+    currentEstudiante = { ...currentEstudiante, fotoUrl: '' };
+    toast(resultado.remoto ? 'Foto de perfil eliminada' : 'No se pudo eliminar la foto en el servidor', resultado.remoto ? 'ok' : 'err');
+    actualizarAvatarEstudianteEnDom('');
+  }
+
+  async function guardarPerfilEstudiante() {
+    const nombre = document.getElementById('perfil_nombre').value.trim();
+    const descripcion = document.getElementById('perfil_descripcion').value.trim();
+    const p1 = document.getElementById('perfil_pass1').value;
+    const p2 = document.getElementById('perfil_pass2').value;
+    if (p1 || p2) {
+      if (p1.length < 6) { toast('La nueva contraseña debe tener al menos 6 caracteres', 'err'); return; }
+      if (p1 !== p2) { toast('Las contraseñas no coinciden', 'err'); return; }
+    }
+    const cambios = {};
+    if (nombre) cambios.nombre = nombre;
+    cambios.descripcion = descripcion; // opcional: puede quedar vacía
+    // CORREGIDO: mismo bug que guardarPerfilDocente() — la nueva
+    // contraseña se validaba pero nunca se guardaba de verdad.
+    if (p1) cambios.password = p1;
+    // CORREGIDO: usaba actualizarUsuarioEstudianteActual() ->
+    // Store.set('usuarios', ...), que exige rol Superadmin/Coordinador
+    // en el backend. Ver el mismo comentario en guardarPerfilDocente().
+    const resultado = await Store.actualizarPerfilPropio(cambios);
+    currentEstudiante = { ...currentEstudiante, ...cambios };
+    delete currentEstudiante.password;
+    toast(resultado.remoto ? 'Perfil actualizado correctamente' : 'No se pudo guardar en el servidor, intenta de nuevo', resultado.remoto ? 'ok' : 'err');
+    renderPerfilEstudiante();
+  }
+
+  // ---------- VER PERFIL DE OTRA PERSONA (modal de solo lectura) ----------
+  // Usado por el estudiante para ver el perfil de sus profesores asignados,
+  // y por el docente para ver el perfil de sus estudiantes.
+  // async: 'usuarios' vía MySQL.
+  async function abrirPerfilPersonaPorNombreYRol(nombre, rol) {
+    if (!nombre) return;
+    const objetivo = nombre.trim().toLowerCase();
+    const usuarios = await Store.list('usuarios');
+    const usuario = usuarios.find(u => u.rol === rol && u.nombre && u.nombre.trim().toLowerCase() === objetivo);
+    if (!usuario) { toast('No se encontró el perfil de ' + nombre, 'err'); return; }
+    await abrirPerfilPersona(usuario.id);
+  }
+
+  async function abrirPerfilPersona(usuarioId) {
+    const usuario = (await Store.list('usuarios')).find(u => u.id === usuarioId);
+    if (!usuario) { toast('No se encontró ese perfil', 'err'); return; }
+
+    const iniciales = escapeHtml((usuario.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+    const avatarHtml = usuario.fotoUrl
+      ? `<img src="${escapeHtml(usuario.fotoUrl)}" alt="Foto de perfil" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100" />`
+      : `<div class="w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>`;
+
+    const esDocente = usuario.rol === 'Docente';
+    const materiasDocente = esDocente ? (await Store.list('pensum')).filter(p => p.docente === usuario.nombre) : [];
+    const infoExtra = esDocente
+      ? `
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1.5">Rol</label>
+              <p class="text-sm text-ink font-semibold">Docente</p>
+            </div>
+            ${materiasDocente.length ? `
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold text-slate2 mb-1.5">Materias que dicta</label>
+              <p class="text-sm text-ink">${escapeHtml([...new Set(materiasDocente.map(m => m.modulo))].join(', '))}</p>
+            </div>` : ''}`
+      : `
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1.5">Cohorte</label>
+              <p class="text-sm text-ink">${escapeHtml(usuario.cohorte || '—')}</p>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1.5">Estado</label>
+              ${statusPill(usuario.estado || 'Activo', ESTADO_COLORS)}
+            </div>`;
+
+    document.getElementById('perfilPersonaContenido').innerHTML = `
+      <div class="flex items-center gap-5 mb-6">
+        ${avatarHtml}
+        <div>
+          <p class="text-base font-extrabold text-ink">${escapeHtml(usuario.nombre || '')}</p>
+          <p class="text-sm text-slate2">${escapeHtml(usuario.email || '')}</p>
+        </div>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4 mb-6">${infoExtra}</div>
+      ${usuario.descripcion ? `
+      <div class="border-t border-gray-100 pt-5">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">Descripción</p>
+        <p class="text-sm text-ink leading-relaxed">${escapeHtml(usuario.descripcion)}</p>
+      </div>` : `
+      <div class="border-t border-gray-100 pt-5">
+        <p class="text-sm text-slate2 italic">Esta persona aún no ha agregado una descripción.</p>
+      </div>`}
+    `;
+    document.getElementById('perfilPersonaModal').classList.remove('hidden');
+  }
+
+  function cerrarPerfilPersonaModal() {
+    document.getElementById('perfilPersonaModal').classList.add('hidden');
+  }
+
+  // Devuelve un <button> clicable con el nombre de una persona, que abre su
+  // perfil de solo lectura. Se usa para reemplazar texto plano de nombres.
+  function nombrePersonaClicable(nombre, rol) {
+    if (!nombre) return '—';
+    return `<button type="button" onclick="abrirPerfilPersonaPorNombreYRol('${escapeHtml(nombre).replace(/'/g, "\\'")}', '${rol}')" class="hover:underline hover:text-morado transition text-left">${escapeHtml(nombre)}</button>`;
+  }
+
+  // ---------- ASISTENCIA (QR) ----------
+  let asistenciaEstudianteTimer = null;
+
+  // async: docenteEstudiantesDeCohorte ahora es async.
+  async function renderAsistenciaEstudiante() {
+    if (asistenciaEstudianteTimer) clearInterval(asistenciaEstudianteTimer);
+
+    const nombre = estudianteNombre();
+    const mod = await estudianteModulo();
+    const registros = [...(await Store.list('asistencia'))].filter(a => a.estudiante === nombre)
+      .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const totales = { Presente: 0, Tarde: 0, Falla: 0 };
+    registros.forEach(r => { if (totales[r.estado] !== undefined) totales[r.estado]++; });
+    const pct = registros.length ? Math.round((totales.Presente / registros.length) * 100) : 100;
+
+    const rows = registros.map(r => `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm text-ink">${fmtDate(r.fecha)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(r.modulo)}</td>
+        <td class="py-3 px-4">${statusPill(r.estado, { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['En proceso'] || ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'] })}${r.automatico ? '<span class="text-[10px] text-slate2 ml-2">automático</span>' : ''}</td>
+      </tr>`).join('');
+
+    let tarjetasSesiones;
+    if (!mod) {
+      tarjetasSesiones = `
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 text-center">
+          <p class="text-sm text-slate2">No tienes un módulo activo asignado.</p>
+        </div>`;
+    } else {
+      const hoy = new Date().toISOString().slice(0, 10);
+      const sesionesHoy = (await Store.list('sesiones_asistencia')).filter(s => s.cohorte === mod.nombre && s.fecha === hoy);
+
+      if (!sesionesHoy.length) {
+        tarjetasSesiones = `
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 flex flex-col sm:flex-row items-center gap-6">
+            <div class="w-32 h-32 rounded-2xl border-2 border-dashed border-gray-200 grid place-items-center shrink-0">
+              <svg class="w-14 h-14 text-slate2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.3"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h3v3h-3zM19 14v3M14 19h2M19 19h1"/></svg>
+            </div>
+            <div class="flex-1 text-center sm:text-left">
+              <p class="text-sm font-bold text-ink">Código de asistencia de hoy</p>
+              <p class="text-xs text-slate2 mt-1">Módulo: ${escapeHtml(mod.modulo)}</p>
+              <p class="text-sm text-slate2 mt-3">Ninguno de tus docentes ha habilitado su código de asistencia todavía. Cada materia se activa por separado.</p>
+            </div>
+          </div>`;
+      } else {
+        // Se resuelve una vez, antes del .map() síncrono de abajo (que no
+        // puede usar await dentro): docenteEstudiantesDeCohorte ahora es
+        // async (usa 'usuarios' vía MySQL). Como es el mismo mod.nombre
+        // para todas las sesiones del día, basta una sola llamada.
+        const estudiantesCohorte = await docenteEstudiantesDeCohorte(mod.nombre);
+        sesionesHoy.forEach(sesion => sincronizarAusentesSesion(sesion, estudiantesCohorte));
+        tarjetasSesiones = sesionesHoy.map(sesion => {
+          const info = estadoActualEstudianteSesion(sesion, nombre);
+          const materiaLabel = sesion.materia || sesion.modulo;
+          const yaReg = registros.find(r => r.sesionId === sesion.id);
+
+          if (yaReg) {
+            const color = yaReg.estado === 'Presente' ? '#0f8f89' : yaReg.estado === 'Tarde' ? '#b5790f' : '#F0455C';
+            const texto = yaReg.estado === 'Presente' ? 'Llegaste puntual' : yaReg.estado === 'Tarde' ? 'Llegaste tarde' : 'Quedaste ausente';
+            return `
+              <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
+                <div class="w-28 h-28 rounded-2xl border-2 grid place-items-center shrink-0" style="border-color:${color}">
+                  <p class="text-sm font-extrabold text-center px-2" style="color:${color}">${texto}</p>
+                </div>
+                <div class="flex-1 text-center sm:text-left">
+                  <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
+                  <p class="text-xs text-slate2 mt-1">Docente: ${escapeHtml(sesion.iniciadaPor || '—')} · ${fmtDate(sesion.fecha)}</p>
+                </div>
+              </div>`;
+          }
+          if (info.estado === 'Falla') {
+            return `
+              <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
+                <div class="w-28 h-28 rounded-2xl border-2 border-coral grid place-items-center shrink-0">
+                  <svg class="w-11 h-11 text-coral" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </div>
+                <div class="flex-1 text-center sm:text-left">
+                  <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)} — la ventana ya cerró</p>
+                  <p class="text-xs text-slate2 mt-1">Quedaste registrado como ausente automáticamente. Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
+                </div>
+              </div>`;
+          }
+          const ventana = estadoVentanaSesion(sesion);
+          return `
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
+              <div class="w-28 h-28 rounded-2xl border-2 border-dashed border-gray-200 grid place-items-center shrink-0">
+                <svg class="w-12 h-12 text-slate2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.3"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h3v3h-3zM19 14v3M14 19h2M19 19h1"/></svg>
+              </div>
+              <div class="flex-1 text-center sm:text-left">
+                <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
+                <p class="text-xs text-slate2 mt-1 mb-1">Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
+                <p class="text-xs font-bold mb-3" style="color:${ventana.color}">${ventana.texto}</p>
+                <div class="flex flex-col sm:flex-row gap-2 max-w-xs mx-auto sm:mx-0">
+                  <input id="codigo_qr_estudiante_${sesion.id}" type="text" maxlength="6" placeholder="Código (ej. 7F3K9A)" class="flex-1 rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm uppercase tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+                  <button onclick="escanearAsistencia('${sesion.id}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-2.5 px-5 hover:bg-morado transition">Escanear</button>
+                </div>
+              </div>
+            </div>`;
+        }).join('');
+      }
+    }
+
+    document.getElementById('mount-s-asistencia').innerHTML = `
+      <div class="grid sm:grid-cols-3 gap-5 mb-6">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5"><p class="text-xs font-semibold text-slate2 uppercase tracking-wide">% Asistencia</p><p class="text-2xl font-extrabold text-ink mt-1">${pct}%</p></div>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5"><p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Llegadas tarde</p><p class="text-2xl font-extrabold text-ink mt-1">${totales.Tarde}</p></div>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5"><p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Fallas</p><p class="text-2xl font-extrabold text-ink mt-1">${totales.Falla}</p></div>
+      </div>
+      ${tarjetasSesiones}
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 px-6 pt-5 pb-2">Historial mensual</p>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Fecha</th><th class="py-3 px-4">Materia</th><th class="py-3 px-4">Estado</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Aún no tienes registros de asistencia.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    asistenciaEstudianteTimer = setInterval(() => {
+      const panel = document.getElementById('panel-s-asistencia');
+      if (panel && !panel.classList.contains('hidden')) renderAsistenciaEstudiante();
+      else clearInterval(asistenciaEstudianteTimer);
+    }, 15000);
+  }
+
+  // async: 'modulos', 'sesiones_asistencia' y 'asistencia' vía MySQL.
+  async function escanearAsistencia(sesionId) {
+    const nombre = estudianteNombre();
+    const mod = await estudianteModulo();
+    if (!mod) { toast('No tienes un módulo activo asignado', 'err'); return; }
+    const hoy = new Date().toISOString().slice(0, 10);
+    const sesion = (await Store.list('sesiones_asistencia')).find(s => s.id === sesionId && s.cohorte === mod.nombre && s.fecha === hoy);
+    if (!sesion) { toast('Esa sesión ya no está disponible', 'err'); renderAsistenciaEstudiante(); return; }
+    const registros = await Store.list('asistencia');
+    if (registros.some(r => r.estudiante === nombre && r.sesionId === sesion.id)) {
+      toast('Ya registraste tu asistencia en esta materia hoy', 'info'); renderAsistenciaEstudiante(); return;
+    }
+    const mins = minutosTranscurridos(sesion.horaInicio);
+    if (mins > VENTANA_TARDE_MIN) {
+      toast('La ventana de asistencia ya cerró', 'err'); renderAsistenciaEstudiante(); return;
+    }
+    const input = document.getElementById('codigo_qr_estudiante_' + sesionId);
+    const codigo = (input ? input.value : '').trim().toUpperCase();
+    if (!codigo) { toast('Ingresa el código que muestra tu docente', 'err'); return; }
+    if (codigo !== sesion.codigo) { toast('El código no coincide con el de la sesión de hoy', 'err'); return; }
+
+    const estado = estadoPorTiempo(mins);
+    registros.push({ id: uid('as'), estudiante: nombre, modulo: sesion.modulo, docente: sesion.iniciadaPor, materia: sesion.materia || sesion.modulo, fecha: sesion.fecha, estado, sesionId: sesion.id });
+    await Store.set('asistencia', registros);
+    const msg = estado === 'Presente' ? 'Asistencia registrada: llegaste puntual.' : 'Asistencia registrada: llegaste tarde.';
+    toast(msg, 'ok');
+    renderAsistenciaEstudiante();
+  }
+
+  // ---------- MIS MATERIAS Y HORARIO ----------
+  // Mes seleccionado por el estudiante para ver su horario (memoria de sesión)
+  let estudianteHorarioMes = null;
+
+  // ---------- Calificaciones (estudiante) — solo lectura ----------
+  // Muestra, por cada docente que le sube notas en su cohorte: cuántas notas
+  // hay, el porcentaje (peso) de cada una, la nota definitiva y el puesto
+  // que ocupa entre sus compañeros de esa misma cohorte. Nada más.
+  // async: docenteEstudiantesDeCohorte ahora es async.
+  async function renderCalificacionesEstudiante() {
+    const nombre = estudianteNombre();
+    const mod = await estudianteModulo();
+
+    if (!mod) {
+      document.getElementById('mount-s-calificaciones').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
+        <p class="text-sm text-slate2">Aún no tienes una cohorte activa asignada, así que todavía no hay calificaciones para mostrar.</p>
+      </div>`;
+      return;
+    }
+
+    // Un bloque por cada registro Docente+Cohorte+MES real —misma separación
+    // que ya usa el docente al calificar (ver renderCalificacionesDocente).
+    // El mes más reciente de cada docente es el periodo activo; los
+    // anteriores quedan visibles como historial de solo lectura, igual que
+    // ya ocurre en el panel del docente.
+    const registros = [...(await Store.list('notas_modulos'))]
+      .filter(r => r.cohorte === mod.nombre && (r.criterios || []).length)
+      .sort((a, b) => (b.mes || '').localeCompare(a.mes || '') || (a.docente || '').localeCompare(b.docente || ''));
+
+    if (!registros.length) {
+      document.getElementById('mount-s-calificaciones').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
+        <p class="text-sm text-slate2">Tu(s) docente(s) aún no han registrado notas en <strong class="text-ink">${escapeHtml(mod.nombre)}</strong>.</p>
+      </div>`;
+      return;
+    }
+
+    const compañeros = await docenteEstudiantesDeCohorte(mod.nombre);
+
+    const esActualPorRegistro = await Promise.all(registros.map(rec => mesActualParaDocenteCohorte(rec.docente, mod.nombre)));
+    const slotsPorRegistro = await Promise.all(registros.map(rec => getSlotsDocente(rec.docente)));
+
+    const bloques = registros.map((rec, i) => {
+      const esActual = rec.mes === esActualPorRegistro[i];
+      const materias = [...new Set(slotsPorRegistro[i].filter(s => s.cohorte === mod.nombre && s.mes === rec.mes).map(s => s.materia))];
+      const materiaLabel = materias.length ? materias.join(', ') : mod.modulo;
+
+      const valores = (rec.valores && rec.valores[nombre]) || {};
+      const filasNotas = (rec.criterios || []).map(c => {
+        const v = valores[c.id];
+        const tieneValor = v !== undefined && v !== null && v !== '';
+        return `<tr class="border-b border-gray-50 last:border-0">
+          <td class="py-2.5 px-4 text-sm font-semibold text-ink">${escapeHtml(c.nombre)}</td>
+          <td class="py-2.5 px-4 text-sm text-slate2">${c.peso}%</td>
+          <td class="py-2.5 px-4 text-sm font-bold text-right" style="color:${tieneValor ? '#14181F' : '#5B6472'}">${tieneValor ? Number(v).toFixed(1) : 'Pendiente'}</td>
+        </tr>`;
+      }).join('');
+
+      const resultado = calcularNotaFinal(rec, nombre);
+      const definitiva = resultado && !resultado.pendiente ? resultado.valor : null;
+
+      const ranking = compañeros
+        .map(u => {
+          const r = calcularNotaFinal(rec, u.nombre);
+          return { nombre: u.nombre, valor: r && !r.pendiente ? r.valor : null };
+        })
+        .filter(x => x.valor !== null)
+        .sort((a, b) => b.valor - a.valor);
+      const puesto = definitiva !== null ? ranking.findIndex(x => x.nombre === nombre) + 1 : null;
+
+      return `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden mb-6">
+        <div class="px-6 pt-5 pb-3 flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)} · ${escapeHtml(mesLabel(rec.mes))}</p>
+            <p class="text-xs text-slate2 mt-0.5">Docente: ${nombrePersonaClicable(rec.docente, 'Docente')}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            ${esActual
+              ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-turquesa/10 text-turquesa">Periodo actual</span>`
+              : `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-slate2">Historial</span>`}
+            ${definitiva !== null ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${colorCualitativa(definitiva)}1A;color:${colorCualitativa(definitiva)}">${calificacionCualitativa(definitiva)}</span>` : ''}
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-2.5 px-4">Nota</th><th class="py-2.5 px-4">Porcentaje</th><th class="py-2.5 px-4 text-right">Calificación</th></tr></thead>
+            <tbody>${filasNotas || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Este docente aún no ha definido notas de evaluación.</td></tr>'}</tbody>
+          </table>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4 px-6 py-5 border-t border-gray-100">
+          <div>
+            <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Nota definitiva</p>
+            <p class="text-2xl font-extrabold mt-1" style="color:${colorCualitativa(definitiva)}">${definitiva !== null ? definitiva.toFixed(1) : '—'}</p>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Puesto en la cohorte</p>
+            <p class="text-2xl font-extrabold text-ink mt-1">${puesto !== null ? puesto + ' de ' + ranking.length : '—'}</p>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('mount-s-calificaciones').innerHTML = `
+      <p class="text-xs text-slate2 mb-5">Cada mes y materia que te asignaron tiene su propia hoja de calificación — el periodo más reciente es el actual; los anteriores quedan como historial.</p>
+      ${bloques}`;
+  }
+
+  // async: 'modulos' vía MySQL.
+  async function renderAcademicoEstudiante() {
+    const mod = await estudianteModulo();
+    const pensumItems = mod ? (await Store.list('pensum')).filter(p => p.modulo === mod.modulo) : [];
+    const docentesCohorte = mod ? await docentesDeCohorte(mod.nombre) : [];
+    document.getElementById('mount-s-academico').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-3">Mi cohorte</p>
+        ${mod ? `
+          <div class="flex flex-wrap items-center gap-3 mb-1">
+            <p class="text-lg font-extrabold text-ink">${escapeHtml(mod.nombre)}</p>
+            ${statusPill(mod.estado, ESTADO_COLORS)}
+          </div>
+          <p class="text-sm text-slate2">${escapeHtml(mod.modulo)}</p>
+          <p class="text-sm text-slate2 mt-1">${fmtDate(mod.fechaInicio)} — ${fmtDate(mod.fechaFin)}</p>
+          <div class="mt-3">
+            <p class="text-xs font-semibold text-slate2 mb-1.5">Profesores de mi cohorte</p>
+            <div class="flex flex-wrap gap-2">
+              ${docentesCohorte.length
+                ? docentesCohorte.map(d => `<span class="inline-flex items-center rounded-full bg-morado/10 px-3 py-1 text-sm font-semibold text-morado">${nombrePersonaClicable(d, 'Docente')}</span>`).join('')
+                : '<span class="text-sm text-slate2">Sin docentes asignados aún.</span>'}
+            </div>
+          </div>
+        ` : '<p class="text-sm text-slate2">No tienes un módulo activo asignado por el momento.</p>'}
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 px-6 pt-5 pb-2">Temas / horario de tu módulo</p>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Tema</th><th class="py-3 px-4">Intensidad</th><th class="py-3 px-4">Docente</th></tr></thead>
+            <tbody>${pensumItems.map(p => `
+              <tr class="border-b border-gray-50 last:border-0">
+                <td class="py-3 px-4 text-sm text-ink">${escapeHtml(p.tema)}</td>
+                <td class="py-3 px-4 text-sm text-slate2">${p.horas} h</td>
+                <td class="py-3 px-4 text-sm text-slate2">${nombrePersonaClicable(p.docente, 'Docente')}</td>
+              </tr>`).join('') || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Aún no hay temas cargados para tu módulo.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      ${await renderHorarioEstudianteBloque(mod)}`;
+  }
+
+  // ---------- Mi horario de clases (estudiante) ----------
+  // async: 'horarios' vía MySQL.
+  async function renderHorarioEstudianteBloque(mod) {
+    if (!mod) return '';
+    const registros = (await Store.list('horarios')).filter(h => h.cohorte === mod.nombre);
+    if (!registros.length) {
+      return `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mt-6">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">Mi horario de clases</p>
+        <p class="text-sm text-slate2">Tu cohorte aún no tiene un horario publicado por el administrador.</p>
+      </div>`;
+    }
+    const meses = registros.map(r => r.mes).sort();
+    if (!estudianteHorarioMes || !meses.includes(estudianteHorarioMes)) {
+      const hoy = new Date();
+      const mesActual = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0');
+      estudianteHorarioMes = meses.includes(mesActual) ? mesActual : meses[meses.length - 1];
+    }
+    const registro = registros.find(r => r.mes === estudianteHorarioMes);
+    const dias = registro.incluyeSabado ? DIAS_HORARIO : DIAS_HORARIO.slice(0, 5);
+    const franjas = franjasActivas(registro);
+
+    const columnas = dias.map(dia => {
+      const franjasDelDia = franjas.filter(f => f.dia === dia).sort((a, b) => a.inicio.localeCompare(b.inicio));
+      const tarjetas = franjasDelDia.map(f => `
+        <div class="rounded-xl border border-gray-100 p-3 mb-2" style="border-left:3px solid #1FC8C0">
+          <p class="text-xs font-bold text-ink leading-snug">${escapeHtml(f.curso || '—')}</p>
+          <p class="text-[11px] text-slate2 mt-1">${f.inicio}–${f.fin}</p>
+          <p class="text-[11px] text-slate2 mt-0.5">${nombrePersonaClicable(f.docente, 'Docente')}</p>
+        </div>`).join('');
+      return `<div>
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">${dia}</p>
+        ${tarjetas || '<p class="text-[11px] text-slate2/60 italic">Sin clases</p>'}
+      </div>`;
+    }).join('');
+
+    return `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden mt-6">
+      <div class="px-6 pt-5 pb-3 flex items-center justify-between flex-wrap gap-3">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2">Mi horario de clases</p>
+        <select onchange="onCambiaMesEstudianteHorario(this.value)" class="rounded-xl border border-gray-200 px-3 py-1.5 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-oro/30">
+          ${meses.map(m => `<option value="${m}" ${m === estudianteHorarioMes ? 'selected' : ''}>${mesLabel(m)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="px-6 pb-6">
+        <div class="grid gap-3" style="grid-template-columns:repeat(${dias.length}, minmax(140px, 1fr))">
+          ${columnas}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function onCambiaMesEstudianteHorario(mes) {
+    estudianteHorarioMes = mes;
+    renderAcademicoEstudiante();
+  }
+
+  // ---------- PENSUM CURRICULAR ----------
+  // async: 'modulos' vía MySQL.
+  async function renderPensumEstudiante() {
+    const mod = await estudianteModulo();
+    const pensumItems = [...(await Store.list('pensum'))].filter(p => !mod || p.modulo === mod.modulo).sort((a, b) => a.orden - b.orden);
+    document.getElementById('mount-s-pensum').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        <div class="flex items-center justify-between px-6 pt-5 pb-2">
+          <p class="text-xs font-bold uppercase tracking-wide text-slate2">Pensum de ${mod ? escapeHtml(mod.modulo) : 'tu módulo'}</p>
+          <button onclick="descargarPensumEstudiante()" class="text-xs font-semibold text-white bg-ink hover:bg-morado transition rounded-full px-4 py-2">Descargar PDF</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">#</th><th class="py-3 px-4">Tema</th><th class="py-3 px-4">Intensidad</th><th class="py-3 px-4">Material</th></tr></thead>
+            <tbody>${pensumItems.map(p => `
+              <tr class="border-b border-gray-50 last:border-0">
+                <td class="py-3 px-4 text-sm text-slate2">${p.orden}</td>
+                <td class="py-3 px-4 text-sm text-ink">${escapeHtml(p.tema)}</td>
+                <td class="py-3 px-4 text-sm text-slate2">${p.horas} h</td>
+                <td class="py-3 px-4 text-sm">${p.archivoDatos ? `<button onclick="verArchivoPensum('${p.id}')" class="text-xs font-semibold text-morado hover:underline">📎 ${escapeHtml(p.archivoNombre || 'Ver archivo')}</button>` : '<span class="text-xs text-slate2">Sin archivo</span>'}</td>
+              </tr>`).join('') || '<tr><td colspan="4" class="text-sm text-slate2 text-center py-6">Sin temas registrados.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  // async: 'modulos' vía MySQL. window.open() se llama SÍNCRONAMENTE antes
+  // de cualquier await, para no activar el bloqueador de popups del
+  // navegador (mismo cuidado que en abrirMemorandoCarta).
+  async function descargarPensumEstudiante() {
+    const win = window.open('', '_blank');
+    const mod = await estudianteModulo();
+    const pensumItems = [...(await Store.list('pensum'))].filter(p => !mod || p.modulo === mod.modulo).sort((a, b) => a.orden - b.orden);
+    win.document.write(`<html><head><title>Pensum - ${escapeHtml(mod ? mod.modulo : '')}</title>
+      <style>body{font-family:Arial,sans-serif;padding:40px;color:#14181F}h1{font-size:20px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:8px 12px;text-align:left;font-size:13px}th{background:#f5f5f5}</style>
+      </head><body><h1>Pensum curricular — ${escapeHtml(mod ? mod.modulo : '')}</h1>
+      <p>Estudiante: ${escapeHtml(estudianteNombre())}</p>
+      <table><thead><tr><th>#</th><th>Tema</th><th>Intensidad</th></tr></thead><tbody>
+      ${pensumItems.map(p => `<tr><td>${p.orden}</td><td>${escapeHtml(p.tema)}</td><td>${p.horas} h</td></tr>`).join('')}
+      </tbody></table></body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
+  // ---------- MEMORANDOS (solo lectura, formato carta) ----------
+  async function renderMemorandosEstudiante() {
+    const doc = currentEstudiante || {};
+    const email = (doc.email || '').toLowerCase();
+    const [memos, mapaLeidos] = await Promise.all([
+      memorandosParaEstudiante(),
+      Store.get('memorandos_leidos'),
+    ]);
+    const mapa = mapaLeidos || {};
+    document.getElementById('mount-s-memorandos').innerHTML = `
+      <div class="space-y-4">
+        ${memos.map(m => {
+          const noLeido = !(mapa[m.id] && mapa[m.id][email]);
+          return `
+          <button onclick="verMemorandoEstudiante('${m.id}')" class="w-full text-left bg-white rounded-2xl border border-gray-100 shadow-soft p-5 hover:border-oro transition">
+            <div class="flex items-start gap-3">
+              <span class="w-2 h-2 rounded-full mt-2 shrink-0" style="background:${noLeido ? '#F5A623' : '#5B647233'}"></span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-3 mb-1">
+                  <p class="text-sm ${noLeido ? 'font-bold text-ink' : 'font-semibold text-slate2'}">${escapeHtml(m.titulo)}</p>
+                  ${statusPill(m.estado, ESTADO_COLORS)}
+                </div>
+                <p class="text-xs text-slate2 mb-2">${fmtDate(m.fecha)} · De: Equipo Directivo Fundación A+</p>
+                <p class="text-sm text-slate2">${m.archivoDatos ? `📎 ${escapeHtml(m.archivoNombre || 'Documento adjunto')}` : 'Sin archivo adjunto'}</p>
+                <p class="text-xs font-semibold text-morado mt-2">Ver memorando en formato de carta →</p>
+              </div>
+            </div>
+          </button>`;
+        }).join('') || '<p class="text-sm text-slate2 text-center py-8">No tienes memorandos por el momento.</p>'}
+      </div>`;
+  }
+
+  // Igual que renderMemorandosEstudiante, pero para el panel del Docente
+  // (mount-t-memorandos) y usando verMemorandoUsuarioActual (que resuelve
+  // solo por el correo real, sin depender de una cohorte).
+  async function renderMemorandosDocente() {
+    const doc = currentDocente || {};
+    const email = (doc.email || '').toLowerCase();
+    const [memos, mapaLeidos] = await Promise.all([
+      memorandosParaUsuarioActual(),
+      Store.get('memorandos_leidos'),
+    ]);
+    const mapa = mapaLeidos || {};
+    document.getElementById('mount-t-memorandos').innerHTML = `
+      <div class="space-y-4">
+        ${memos.map(m => {
+          const noLeido = !(mapa[m.id] && mapa[m.id][email]);
+          return `
+          <button onclick="verMemorandoUsuarioActual('${m.id}')" class="w-full text-left bg-white rounded-2xl border border-gray-100 shadow-soft p-5 hover:border-oro transition">
+            <div class="flex items-start gap-3">
+              <span class="w-2 h-2 rounded-full mt-2 shrink-0" style="background:${noLeido ? '#F5A623' : '#5B647233'}"></span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-3 mb-1">
+                  <p class="text-sm ${noLeido ? 'font-bold text-ink' : 'font-semibold text-slate2'}">${escapeHtml(m.titulo)}</p>
+                  ${statusPill(m.estado, ESTADO_COLORS)}
+                </div>
+                <p class="text-xs text-slate2 mb-2">${fmtDate(m.fecha)} · De: Equipo Directivo Fundación A+</p>
+                <p class="text-sm text-slate2">${m.archivoDatos ? `📎 ${escapeHtml(m.archivoNombre || 'Documento adjunto')}` : 'Sin archivo adjunto'}</p>
+                <p class="text-xs font-semibold text-morado mt-2">Ver memorando en formato de carta →</p>
+              </div>
+            </div>
+          </button>`;
+        }).join('') || '<p class="text-sm text-slate2 text-center py-8">No tienes memorandos por el momento.</p>'}
+      </div>`;
+  }
+
+  // ---------- PQR ----------
+  // Helper compartido (Docente y Estudiante): sube una PQR como archivo PDF.
+  // Devuelve true si se guardó correctamente.
+  // Copia un archivo (ya en Data URL) a la sección "Archivos" de la ficha
+  // del estudiante en Historial Trainee — usado SOLO para memorandos
+  // dirigidos puntualmente a un estudiante (ver saveModal). Las PQR son
+  // privadas y nunca generan copia aquí: no se mezclan con Historial
+  // Trainee, que es visible para cualquier admin/coordinador con acceso a
+  // ese panel. No aplica el límite de 3MB pensado para subida manual
+  // (TRAINEE_ARCHIVO_MAX_BYTES): esta es una copia de algo que ya pasó su
+  // propio límite de origen (el de saveModal en Memorandos), no una
+  // subida nueva.
+  // async: 'usuarios' vía MySQL.
+  // CORREGIDO: mismo bug que agregarArchivoTrainee() — usaba Store.set()
+  // con el array completo. Ahora usa Store.agregarArchivo() (POST
+  // puntual). El campo "origen" ('PQR'/'Memorando') viaja en el mismo
+  // body; ver la columna `origen` agregada a trainee_archivos en
+  // migracion_trainee_archivos_origen.sql.
+  async function copiarArchivoATraineeDeEstudiante(estudianteNombreOEmail, { nombre, tipo, datos, origen }) {
+    if (!datos) return;
+    const usuarios = await Store.list('usuarios');
+    const est = usuarios.find(u =>
+      u.rol === 'Estudiante' && (
+        u.nombre === estudianteNombreOEmail ||
+        (u.email || '').toLowerCase() === String(estudianteNombreOEmail || '').toLowerCase()
+      ));
+    if (!est) return; // no se pudo resolver a un estudiante real (ej. remitente ya no existe o no es estudiante) — no se guarda nada
+    await Store.agregarArchivo({
+      estudianteId: est.id,
+      nombre: nombre || 'Archivo', tipo: tipo || 'application/pdf', datos,
+      fecha: new Date().toISOString().slice(0, 10),
+      origen: origen || null, // 'PQR' | 'Memorando' — solo informativo, para distinguir en la UI de dónde vino
+    });
+  }
+
+  async function subirPqrArchivo({ tipoId, asuntoId, fileId, solicitante, remitenteRol }) {
+    const tipo = document.getElementById(tipoId).value;
+    const asunto = document.getElementById(asuntoId).value.trim();
+    const fileInput = document.getElementById(fileId);
+    const file = fileInput.files && fileInput.files[0];
+    if (!asunto) { toast('Escribe el asunto de tu solicitud', 'err'); return false; }
+    if (!file) { toast('Adjunta el PDF de tu solicitud', 'err'); return false; }
+    const esPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!esPdf) { toast('El archivo debe ser un PDF', 'err'); return false; }
+    if (file.size > 8 * 1024 * 1024) { toast('El archivo no puede superar 8 MB', 'err'); return false; }
+
+    const archivoDatos = await leerArchivoComoDataURL(file);
+    const registros = await Store.list('pqr');
+    registros.push({
+      id: uid('pq'), tipo, solicitante, remitenteRol, asunto,
+      fecha: new Date().toISOString().slice(0, 10),
+      estado: 'Pendiente', fechaActivacion: null,
+      archivoNombre: file.name, archivoTipo: file.type || 'application/pdf', archivoDatos,
+    });
+    await Store.set('pqr', registros);
+    fileInput.value = '';
+
+    // Las PQR son privadas: no se archiva ninguna copia en Historial
+    // Trainee. Ese historial es visible para cualquier admin/coordinador
+    // con acceso al panel "Historial Trainee", mientras que PQR tiene su
+    // propio flujo de acceso (panel PQR) — mezclar ambos filtraría
+    // contenido privado del estudiante a una vista que no debería tenerlo.
+    return true;
+  }
+
+  // Fila reutilizable de "mis solicitudes" (Docente y Estudiante).
+  function filaPqrPropia(p) {
+    return `
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(p.tipo)}</td>
+        <td class="py-3 px-4 text-sm text-ink">${escapeHtml(p.asunto)}</td>
+        <td class="py-3 px-4">${statusPill(p.estado, ESTADO_COLORS)}</td>
+        <td class="py-3 px-4 text-sm">${p.archivoDatos ? `<button onclick="verPqrPropia('${p.id}')" class="text-xs font-semibold text-morado hover:underline">📎 ${escapeHtml(p.archivoNombre || 'Ver PDF')}</button>` : '—'}</td>
+      </tr>`;
+  }
+
+  // Abre en una pestaña nueva el PDF que el propio Docente/Estudiante envió.
+  // async: 'pqr' vía MySQL. window.open() se llama SÍNCRONAMENTE antes de
+  // cualquier await, para no activar el bloqueador de popups.
+  async function verPqrPropia(id) {
+    const win = window.open('', '_blank');
+    const p = (await Store.list('pqr')).find(r => r.id === id);
+    if (!p || !p.archivoDatos) { toast('No se encontró el archivo', 'err'); win.close(); return; }
+    win.document.write(`<iframe src="${p.archivoDatos}" style="border:0;width:100%;height:100vh"></iframe>`);
+    win.document.title = p.archivoNombre || p.asunto;
+  }
+
+  // async: 'pqr' vía MySQL.
+  async function renderPqrEstudiante() {
+    const nombre = estudianteNombre();
+    const propias = [...(await Store.list('pqr'))].filter(p => p.solicitante === nombre).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    document.getElementById('mount-s-pqr').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+        <p class="text-sm font-bold text-ink mb-4">Enviar una nueva solicitud</p>
+        <p class="text-xs text-slate2 mb-4">Adjunta tu petición, queja o reclamo como archivo PDF. Quedará en estado <span class="font-semibold text-ink">Pendiente</span> hasta que el administrador lo descargue.</p>
+        <div class="grid sm:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Tipo</label>
+            <select id="pqr_tipo" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30">
+              <option>Petición</option><option>Queja</option><option>Reclamo</option><option>Sugerencia</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Asunto</label>
+            <input id="pqr_asunto" type="text" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30" />
+          </div>
+        </div>
+        <label class="block text-xs font-semibold text-slate2 mb-1.5">Archivo PDF</label>
+        <input id="pqr_archivo" type="file" accept=".pdf,application/pdf" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold focus:outline-none focus:ring-2 focus:ring-oro/30" />
+        <button onclick="enviarPqrEstudiante()" class="mt-4 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition">Enviar solicitud</button>
+      </div>
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 px-6 pt-5 pb-2">Mis solicitudes</p>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Tipo</th><th class="py-3 px-4">Asunto</th><th class="py-3 px-4">Estado</th><th class="py-3 px-4">Archivo</th></tr></thead>
+            <tbody>${propias.map(filaPqrPropia).join('') || '<tr><td colspan="4" class="text-sm text-slate2 text-center py-6">Aún no has enviado solicitudes.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  async function enviarPqrEstudiante() {
+    const ok = await subirPqrArchivo({ tipoId: 'pqr_tipo', asuntoId: 'pqr_asunto', fileId: 'pqr_archivo', solicitante: estudianteNombre(), remitenteRol: 'Estudiante' });
+    if (!ok) return;
+    toast('Solicitud enviada correctamente', 'ok');
+    renderPqrEstudiante();
+  }
+
+  // "Calendario institucional" fue eliminado del panel Estudiante.
+
+  // ---------- ENCUESTAS DE SATISFACCIÓN ----------
+  // async: 'encuestas' vía MySQL.
+  async function renderEncuestasEstudiante() {
+    const est = currentEstudiante || {};
+    const encuestas = [...(await Store.list('encuestas'))]
+      .filter(e => e.estado === 'Abierta' && e.cohorte === est.cohorte)
+      .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    document.getElementById('mount-s-encuestas').innerHTML = `
+      <div class="grid sm:grid-cols-2 gap-4">
+        ${encuestas.map(e => `
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <p class="text-sm font-bold text-ink">${escapeHtml(e.titulo)}</p>
+              ${statusPill(e.estado, ESTADO_COLORS)}
+            </div>
+            <p class="text-xs text-slate2 mb-3">${fmtDate(e.fecha)}</p>
+            <a href="${escapeHtml(e.url)}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-ink hover:bg-oro transition rounded-full px-4 py-2">
+              Responder encuesta
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+            </a>
+          </div>`).join('') || '<p class="text-sm text-slate2 text-center py-8 sm:col-span-2">No hay encuestas disponibles para tu cohorte por el momento.</p>'}
+      </div>`;
+  }
+
+  // ---------- AGENDA PERSONAL INTELIGENTE ----------
+  // async: 'agenda_estudiante' vía MySQL.
+  async function renderAgendaEstudiante() {
+    const nombre = estudianteNombre();
+    const eventos = [...(await Store.list('agenda_estudiante'))].filter(a => a.estudiante === nombre).sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+    document.getElementById('mount-s-agenda').innerHTML = `
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+        <p class="text-sm font-bold text-ink mb-4">Agregar evento a mi agenda</p>
+        <div class="grid sm:grid-cols-4 gap-3 mb-3">
+          <input id="ag_titulo" type="text" placeholder="Título" class="sm:col-span-2 w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30" />
+          <select id="ag_tipo" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30">
+            <option>Taller</option><option>Quiz</option><option>Entrega</option><option>Evento</option><option>Recordatorio</option>
+          </select>
+          <input id="ag_fecha" type="date" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30" />
+        </div>
+        <button onclick="agregarEventoAgenda()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition">Agregar</button>
+      </div>
+      <div class="space-y-3">
+        ${eventos.map(a => `
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 flex items-center justify-between gap-4">
+            <div>
+              <p class="text-sm font-bold text-ink">${escapeHtml(a.titulo)}</p>
+              <p class="text-xs text-slate2 mt-0.5">${escapeHtml(a.tipo)} · ${fmtDate(a.fecha)}${a.hora ? ' · ' + escapeHtml(a.hora) : ''}</p>
+            </div>
+            <button onclick="eliminarEventoAgenda('${a.id}')" class="text-xs font-semibold text-coral hover:underline shrink-0">Eliminar</button>
+          </div>`).join('') || '<p class="text-sm text-slate2 text-center py-8">No tienes eventos en tu agenda personal.</p>'}
+      </div>`;
+  }
+
+  // async: 'agenda_estudiante' vía MySQL.
+  async function agregarEventoAgenda() {
+    const titulo = document.getElementById('ag_titulo').value.trim();
+    const tipo = document.getElementById('ag_tipo').value;
+    const fecha = document.getElementById('ag_fecha').value;
+    if (!titulo || !fecha) { toast('Completa el título y la fecha', 'err'); return; }
+    const registros = await Store.list('agenda_estudiante');
+    registros.push({ id: uid('ag'), estudiante: estudianteNombre(), titulo, tipo, fecha, hora: '', notas: '' });
+    await Store.set('agenda_estudiante', registros);
+    toast('Evento agregado a tu agenda', 'ok');
+    renderAgendaEstudiante();
+  }
+
+  // async: 'agenda_estudiante' vía MySQL.
+  async function eliminarEventoAgenda(id) {
+    const registros = (await Store.list('agenda_estudiante')).filter(a => a.id !== id);
+    await Store.set('agenda_estudiante', registros);
+    toast('Evento eliminado', 'ok');
+    renderAgendaEstudiante();
+  }
+
+  const RENDERERS_ESTUDIANTE = {
+    resumen: renderResumenEstudiante,
+    perfil: renderPerfilEstudiante,
+    asistencia: renderAsistenciaEstudiante,
+    academico: renderAcademicoEstudiante,
+    calificaciones: renderCalificacionesEstudiante,
+    pensum: renderPensumEstudiante,
+    memorandos: renderMemorandosEstudiante,
+    pqr: renderPqrEstudiante,
+    encuestas: renderEncuestasEstudiante,
+    agenda: renderAgendaEstudiante,
+  };
+  // Si la URL trae ?qr=... (viene de escanear un código impreso con la
+  // cámara), toma el control ANTES que cualquier otra cosa.
+  manejarQrEnURL();
+
+  // Pinta el sitio público (Contáctanos + botón Postular) con lo que el
+  // Superadmin haya guardado en Configuración. Se ejecuta al cargar la
+  // página para que cualquier visitante vea siempre los datos vigentes.
+  // Nota: seedIfEmpty ahora es async, pero se deja sin await aquí a
+  // propósito — este es código de nivel superior del script (no dentro de
+  // una función async), y seedIfEmpty ya NO toca 'usuarios' (ver su
+  // propio comentario), así que nada de lo que sigue depende de esperarla.
+  seedIfEmpty();
+  // Limpieza única: 'alumnos_cohorte' fue una entidad de prueba del
+  // simulador de roles (ya retirado) que llegó a guardar alumnos ficticios
+  // en el localStorage de instalaciones anteriores. Se borra para dejar
+  // la base de datos local realmente en blanco.
+  localStorage.removeItem(DB_PREFIX + 'alumnos_cohorte');
+  // Migración única: las calificaciones (notas_modulos) empezaron a
+  // separarse por mes además de por cohorte/docente. Cualquier registro
+  // guardado antes de este cambio (sin campo "mes") se etiqueta con el mes
+  // más reciente que ese docente tuvo asignado en esa cohorte según el
+  // Horario, para que no se pierda como historial.
+  migrarNotasModulosSinMes();
+  renderContactoPublico();
+  actualizarBotonesPostular();
+  // Pinta la constelación de nodos con el número real de estudiantes
+  // inscritos (ver renderConstellation() al inicio del archivo). Se llama
+  // aquí, después de seedIfEmpty(), para garantizar que Store('usuarios')
+  // ya tenga los datos reales cargados.
+  renderConstellation();
+
+  // Arranca el widget de chat (público + dentro de cualquier login), ver
+  // bloque "WIDGET: Chat de la Fundación A+" más abajo.
+  initAplusChat();
+
+  /* =====================================================================
+     WIDGET: Chat de la Fundación A+ (texto)
+     ---------------------------------------------------------------------
+     El HTML/CSS del botón flotante y el panel de conversación ya están en
+     index.html / style.css (prefijo "aplus-chat", fuera de cualquier
+     vista específica, así que se ve tanto en el sitio público como dentro
+     de cualquier login). Esta sección es SOLO la lógica: abrir/cerrar el
+     panel, mandar el mensaje al backend en streaming, mostrar la
+     respuesta a medida que llega, chips de sugerencias por rol, contador
+     de caracteres, limpiar conversación, estado del backend, timestamps.
+
+     ESTADO ACTUAL (para quien retome esto): es un chat de TEXTO, no de
+     voz — no hay reconocimiento ni síntesis de voz implementados. El
+     nombre "chat de voz" quedó como referencia del pedido original; si
+     más adelante se agrega voz de verdad, lo natural es sumar un botón de
+     micrófono que transcriba con la Web Speech API (o similar) y rellene
+     el mismo input de texto de aquí abajo, reutilizando todo lo demás.
+
+     BACKEND: corre aparte, fuera de este proyecto (que es HTML/JS
+     estático, sin servidor propio) — es un servicio Python/FastAPI que
+     llama a la API de Groq/Gemini y consulta MySQL para el contexto por
+     rol. Responde en streaming vía POST /chat/stream (Server-Sent Events:
+     eventos "delta" con fragmentos de texto, "done" al terminar, "error"
+     si algo falla a mitad de camino) — ver chat_backend.py y
+     backend_chat/DEPLOY_RENDER.md para desplegarlo gratis en Render.
+     Mientras ese backend no esté desplegado, CHAT_CONFIG.baseUrl de abajo
+     queda apuntando a "http://127.0.0.1:8000" (solo funciona si lo corres
+     en tu propia máquina) — actualízala con la URL real una vez desplegado.
+
+     AUTENTICACIÓN DEL CHAT: el backend ya NO confía en un rol/contexto que
+     este archivo le arme y le mande "de palabra" — verifica un token
+     firmado que él mismo emite (POST /auth/login) tras validar el email y
+     la contraseña contra MySQL. Por eso, justo después de cada login
+     exitoso (ver submitLogin), se llama a iniciarSesionChat(email,
+     password) para obtener y guardar ese token; sendMessage() lo manda en
+     cada mensaje. Si no hay token (visitante sin sesión, o el backend de
+     autenticación no respondió), el chat sigue funcionando igual que
+     antes: simplemente responde como visitante público.
+
+     BASE DE CONOCIMIENTO: el panel "Chat conocimiento" del Superadmin
+     (ver renderChatVozConocimiento()) vive en MySQL (tabla
+     chat_voz_conocimiento, Fase 6) — el backend del chat la consulta
+     directamente en cada pregunta, sin exportar/subir ningún archivo a
+     mano.
+     ===================================================================== */
+  const CHAT_CONFIG = {
+    // Backend local (uvicorn corriendo en tu propia máquina, ver
+    // backend_chat/chat_backend.py). Cuando despliegues este backend a
+    // internet (Render u otro), reemplaza esto por esa URL pública —
+    // localhost solo funciona mientras tú mismo lo pruebas en tu PC.
+    baseUrl: "http://127.0.0.1:8000",
+    // Cada cuánto se vuelve a comprobar /health mientras el chat está
+    // abierto, para reflejar si el backend se cayó/volvió (ver
+    // checkBackendStatus). No corre mientras el panel está cerrado.
+    healthCheckIntervalMs: 30000,
+  };
+
+  // Token de sesión del CHAT: se guarda en memoria y en localStorage
+  // para que persista al recargar la página y el usuario siga reconocido
+  // con su rol en vez de volver a visitante.
+  let chatSessionToken = localStorage.getItem('aplus_chat_token') || null;
+
+  /** Se llama justo después de un login exitoso en la app (cualquier rol)
+   *  para obtener el token que el chat necesita mandar en cada mensaje.
+   *  Si el backend de autenticación no responde (apagado, sin MySQL
+   *  configurado, etc.), usa el token de sesión de la app (compatible con
+   *  backend_chat/auth.py) como respaldo automático. */
+  async function iniciarSesionChat(email, password) {
+    try {
+      const resp = await fetch(CHAT_CONFIG.baseUrl + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!resp.ok) {
+        const tokenFallback = (typeof getAuthToken === 'function' ? getAuthToken() : null) || localStorage.getItem(DB_PREFIX_TOKEN + 'authToken');
+        chatSessionToken = tokenFallback || null;
+        if (chatSessionToken) localStorage.setItem('aplus_chat_token', chatSessionToken);
+        return;
+      }
+      const data = await resp.json();
+      chatSessionToken = data.token || null;
+      if (chatSessionToken) {
+        localStorage.setItem('aplus_chat_token', chatSessionToken);
+      }
+    } catch (e) {
+      const tokenFallback = (typeof getAuthToken === 'function' ? getAuthToken() : null) || localStorage.getItem(DB_PREFIX_TOKEN + 'authToken');
+      chatSessionToken = tokenFallback || null;
+      if (chatSessionToken) localStorage.setItem('aplus_chat_token', chatSessionToken);
+    }
+  }
+
+  /** Se llama en cada logout (cualquier rol) para que el chat deje de
+   *  mandar un token de una sesión que ya terminó. */
+  function cerrarSesionChat() {
+    chatSessionToken = null;
+    localStorage.removeItem('aplus_chat_token');
+  }
+
+  function initAplusChat() {
+    const fab = document.getElementById('aplusFab');
+    const panel = document.getElementById('aplusPanel');
+    const body = document.getElementById('aplusBody');
+    const input = document.getElementById('aplusInput');
+    const sendBtn = document.getElementById('aplusSend');
+    const clearBtn = document.getElementById('aplusClear');
+    const chipsWrap = document.getElementById('aplusChips');
+    const statusDot = document.getElementById('aplusStatusDot');
+    const statusText = document.getElementById('aplusStatusText');
+    if (!fab || !panel || !body || !input || !sendBtn) return; // widget no presente en esta página
+    // Elementos añadidos en una actualización posterior del widget
+    // (chips de sugerencias, indicador de estado, botón de limpiar). Si el
+    // index.html publicado quedó desactualizado respecto a este app.js
+    // (por ejemplo, un despliegue a medias que subió el .js nuevo pero no
+    // el .html nuevo, o una copia en caché del navegador), cualquiera de
+    // estos podía ser null y entonces un solo error (p.ej. "Cannot read
+    // properties of null" en statusDot) cortaba TODA la función a mitad de
+    // camino — dejando sin registrar incluso los addEventListener de más
+    // abajo (el input de texto dejaba de reaccionar, aunque el chat en sí
+    // pareciera funcionar). Por eso cada uso de estos elementos más abajo
+    // revisa primero que existan.
+
+    let history = [];
+    let isOpen = false;
+    let isLoading = false;
+    let hasGreeted = false;
+    let backendOnline = true; // optimista hasta la primera comprobación real
+    let healthCheckTimer = null;
+
+    function getRoleGreeting() {
+      if (currentAdminRole === 'superadmin') {
+        return '¡Hola Superadmin! Estoy listo para apoyarte con la gestión de la plataforma y consultas administrativas.';
+      }
+      if (currentAdminRole === 'administracion' && currentAdminUser) {
+        return `¡Hola ${currentAdminUser.nombre}! ¿En qué te puedo apoyar hoy con la administración?`;
+      }
+      if (currentDocente) {
+        return `¡Hola docente ${currentDocente.nombre}! ¿En qué te puedo colaborar hoy?`;
+      }
+      if (currentEstudiante) {
+        return `¡Hola ${currentEstudiante.nombre}! ¿En qué te puedo ayudar hoy con tus cursos o calificaciones?`;
+      }
+      return '¡Hola! Soy el asistente virtual de la Fundación A+. ¿En qué te puedo ayudar hoy?';
+    }
+
+    /** Preguntas sugeridas (chips) según quién esté usando el chat en
+     *  este momento — cada rol ve las que probablemente le sirven más.
+     *  Se muestran solo al abrir el chat, antes de escribir nada, y
+     *  desaparecen en cuanto se manda el primer mensaje (ver toggleChat
+     *  y sendMessage). */
+    function getSuggestedChips() {
+      if (currentEstudiante) {
+        return ['¿Cuáles son mis notas?', '¿Cómo va mi asistencia?', '¿Tengo memorandos sin leer?', '¿Cuál es mi cohorte?'];
+      }
+      if (currentDocente) {
+        return ['¿Qué cohortes tengo a cargo?', '¿Cómo va la asistencia de mis clases?', '¿Tengo PQR pendientes?', '¿Cuál es mi pensum?'];
+      }
+      if (currentAdminRole === 'superadmin' || currentAdminRole === 'administracion') {
+        return ['¿Cuántos usuarios hay registrados?', '¿Cuántas cohortes están activas?', '¿Hay PQR sin resolver?'];
+      }
+      return ['¿Cómo ser voluntario?', '¿Cuáles son sus redes sociales?', '¿Qué es el TrAIning de 100 a 1000+?', '¿Dónde están ubicados?'];
+    }
+
+    function renderChips() {
+      if (!chipsWrap) return;
+      const chips = getSuggestedChips();
+      chipsWrap.innerHTML = chips.map(c => `<button type="button" class="aplus-chat-chip">${escapeHtml(c)}</button>`).join('');
+      chipsWrap.classList.add('is-visible');
+      chipsWrap.querySelectorAll('.aplus-chat-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          input.value = btn.textContent;
+          sendMessage();
+        });
+      });
+    }
+
+    function hideChips() {
+      if (!chipsWrap) return;
+      chipsWrap.classList.remove('is-visible');
+      chipsWrap.innerHTML = '';
+    }
+
+    function resetChatSession() {
+      history = [];
+      body.innerHTML = '';
+      hasGreeted = true;
+      addMessage('assistant', getRoleGreeting());
+      renderChips();
+    }
+    window.aplusChatResetSession = resetChatSession;
+
+    /** Comprueba GET /health una vez y refleja el resultado en el punto
+     *  de estado del header (verde=en línea, ámbar=comprobando,
+     *  coral=sin conexión). Nunca lanza: un fallo de red se trata igual
+     *  que backend caído. */
+    async function checkBackendStatus() {
+      if (!statusDot || !statusText) return;
+      statusDot.className = 'aplus-chat-dot is-checking';
+      statusText.textContent = 'Comprobando...';
+      try {
+        const resp = await fetch(CHAT_CONFIG.baseUrl + '/health', { method: 'GET' });
+        backendOnline = resp.ok;
+      } catch (e) {
+        backendOnline = false;
+      }
+      statusDot.className = 'aplus-chat-dot' + (backendOnline ? '' : ' is-offline');
+      statusText.textContent = backendOnline ? 'Asistente virtual' : 'Sin conexión';
+      sendBtn.disabled = !backendOnline || isLoading;
+    }
+
+    function startHealthChecks() {
+      checkBackendStatus();
+      if (healthCheckTimer) clearInterval(healthCheckTimer);
+      healthCheckTimer = setInterval(checkBackendStatus, CHAT_CONFIG.healthCheckIntervalMs);
+    }
+    function stopHealthChecks() {
+      if (healthCheckTimer) clearInterval(healthCheckTimer);
+      healthCheckTimer = null;
+    }
+
+    function toggleChat() {
+      isOpen = !isOpen;
+      fab.classList.toggle('is-open', isOpen);
+      panel.classList.toggle('is-open', isOpen);
+      // En móvil el panel pasa a pantalla completa (ver @media en style.css);
+      // esta clase en el contenedor hace que el FAB flote por encima del
+      // panel abierto, para que siga sirviendo de botón "cerrar".
+      const container = document.getElementById('aplusChat');
+      if (container) container.classList.toggle('is-open-mobile', isOpen);
+      fab.setAttribute('aria-expanded', String(isOpen));
+      panel.setAttribute('aria-hidden', String(!isOpen));
+      if (isOpen) {
+        if (!hasGreeted) {
+          hasGreeted = true;
+          addMessage('assistant', getRoleGreeting());
+          renderChips();
+        }
+        startHealthChecks();
+        input.focus();
+      } else {
+        stopHealthChecks();
+      }
+    }
+
+    /** Convierte las URLs (http/https) de un texto en enlaces clicables,
+     *  reales y seguros: el texto se escapa primero como HTML (igual que
+     *  escapeHtml) y solo DESPUÉS se envuelven las URLs detectadas en
+     *  <a>, así el contenido que devuelve la IA nunca puede inyectar HTML
+     *  propio — solo se le permite convertirse en un link normal. */
+    function linkifyMensajeAsistente(texto) {
+      const escapado = escapeHtml(texto);
+      return escapado.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]"'])/g, url =>
+        `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+      );
+    }
+
+    /** Markdown MUY básico y seguro para las respuestas del asistente:
+     *  **negrita** y líneas que empiezan con "- " como lista. Se aplica
+     *  DESPUÉS de linkify (que ya escapó el texto), así que solo actúa
+     *  sobre marcado literal tipo **texto**, nunca sobre HTML — no hay
+     *  forma de que esto introduzca una etiqueta que no sea <strong>,
+     *  <ul> o <li>, generadas aquí mismo. */
+    function formatearMarkdownBasico(html) {
+      // Normaliza ***texto*** (bold+italic en markdown estándar) a
+      // **texto** antes de procesar negritas — si no, el "*" extra queda
+      // suelto porque solo reconocemos "**".
+      html = html.replace(/\*\*\*(.+?)\*\*\*/gs, '**$1**');
+      // CORREGIDO: el flag "s" (dotAll) es imprescindible aquí — sin él,
+      // "." no coincide con saltos de línea, así que una negrita que el
+      // modelo parte en dos líneas (p.ej. "**Fase 2\n(Profundización)**",
+      // algo normal en respuestas largas) nunca cerraba correctamente: el
+      // regex terminaba emparejando el "**" de apertura con el SIGUIENTE
+      // "**" que encontrara en el texto (que podía ser el de otra negrita
+      // más adelante), produciendo negritas en el lugar equivocado y
+      // dejando asteriscos sueltos visibles en el mensaje final.
+      html = html.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
+      // RED DE SEGURIDAD: el modelo a veces genera markdown mal formado —
+      // un "**" de apertura que nunca cierra (la respuesta termina a
+      // mitad de una negrita, o el modelo simplemente lo olvida). Ningún
+      // regex puede adivinar un cierre que no existe, así que cualquier
+      // "**" que sobreviva hasta aquí (no se convirtió en <strong>) se
+      // elimina en vez de mostrarse crudo — es preferible perder el
+      // énfasis a mostrar asteriscos sueltos en el chat.
+      html = html.replace(/\*\*/g, '');
+      // Agrupa líneas consecutivas que empiezan con "- " en un solo <ul>
+      const lineas = html.split('\n');
+      let out = [];
+      let enLista = false;
+      for (const linea of lineas) {
+        const esItem = /^\s*-\s+(.+)/.exec(linea);
+        if (esItem) {
+          if (!enLista) { out.push('<ul>'); enLista = true; }
+          out.push(`<li>${esItem[1]}</li>`);
+        } else {
+          if (enLista) { out.push('</ul>'); enLista = false; }
+          out.push(linea);
+        }
+      }
+      if (enLista) out.push('</ul>');
+      return out.join('\n');
+    }
+
+    function horaCorta() {
+      return new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function addMessage(role, content) {
+      const row = document.createElement('div');
+      row.className = 'aplus-msg-row ' + role;
+      const bubble = document.createElement('div');
+      bubble.className = 'aplus-msg ' + role;
+      if (role === 'assistant') {
+        // Solo las respuestas del asistente pasan por linkify + markdown
+        // básico (para que WhatsApp, redes sociales, negritas, listas,
+        // etc. salgan bien formateadas); lo que escribe el propio usuario
+        // se muestra siempre como texto plano, tal cual lo tipeó.
+        bubble.innerHTML = formatearMarkdownBasico(linkifyMensajeAsistente(content));
+      } else {
+        bubble.textContent = content;
+      }
+      row.appendChild(bubble);
+      if (role !== 'error') {
+        const time = document.createElement('div');
+        time.className = 'aplus-msg-time';
+        time.textContent = horaCorta();
+        row.appendChild(time);
+      }
+      body.appendChild(row);
+      scrollToBottom();
+      return { row, bubble };
+    }
+
+    function showTyping() {
+      const row = document.createElement('div');
+      row.className = 'aplus-msg-row assistant';
+      row.id = 'aplusTypingRow';
+      row.innerHTML = '<div class="aplus-msg assistant aplus-typing"><span class="node"></span><span class="node"></span><span class="node"></span></div>';
+      body.appendChild(row);
+      scrollToBottom();
+    }
+
+    function hideTyping() {
+      const row = document.getElementById('aplusTypingRow');
+      if (row) row.remove();
+    }
+
+    function scrollToBottom() { body.scrollTop = body.scrollHeight; }
+
+    function setLoading(state) {
+      isLoading = state;
+      sendBtn.disabled = state || !backendOnline;
+      input.disabled = state;
+    }
+
+    /** Mensajes de error específicos según lo que falló, en vez de un
+     *  genérico único: ayuda a distinguir "el backend está apagado/no
+     *  desplegado" de "se cayó la conexión a mitad de respuesta" de
+     *  "el servidor respondió con un error puntual". */
+    function mensajeDeError(err) {
+      if (err && err.isTimeout) return 'El asistente está tardando más de lo normal. Intenta de nuevo en un momento.';
+      if (err && err.name === 'TypeError') return 'No pudimos conectar con el asistente. Comprueba tu conexión a internet e intenta de nuevo.';
+      if (err && err.fromServer) return err.message || 'El asistente tuvo un problema al responder. Intenta de nuevo.';
+      return 'Ocurrió un error inesperado. Intenta de nuevo en un momento.';
+    }
+
+    async function sendMessage() {
+      const text = input.value.trim();
+      if (!text || isLoading || !backendOnline) return;
+
+      hideChips();
+      addMessage('user', text);
+      history.push({ role: 'user', content: text });
+      input.value = '';
+      autoGrow();
+      setLoading(true);
+      showTyping();
+
+      let acumulado = '';
+      let streamingBubble = null;
+
+      try {
+        const response = await fetch(CHAT_CONFIG.baseUrl + '/chat/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: history,
+            // El backend verifica este token él mismo (auth.verificar_token)
+            // y de ahí saca el rol/email real para consultar MySQL.
+            // Si el token directo del chat aún no está o se recargó la página,
+            // usa el token guardado o el de la app como respaldo.
+            token: chatSessionToken || localStorage.getItem('aplus_chat_token') || (typeof getAuthToken === 'function' ? getAuthToken() : null) || localStorage.getItem(DB_PREFIX_TOKEN + 'authToken'),
+          })
+        });
+
+        if (!response.ok || !response.body) {
+          const err = new Error('Respuesta no válida del servidor (' + response.status + ')');
+          err.fromServer = true;
+          throw err;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // Los eventos SSE vienen separados por una línea en blanco
+          // ("\n\n"); se procesan de a uno según van completándose.
+          let idx;
+          while ((idx = buffer.indexOf('\n\n')) !== -1) {
+            const evento = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            const linea = evento.split('\n').find(l => l.startsWith('data: '));
+            if (!linea) continue;
+            let payload;
+            try { payload = JSON.parse(linea.slice(6)); } catch (e) { continue; }
+
+            if (payload.error) {
+              const err = new Error(payload.error);
+              err.fromServer = true;
+              throw err;
+            }
+            if (payload.delta) {
+              if (!streamingBubble) {
+                hideTyping();
+                streamingBubble = addMessage('assistant', '');
+                streamingBubble.bubble.classList.add('is-streaming');
+              }
+              acumulado += payload.delta;
+              // Mientras el streaming está en curso se muestra el texto
+              // PLANO acumulado (sin procesar markdown todavía). Antes se
+              // reprocesaba **negrita** y enlaces en cada fragmento
+              // parcial, pero el texto a medio llegar puede tener un "**"
+              // de apertura sin su cierre (llegó en un chunk posterior);
+              // el regex terminaba emparejando ese "**" suelto con el de
+              // OTRA negrita más adelante en el texto, produciendo negritas
+              // en el lugar equivocado y asteriscos sueltos visibles en el
+              // mensaje ya terminado. formatearMarkdownBasico()/linkify
+              // ahora se aplican una sola vez, al final (evento "done"),
+              // sobre el texto ya completo — ahí el emparejamiento de "**"
+              // siempre es correcto.
+              streamingBubble.bubble.textContent = acumulado;
+              scrollToBottom();
+            }
+            if (payload.done) {
+              if (streamingBubble) {
+                streamingBubble.bubble.classList.remove('is-streaming');
+                streamingBubble.bubble.innerHTML = formatearMarkdownBasico(linkifyMensajeAsistente(acumulado));
+              }
+            }
+          }
+        }
+
+        hideTyping();
+        if (streamingBubble) {
+          streamingBubble.bubble.classList.remove('is-streaming');
+          // Red de seguridad: si por lo que sea el backend nunca mandó el
+          // evento "done" (stream cortado, etc.), el markdown final igual
+          // se aplica aquí — nunca debe quedar la burbuja mostrando texto
+          // plano con "**"/enlaces crudos por no haber pasado por done.
+          streamingBubble.bubble.innerHTML = formatearMarkdownBasico(linkifyMensajeAsistente(acumulado));
+          history.push({ role: 'assistant', content: acumulado });
+        } else {
+          // El stream terminó sin ningún fragmento de contenido (caso
+          // límite poco común) — se avisa en vez de dejar la conversación
+          // sin respuesta visible y sin explicación.
+          addMessage('error', 'El asistente no devolvió una respuesta. Intenta de nuevo.');
+        }
+      } catch (err) {
+        hideTyping();
+        if (streamingBubble) streamingBubble.row.remove(); // no dejar una burbuja a medio escribir sin explicación
+        addMessage('error', mensajeDeError(err));
+        console.error('Error del chat de la Fundación A+:', err);
+        if (err && err.name === 'TypeError') checkBackendStatus(); // probable caída del backend: refresca el indicador ya
+      } finally {
+        setLoading(false);
+        input.focus();
+      }
+    }
+
+    function autoGrow() {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 88) + 'px';
+    }
+
+    function clearConversation() {
+      history = [];
+      body.innerHTML = '';
+      hasGreeted = true;
+      addMessage('assistant', getRoleGreeting());
+      renderChips();
+      input.focus();
+    }
+
+    fab.addEventListener('click', toggleChat);
+    sendBtn.addEventListener('click', sendMessage);
+    if (clearBtn) clearBtn.addEventListener('click', clearConversation);
+    input.addEventListener('input', autoGrow);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+  }

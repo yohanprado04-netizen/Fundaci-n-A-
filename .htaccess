@@ -1,0 +1,35 @@
+# Reescribe /api/<entidad> hacia api/index.php/<entidad>, y /api/auth/login
+# hacia api/auth.php — así el frontend llama a rutas limpias en vez de
+# api/index.php?entidad=usuarios.
+#
+# CORREGIDO: auth.php e index.php ahora viven en la subcarpeta api/, no
+# sueltos en esta misma carpeta — por eso las reglas de abajo apuntan a
+# api/auth.php y api/index.php (con el prefijo api/ delante), no a
+# auth.php/index.php a secas. Este .htaccess va en la RAÍZ del proyecto
+# (fundacion-api/), al mismo nivel que index.html, app.js y la carpeta api/.
+
+RewriteEngine On
+
+# /api/auth/login -> api/auth.php (login)
+RewriteRule ^api/auth/login/?$ api/auth.php [L,QSA]
+
+# /api/<entidad> -> api/index.php?entidad=<entidad>
+# Se pasa por query string (?entidad=...), no por PATH_INFO: PATH_INFO
+# depende de que el hosting tenga AcceptPathInfo activado, lo cual no
+# todos los shared hosting garantizan — el query string funciona en
+# cualquier servidor Apache con mod_rewrite, sin configuración adicional.
+RewriteRule ^api/([a-zA-Z_]+)/?$ api/index.php?entidad=$1 [L,QSA]
+
+# Nunca servir el certificado SSL de la base de datos por HTTP directo —
+# solo lo necesita PHP internamente (ver api/config.php), un visitante no
+# debería poder descargarlo abriendo la URL a mano.
+<FilesMatch "\.pem$">
+    Require all denied
+</FilesMatch>
+
+# Igual con el log de diagnóstico temporal (ver reemplazarTablaUsuarios en
+# api/index.php) — nunca debe poder abrirse desde el navegador, aunque de
+# todas formas se borra en cuanto se resuelva el bug que está investigando.
+<FilesMatch "\.log$">
+    Require all denied
+</FilesMatch>

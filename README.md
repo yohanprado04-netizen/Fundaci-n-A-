@@ -187,3 +187,39 @@ Docente, luego Estudiante) si quieres que lo hagamos ahora.
   variables de entorno); asegúrate de que `.htaccess` bloquee su
   acceso directo (ya incluido) y no subas ese archivo a un repositorio
   público con las credenciales reales.
+
+---
+
+## Fase 4 — Tablas nuevas requeridas (configuracion, superadmin_credentials, perfiles)
+
+Ejecuta el siguiente SQL en phpMyAdmin (o en tu cliente MySQL) para crear las 3 tablas que necesita la Fase 4:
+
+```sql
+-- Configuración institucional (objeto único, una sola fila con clave 'default')
+CREATE TABLE IF NOT EXISTS configuracion (
+  clave  VARCHAR(64)  NOT NULL DEFAULT 'default',
+  valor  MEDIUMTEXT   NOT NULL COMMENT 'JSON del objeto de configuración',
+  PRIMARY KEY (clave)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Credenciales del Superadmin (objeto único, una sola fila con id 'default')
+CREATE TABLE IF NOT EXISTS superadmin_credentials (
+  id       VARCHAR(32)  NOT NULL DEFAULT 'default',
+  email    VARCHAR(255) NOT NULL,
+  password VARCHAR(255) NOT NULL COMMENT 'Hash bcrypt',
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Perfiles y permisos (array — reemplazo total en cada guardado)
+CREATE TABLE IF NOT EXISTS perfiles (
+  id          VARCHAR(64)  NOT NULL,
+  nombre      VARCHAR(255) NOT NULL,
+  categoria   VARCHAR(64)  NOT NULL DEFAULT 'Administrativo',
+  descripcion TEXT,
+  es_sistema  TINYINT(1)   NOT NULL DEFAULT 0,
+  permisos    MEDIUMTEXT   NOT NULL DEFAULT '{}' COMMENT 'JSON de permisos por panel',
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+> **Nota:** Después de importar las tablas, la primera vez que el Superadmin abra el panel "Configuración" el backend devuelve los valores por defecto del SEED (la fila aún no existe en MySQL). Al guardar por primera vez, se crea la fila. Los perfiles de sistema se crean automáticamente al iniciar sesión si la tabla está vacía (misma lógica que antes, ahora escribe en MySQL).

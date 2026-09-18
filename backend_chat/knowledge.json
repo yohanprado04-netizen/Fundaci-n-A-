@@ -1,0 +1,100 @@
+[
+  {
+    "pregunta": "Convocatorias, inscripciones o postulación a los programas (cuándo abren, cómo aplicar, requisitos)",
+    "respuesta": "Si el botón \"Postular\" del sitio está activo (dato que llega en el contexto en vivo de cada conversación), comparte ese link cuando pregunten cómo aplicar. Si no está activo y aquí no hay ninguna fecha cargada para la próxima convocatoria, dilo con honestidad e invita a seguir las redes sociales o el WhatsApp oficial (+57 321 497 4708) para enterarse apenas se abra. IMPORTANTE para el Superadmin: edita esta misma entrada y reemplaza este texto con la fecha real de apertura en cuanto se defina (ej. \"Las inscripciones para la próxima cohorte abren el 15 de octubre de 2026\"), así el chat la usará aunque el botón Postular todavía no tenga el link activo.",
+    "visibilidad": "Pública",
+    "categoria": "Convocatorias",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Cómo puedo ser voluntario o apoyar a la Fundación A+?",
+    "respuesta": "¡Puedes unirte al parche como voluntario ('Para los bacanes') y ser un agente activo de cambio comunitario! También puedes sumarte como donante o como aliado. Escríbenos directo por WhatsApp en https://wa.me/573214974708 o consulta más en https://fundacionamas.org.co/",
+    "visibilidad": "Pública",
+    "categoria": "Voluntariado",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Cuáles son las redes sociales oficiales de la Fundación A+?",
+    "respuesta": "Nuestras redes oficiales son:\n- Instagram: https://www.instagram.com/fundacionamas.org.co?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==\n- Facebook: https://www.facebook.com/fundacionamas.org\n- LinkedIn: https://www.linkedin.com/company/fundacionamas\n- YouTube: https://www.youtube.com/channel/UCYtl9tnCwwRDNr-_sAe5Erw",
+    "visibilidad": "Pública",
+    "categoria": "Contacto",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Cuál es la página web y canales de contacto de la Fundación A+?",
+    "respuesta": "Nuestra página web oficial es https://fundacionamas.org.co/. También puedes escribir a info@fundacionamas.org.co o contactarnos al WhatsApp +57 321 497 4708. Estamos ubicados en Quibdó, Chocó, Colombia.",
+    "visibilidad": "Pública",
+    "categoria": "Contacto",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Qué programas ofrece la Fundación A+?",
+    "respuesta": "Desarrollamos varios programas educativos y de liderazgo en el Chocó:\n1. TrAIning de 100 a 1000+ (programación e IA): https://fundacionamas.org.co/training-de-100-a-1000/\n2. Cimentación Académica: https://fundacionamas.org.co/portfolio/cimentacion-academica/\n3. Formación para el Desarrollo Territorial Sostenible: https://fundacionamas.org.co/portfolio/formacion-para-el-desarrollo-territorial-sostenible/\n4. Desarrollo Territorial Endógeno: https://fundacionamas.org.co/portfolio/desarrollo-territorial-endogeno/",
+    "visibilidad": "Pública",
+    "categoria": "Programas",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Qué es la Fundación A+ y cuál es su misión?",
+    "respuesta": "Es una entidad sin ánimo de lucro fundada en Quibdó a inicios de 2018, enfocada en impulsar la trayectoria académica, laboral y social de niños, jóvenes y adultos de comunidades negras, afro, raizales y palenqueras del Litoral Pacífico colombiano, mediante educación, competencias digitales y valores. Más información en https://fundacionamas.org.co/quienes-somos/",
+    "visibilidad": "Pública",
+    "categoria": "Institucional",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Qué formas hay de apoyar a la Fundación A+? (Voluntario, Donante, Aliado)",
+    "respuesta": "En A+ hay tres formas de sumarte: Voluntario ('¡Para los bacanes!') — sé un agente activo de cambio a través de un proceso teórico-práctico articulado al trabajo comunitario; Donante ('¡Para los que creen!') — ayuda a democratizar el acceso al conocimiento, la tecnología y las oportunidades; y Aliado ('¡Para los que se suman!') — únete para encontrar formas innovadoras de abordar los retos de la educación en el Litoral Pacífico colombiano. Escríbenos por WhatsApp en https://wa.me/573214974708 y cuéntanos cuál te interesa.",
+    "visibilidad": "Pública",
+    "categoria": "Voluntariado",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Cuándo se fundó la Fundación A+ y dónde opera?",
+    "respuesta": "Somos una entidad sin ánimo de lucro establecida en Quibdó, Chocó, a inicios de 2018. Diseñamos, formulamos y ejecutamos proyectos de intervención social para mejorar la calidad de vida de comunidades negras, afro, raizales y palenqueras de Colombia, principalmente en el Litoral Pacífico colombiano.",
+    "visibilidad": "Pública",
+    "categoria": "Institucional",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Cómo trabaja la Fundación A+ para lograr sus objetivos?",
+    "respuesta": "Lo hacemos a través de formación, sensibilización, asesoría, consultoría, investigación y promoción para el desarrollo humano, social, económico, laboral, cultural y ambiental. Esto incluye movilidad social, competitividad, protección del medioambiente, desarrollo tecnológico, formación para la paz y la democracia, formación de líderes y ciudadanos del mundo, y la difusión de la cultura afrocolombiana.",
+    "visibilidad": "Pública",
+    "categoria": "Institucional",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿En qué se enfoca principalmente la Fundación A+?",
+    "respuesta": "Nos enfocamos en: enriquecer de forma extracurricular el proceso educativo de estudiantes de básica y media del Litoral Pacífico con métodos personalizados y multimedia; formar para la paz, la democracia y el liderazgo; reivindicar los derechos humanos, territoriales y culturales de las comunidades negras y afrocolombianas; y acompañar iniciativas de desarrollo humano y económico local sostenibles.",
+    "visibilidad": "Pública",
+    "categoria": "Institucional",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Cuáles son los ejes estratégicos o valores de la Fundación A+?",
+    "respuesta": "Nuestros ejes son: Acompañamiento integral (el beneficiario como protagonista de su propio proceso formativo), Confiable (equipo comprometido, transparente y cálido), Cercanía (una organización de la región para la región, que respeta las dimensiones étnicas y culturales) y Cooperación (creemos en el poder de las redes y practicamos el Ubuntu: somos en función de los demás).",
+    "visibilidad": "Pública",
+    "categoria": "Institucional",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Qué es el programa TrAIning de 100 a 1000+?",
+    "respuesta": "Es nuestro programa insignia: un modelo de capacitación en dos fases para aprender a programar con inteligencia artificial sin salir de tu territorio. FASE 1 — Fundamentación: la formación de base, a cargo de la propia Fundación A+, donde seleccionamos y capacitamos intensivamente a un primer grupo de líderes comunitarios en habilidades técnicas y de facilitación. FASE 2 — Profundización: la etapa avanzada, que desarrollamos junto a Blend360, nuestro aliado principal, para llevar la formación a un nivel más profundo y conectado con la industria tecnológica. Más info: https://fundacionamas.org.co/training-de-100-a-1000/",
+    "visibilidad": "Pública",
+    "categoria": "Programas",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Dónde puedo leer noticias, historias o novedades de la Fundación A+?",
+    "respuesta": "Puedes leer nuestras historias de transformación, novedades y actualidad en el blog oficial: https://fundacionamas.org.co/blog/",
+    "visibilidad": "Pública",
+    "categoria": "Contacto",
+    "estado": "Activa"
+  },
+  {
+    "pregunta": "¿Quién es el aliado principal de la Fundación A+? (Blend360)",
+    "respuesta": "Nuestro aliado principal es Blend360, una firma tecnológica estadounidense fundada en 2015, especializada en ciencia de datos, ingeniería de datos y consultoría en inteligencia artificial. Trabaja con más de 100 empresas a nivel global (entre ellas American Express, Mastercard, Visa y Expedia) y tiene centros de excelencia en India, Reino Unido y Colombia; en 2025 adquirió la empresa colombiana Nuvu, apostando por Colombia como centro clave de innovación en IA para América Latina. En el TrAIning de 100 a 1000+, Blend360 acompaña la Fase 2 (Profundización). Su sitio web es https://www.blend360.com",
+    "visibilidad": "Pública",
+    "categoria": "Aliados",
+    "estado": "Activa"
+  }
+]

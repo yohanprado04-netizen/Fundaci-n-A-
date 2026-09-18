@@ -7,12 +7,12 @@
 <link rel="icon" type="image/jpeg" href="logo.jpg">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <script>
   tailwind.config = {
     theme: {
       extend: {
-        fontFamily: { sans: ['Inter', 'sans-serif'] },
+        fontFamily: { sans: ['Inter', 'sans-serif'], display: ['"Space Grotesk"', 'sans-serif'] },
         colors: {
           turquesa: '#1FC8C0',
           morado:   '#8B5CF6',
@@ -49,10 +49,9 @@
       <!-- Desktop nav -->
       <nav class="hidden lg:flex items-center gap-10 text-[15px] text-slate2">
         <a href="#inicio" class="nav-link active">Inicio</a>
-        <a href="#nosotros" class="nav-link hover:text-ink">Nosotros</a>
+        <a href="https://fundacionamas.org.co/" target="_blank" rel="noopener" class="nav-link hover:text-ink">Nosotros</a>
         <a href="#programa" class="nav-link hover:text-ink">Training / Programas</a>
-        <a href="#impacto" class="nav-link hover:text-ink">Impacto</a>
-        <a href="#calificaciones" class="nav-link hover:text-ink">Calificaciones</a>
+        <a href="#calificaciones" class="nav-link hover:text-ink">Portal</a>
       </nav>
 
       <div class="hidden lg:flex items-center gap-4">
@@ -71,10 +70,9 @@
   <div id="mobileMenu" class="hidden lg:hidden border-t border-gray-100 bg-white">
     <nav class="flex flex-col px-6 py-4 gap-1 text-[15px]">
       <a href="#inicio" class="py-3 border-b border-gray-50 text-ink font-semibold">Inicio</a>
-      <a href="#nosotros" class="py-3 border-b border-gray-50 text-slate2">Nosotros</a>
+      <a href="https://fundacionamas.org.co/" target="_blank" rel="noopener" class="py-3 border-b border-gray-50 text-slate2">Nosotros</a>
       <a href="#programa" class="py-3 border-b border-gray-50 text-slate2">Training / Programas</a>
-      <a href="#impacto" class="py-3 border-b border-gray-50 text-slate2">Impacto</a>
-      <a href="#calificaciones" class="py-3 text-slate2">Calificaciones</a>
+      <a href="#calificaciones" class="py-3 text-slate2">Portal</a>
       <a href="#programa" class="mt-4 text-center text-sm font-semibold text-white bg-ink rounded-full px-5 py-3">Únete al programa</a>
     </nav>
   </div>
@@ -87,25 +85,23 @@
     <div>
       <div class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate2 shadow-soft">
         <span class="w-1.5 h-1.5 rounded-full bg-turquesa"></span>
-        Programa insignia · Training de 100 a 1000+
+        TrAIning de 100 a 1000+ · Quibdó, Chocó
       </div>
 
       <h1 class="mt-6 text-4xl sm:text-5xl lg:text-[3.4rem] font-extrabold leading-[1.08] tracking-tight text-ink">
-        Cada persona que capacitamos
-        <span class="bg-gradient-to-r from-turquesa via-morado to-coral bg-clip-text text-transparent">forma a la siguiente.</span>
+        Cada joven que formamos en alta tecnología
+        <span class="bg-gradient-to-r from-turquesa via-morado to-coral bg-clip-text text-transparent">forma a la siguiente generación.</span>
       </h1>
 
       <p class="mt-6 text-lg text-slate2 leading-relaxed max-w-xl">
-        Fundación A+ conecta a comunidades con formación de calidad a través del Training de 100 a 1000+:
-        un modelo pensado para que el conocimiento se multiplique dentro de cada comunidad.
+        En el Chocó las ganas y el talento sobran. A través del TrAIning de 100 a 1000+, capacitamos a jóvenes
+        del territorio en programación con Inteligencia Artificial para vincularse a la industria tecnológica
+        global sin abandonar su tierra, multiplicando el conocimiento de persona a persona.
       </p>
 
       <div class="mt-9 flex flex-wrap items-center gap-4">
-        <a href="#programa" class="rounded-full bg-ink text-white font-semibold px-7 py-3.5 hover:bg-morado transition shadow-soft">
-          Conocer el Training
-        </a>
-        <a href="#calificaciones" class="rounded-full border border-gray-300 text-ink font-semibold px-7 py-3.5 hover:border-ink transition">
-          Ver calificaciones →
+        <a href="#programa" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold px-7 py-3.5 hover:bg-morado transition shadow-soft">
+          Conocer el TrAIning
         </a>
       </div>
 
@@ -113,22 +109,22 @@
         <div class="flex items-start gap-3">
           <span class="w-2 h-2 rounded-full bg-turquesa mt-1.5 shrink-0"></span>
           <div>
-            <p class="font-semibold text-ink text-sm">Formación práctica</p>
-            <p class="text-sm text-slate2 mt-1 leading-relaxed">Contenidos aplicables desde el primer módulo.</p>
+            <p class="font-semibold text-ink text-sm">Tecnología sin desarraigo</p>
+            <p class="text-sm text-slate2 mt-1 leading-relaxed">Python, lógica computacional y programación con IA desde Quibdó para el mundo, sin tener que migrar.</p>
           </div>
         </div>
         <div class="flex items-start gap-3">
           <span class="w-2 h-2 rounded-full bg-morado mt-1.5 shrink-0"></span>
           <div>
-            <p class="font-semibold text-ink text-sm">Acompañamiento continuo</p>
-            <p class="text-sm text-slate2 mt-1 leading-relaxed">La fundación guía cada nueva cohorte.</p>
+            <p class="font-semibold text-ink text-sm">Efecto multiplicador 10 a 1</p>
+            <p class="text-sm text-slate2 mt-1 leading-relaxed">Cada participante becado se convierte en facilitador y replica lo aprendido con 10 personas de su comunidad.</p>
           </div>
         </div>
         <div class="flex items-start gap-3">
           <span class="w-2 h-2 rounded-full bg-coral mt-1.5 shrink-0"></span>
           <div>
-            <p class="font-semibold text-ink text-sm">Resultados verificables</p>
-            <p class="text-sm text-slate2 mt-1 leading-relaxed">Cada cohorte publica sus propias calificaciones.</p>
+            <p class="font-semibold text-ink text-sm">Proyectos con impacto local</p>
+            <p class="text-sm text-slate2 mt-1 leading-relaxed">Soluciones digitales pensadas para las necesidades del territorio, con calificaciones y avances 100% verificables.</p>
           </div>
         </div>
       </div>
@@ -140,59 +136,6 @@
         <div id="constellation" class="constellation"></div>
       </div>
       <p class="text-center text-xs text-slate2 mt-4">Cada nodo representa una persona formada dentro del programa</p>
-    </div>
-  </div>
-</section>
-
-<!-- ============ NOSOTROS ============ -->
-<section id="nosotros" class="py-24 lg:py-32">
-  <div class="max-w-7xl mx-auto px-6 lg:px-10">
-    <div class="grid lg:grid-cols-12 gap-14 items-start">
-      <div class="lg:col-span-5">
-        <p class="text-xs font-bold tracking-widest uppercase text-morado mb-3">Quiénes somos</p>
-        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink leading-tight">
-          Formamos líderes que multiplican el conocimiento
-        </h2>
-        <p class="mt-5 text-slate2 leading-relaxed">
-          Fundación A+ nació con una idea simple: la capacitación con propósito no se queda en quien la recibe,
-          se convierte en algo que esa persona enseña a otras. Así diseñamos cada programa — como una red que crece.
-        </p>
-        <a href="#programa" class="inline-flex items-center gap-2 mt-7 text-sm font-semibold text-ink hover:text-morado transition">
-          Ver cómo funciona el modelo
-          <span aria-hidden="true">→</span>
-        </a>
-      </div>
-
-      <div class="lg:col-span-7 grid sm:grid-cols-2 gap-5">
-        <div class="grad-border rounded-2xl p-6">
-          <div class="w-10 h-10 rounded-xl bg-turquesa/10 grid place-items-center mb-4">
-            <svg class="w-5 h-5 text-turquesa" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM5 20a7 7 0 0114 0"/></svg>
-          </div>
-          <h3 class="font-bold text-ink mb-1.5">Comunidad primero</h3>
-          <p class="text-sm text-slate2 leading-relaxed">Diseñamos cada programa junto a las comunidades que lo van a vivir, no para ellas.</p>
-        </div>
-        <div class="grad-border rounded-2xl p-6">
-          <div class="w-10 h-10 rounded-xl bg-oro/10 grid place-items-center mb-4">
-            <svg class="w-5 h-5 text-oro" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-          </div>
-          <h3 class="font-bold text-ink mb-1.5">Impacto medible</h3>
-          <p class="text-sm text-slate2 leading-relaxed">Cada cohorte reporta resultados verificables: personas formadas, certificadas y activas.</p>
-        </div>
-        <div class="grad-border rounded-2xl p-6">
-          <div class="w-10 h-10 rounded-xl bg-magenta/10 grid place-items-center mb-4">
-            <svg class="w-5 h-5 text-magenta" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-8a4 4 0 110 8 4 4 0 010-8z"/></svg>
-          </div>
-          <h3 class="font-bold text-ink mb-1.5">Efecto multiplicador</h3>
-          <p class="text-sm text-slate2 leading-relaxed">Cada graduado se convierte en formador de su propio círculo cercano.</p>
-        </div>
-        <div class="grad-border rounded-2xl p-6">
-          <div class="w-10 h-10 rounded-xl bg-coral/10 grid place-items-center mb-4">
-            <svg class="w-5 h-5 text-coral" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          </div>
-          <h3 class="font-bold text-ink mb-1.5">Transparencia total</h3>
-          <p class="text-sm text-slate2 leading-relaxed">Publicamos calificaciones y resultados de cada edición del programa.</p>
-        </div>
-      </div>
     </div>
   </div>
 </section>
@@ -212,48 +155,20 @@
     <div class="grid md:grid-cols-2 gap-6">
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8">
         <span class="text-sm font-bold text-turquesa">Fase 1</span>
-        <h3 class="text-xl font-bold text-ink mt-2 mb-3">Los 100</h3>
+        <h3 class="text-xl font-bold text-ink mt-2 mb-3">Fundamentación</h3>
         <p class="text-sm text-slate2 leading-relaxed">
-          Seleccionamos y capacitamos intensivamente a un primer grupo de líderes comunitarios en habilidades técnicas y de facilitación.
+          Formación de base a cargo de la Fundación A+: seleccionamos y capacitamos intensivamente a un primer grupo
+          de líderes comunitarios en habilidades técnicas y de facilitación.
         </p>
       </div>
 
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8">
         <span class="text-sm font-bold text-coral">Fase 2</span>
-        <h3 class="text-xl font-bold text-ink mt-2 mb-3">A 1000+</h3>
+        <h3 class="text-xl font-bold text-ink mt-2 mb-3">Profundización</h3>
         <p class="text-sm text-slate2 leading-relaxed">
-          Cada líder forma a un nuevo grupo dentro de su propia comunidad, con acompañamiento directo de la fundación,
-          hasta que la red crece más allá del punto de partida.
+          Etapa avanzada que desarrollamos junto a <strong>Blend360</strong>, nuestro aliado principal, para llevar
+          la formación a un nivel más profundo y conectada con la industria tecnológica.
         </p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ============ IMPACTO ============ -->
-<section id="impacto" class="py-24 lg:py-32">
-  <div class="max-w-7xl mx-auto px-6 lg:px-10">
-    <div class="grid lg:grid-cols-2 gap-16 items-center">
-      <div>
-        <p class="text-xs font-bold tracking-widest uppercase text-oro mb-3">Impacto</p>
-        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink leading-tight">
-          Estamos construyendo esta sección
-        </h2>
-        <p class="mt-5 text-slate2 leading-relaxed max-w-lg">
-          A medida que las cohortes del Training de 100 a 1000+ avancen, aquí publicaremos los resultados
-          y el impacto real que va dejando el programa en cada comunidad.
-        </p>
-        <a href="#calificaciones" class="inline-flex items-center gap-2 mt-7 rounded-full bg-ink text-white font-semibold px-7 py-3.5 hover:bg-morado transition">
-          Ir a Calificaciones
-        </a>
-      </div>
-
-      <div class="rounded-[2rem] border border-dashed border-gray-200 bg-gray-50/60 p-12 flex flex-col items-center text-center">
-        <div class="w-14 h-14 rounded-2xl bg-white shadow-soft grid place-items-center mb-5">
-          <svg class="w-6 h-6 text-oro" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 012-2h2a2 2 0 012 2v6m-9 0h14a1 1 0 001-1V9.5a1 1 0 00-.4-.8l-6-4.5a1 1 0 00-1.2 0l-6 4.5a1 1 0 00-.4.8V18a1 1 0 001 1z"/></svg>
-        </div>
-        <p class="font-bold text-ink mb-1.5">Resultados próximamente</p>
-        <p class="text-sm text-slate2 leading-relaxed max-w-xs">Todavía no hay datos publicados de impacto. Vuelve pronto para ver el progreso del programa.</p>
       </div>
     </div>
   </div>
@@ -264,10 +179,10 @@
   <div class="max-w-7xl mx-auto px-6 lg:px-10">
     <div class="grid lg:grid-cols-12 gap-14 items-center">
       <div class="lg:col-span-5">
-        <p class="text-xs font-bold tracking-widest uppercase text-magenta mb-3">Transparencia</p>
-        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink leading-tight">Calificaciones</h2>
+        <p class="text-xs font-bold tracking-widest uppercase text-magenta mb-3">Acceso</p>
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink leading-tight">Portal</h2>
         <p class="mt-5 text-slate2 leading-relaxed">
-          Al cierre de cada cohorte, los participantes califican el Training de 100 a 1000+.
+          Inicia sesión para consultar tus calificaciones, gestionar tu cohorte o acceder a tu panel del Training de 100 a 1000+.
         </p>
       </div>
 
@@ -278,21 +193,35 @@
           <h3 class="text-xl font-extrabold text-ink text-center">Iniciar sesión</h3>
           <p class="text-sm text-slate2 mt-1 text-center">Ingresa tu correo y contraseña para continuar.</p>
 
-          <form id="loginForm" action="#" autocomplete="on" onsubmit="submitLogin(event)" class="mt-6 space-y-3">
-            <input id="loginEmail" name="username" type="email" autocomplete="username" placeholder="Correo electrónico" class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+          <!-- target="loginTargetFrame": el formulario de login SÍ hace un
+               submit real (a un iframe interno invisible), en vez de
+               bloquearlo siempre con preventDefault. Esa es la señal que
+               los navegadores (Chrome, Edge, Firefox...) necesitan para
+               ofrecer guardar la contraseña — y al ser el propio formulario
+               visible el que el usuario llenó (no uno oculto/paralelo), no
+               lo descartan como sospechoso de phishing. La navegación
+               nunca sale de ese iframe, así que la SPA no se recarga ni
+               pierde su estado. Ver submitLogin() en app.js: solo deja
+               pasar este submit real cuando el login es exitoso. -->
+          <form id="loginForm" autocomplete="on" target="loginTargetFrame" action="about:blank" onsubmit="submitLogin(event)" class="mt-6 space-y-3">
+            <input id="loginEmail" name="username" type="email" autocomplete="username" placeholder="Correo electrónico" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
             <div class="relative">
-              <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Contraseña" class="w-full rounded-xl border border-gray-200 pl-4 pr-11 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Contraseña" class="w-full rounded-xl border border-morado/25 bg-morado/5 pl-4 pr-11 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
               <button type="button" onclick="toggleLoginPasswordVisibility()" aria-label="Mostrar u ocultar contraseña" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate2 hover:text-ink transition">
                 <svg id="loginPwEyeOpen" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 <svg id="loginPwEyeClosed" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.5a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
               </button>
             </div>
           </form>
+          <iframe name="loginTargetFrame" title="" aria-hidden="true" tabindex="-1" style="position:absolute;width:1px;height:1px;border:0;opacity:0.01;pointer-events:none;"></iframe>
 
           <p id="loginError" class="hidden text-xs text-coral mt-3">Credenciales incorrectas. Verifica tu correo y contraseña.</p>
 
-          <button type="submit" form="loginForm" class="w-full mt-6 rounded-full bg-ink text-white font-semibold py-3.5 hover:bg-morado transition">
+          <button type="submit" form="loginForm" class="w-full mt-6 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold py-3.5 hover:opacity-90 transition">
             Ingresar
+          </button>
+          <button type="button" onclick="abrirRegistroPublico()" class="w-full mt-3 text-sm font-semibold text-morado hover:underline">
+            ¿Eres nuevo? Regístrate como estudiante
           </button>
         </div>
       </div>
@@ -337,21 +266,34 @@
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-4">Fundación</p>
         <ul class="space-y-3 text-sm text-slate2">
           <li><a href="#inicio" class="hover:text-ink transition">Inicio</a></li>
-          <li><a href="#nosotros" class="hover:text-ink transition">Nosotros</a></li>
-          <li><a href="#impacto" class="hover:text-ink transition">Impacto</a></li>
+          <li><a href="https://fundacionamas.org.co/" target="_blank" rel="noopener" class="hover:text-ink transition">Nosotros</a></li>
         </ul>
       </div>
       <div>
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-4">Programa</p>
         <ul class="space-y-3 text-sm text-slate2">
           <li><a href="#programa" class="hover:text-ink transition">Training 100 a 1000+</a></li>
-          <li><a href="#calificaciones" class="hover:text-ink transition">Calificaciones</a></li>
+          <li><a href="#calificaciones" class="hover:text-ink transition">Portal</a></li>
           <li><a href="#" onclick="abrirPostulacion(event)" class="btn-postular hover:text-ink transition">Postular</a></li>
         </ul>
       </div>
       <div>
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-4">Contáctanos</p>
         <div id="contactoPublico" class="flex flex-col gap-2 text-sm text-slate2"></div>
+        <div class="flex items-center gap-3 mt-4">
+          <a href="https://www.instagram.com/fundacionamas.org.co?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==" target="_blank" rel="noopener" aria-label="Instagram" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4.5 h-4.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+          </a>
+          <a href="https://www.facebook.com/fundacionamas.org" target="_blank" rel="noopener" aria-label="Facebook" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
+          </a>
+          <a href="https://www.linkedin.com/company/fundacionamas" target="_blank" rel="noopener" aria-label="LinkedIn" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
+          </a>
+          <a href="https://www.youtube.com/channel/UCYtl9tnCwwRDNr-_sAe5Erw" target="_blank" rel="noopener" aria-label="YouTube" class="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-slate2 hover:text-ink hover:border-ink transition">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon></svg>
+          </a>
+        </div>
       </div>
     </div>
     <div class="mt-14 pt-8 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -371,8 +313,8 @@
 </div><!-- /siteView -->
 
 <!-- ============ QR: pantalla que abre la cámara al escanear un código (docente o estudiante) ============ -->
-<div id="qrView" class="hidden min-h-screen bg-gray-50/60 flex items-center justify-center p-6">
-  <div id="qrViewCard" class="w-full max-w-md bg-white rounded-3xl shadow-softLg border border-gray-100 p-8 text-center"></div>
+<div id="qrView" class="hidden min-h-screen py-10 px-4 flex items-start justify-center" style="background-color: #f0ebf8;">
+  <div id="qrViewCard" class="w-full max-w-xl"></div>
 </div>
 
 <!-- ============ PANEL SUPERADMIN (post-login) ============ -->
@@ -400,17 +342,17 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">General</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanel('resumen')" data-panel="resumen" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('resumen')" data-panel="resumen" data-panel-code="admin.resumen" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
             Resumen
           </button>
         </nav>
       </div>
 
-      <div class="mb-6">
+      <div class="mb-6" data-super-only-group="true">
         <p class="text-xs font-bold tracking-widest uppercase text-morado mb-3 px-4">Superadmin</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanel('administradores')" data-panel="administradores" data-super-only="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('administradores')" data-panel="administradores" data-panel-code="admin.usuarios" data-super-only="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
             Administradores
           </button>
@@ -420,43 +362,53 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Gestión académica</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanel('usuarios')" data-panel="usuarios" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('usuarios')" data-panel="usuarios" data-panel-code="admin.usuarios" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM5 20a7 7 0 0114 0"/></svg>
             Usuarios
           </button>
-          <button onclick="showPanel('modulos')" data-panel="modulos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('perfiles')" data-panel="perfiles" data-panel-code="admin.perfiles" data-super-only="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            Perfiles y permisos
+          </button>
+          <button onclick="showPanel('modulos')" data-panel="modulos" data-panel-code="admin.modulos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.25v13.5M4.75 8.5L12 6.25l7.25 2.25v9L12 19.75l-7.25-2.25v-9z"/></svg>
             Cohortes
           </button>
-          <button onclick="showPanel('codigosqr')" data-panel="codigosqr" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('cursos')" data-panel="cursos" data-panel-code="admin.cursos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+            Cursos
+          </button>
+          <button onclick="showPanel('codigosqr')" data-panel="codigosqr" data-panel-code="admin.codigosqr" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 2h2v2h-2v-2zm4 0h2v2h-2v-2zm-4 4h2v2h-2v-2zm4 0h2v2h-2v-2z"/></svg>
             Códigos QR
           </button>
-          <button onclick="showPanel('pensum')" data-panel="pensum" data-admin-hide="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('pensum')" data-panel="pensum" data-panel-code="admin.pensum" data-admin-hide="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.25C10.5 5 8.5 4.5 6.5 4.5c-1 0-2 .1-3 .4v13.6c1-.3 2-.4 3-.4 2 0 4 .5 5.5 1.7 1.5-1.2 3.5-1.7 5.5-1.7 1 0 2 .1 3 .4V4.9c-1-.3-2-.4-3-.4-2 0-4 .5-5.5 1.75V19"/></svg>
             Pensum curricular
           </button>
-          <button onclick="showPanel('semaforo')" data-panel="semaforo" data-admin-hide="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('semaforo')" data-panel="semaforo" data-panel-code="admin.semaforo" data-admin-hide="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M4.93 4.93l14.14 14.14M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             Semáforo de riesgo
           </button>
         </nav>
       </div>
 
-      <div class="mb-6" data-admin-hide-group="true">
+      <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Comunicación</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanel('memorandos')" data-panel="memorandos" data-admin-hide="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('memorandos')" data-panel="memorandos" data-panel-code="admin.memorandos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             Memorandos
           </button>
-          <button onclick="showPanel('pqr')" data-panel="pqr" data-admin-hide="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+        </nav>
+      </div>
+      <div class="mb-6">
+        <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">PQR</p>
+        <nav class="flex flex-col gap-1 text-sm">
+          <button onclick="showPanel('pqr')" data-panel="pqr" data-panel-code="admin.pqr" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.02-.465L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
             PQR
-          </button>
-          <button onclick="showPanel('reuniones')" data-panel="reuniones" data-admin-hide="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-            Reuniones virtuales
+            <span id="pqrBadgeAdmin" class="hidden ml-auto text-[10px] font-bold bg-oro text-white rounded-full w-5 h-5 grid place-items-center">0</span>
           </button>
         </nav>
       </div>
@@ -464,17 +416,21 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Reportes</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanel('calificaciones')" data-panel="calificaciones" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('calificaciones')" data-panel="calificaciones" data-panel-code="admin.calificaciones" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 012-2h2a2 2 0 012 2v6m-9 0h14a1 1 0 001-1V9.5a1 1 0 00-.4-.8l-6-4.5a1 1 0 00-1.2 0l-6 4.5a1 1 0 00-.4.8V18a1 1 0 001 1z"/></svg>
             Calificaciones
           </button>
-          <button onclick="showPanel('informesAdmin')" data-panel="informesAdmin" data-admin-hide="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('informesAdmin')" data-panel="informesAdmin" data-panel-code="admin.informesAdmin" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2zM12 4.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7z"/></svg>
             Informes de docentes
           </button>
-          <button onclick="showPanel('encuestas')" data-panel="encuestas" data-admin-hide="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('encuestas')" data-panel="encuestas" data-panel-code="admin.encuestas" data-admin-hide="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
             Encuestas de satisfacción
+          </button>
+          <button onclick="showPanel('trainee')" data-panel="trainee" data-panel-code="admin.trainee" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            Historial Trainee
           </button>
         </nav>
       </div>
@@ -482,7 +438,15 @@
       <div>
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Sistema</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanel('configuracion')" data-panel="configuracion" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanel('chatvoz')" data-panel="chatvoz" data-panel-code="admin.chatvoz" data-super-only="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/></svg>
+            Chat conocimiento
+          </button>
+          <button onclick="showPanel('auditoria')" data-panel="auditoria" data-panel-code="admin.auditoria" data-super-only="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            Auditoría
+          </button>
+          <button onclick="showPanel('configuracion')" data-panel="configuracion" data-panel-code="admin.configuracion" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             Configuración
           </button>
@@ -494,7 +458,6 @@
     <main>
       <div class="rounded-3xl border border-gray-100 bg-white p-8 sm:p-10 mb-8">
         <p id="adminEyebrow" class="text-xs font-bold tracking-widest uppercase text-morado">Superadmin</p>
-        <h1 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">Panel administrativo inteligente</h1>
         <p id="adminBannerText" class="mt-2 text-sm text-slate2 max-w-lg leading-relaxed">Desde aquí administrarás usuarios, cohortes y calificaciones del Training de 100 a 1000+.</p>
       </div>
 
@@ -505,16 +468,20 @@
 
       <div id="panel-administradores" class="panel-content hidden"><div id="mount-administradores"></div></div>
       <div id="panel-usuarios" class="panel-content hidden"><div id="mount-usuarios"></div></div>
+      <div id="panel-perfiles" class="panel-content hidden"><div id="mount-perfiles"></div></div>
       <div id="panel-modulos" class="panel-content hidden"><div id="mount-modulos"></div></div>
+      <div id="panel-cursos" class="panel-content hidden"><div id="mount-cursos"></div></div>
       <div id="panel-codigosqr" class="panel-content hidden"><div id="mount-codigosqr"></div></div>
       <div id="panel-pensum" class="panel-content hidden"><div id="mount-pensum"></div></div>
       <div id="panel-semaforo" class="panel-content hidden"><div id="mount-semaforo"></div></div>
       <div id="panel-memorandos" class="panel-content hidden"><div id="mount-memorandos"></div></div>
       <div id="panel-pqr" class="panel-content hidden"><div id="mount-pqr"></div></div>
-      <div id="panel-reuniones" class="panel-content hidden"><div id="mount-reuniones"></div></div>
       <div id="panel-calificaciones" class="panel-content hidden"><div id="mount-calificaciones"></div></div>
       <div id="panel-informesAdmin" class="panel-content hidden"><div id="mount-informes-admin"></div></div>
       <div id="panel-encuestas" class="panel-content hidden"><div id="mount-encuestas"></div></div>
+      <div id="panel-trainee" class="panel-content hidden"><div id="mount-trainee"></div></div>
+      <div id="panel-chatvoz" class="panel-content hidden"><div id="mount-chatvoz"></div></div>
+      <div id="panel-auditoria" class="panel-content hidden"><div id="mount-auditoria"></div></div>
       <div id="panel-configuracion" class="panel-content hidden"><div id="mount-configuracion"></div></div>
     </main>
   </div>
@@ -523,68 +490,80 @@
   <div id="adminModal" class="hidden fixed inset-0 z-[100]">
     <div class="absolute inset-0 bg-ink/40 backdrop-blur-sm" onclick="closeModal()"></div>
     <div class="absolute inset-0 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
-      <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-lg my-8 p-7 sm:p-8">
+      <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-2xl my-8 p-7 sm:p-8">
         <button onclick="closeModal()" class="absolute top-5 right-5 text-slate2 hover:text-ink transition">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
-        <p id="modalEyebrow" class="text-xs font-bold tracking-widest uppercase text-morado"></p>
-        <h3 id="modalTitle" class="text-xl font-extrabold text-ink mt-1 mb-5"></h3>
-        <form id="modalForm" onsubmit="return false;" class="space-y-4"></form>
+        <div class="pb-5 mb-5 border-b border-morado/10">
+          <p id="modalEyebrow" class="text-xs font-bold tracking-widest uppercase text-morado"></p>
+          <h3 id="modalTitle" class="text-xl font-extrabold text-ink mt-1"></h3>
+        </div>
+        <form id="modalForm" onsubmit="event.preventDefault(); saveModal();" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4"></form>
         <div class="flex items-center gap-3 mt-6">
-          <button type="button" onclick="saveModal()" class="flex-1 rounded-xl bg-ink text-white font-semibold text-sm py-3 hover:bg-black transition">Guardar</button>
-          <button type="button" onclick="closeModal()" class="rounded-xl border border-gray-200 text-slate2 font-semibold text-sm py-3 px-5 hover:bg-gray-50 transition">Cancelar</button>
+          <button type="button" onclick="saveModal()" class="flex-1 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 hover:opacity-90 transition">Guardar</button>
+          <button type="button" onclick="closeModal()" class="rounded-full border border-morado/25 text-slate2 font-semibold text-sm py-3 px-5 hover:bg-morado/5 transition">Cancelar</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ============ MODAL: Crear Cohorte + Administrador exclusivo (aislamiento multi-tenant) ============ -->
-  <div id="modalCohorteAdmin" class="hidden fixed inset-0 z-[100]">
-    <div class="absolute inset-0 bg-ink/40 backdrop-blur-sm" onclick="cerrarModalCohorteAdmin()"></div>
+  <!-- El modal "Crear Cohorte + Administrador exclusivo" (aislamiento
+       multi-tenant por cohorteId) se retiró: nunca tuvo un botón real que
+       lo abriera en ningún panel visible, así que era inalcanzable. El
+       Administrador real de la app se gestiona desde el panel
+       "Administradores" (rol Coordinador en Store('usuarios')). -->
+
+  <!-- ============ MODAL: Nueva/Editar Promoción ============ -->
+  <div id="promoModal" class="hidden fixed inset-0 z-[100]">
+    <div class="absolute inset-0 bg-ink/40 backdrop-blur-sm" onclick="closePromoModal()"></div>
     <div class="absolute inset-0 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
-      <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-lg my-8 p-7 sm:p-8">
-        <button onclick="cerrarModalCohorteAdmin()" class="absolute top-5 right-5 text-slate2 hover:text-ink transition">
+      <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-2xl my-8 p-7 sm:p-8">
+        <button onclick="closePromoModal()" class="absolute top-5 right-5 text-slate2 hover:text-ink transition">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
-        <p class="text-xs font-bold tracking-widest uppercase text-morado">Crear nuevo</p>
-        <h3 class="text-xl font-extrabold text-ink mt-1 mb-1">Crear Cohorte y Administrador</h3>
-        <p class="text-sm text-slate2 mb-5 leading-relaxed">La cohorte y su administrador quedan enlazados automáticamente por un <span class="font-semibold text-ink">cohorteId</span> único. Ese administrador solo podrá ver los datos de esta cohorte.</p>
+        <div class="pb-5 mb-5 border-b border-morado/10">
+          <p class="text-xs font-bold tracking-widest uppercase text-morado">Training de 100 a 1000+</p>
+          <h3 id="promoModalTitle" class="text-xl font-extrabold text-ink mt-1">Nueva promoción</h3>
+        </div>
 
-        <form id="formCohorteAdmin" onsubmit="return false;" class="space-y-4">
-          <div>
-            <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">Cohorte</p>
-            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="ccNombreCohorte">Nombre de la cohorte</label>
-            <input id="ccNombreCohorte" type="text" placeholder="Ej: Cohorte Octubre 2026" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30" />
+        <form onsubmit="event.preventDefault(); guardarPromoModal();" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="promo_nombre">Nombre de la promoción</label>
+            <input id="promo_nombre" type="text" placeholder="Ej: Primera Promoción" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
           </div>
-          <div class="pt-2 border-t border-gray-100">
-            <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2 mt-3">Administrador exclusivo de esta cohorte</p>
-            <div class="space-y-3">
-              <div>
-                <label class="block text-xs font-semibold text-slate2 mb-1.5" for="ccAdminNombre">Nombre del administrador</label>
-                <input id="ccAdminNombre" type="text" placeholder="Ej: Carlos Restrepo" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30" />
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-slate2 mb-1.5" for="ccAdminEmail">Correo electrónico</label>
-                <input id="ccAdminEmail" type="email" placeholder="admin@aplus.org" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30" />
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-slate2 mb-1.5" for="ccAdminPassword">Contraseña</label>
-                <div class="relative">
-                  <input id="ccAdminPassword" type="password" autocomplete="new-password" placeholder="Mínimo 4 caracteres" class="w-full rounded-xl border border-gray-200 pl-3.5 pr-11 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30" />
-                  <button type="button" onclick="togglePasswordVisibility('ccAdminPassword', this)" aria-label="Mostrar u ocultar contraseña" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate2 hover:text-ink transition">
-                    <svg class="pw-eye-open w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                    <svg class="pw-eye-closed w-4.5 h-4.5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.5a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
-                  </button>
-                </div>
-                <p id="ccAdminPasswordHint" class="text-xs text-slate2 mt-1.5"></p>
-              </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="promo_fecha">Fecha</label>
+            <input id="promo_fecha" type="text" placeholder="Ej: Julio 2026" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="promo_estado">Estado</label>
+            <select id="promo_estado" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition">
+              <option value="Publicada">Publicada</option>
+              <option value="Oculta">Oculta</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="promo_descripcion">Descripción</label>
+            <textarea id="promo_descripcion" rows="3" placeholder="Breve descripción de la cohorte graduada" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition"></textarea>
+          </div>
+
+          <div class="sm:col-span-2 pt-2 border-t border-morado/15">
+            <p class="text-xs font-bold uppercase tracking-wide text-turquesa mb-2 mt-3">Fotos</p>
+            <div id="promoFotosGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
+          </div>
+
+          <div class="sm:col-span-2 pt-2 border-t border-morado/15">
+            <div class="flex items-center justify-between mb-2 mt-3">
+              <p class="text-xs font-bold uppercase tracking-wide text-turquesa">Graduados</p>
+              <button type="button" onclick="agregarPromoGraduado()" class="text-xs font-semibold text-morado hover:underline">+ Agregar graduado</button>
             </div>
+            <div id="promoGraduadosList" class="space-y-2"></div>
           </div>
         </form>
 
         <div class="flex items-center gap-3 mt-6">
-          <button type="button" onclick="guardarCohorteAdmin()" class="flex-1 rounded-xl bg-ink text-white font-semibold text-sm py-3 hover:bg-black transition">Crear Cohorte y Administrador</button>
-          <button type="button" onclick="cerrarModalCohorteAdmin()" class="rounded-xl border border-gray-200 text-slate2 font-semibold text-sm py-3 px-5 hover:bg-gray-50 transition">Cancelar</button>
+          <button type="button" onclick="guardarPromoModal()" class="flex-1 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 hover:opacity-90 transition">Guardar</button>
+          <button type="button" onclick="closePromoModal()" class="rounded-full border border-morado/25 text-slate2 font-semibold text-sm py-3 px-5 hover:bg-morado/5 transition">Cancelar</button>
         </div>
       </div>
     </div>
@@ -634,11 +613,11 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">General</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelDocente('resumen')" data-tpanel="resumen" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelDocente('resumen')" data-tpanel="resumen" data-panel-code="docente.resumen" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
             Mi resumen
           </button>
-          <button onclick="showPanelDocente('perfil')" data-tpanel="perfil" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelDocente('perfil')" data-tpanel="perfil" data-panel-code="docente.perfil" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14c-4.42 0-8 1.79-8 4v1a1 1 0 001 1h14a1 1 0 001-1v-1c0-2.21-3.58-4-8-4z"/></svg>
             Mi perfil
           </button>
@@ -648,11 +627,11 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Mis estudiantes</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelDocente('asistencia')" data-tpanel="asistencia" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelDocente('asistencia')" data-tpanel="asistencia" data-panel-code="docente.asistencia" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h1.5m0 0V7.5m0 4.5v4.5m0-4.5H15m-9.75 6.75h11.5a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25h-11.5A2.25 2.25 0 003 6v10.5a2.25 2.25 0 002.25 2.25z"/></svg>
             Asistencia (QR)
           </button>
-          <button onclick="showPanelDocente('riesgo')" data-tpanel="riesgo" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelDocente('riesgo')" data-tpanel="riesgo" data-panel-code="docente.riesgo" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M4.93 4.93l14.14 14.14M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             Semáforo de riesgo
           </button>
@@ -662,7 +641,7 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Inteligencia artificial</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelDocente('informes')" data-tpanel="informes" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelDocente('informes')" data-tpanel="informes" data-panel-code="docente.informes" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             Informes docentes
           </button>
@@ -672,30 +651,31 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Gestión académica</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelDocente('modulos')" data-tpanel="modulos" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelDocente('modulos')" data-tpanel="modulos" data-panel-code="docente.modulos" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>
             Mis módulos
           </button>
-          <button onclick="showPanelDocente('calificaciones')" data-tpanel="calificaciones" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelDocente('calificaciones')" data-tpanel="calificaciones" data-panel-code="docente.calificaciones" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2a4 4 0 014-4h4m0 0l-3-3m3 3l-3 3M5 7h5m-5 4h3m-3 4h5"/></svg>
             Calificaciones
           </button>
-          <button onclick="showPanelDocente('pensum')" data-tpanel="pensum" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelDocente('pensum')" data-tpanel="pensum" data-panel-code="docente.pensum" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.25C10.5 5 8.5 4.5 6.5 4.5c-1 0-2 .1-3 .4v13.6c1-.3 2-.4 3-.4 2 0 4 .5 5.5 1.7 1.5-1.2 3.5-1.7 5.5-1.7 1 0 2 .1 3 .4V4.9c-1-.3-2-.4-3-.4-2 0-4 .5-5.5 1.75V19"/></svg>
             Pensum curricular
           </button>
         </nav>
       </div>
 
-      <div class="mb-6">
+      <div>
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Comunicación</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelDocente('reuniones')" data-tpanel="reuniones" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-            Reuniones virtuales
+          <button onclick="showPanelDocente('memorandos')" data-tpanel="memorandos" data-panel-code="docente.memorandos" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            Memorandos
+            <span id="memorandosBadgeDocente" class="hidden ml-auto text-[10px] font-bold bg-oro text-white rounded-full w-5 h-5 grid place-items-center">0</span>
           </button>
-          <button onclick="showPanelDocente('pqr')" data-tpanel="pqr" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          <button onclick="showPanelDocente('pqr')" data-tpanel="pqr" data-panel-code="docente.pqr" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-6l-4 4v-4z"/></svg>
             PQR
           </button>
         </nav>
@@ -704,7 +684,7 @@
       <div>
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Productividad</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelDocente('agenda')" data-tpanel="agenda" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelDocente('agenda')" data-tpanel="agenda" data-panel-code="docente.agenda" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             Agenda personal
           </button>
@@ -714,13 +694,14 @@
 
     <!-- Content -->
     <main>
-      <div class="rounded-3xl border border-gray-100 bg-white p-8 sm:p-10 mb-8">
-        <p class="text-xs font-bold tracking-widest uppercase text-morado">Docentes · A+ Smart</p>
-        <h1 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">Panel del docente</h1>
-        <p class="mt-2 text-sm text-slate2 max-w-lg leading-relaxed">Tu espacio para gestionar cohortes, riesgo académico, materiales y herramientas con IA.</p>
+      <div id="panel-t-resumen" class="panel-content-t">
+        <div class="rounded-3xl border border-gray-100 bg-white p-8 sm:p-10 mb-8">
+          <p class="text-xs font-bold tracking-widest uppercase text-morado">Docentes · A+ Smart</p>
+          <h1 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">Panel del docente</h1>
+          <p class="mt-2 text-sm text-slate2 max-w-lg leading-relaxed">Tu espacio para gestionar cohortes, riesgo académico, materiales y herramientas con IA.</p>
+        </div>
+        <div id="mount-t-resumen"></div>
       </div>
-
-      <div id="panel-t-resumen" class="panel-content-t"><div id="mount-t-resumen"></div></div>
       <div id="panel-t-perfil" class="panel-content-t hidden"><div id="mount-t-perfil"></div></div>
       <div id="panel-t-asistencia" class="panel-content-t hidden"><div id="mount-t-asistencia"></div></div>
       <div id="panel-t-riesgo" class="panel-content-t hidden"><div id="mount-t-riesgo"></div></div>
@@ -728,7 +709,7 @@
       <div id="panel-t-modulos" class="panel-content-t hidden"><div id="mount-t-modulos"></div></div>
       <div id="panel-t-calificaciones" class="panel-content-t hidden"><div id="mount-t-calificaciones"></div></div>
       <div id="panel-t-pensum" class="panel-content-t hidden"><div id="mount-t-pensum"></div></div>
-      <div id="panel-t-reuniones" class="panel-content-t hidden"><div id="mount-t-reuniones"></div></div>
+      <div id="panel-t-memorandos" class="panel-content-t hidden"><div id="mount-t-memorandos"></div></div>
       <div id="panel-t-pqr" class="panel-content-t hidden"><div id="mount-t-pqr"></div></div>
       <div id="panel-t-agenda" class="panel-content-t hidden"><div id="mount-t-agenda"></div></div>
     </main>
@@ -761,11 +742,11 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">General</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelEstudiante('resumen')" data-spanel="resumen" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelEstudiante('resumen')" data-spanel="resumen" data-panel-code="estudiante.resumen" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
             Mi resumen
           </button>
-          <button onclick="showPanelEstudiante('perfil')" data-spanel="perfil" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelEstudiante('perfil')" data-spanel="perfil" data-panel-code="estudiante.perfil" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
             Mi perfil
           </button>
@@ -775,7 +756,7 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Asistencia y desempeño</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelEstudiante('asistencia')" data-spanel="asistencia" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelEstudiante('asistencia')" data-spanel="asistencia" data-panel-code="estudiante.asistencia" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h1.5m0 0V7.5m0 4.5v4.5m0-4.5H15m-9.75 6.75h11.5a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25h-11.5A2.25 2.25 0 003 6v10.5a2.25 2.25 0 002.25 2.25z"/></svg>
             Asistencia (QR)
           </button>
@@ -785,15 +766,15 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Académico</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelEstudiante('academico')" data-spanel="academico" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelEstudiante('academico')" data-spanel="academico" data-panel-code="estudiante.academico" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>
             Mis horarios y materias
           </button>
-          <button onclick="showPanelEstudiante('calificaciones')" data-spanel="calificaciones" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelEstudiante('calificaciones')" data-spanel="calificaciones" data-panel-code="estudiante.calificaciones" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2a4 4 0 014-4h4m0 0l-3-3m3 3l-3 3M5 7h5m-5 4h3m-3 4h5"/></svg>
             Calificaciones
           </button>
-          <button onclick="showPanelEstudiante('pensum')" data-spanel="pensum" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelEstudiante('pensum')" data-spanel="pensum" data-panel-code="estudiante.pensum" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.25C10.5 5 8.5 4.5 6.5 4.5c-1 0-2 .1-3 .4v13.6c1-.3 2-.4 3-.4 2 0 4 .5 5.5 1.7 1.5-1.2 3.5-1.7 5.5-1.7 1 0 2 .1 3 .4V4.9c-1-.3-2-.4-3-.4-2 0-4 .5-5.5 1.75V19"/></svg>
             Pensum curricular
           </button>
@@ -803,17 +784,9 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Comunicación</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelEstudiante('memorandos')" data-spanel="memorandos" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelEstudiante('memorandos')" data-spanel="memorandos" data-panel-code="estudiante.memorandos" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             Memorandos
-          </button>
-          <button onclick="showPanelEstudiante('pqr')" data-spanel="pqr" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h8m-8 4h5M21 12a9 9 0 11-9-9 9 9 0 019 9z"/></svg>
-            PQR
-          </button>
-          <button onclick="showPanelEstudiante('reuniones')" data-spanel="reuniones" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-            Reuniones virtuales
           </button>
         </nav>
       </div>
@@ -821,9 +794,13 @@
       <div class="mb-6">
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Institucional</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelEstudiante('encuestas')" data-spanel="encuestas" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelEstudiante('encuestas')" data-spanel="encuestas" data-panel-code="estudiante.encuestas" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6h6v6M9 11V7a3 3 0 016 0v4M5 21h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
             Encuestas de satisfacción
+          </button>
+          <button onclick="showPanelEstudiante('pqr')" data-spanel="pqr" data-panel-code="estudiante.pqr" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-6l-4 4v-4z"/></svg>
+            PQR
           </button>
         </nav>
       </div>
@@ -831,7 +808,7 @@
       <div>
         <p class="text-xs font-bold tracking-widest uppercase text-slate2 mb-3 px-4">Productividad</p>
         <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanelEstudiante('agenda')" data-spanel="agenda" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+          <button onclick="showPanelEstudiante('agenda')" data-spanel="agenda" data-panel-code="estudiante.agenda" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             Agenda personal
           </button>
@@ -841,18 +818,20 @@
 
     <!-- Content -->
     <main>
-      <div id="mensajeMotivacional" class="rounded-3xl border border-gray-100 bg-gradient-to-br from-oro/10 via-white to-morado/10 p-6 sm:p-7 mb-6 hidden">
-        <p class="text-xs font-bold tracking-widest uppercase text-oro">Mensaje del día</p>
-        <p id="mensajeMotivacionalTexto" class="mt-1.5 text-sm sm:text-base font-semibold text-ink leading-relaxed"></p>
-      </div>
+      <div id="panel-s-resumen" class="panel-content-s">
+        <div id="mensajeMotivacional" class="rounded-3xl border border-gray-100 bg-gradient-to-br from-oro/10 via-white to-morado/10 p-6 sm:p-7 mb-6 hidden">
+          <p class="text-xs font-bold tracking-widest uppercase text-oro">Mensaje del día</p>
+          <p id="mensajeMotivacionalTexto" class="mt-1.5 text-sm sm:text-base font-semibold text-ink leading-relaxed"></p>
+        </div>
 
-      <div class="rounded-3xl border border-gray-100 bg-white p-8 sm:p-10 mb-8">
-        <p class="text-xs font-bold tracking-widest uppercase text-oro">Estudiantes · A+ Smart</p>
-        <h1 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">Panel del estudiante</h1>
-        <p class="mt-2 text-sm text-slate2 max-w-lg leading-relaxed">Tu espacio para seguir tu proceso, tus materiales y tus herramientas con IA.</p>
-      </div>
+        <div class="rounded-3xl border border-gray-100 bg-white p-8 sm:p-10 mb-8">
+          <p class="text-xs font-bold tracking-widest uppercase text-oro">Estudiantes · A+ Smart</p>
+          <h1 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">Panel del estudiante</h1>
+          <p class="mt-2 text-sm text-slate2 max-w-lg leading-relaxed">Tu espacio para seguir tu proceso, tus materiales y tus herramientas con IA.</p>
+        </div>
 
-      <div id="panel-s-resumen" class="panel-content-s"><div id="mount-s-resumen"></div></div>
+        <div id="mount-s-resumen"></div>
+      </div>
       <div id="panel-s-perfil" class="panel-content-s hidden"><div id="mount-s-perfil"></div></div>
       <div id="panel-s-asistencia" class="panel-content-s hidden"><div id="mount-s-asistencia"></div></div>
       <div id="panel-s-academico" class="panel-content-s hidden"><div id="mount-s-academico"></div></div>
@@ -860,7 +839,6 @@
       <div id="panel-s-pensum" class="panel-content-s hidden"><div id="mount-s-pensum"></div></div>
       <div id="panel-s-memorandos" class="panel-content-s hidden"><div id="mount-s-memorandos"></div></div>
       <div id="panel-s-pqr" class="panel-content-s hidden"><div id="mount-s-pqr"></div></div>
-      <div id="panel-s-reuniones" class="panel-content-s hidden"><div id="mount-s-reuniones"></div></div>
       <div id="panel-s-encuestas" class="panel-content-s hidden"><div id="mount-s-encuestas"></div></div>
       <div id="panel-s-agenda" class="panel-content-s hidden"><div id="mount-s-agenda"></div></div>
     </main>
@@ -903,21 +881,99 @@
   </div>
 </div>
 
+<!-- ============ AUTORREGISTRO PÚBLICO (Estudiante) ============ -->
+<!-- Global igual que perfilPersonaModal: se abre desde el login, fuera de
+     cualquier vista con sesión iniciada. app.js llena registroPublicoContenido. -->
+<div id="registroPublicoModal" class="hidden fixed inset-0 z-[100]">
+  <div class="absolute inset-0 bg-ink/40 backdrop-blur-sm" onclick="cerrarRegistroPublico()"></div>
+  <div class="absolute inset-0 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+    <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-md my-8 p-7 sm:p-8">
+      <button onclick="cerrarRegistroPublico()" class="absolute top-5 right-5 text-slate2 hover:text-ink transition">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+      <div id="registroPublicoContenido"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ============ TOASTS ============ -->
 <!-- También global por la misma razón: si quedara dentro de un panel oculto,
      los avisos (éxito/error) de Docente o Estudiante nunca se verían. -->
 <div id="toastWrap" class="fixed bottom-5 right-5 z-[110] flex flex-col gap-2 items-end"></div>
 
+<!-- =====================================================================
+     WIDGET: Chat de la Fundación A+ (texto, no de voz — ver nota en
+     app.js sobre el estado de esa parte). Vive fuera de siteView/
+     dashboardView/teacherView/studentView a propósito: se muestra siempre,
+     sin importar en qué vista esté la persona (sitio público o cualquier
+     login), y CSS/JS están prefijados con "aplus-chat" para no chocar con
+     el resto del proyecto. El backend real vive aparte (Python/FastAPI +
+     Groq/Gemini), responde en streaming (POST /chat/stream) — ver
+     /backend_chat/DEPLOY_RENDER.md para desplegarlo y CHAT_CONFIG.baseUrl
+     más abajo en app.js para apuntar el widget a él.
+     ===================================================================== -->
+<div class="aplus-chat" id="aplusChat">
+  <div class="aplus-chat-panel" id="aplusPanel" role="dialog" aria-label="Asistente de la Fundación A+" aria-hidden="true">
+    <div class="aplus-chat-header">
+      <div class="aplus-chat-header-row">
+        <div class="aplus-chat-avatar">A+</div>
+        <div class="aplus-chat-header-info">
+          <div class="aplus-chat-title">Fundación A+</div>
+          <div class="aplus-chat-subtitle"><span class="aplus-chat-dot" id="aplusStatusDot"></span> <span id="aplusStatusText">Asistente virtual</span></div>
+        </div>
+        <button type="button" class="aplus-chat-clear" id="aplusClear" title="Limpiar conversación" aria-label="Limpiar conversación">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0-.867 12.142A2 2 0 0115.138 20H8.862a2 2 0 01-1.995-1.858L6 6"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="aplus-chat-chips" id="aplusChips"></div>
+    <div class="aplus-chat-body" id="aplusBody"></div>
+    <div class="aplus-chat-inputbar">
+      <textarea id="aplusInput" class="aplus-chat-textarea" rows="1" maxlength="500" placeholder="Escribe tu pregunta..." aria-label="Escribe tu mensaje"></textarea>
+      <button class="aplus-chat-send" id="aplusSend" aria-label="Enviar mensaje">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+      </button>
+    </div>
+    <div class="aplus-chat-footnote">Fundación A+ · Respuestas generadas por IA</div>
+  </div>
+  <button class="aplus-chat-fab" id="aplusFab" aria-label="Abrir chat de la Fundación A+" aria-expanded="false">
+    <span class="pulse-ring"></span>
+    <span class="aplus-chat-badge"></span>
+    <svg class="icon-chat" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+    <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+  </button>
+</div>
+
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<!-- db.js (API PHP + MySQL) está deshabilitado a propósito: define su propio "const Store"
-     y, al cargarse junto a app.js en el mismo scope global, choca con el Store de
-     localStorage de app.js y rompe TODA la app con un SyntaxError. app.js todavía
-     no está migrado a la interfaz async de db.js (ver notas de migración al final
-     de ese archivo) — actívalo solo cuando completes esa migración.
-<script src="db.js"></script>
--->
-<script src="qrcode.min.js"></script>
-<script src="app.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- CORREGIDO: antes apuntaba a "qrcode.min.js" (un archivo local que no
+     existe en el proyecto), así que la librería QRCode nunca cargaba y el
+     panel "Códigos QR" siempre mostraba "No se pudo cargar la librería de
+     códigos QR" en vez del QR real (ver pintarQrImprimible() en app.js).
+     Ahora se carga la misma librería (qrcodejs) desde cdnjs, verificada y
+     con el mismo patrón que ya se usa aquí con Chart.js y EmailJS. -->
+<!-- EmailJS: envía el correo de aprobación/rechazo del autorregistro
+     directo desde el navegador (sin backend propio). Configura tus IDs
+     reales en EMAILJS_CONFIG, al inicio de la sección correspondiente
+     en app.js. -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<!-- db.js SIEMPRE antes que app.js: define Store (habla con MySQL para las
+     entidades ya migradas) y apiLogin, que app.js usa desde submitLogin().
+     IMPORTANTE: db.js va UNA SOLA VEZ aquí — cargarlo dos veces (o dos
+     archivos que declaren el mismo nombre en el scope global, como
+     DB_PREFIX) revienta TODO app.js con un SyntaxError silencioso que se
+     manifiesta como "submitLogin is not defined" en la consola.
+
+     ?v=20260917-1: parámetro de versión ("cache buster"). Sin esto, el
+     navegador (o el hosting) puede quedarse sirviendo una copia vieja en
+     caché de db.js/app.js aunque subas el archivo nuevo por FTP/cPanel —
+     fue justo lo que pasó con Store.actualizarPerfilPropio(): app.js se
+     actualizó pero db.js se siguió cargando desde caché sin esa función.
+     Cambia el número cada vez que subas una versión nueva de cualquiera
+     de los dos archivos, para forzar que el navegador la descargue. -->
+<script src="db.js?v=20260918-7"></script>
+<script src="app.js?v=20260918-7"></script>
 
 </body>
 </html>
