@@ -305,8 +305,11 @@ def construir_system_prompt(hay_sesion: bool) -> str:
     if not hay_sesion:
         base += (
             "\nESTA PERSONA NO HA INICIADO SESIÓN (visitante público del sitio web):\n"
-            "- Responde como asistente institucional para visitantes externos y público general.\n"
-            "- Nunca reveles datos internos del sistema (notas, asistencia, correos o datos privados de usuarios).\n"
+            "- Responde SIEMPRE en español como asistente institucional para visitantes externos y público general.\n"
+            "- NUNCA asumas, digas ni insinúes que la persona es Superadmin, Administrador, Docente ni Estudiante.\n"
+            "- NUNCA proporciones guías ni instrucciones de administración interna de la plataforma (ej. cómo crear o gestionar cursos, cohortes, permisos o usuarios).\n"
+            "- NUNCA reveles datos internos del sistema (notas, asistencia, correos, listados de personas ni estadísticas privadas).\n"
+            "- Si preguntan sobre cómo administrar la plataforma o gestionar cursos, aclara con cortesía que dichas gestiones son de uso exclusivo para el personal administrativo autenticado y ofrece información pública de los programas formativos.\n"
             "- Si el CONTEXTO EN VIVO trae un bloque de \"PERSONA MENCIONADA POR UN VISITANTE SIN SESIÓN\", "
             "significa que preguntó por el nombre de un estudiante o docente real de la fundación: sigue "
             "exactamente esa instrucción (mensaje cálido e institucional, nunca datos privados). Si no "

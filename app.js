@@ -610,8 +610,11 @@
     document.getElementById('loginPassword').value = '';
     quitarAvisoSinAcceso('.panel-content');
     window.scrollTo(0, 0);
-    if (window.aplusChatResetSession) window.aplusChatResetSession();
     cerrarSesionChat();
+    if (typeof setAuthToken === 'function') setAuthToken(null);
+    localStorage.removeItem(DB_PREFIX_TOKEN + 'authToken');
+    localStorage.removeItem('aplus_chat_token');
+    if (window.aplusChatResetSession) window.aplusChatResetSession();
   }
 
   function logoutDocente() {
@@ -623,14 +626,13 @@
     document.getElementById('loginEmail').value = '';
     document.getElementById('loginPassword').value = '';
     quitarAvisoSinAcceso('.panel-content-t');
-    // Mismo motivo que en applyAdminRoleUI: si el siguiente login (otro
-    // Docente, con otro perfil) reutiliza este mismo DOM sin recargar la
-    // página, las secciones ocultas por este usuario no deben quedar
-    // pegadas para el que entre después.
     document.querySelectorAll('#teacherView .mb-6').forEach(seccion => seccion.classList.remove('hidden'));
     window.scrollTo(0, 0);
-    if (window.aplusChatResetSession) window.aplusChatResetSession();
     cerrarSesionChat();
+    if (typeof setAuthToken === 'function') setAuthToken(null);
+    localStorage.removeItem(DB_PREFIX_TOKEN + 'authToken');
+    localStorage.removeItem('aplus_chat_token');
+    if (window.aplusChatResetSession) window.aplusChatResetSession();
   }
 
   function logoutEstudiante() {
@@ -644,8 +646,11 @@
     quitarAvisoSinAcceso('.panel-content-s');
     document.querySelectorAll('#studentView .mb-6').forEach(seccion => seccion.classList.remove('hidden'));
     window.scrollTo(0, 0);
-    if (window.aplusChatResetSession) window.aplusChatResetSession();
     cerrarSesionChat();
+    if (typeof setAuthToken === 'function') setAuthToken(null);
+    localStorage.removeItem(DB_PREFIX_TOKEN + 'authToken');
+    localStorage.removeItem('aplus_chat_token');
+    if (window.aplusChatResetSession) window.aplusChatResetSession();
   }
 
   // ---------- Navegación del panel Docente ----------
@@ -8731,10 +8736,22 @@
     healthCheckIntervalMs: 30000,
   };
 
-  // Token de sesión del CHAT: se guarda en memoria y en localStorage
-  // para que persista al recargar la página y el usuario siga reconocido
-  // con su rol en vez de volver a visitante.
-  let chatSessionToken = localStorage.getItem('aplus_chat_token') || null;
+  // Valida si existe una sesión activa real en la interfaz de la aplicación
+  function haySesionActivaApp() {
+    return Boolean(currentAdminRole || currentDocente || currentEstudiante || currentAdminUser);
+  }
+
+  // Token de sesión del CHAT: vive ÚNICAMENTE en memoria durante la sesión activa.
+  // No se persiste en localStorage para evitar que un visitante público en la misma máquina
+  // herede credenciales administrativas residuales y acceda a información privada.
+  let chatSessionToken = null;
+
+  // Limpieza defensiva en arranque: si no hay sesión activa en la app, purgar cualquier residuo
+  if (!haySesionActivaApp()) {
+    try {
+      localStorage.removeItem('aplus_chat_token');
+    } catch (_) {}
+  }
 
   /** Se llama justo después de un login exitoso en la app (cualquier rol)
    *  para obtener el token que el chat necesita mandar en cada mensaje.
@@ -8742,6 +8759,7 @@
    *  configurado, etc.), usa el token de sesión de la app (compatible con
    *  backend_chat/auth.py) como respaldo automático. */
   async function iniciarSesionChat(email, password) {
+    if (!haySesionActivaApp()) return;
     try {
       const resp = await fetch(CHAT_CONFIG.baseUrl + '/auth/login', {
         method: 'POST',
@@ -8749,20 +8767,15 @@
         body: JSON.stringify({ email, password }),
       });
       if (!resp.ok) {
-        const tokenFallback = (typeof getAuthToken === 'function' ? getAuthToken() : null) || localStorage.getItem(DB_PREFIX_TOKEN + 'authToken');
+        const tokenFallback = (typeof getAuthToken === 'function' ? getAuthToken() : null);
         chatSessionToken = tokenFallback || null;
-        if (chatSessionToken) localStorage.setItem('aplus_chat_token', chatSessionToken);
         return;
       }
       const data = await resp.json();
       chatSessionToken = data.token || null;
-      if (chatSessionToken) {
-        localStorage.setItem('aplus_chat_token', chatSessionToken);
-      }
     } catch (e) {
-      const tokenFallback = (typeof getAuthToken === 'function' ? getAuthToken() : null) || localStorage.getItem(DB_PREFIX_TOKEN + 'authToken');
+      const tokenFallback = (typeof getAuthToken === 'function' ? getAuthToken() : null);
       chatSessionToken = tokenFallback || null;
-      if (chatSessionToken) localStorage.setItem('aplus_chat_token', chatSessionToken);
     }
   }
 
@@ -8770,7 +8783,9 @@
    *  mandar un token de una sesión que ya terminó. */
   function cerrarSesionChat() {
     chatSessionToken = null;
-    localStorage.removeItem('aplus_chat_token');
+    try {
+      localStorage.removeItem('aplus_chat_token');
+    } catch (_) {}
   }
 
   function initAplusChat() {
@@ -9055,16 +9070,19 @@
       let streamingBubble = null;
 
       try {
+        // SEGURIDAD CRÍTICA: solo enviar token si el usuario REALMENTE tiene una sesión activa
+        // en la interfaz de la aplicación (Superadmin, Administración, Docente o Estudiante).
+        // Si la persona está en el sitio público sin iniciar sesión, NUNCA enviar token:
+        // el asistente debe responder estrictamente como visitante público con información institucional
+        // general y jamás con datos privados, estadísticas ni guías de gestión administrativa.
+        const tokenParaChat = haySesionActivaApp() ? (chatSessionToken || (typeof getAuthToken === 'function' ? getAuthToken() : null)) : null;
+
         const response = await fetch(CHAT_CONFIG.baseUrl + '/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: history,
-            // El backend verifica este token él mismo (auth.verificar_token)
-            // y de ahí saca el rol/email real para consultar MySQL.
-            // Si el token directo del chat aún no está o se recargó la página,
-            // usa el token guardado o el de la app como respaldo.
-            token: chatSessionToken || localStorage.getItem('aplus_chat_token') || (typeof getAuthToken === 'function' ? getAuthToken() : null) || localStorage.getItem(DB_PREFIX_TOKEN + 'authToken'),
+            token: tokenParaChat,
           })
         });
 
