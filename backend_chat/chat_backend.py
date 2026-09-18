@@ -217,6 +217,7 @@ def construir_system_prompt(hay_sesion: bool) -> str:
         "o una explicación con varios pasos), puedes extenderte lo necesario para cubrir todos los "
         "datos relevantes sin omitir información — es preferible una respuesta algo más larga pero "
         "completa que una corta pero incompleta.\n"
+        "- TERMINAR SIEMPRE LA RESPUESTA: Nunca dejes una idea, oración o palabra a medias. Completa siempre toda la explicación, enlace, despedida o mensaje de seguimiento antes de finalizar tu respuesta.\n"
         "- Puedes usar saltos de línea para separar ideas o listar varios datos (por ejemplo, una nota "
         "por materia), ya que el chat los muestra correctamente. Evita encabezados markdown (#, ##) y "
         "tablas, que no se ven bien en una burbuja de chat; usa texto plano y, si hace falta enumerar, "
@@ -448,7 +449,7 @@ def llamar_openrouter(messages: list, system_prompt: str) -> str:
         "messages": [{"role": "system", "content": system_prompt}] + [
             {"role": m.role, "content": m.content} for m in historial_reciente
         ],
-        "max_tokens": 400,
+        "max_tokens": 1200,
         "temperature": 0.6,
     }
     body = json.dumps(payload).encode("utf-8")
@@ -494,7 +495,7 @@ def llamar_openrouter_stream(messages: list, system_prompt: str):
         "messages": [{"role": "system", "content": system_prompt}] + [
             {"role": m.role, "content": m.content} for m in historial_reciente
         ],
-        "max_tokens": 400,
+        "max_tokens": 1200,
         "temperature": 0.6,
         "stream": True,
     }
@@ -540,7 +541,7 @@ def llamar_groq(messages: list, system_prompt: str) -> str:
         "messages": [{"role": "system", "content": system_prompt}] + [
             {"role": m.role, "content": m.content} for m in historial_reciente
         ],
-        "max_tokens": 400,
+        "max_tokens": 1200,
         "temperature": 0.6,
     }
     body = json.dumps(payload).encode("utf-8")
@@ -589,7 +590,7 @@ def llamar_groq_stream(messages: list, system_prompt: str):
         "messages": [{"role": "system", "content": system_prompt}] + [
             {"role": m.role, "content": m.content} for m in historial_reciente
         ],
-        "max_tokens": 400,
+        "max_tokens": 1200,
         "temperature": 0.6,
         "stream": True,
     }
@@ -634,7 +635,7 @@ async def llamar_gemini_stream(messages: list, system_prompt: str):
     ]
     config = types.GenerateContentConfig(
         system_instruction=system_prompt,
-        max_output_tokens=400,
+        max_output_tokens=1200,
         thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"),
     )
     for chunk in client.models.generate_content_stream(model="gemini-3.5-flash-lite", contents=contents, config=config):
@@ -785,7 +786,7 @@ def chat(request: ChatRequest):
         ]
         config = types.GenerateContentConfig(
             system_instruction=system_prompt,
-            max_output_tokens=400,
+            max_output_tokens=1200,
             thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"),
         )
         response = client.models.generate_content(
