@@ -506,6 +506,7 @@
     usuarios.unshift({
       id: uid('us'),
       nombre, email, telefono, password,
+      passwordPlano: password,
       rol: 'Estudiante',
       cohorte: '',
       estado: 'Activo',       // estado operativo normal de la cuenta
@@ -1433,7 +1434,7 @@
   // .map() síncrono de más abajo (que genera el HTML de cada campo del
   // formulario), porque ese .map() no puede usar await dentro de sus
   // callbacks. record0 también depende de esto cuando entity=='usuarios'.
-  async function openModal(entity, id, forcedRole) {
+  async function openModal(entity, id, forcedRole, options = {}) {
     const schema = SCHEMAS[entity];
     if (!schema) return;
     const listaEntidadActual = await Store.list(entity); // funciona igual para 'usuarios' (MySQL) y cualquier otra entidad (localStorage, ver Store híbrido en db.js)
@@ -1445,7 +1446,7 @@
       return;
     }
 
-    modalCtx = { entity, id: id || null };
+    modalCtx = { entity, id: id || null, ...(options || {}) };
     const record = record0;
 
     // Precarga de listas usadas DENTRO de los .map()/callbacks síncronos
@@ -1465,11 +1466,29 @@
       ? (entity === 'modulos' ? listaEntidadActual : await Store.list('modulos'))
       : null;
 
-    document.getElementById('modalEyebrow').textContent = id ? 'Editar' : 'Crear nuevo';
-    document.getElementById('modalTitle').textContent = forcedRole === 'Coordinador' ? 'Administrador' : schema.label;
+    document.getElementById('modalEyebrow').textContent = modalCtx.esAprobacion ? 'Aprobación de Registro' : (id ? 'Editar' : 'Crear nuevo');
+    document.getElementById('modalTitle').textContent = modalCtx.esAprobacion ? 'Aprobar y Configurar Estudiante' : (forcedRole === 'Coordinador' ? 'Administrador' : schema.label);
 
     const form = document.getElementById('modalForm');
-    form.innerHTML = schema.fields.map(f => {
+    let bannerAprobacion = '';
+    if (modalCtx.esAprobacion && record) {
+      bannerAprobacion = `
+        <div class="sm:col-span-2 rounded-2xl bg-gradient-to-r from-morado/15 via-turquesa/10 to-transparent border border-morado/30 p-4 mb-2">
+          <div class="flex items-center gap-3.5">
+            <img src="logo.jpg" alt="Fundación A+" class="h-11 w-auto rounded-xl shadow-sm border border-white/80 shrink-0" />
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-morado bg-morado/20 rounded-full px-2.5 py-0.5">Aprobando Solicitud</span>
+                <h4 class="text-sm font-extrabold text-ink">${escapeHtml(record.nombre)}</h4>
+              </div>
+              <p class="text-xs text-slate2 mt-1">
+                Asigna una <strong>cohorte</strong> y <strong>perfiles</strong>. Si ingresas una contraseña abajo, se le asignará como <strong>nueva credencial</strong>; si la dejas en blanco, conservará la que ingresó al registrarse. Al guardar, se enviará automáticamente el correo con sus credenciales y el logo institucional.
+              </p>
+            </div>
+          </div>
+        </div>`;
+    }
+    form.innerHTML = bannerAprobacion + schema.fields.map(f => {
       const val = record ? record[f.key] : (f.default !== undefined ? f.default : '');
       const idAttr = 'field_' + f.key;
 
@@ -1563,10 +1582,12 @@
       const step = f.step ? `step="${f.step}"` : '';
       if (f.type === 'password') {
         const ayudaPassword = (entity === 'usuarios' && f.key === 'password')
-          ? (record ? 'Déjala en blanco para conservar la contraseña actual. ' : '') + 'Mínimo 6 caracteres, con al menos una letra y un número.'
+          ? (modalCtx.esAprobacion
+              ? 'Escribe una nueva contraseña para asignársela, o déjala en blanco para conservar la que el estudiante definió al registrarse. (Mínimo 6 caracteres, letra y número).'
+              : ((record ? 'Déjala en blanco para conservar la contraseña actual. ' : '') + 'Mínimo 6 caracteres, con al menos una letra y un número.'))
           : '';
         return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
-          <input id="${idAttr}" type="text" value="" autocomplete="new-password" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+          <input id="${idAttr}" type="text" value="" placeholder="${modalCtx.esAprobacion ? 'Nueva contraseña (opcional)' : ''}" autocomplete="new-password" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
           ${ayudaPassword ? `<p class="text-xs text-slate2 mt-1.5">${ayudaPassword}</p>` : ''}</div>`;
       }
       return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
@@ -1603,11 +1624,16 @@
       form.appendChild(perfilesWrap);
 
       const rolSelectParaPerfiles = document.getElementById('field_rol');
-      const perfilesYaAsignados = record ? (record.perfiles || []) : [];
+      let perfilesYaAsignados = record ? (record.perfiles || []) : [];
       const refrescarSeccionPerfiles = async () => {
-        const rolActual = forcedRole || rolSelectParaPerfiles.value;
+        const rolActual = forcedRole || (rolSelectParaPerfiles ? rolSelectParaPerfiles.value : 'Estudiante');
         const categoriaDelRol = (rolActual === 'Docente') ? 'Docente' : (rolActual === 'Estudiante') ? 'Estudiante' : 'Administrativo';
         const disponibles = (await Store.list('perfiles')).filter(p => p.categoria === categoriaDelRol);
+        let asignadosParaMarcar = [...perfilesYaAsignados];
+        if (modalCtx.esAprobacion && asignadosParaMarcar.length === 0 && disponibles.length > 0) {
+          const defecto = disponibles.find(p => p.nombre.toLowerCase().includes('estudiante') || p.nombre.toLowerCase().includes('estándar')) || disponibles[0];
+          if (defecto) asignadosParaMarcar.push(defecto.id);
+        }
         perfilesWrap.innerHTML = `
           <div>
             <label class="block text-xs font-semibold text-slate2 mb-1.5">Perfiles asignados (funcionalidades que puede usar)</label>
@@ -1615,7 +1641,7 @@
               <div class="border border-morado/20 bg-morado/5 rounded-xl p-3 space-y-1.5 max-h-40 overflow-y-auto">
                 ${disponibles.map(p => `
                   <label class="flex items-center gap-2 text-sm text-ink cursor-pointer">
-                    <input type="checkbox" class="perfil-asignado-checkbox w-4 h-4 rounded border-morado/40 text-morado focus:ring-morado/40" value="${p.id}" ${perfilesYaAsignados.includes(p.id) ? 'checked' : ''} />
+                    <input type="checkbox" class="perfil-asignado-checkbox w-4 h-4 rounded border-morado/40 text-morado focus:ring-morado/40" value="${p.id}" ${asignadosParaMarcar.includes(p.id) ? 'checked' : ''} />
                     ${escapeHtml(p.nombre)}
                   </label>`).join('')}
               </div>
@@ -1627,6 +1653,22 @@
       refrescarSeccionPerfiles();
     }
 
+    if (entity === 'usuarios') {
+      const notifWrap = document.createElement('div');
+      notifWrap.className = 'sm:col-span-2 pt-3 border-t border-gray-100 flex items-center justify-between gap-3';
+      notifWrap.innerHTML = `
+        <label class="flex items-center gap-2.5 text-xs font-semibold text-ink cursor-pointer select-none">
+          <input id="field_notificar_correo" type="checkbox" ${modalCtx.esAprobacion ? 'checked' : ''} class="w-4 h-4 rounded border-morado/40 text-morado focus:ring-morado/40" />
+          <span>Enviar notificación por correo con credenciales de acceso y logo institucional</span>
+        </label>
+        <span class="text-[11px] text-slate2 font-medium">EmailJS / SMTP</span>`;
+      form.appendChild(notifWrap);
+    }
+
+    const btnGuardar = document.querySelector('#adminModal button[onclick="saveModal()"]');
+    if (btnGuardar) {
+      btnGuardar.textContent = modalCtx.esAprobacion ? 'Aprobar y Enviar Credenciales' : 'Guardar';
+    }
 
     //      calculados automáticamente — ver contarInscritos()/docentesDeCohorte(). ----
     if (entity === 'modulos' && id) {
@@ -1724,6 +1766,8 @@
 
   function closeModal() {
     document.getElementById('adminModal').classList.add('hidden');
+    const btnGuardar = document.querySelector('#adminModal button[onclick="saveModal()"]');
+    if (btnGuardar) btnGuardar.textContent = 'Guardar';
     modalCtx = { entity: null, id: null };
   }
 
@@ -1799,6 +1843,8 @@
           // interrumpiendo el guardado completo.
           const previo = (await Store.list(entity)).find(r => r.id === id) || {};
           data.password = previo.password || '';
+          data.passwordPlano = previo.passwordPlano || '';
+          data._passwordModificada = false;
         } else {
           if (!validarFortalezaPassword(v)) {
             el.classList.add('ring-2', 'ring-coral');
@@ -1807,6 +1853,8 @@
             return;
           }
           data.password = v;
+          data.passwordPlano = v;
+          data._passwordModificada = true;
         }
         continue;
       }
@@ -1896,11 +1944,26 @@
       data.perfiles = Array.from(document.querySelectorAll('.perfil-asignado-checkbox:checked')).map(chk => chk.value);
     }
 
+    const esAprobacion = !!modalCtx.esAprobacion;
+    const passwordFueModificada = !!data._passwordModificada;
+    delete data._passwordModificada;
+
+    if (entity === 'usuarios' && esAprobacion) {
+      delete data.estadoRegistro;
+      data.estadoRegistro = null;
+    }
+
     const records = await Store.list(entity);
     const esEdicion = !!id;
     if (id) {
       const idx = records.findIndex(r => r.id === id);
-      if (idx > -1) records[idx] = { ...records[idx], ...data };
+      if (idx > -1) {
+        records[idx] = { ...records[idx], ...data };
+        if (esAprobacion) {
+          records[idx].estadoRegistro = null;
+          delete records[idx].estadoRegistro;
+        }
+      }
     } else {
       data.id = uid(entity.slice(0, 2));
       records.unshift(data);
@@ -1913,7 +1976,37 @@
     if (resultado && resultado.remoto === false) {
       toast('No se pudo guardar en el servidor — el cambio solo quedó en este navegador. Revisa la conexión con la base de datos.', 'err');
     } else {
-      toast(schema.label + (esEdicion ? ' actualizado correctamente' : ' creado correctamente'), 'ok');
+      toast(esAprobacion ? 'Estudiante aprobado exitosamente' : (schema.label + (esEdicion ? ' actualizado correctamente' : ' creado correctamente')), 'ok');
+    }
+
+    // Leemos el checkbox de notificación ANTES de cerrar el modal
+    const chkNotificar = document.getElementById('field_notificar_correo');
+    const debeNotificar = chkNotificar ? chkNotificar.checked : esAprobacion;
+    const passwordParaNotificar = data.passwordPlano || (passwordFueModificada ? data.password : '');
+
+    // Cerramos el modal y re-renderizamos inmediatamente para que la interfaz responda al instante
+    closeModal();
+    if (panelActivoAdmin && RENDERERS[panelActivoAdmin]) await RENDERERS[panelActivoAdmin]();
+    if (RENDERERS[entity] && panelActivoAdmin !== entity) await RENDERERS[entity]();
+    if (horariosChanged && panelActivoAdmin !== 'modulos' && RENDERERS['modulos']) await RENDERERS['modulos']();
+    if (panelActivoAdmin === 'resumen') await renderAdminBannerStats();
+    if (entity === 'usuarios') renderConstellation();
+    if (esAprobacion) {
+      if (RENDERERS['usuarios']) await RENDERERS['usuarios']();
+      await renderAdminBannerStats();
+      renderConstellation();
+    }
+
+    // Notificación por correo con credenciales y logo institucional en segundo plano
+    if (entity === 'usuarios' && (esAprobacion || debeNotificar)) {
+      toast(esAprobacion ? 'Enviando correo con credenciales...' : 'Enviando credenciales por correo...', 'ok');
+      notificarEstadoRegistroPorCorreo(data.email, data.nombre, 'aprobado', {
+        password: passwordParaNotificar,
+        passwordModificada: passwordFueModificada,
+        cohorte: data.cohorte || '',
+      }).catch(err => {
+        console.warn('Error al notificar por correo:', err);
+      });
     }
 
     // Memorando ENVIADO (no Borrador) con archivo dirigido a UN estudiante
@@ -1931,13 +2024,6 @@
         });
       }
     }
-
-    closeModal();
-    if (panelActivoAdmin && RENDERERS[panelActivoAdmin]) await RENDERERS[panelActivoAdmin]();
-    if (RENDERERS[entity] && panelActivoAdmin !== entity) await RENDERERS[entity]();
-    if (horariosChanged && panelActivoAdmin !== 'modulos' && RENDERERS['modulos']) await RENDERERS['modulos']();
-    if (panelActivoAdmin === 'resumen') await renderAdminBannerStats();
-    if (entity === 'usuarios') renderConstellation();
   }
 
   // async: 'usuarios' habla con MySQL ahora.
@@ -4282,76 +4368,232 @@
   //   6. Agrega este script en index.html, ANTES de app.js:
   //      <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   const EMAILJS_CONFIG = {
-    publicKey: 'elyshGVkR2fYZQJfO',
+    publicKey: 'eIyshGVkR2fYZQJfO',
     serviceId: 'service_20mxfgu',
     templateId: 'template_qvmzl1l',
   };
 
   let emailjsInicializado = false;
-  function asegurarEmailJsInicializado() {
-    if (emailjsInicializado || typeof emailjs === 'undefined') return;
-    emailjs.init({ publicKey: EMAILJS_CONFIG.publicKey });
-    emailjsInicializado = true;
+  function asegurarEmailJsInicializado(pubKey) {
+    const key = pubKey || EMAILJS_CONFIG.publicKey;
+    if (emailjsInicializado || typeof emailjs === 'undefined' || !key) return;
+    try {
+      emailjs.init({ publicKey: key });
+      emailjsInicializado = true;
+    } catch (e) {}
   }
 
-  async function notificarEstadoRegistroPorCorreo(email, nombre, tipo) {
-    if (typeof emailjs === 'undefined') {
-      toast('La solicitud se procesó, pero falta cargar EmailJS en index.html para enviar el correo', 'err');
-      return;
-    }
-    if (EMAILJS_CONFIG.publicKey.startsWith('TU_')) {
-      toast('La solicitud se procesó, pero falta configurar EmailJS (ver EMAILJS_CONFIG en app.js)', 'err');
-      return;
-    }
-    asegurarEmailJsInicializado();
-
+  async function notificarEstadoRegistroPorCorreo(email, nombre, tipo, extras = {}) {
     const nombreFundacion = 'Fundación A+';
     const esAprobado = tipo === 'aprobado';
-    const subject = esAprobado
-      ? `Tu registro en ${nombreFundacion} fue aprobado`
-      : `Tu registro en ${nombreFundacion} no fue aprobado`;
-    const message = esAprobado
-      ? `Hola ${nombre},\n\nBuenas noticias: tu solicitud de registro en ${nombreFundacion} fue APROBADA.\nYa puedes iniciar sesión con el correo y la contraseña que creaste.\n\n— ${nombreFundacion}`
-      : `Hola ${nombre},\n\nTe escribimos para informarte que tu solicitud de registro en ${nombreFundacion} no fue aprobada en esta ocasión.\n\nSi crees que se trata de un error, contáctanos.\n\n— ${nombreFundacion}`;
+    const urlPortal = window.location.origin + window.location.pathname;
+    const urlBase = window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '/');
+    const logoGithub = 'https://raw.githubusercontent.com/yohanprado04-netizen/Fundaci-n-A-/main/logo.jpg';
+    const logoHttp = urlBase + 'logo.jpg';
+    const logoDataUrl = (typeof LOGO_FUNDACION_DATAURL !== 'undefined') ? LOGO_FUNDACION_DATAURL : '';
+
+    const passwordVal = extras.password || '';
+    const passwordModificada = !!extras.passwordModificada;
+    const cohorteVal = extras.cohorte || '';
+
+    function esBcrypt(str) {
+      return typeof str === 'string' && /^\$2[aby]\$\d{2}\$/.test(str);
+    }
+    const rawPass = extras.password || '';
+    const contrasenaMostrar = (!rawPass || esBcrypt(rawPass))
+      ? '(La contraseña definida en tu registro)'
+      : rawPass;
+
+    let subject = '';
+    if (esAprobado) {
+      subject = passwordModificada
+        ? `Fundación A+ | Acceso a la plataforma y credenciales`
+        : `Fundación A+ | Activación de tu cuenta`;
+    } else {
+      subject = `Fundación A+ | Información de tu solicitud de registro`;
+    }
+
+    let message = '';
+    if (esAprobado) {
+      message = `Estimado(a) ${nombre},
+
+Nos complace informarte que tu solicitud de registro en Fundación A+ ha sido aprobada.
+
+${passwordModificada
+  ? 'El administrador ha configurado las siguientes credenciales para tu acceso a la plataforma:'
+  : 'Tus datos para acceder a la plataforma institucional son los siguientes:'}
+
+Usuario: ${email}
+Contraseña: ${contrasenaMostrar}${cohorteVal ? `\nCohorte: ${cohorteVal}` : ''}
+
+Si tienes alguna inquietud o requieres asistencia, por favor contacta a la coordinación académica.
+
+Atentamente,
+Fundación A+`;
+    } else {
+      message = `Estimado(a) ${nombre},
+
+Te informamos que tu solicitud de registro en Fundación A+ no ha sido aprobada en esta ocasión.
+
+Si consideras que se trata de un error o deseas más información, por favor comunícate con la administración.
+
+Atentamente,
+Fundación A+`;
+    }
+
+    const messageHtml = `
+<div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+  <div style="padding: 24px 36px 18px 36px; text-align: center; border-bottom: 1px solid #f1f5f9;">
+    <img src="${logoGithub}" alt="Fundación A+" style="height: 52px; width: auto; display: inline-block;" />
+  </div>
+  
+  <div style="padding: 28px 36px; color: #334155; font-size: 14px; line-height: 1.6;">
+    <p style="margin-top: 0; font-size: 15px; color: #0f172a;">Estimado(a) <strong>${nombre}</strong>,</p>
+    
+    <p style="color: #475569;">
+      ${esAprobado
+        ? (passwordModificada
+            ? 'Nos complace informarte que tu solicitud de registro en la <strong>Fundación A+</strong> ha sido aprobada. El administrador ha configurado las siguientes credenciales para tu acceso:'
+            : 'Nos complace informarte que tu solicitud de registro en la <strong>Fundación A+</strong> ha sido aprobada. A continuación encontrarás los datos para ingresar a la plataforma:')
+        : 'Te informamos que tu solicitud de registro en la <strong>Fundación A+</strong> no ha sido aprobada en esta ocasión. Si consideras que se trata de un error, por favor comunícate con la administración.'}
+    </p>
+
+    ${esAprobado ? `
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px 20px; margin: 20px 0;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; width: 100px;">Usuario:</td>
+          <td style="padding: 6px 0; color: #0f172a; font-weight: bold;">${email}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Contraseña:</td>
+          <td style="padding: 6px 0; color: #0f172a; font-weight: bold;">${contrasenaMostrar}</td>
+        </tr>
+        ${cohorteVal ? `
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Cohorte:</td>
+          <td style="padding: 6px 0; color: #0f172a; font-weight: bold;">${cohorteVal}</td>
+        </tr>` : ''}
+      </table>
+    </div>` : ''}
+
+    <p style="font-size: 13px; color: #64748b; margin-bottom: 0; padding-top: 14px;">
+      Si tienes alguna inquietud o requieres asistencia técnica, comunícate con el equipo de soporte institucional.
+    </p>
+
+    <p style="margin-top: 24px; margin-bottom: 0; font-size: 14px; color: #334155;">
+      Atentamente,<br />
+      <strong>Fundación A+</strong>
+    </p>
+  </div>
+
+  <div style="background-color: #f8fafc; padding: 14px 36px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9;">
+    Fundación A+ · Todos los derechos reservados
+  </div>
+</div>`;
+
+    let cfg = {};
+    try {
+      cfg = (await Store.get('configuracion')) || {};
+    } catch (e) {}
+
+    const metodo = cfg.emailMetodo || 'emailjs';
+
+    // 1. Si el método configurado es SMTP, enviar directamente por backend PHP
+    if (metodo === 'smtp') {
+      try {
+        const tokenSesion = typeof getAuthToken === 'function' ? getAuthToken() : (localStorage.getItem(DB_PREFIX_TOKEN + 'authToken') || '');
+        const resp = await fetch(API_BASE_URL + '/api/enviar_correo', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(tokenSesion ? { 'Authorization': 'Bearer ' + tokenSesion } : {})
+          },
+          body: JSON.stringify({
+            destinatarioEmail: email,
+            destinatarioNombre: nombre,
+            asunto: subject,
+            mensaje: message,
+            mensajeHtml: messageHtml,
+          })
+        });
+        const res = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          throw new Error(res.error || 'Error al enviar por SMTP');
+        }
+        toast(`Correo de notificación enviado a ${email} vía SMTP`, 'ok');
+        return { ok: true, metodo: 'smtp' };
+      } catch (err) {
+        toast(`Solicitud procesada, pero falló el envío de correo SMTP: ${err.message}`, 'err');
+        return { ok: false, error: err.message };
+      }
+    }
+
+    // 2. Si el método es EmailJS:
+    const pubKey = cfg.emailjsPublicKey || EMAILJS_CONFIG.publicKey;
+    const srvId = cfg.emailjsServiceId || EMAILJS_CONFIG.serviceId;
+    const tmplId = cfg.emailjsTemplateId || EMAILJS_CONFIG.templateId;
+
+    if (!pubKey || pubKey.startsWith('TU_') || !srvId || !tmplId) {
+      toast(`Solicitud procesada, pero falta configurar EmailJS o SMTP en Configuración para enviar el correo a ${email}`, 'err');
+      return { ok: false, error: 'Credenciales incompletas' };
+    }
+
+    if (typeof emailjs === 'undefined') {
+      toast('La solicitud se procesó, pero no se pudo cargar la librería EmailJS en el navegador', 'err');
+      return { ok: false, error: 'Librería no cargada' };
+    }
+
+    asegurarEmailJsInicializado(pubKey);
 
     try {
-      await emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, {
+      await emailjs.send(srvId, tmplId, {
         to_email: email,
+        email: email,
+        user_email: email,
         to_name: nombre,
-        subject,
-        message,
+        name: nombre,
+        subject: subject,
+        usuario: email,
+        password: contrasenaMostrar,
+        contrasena: contrasenaMostrar,
+        cohorte: cohorteVal,
+        logo_url: logoGithub,
+        logo_http_url: logoHttp,
+        logo_data_url: logoDataUrl,
+        url_portal: '',
+        link: '',
+        message: message,
+        message_html: messageHtml,
       });
+      toast(`Correo de notificación enviado a ${email}`, 'ok');
+      return { ok: true, metodo: 'emailjs' };
     } catch (err) {
-      toast('La solicitud se procesó, pero no se pudo enviar el correo de aviso a ' + email, 'err');
+      const errTexto = (err && (err.text || err.message)) || 'Cuenta no encontrada o inválida en EmailJS';
+      toast(`Solicitud procesada, pero falló EmailJS al notificar a ${email}: ${errTexto}. Revisa tus credenciales en Configuración.`, 'err');
+      return { ok: false, error: errTexto };
     }
   }
 
-  // Aprobar: quita el candado (estadoRegistro) y abre de inmediato el editor
-  // del usuario para que el Superadmin le asigne un perfil — sin perfil,
-  // aprobar no sirve de mucho (podría entrar pero no vería ningún panel).
-  // Aprobar: quita el candado (estadoRegistro) y abre de inmediato el editor
-  // del usuario para que el Superadmin le asigne un perfil — sin perfil,
-  // aprobar no sirve de mucho (podría entrar pero no vería ningún panel).
+  // Aprobar: abre de inmediato el editor del usuario con el modo de aprobación activado
+  // para que el Superadmin le asigne cohorte, perfil y configure/asigne credenciales.
+  // Al guardar se enviará el correo con sus credenciales y el logo institucional.
   async function aprobarRegistroPendiente(id) {
     const usuarios = await Store.list('usuarios');
     const u = usuarios.find(x => x.id === id);
     if (!u) return;
-    delete u.estadoRegistro;
-    await Store.set('usuarios', usuarios);
-    notificarEstadoRegistroPorCorreo(u.email, u.nombre, 'aprobado');
-    toast('Solicitud aprobada. Ahora asígnale un perfil.', 'ok');
-    await renderUsuarios();
-    await renderAdminBannerStats();
-    renderConstellation();
-    await openModal('usuarios', id);
+    await openModal('usuarios', id, null, { esAprobacion: true });
   }
 
   async function rechazarRegistroPendiente(id) {
     const usuarios = await Store.list('usuarios');
     const u = usuarios.find(x => x.id === id);
+    if (!u) return;
+    const seguro = confirm(`¿Estás seguro de rechazar la solicitud de registro de "${u.nombre}"? Se le enviará un correo de notificación.`);
+    if (!seguro) return;
     await Store.set('usuarios', usuarios.filter(x => x.id !== id));
-    if (u) notificarEstadoRegistroPorCorreo(u.email, u.nombre, 'rechazado');
-    toast('Solicitud rechazada', 'ok');
+    toast('Solicitud rechazada. Enviando correo de aviso...', 'ok');
+    await notificarEstadoRegistroPorCorreo(u.email, u.nombre, 'rechazado');
     await renderUsuarios();
     await renderAdminBannerStats();
   }
@@ -5995,21 +6237,19 @@
   // ---------- RENDER: Informes enviados por docentes (agrupados por profesor) ----------
   // Estado del filtro del panel Informes (Admin). mes=null = "General"
   // (todos los informes de la cohorte, sin filtrar por periodo).
-  let informesAdminState = { cohorte: null, mes: null };
+  let informesAdminState = { cohorte: null, mes: null, docenteSeleccionado: null };
 
   // async: 'modulos' vía MySQL.
   async function renderInformesAdmin() {
-    // Vista de SOLO LECTURA para Superadmin y Administración: el
-    // administrador elige Cohorte y Mes (o "General"), y se traen
-    // automáticamente los informes de los estudiantes de esa cohorte que
-    // los docentes ya enviaron (ver enviarInformeDocente). Un informe se
-    // ubica en el mes de su campo "fecha".
     const cohortes = await Store.list('modulos');
+    if (!informesAdminState.cohorte && cohortes.length) {
+      informesAdminState.cohorte = cohortes[0].nombre;
+    }
 
     document.getElementById('mount-informes-admin').innerHTML = `
       <div class="mb-5">
         <h2 class="text-lg font-extrabold text-ink">Informes de docentes</h2>
-        <p class="text-sm text-slate2 mt-0.5">Elige una cohorte y un mes (o "General"): los informes de esa cohorte aparecen automáticamente, agrupados por profesor.</p>
+        <p class="text-sm text-slate2 mt-0.5">Elige una cohorte y un mes: automáticamente aparecerán los profesores con informes de ese periodo. Haz clic en un profesor para ver los informes detallados de cada uno de sus estudiantes.</p>
       </div>
       <div class="admin-panel-card p-6 mb-6">
         <div class="grid sm:grid-cols-2 gap-4">
@@ -6021,7 +6261,7 @@
             </select>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="infAdminMesSelect">Periodo</label>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5" for="infAdminMesSelect">Periodo (Mes)</label>
             <select id="infAdminMesSelect" onchange="onCambiaInfAdminMes()" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" ${informesAdminState.cohorte ? '' : 'disabled'}>
               <option value="">General (todos los meses)</option>
             </select>
@@ -6034,7 +6274,7 @@
     await renderInfAdminResultado();
   }
 
-  // async: 'informes_docente' vía MySQL.
+  // async: 'informes_docente' y 'horarios' vía MySQL.
   async function poblarMesesInfAdmin() {
     const mesSelect = document.getElementById('infAdminMesSelect');
     if (!mesSelect) return;
@@ -6044,9 +6284,16 @@
       return;
     }
     const meses = new Set();
-    (await Store.list('informes_docente'))
+    const informes = await Store.list('informes_docente');
+    informes
       .filter(i => i.cohorte === informesAdminState.cohorte && i.estado === 'Enviado' && i.fecha)
       .forEach(i => meses.add(i.fecha.slice(0, 7)));
+
+    const horarios = await Store.list('horarios');
+    horarios
+      .filter(h => h.cohorte === informesAdminState.cohorte && h.mes)
+      .forEach(h => meses.add(h.mes));
+
     const mesesOrdenados = [...meses].sort().reverse();
     mesSelect.disabled = false;
     mesSelect.innerHTML = '<option value="">General (todos los meses)</option>' +
@@ -6058,16 +6305,57 @@
     const sel = document.getElementById('infAdminCohorteSelect');
     informesAdminState.cohorte = sel.value || null;
     informesAdminState.mes = null;
+    informesAdminState.docenteSeleccionado = null;
     await poblarMesesInfAdmin();
     await renderInfAdminResultado();
   }
+  window.onCambiaInfAdminCohorte = onCambiaInfAdminCohorte;
 
   // async: 'informes_docente' vía MySQL.
   async function onCambiaInfAdminMes() {
     const sel = document.getElementById('infAdminMesSelect');
     informesAdminState.mes = sel.value || null;
+    informesAdminState.docenteSeleccionado = null;
     await renderInfAdminResultado();
   }
+  window.onCambiaInfAdminMes = onCambiaInfAdminMes;
+
+  async function seleccionarDocenteInfAdmin(nombreDocente) {
+    informesAdminState.docenteSeleccionado = nombreDocente;
+    await renderInfAdminResultado();
+  }
+  window.seleccionarDocenteInfAdmin = seleccionarDocenteInfAdmin;
+
+  // Obtiene el curso real que dicta un docente en una cohorte/mes según el Horario.
+  // Evita usar 'Formacion' (que es el tipo de módulo de la cohorte) y prioriza el curso del horario.
+  async function cursoDeDocenteEnCohorte(docenteNombre, cohorteNombre, mes) {
+    if (!docenteNombre) return 'Curso asignado';
+    const slotsDocente = await getSlotsDocente(docenteNombre);
+    // 1. Filtrar por cohorte y mes si se especifica
+    if (cohorteNombre && mes) {
+      const match = slotsDocente.filter(s => s.cohorte === cohorteNombre && s.mes === mes);
+      const cursos = [...new Set(match.map(s => s.curso || s.materia))].filter(c => c && c !== '(sin curso)' && c !== '(sin materia)' && c !== 'Formacion' && c !== 'Formación');
+      if (cursos.length) return cursos.join(' / ');
+    }
+    // 2. Filtrar por cohorte en cualquier mes
+    if (cohorteNombre) {
+      const match = slotsDocente.filter(s => s.cohorte === cohorteNombre);
+      const cursos = [...new Set(match.map(s => s.curso || s.materia))].filter(c => c && c !== '(sin curso)' && c !== '(sin materia)' && c !== 'Formacion' && c !== 'Formación');
+      if (cursos.length) return cursos.join(' / ');
+    }
+    // 3. Cualquier curso activo del docente en el horario
+    const cursosGen = [...new Set(slotsDocente.map(s => s.curso || s.materia))].filter(c => c && c !== '(sin curso)' && c !== '(sin materia)' && c !== 'Formacion' && c !== 'Formación');
+    if (cursosGen.length) return cursosGen.join(' / ');
+
+    // 4. Pensum si aplica
+    const pensum = await Store.list('pensum');
+    const matchPensum = pensum.filter(p => p.docente === docenteNombre && (!cohorteNombre || p.cohorte === cohorteNombre));
+    const cursosPensum = [...new Set(matchPensum.map(p => p.modulo || p.curso))].filter(c => c && c !== 'Formacion' && c !== 'Formación');
+    if (cursosPensum.length) return cursosPensum.join(' / ');
+
+    return 'Curso asignado';
+  }
+  window.cursoDeDocenteEnCohorte = cursoDeDocenteEnCohorte;
 
   // async: 'informes_docente' vía MySQL.
   async function renderInfAdminResultado() {
@@ -6077,51 +6365,174 @@
       wrap.innerHTML = `<div class="admin-panel-card p-10 text-center"><p class="text-sm text-slate2">Selecciona una cohorte para ver sus informes.</p></div>`;
       return;
     }
-    // Solo informes ENVIADOS: un borrador que el docente está
-    // autoguardando mientras escribe no debería aparecer aquí todavía
-    // (ver autoguardarBorradorInforme() en el panel del docente).
+
     const informes = (await Store.list('informes_docente')).filter(i =>
       i.cohorte === informesAdminState.cohorte && i.estado === 'Enviado' &&
-      (!informesAdminState.mes || (i.fecha || '').slice(0, 7) === informesAdminState.mes));
+      (!informesAdminState.mes || (i.fecha || '').slice(0, 7) === informesAdminState.mes || i.mes === informesAdminState.mes)
+    );
 
     const porDocente = {};
-    informes.forEach(i => { (porDocente[i.docente] = porDocente[i.docente] || []).push(i); });
+    informes.forEach(i => {
+      const docNombre = i.docente || 'Sin docente';
+      if (!porDocente[docNombre]) porDocente[docNombre] = [];
+      porDocente[docNombre].push(i);
+    });
+
     const docentesConInformes = Object.keys(porDocente).sort((a, b) => a.localeCompare(b));
 
-    const bloquesDocente = docentesConInformes.map(nombreDocente => {
-      const lista = porDocente[nombreDocente].slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
-      const filas = lista.map(i => `
-        <tr class="border-b border-gray-50 last:border-0">
-          <td class="py-3 px-4 text-sm font-semibold text-ink">${nombrePersonaClicable(i.estudiante, 'Estudiante')}</td>
-          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(i.materia || '—')}</td>
-          <td class="py-3 px-4 text-sm text-slate2">${i.fecha ? fmtDate(i.fecha) : '—'}</td>
-          <td class="py-3 px-4 text-sm text-slate2">${i.asistenciaPct !== null && i.asistenciaPct !== undefined ? i.asistenciaPct + '%' : 'Sin datos'}</td>
-          <td class="py-3 px-4 text-sm">${i.promedio !== null && i.promedio !== undefined
-            ? `<span class="font-bold" style="color:${colorCualitativa(i.promedio)}">${Number(i.promedio).toFixed(1)}</span> <span class="text-[11px] text-slate2">(${escapeHtml(i.cualitativa || '')})</span>`
-            : '<span class="text-slate2 text-xs">Sin datos</span>'}</td>
-          <td class="py-3 px-4 text-sm text-ink max-w-xs">${i.observaciones ? escapeHtml(i.observaciones) : '<span class="text-slate2 italic">Sin observaciones</span>'}</td>
-        </tr>`).join('');
+    if (!docentesConInformes.length) {
+      wrap.innerHTML = `
+        <div class="admin-panel-card p-10 text-center">
+          <div class="w-12 h-12 rounded-2xl bg-morado/10 text-morado grid place-items-center text-xl mx-auto mb-3">📋</div>
+          <p class="text-base font-extrabold text-ink">No hay informes enviados para este periodo</p>
+          <p class="text-xs text-slate2 mt-1 max-w-md mx-auto leading-relaxed">Los docentes de la cohorte "${escapeHtml(informesAdminState.cohorte)}" aún no han enviado informes para ${informesAdminState.mes ? mesLabel(informesAdminState.mes) : 'este periodo'}.</p>
+        </div>`;
+      return;
+    }
+
+    // Si el docente seleccionado no está o es nulo, preseleccionar el primero
+    if (!informesAdminState.docenteSeleccionado || !docentesConInformes.includes(informesAdminState.docenteSeleccionado)) {
+      informesAdminState.docenteSeleccionado = docentesConInformes[0];
+    }
+
+    // 1. Selector visual e interactivo de profesores
+    const botonesDocenteHtml = (await Promise.all(docentesConInformes.map(async docNombre => {
+      const listaDoc = porDocente[docNombre];
+      const esActivo = docNombre === informesAdminState.docenteSeleccionado;
+      let cursosDoc = [...new Set(listaDoc.map(i => i.curso || i.materia))].filter(c => c && c !== 'Formacion' && c !== 'Formación').join(', ');
+      if (!cursosDoc) {
+        cursosDoc = await cursoDeDocenteEnCohorte(docNombre, informesAdminState.cohorte, informesAdminState.mes);
+      }
+      const inicial = docNombre.charAt(0).toUpperCase();
 
       return `
-      <div class="admin-panel-card p-6 mb-6">
-        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <p class="text-sm font-bold text-ink">${nombrePersonaClicable(nombreDocente, 'Docente')}</p>
-          <span class="text-xs text-slate2">${lista.length} informe${lista.length !== 1 ? 's' : ''}</span>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full admin-table">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Materia</th><th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Asistencia</th><th class="py-2.5 px-4">Nota</th><th class="py-2.5 px-4">Observaciones</th>
-            </tr></thead>
-            <tbody>${filas}</tbody>
-          </table>
-        </div>
-      </div>`;
+        <button type="button" onclick="seleccionarDocenteInfAdmin('${escapeHtml(docNombre)}')"
+          class="group text-left p-4 rounded-2xl border transition-all flex items-center justify-between gap-3 ${esActivo ? 'bg-morado/10 border-morado shadow-md ring-2 ring-morado/25 scale-[1.01]' : 'bg-white border-gray-200/80 hover:border-morado/40 hover:bg-gray-50/80'}">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-11 h-11 rounded-xl ${esActivo ? 'bg-gradient-to-br from-morado to-indigo-600 text-white shadow-sm shadow-morado/30' : 'bg-morado/10 text-morado'} font-extrabold grid place-items-center text-sm shrink-0 transition-transform group-hover:scale-105">
+              ${inicial}
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <p class="font-extrabold text-sm text-ink truncate">${escapeHtml(docNombre)}</p>
+                ${esActivo ? '<span class="w-2 h-2 rounded-full bg-morado animate-pulse"></span>' : ''}
+              </div>
+              <p class="text-xs text-slate2 truncate mt-0.5">${escapeHtml(cursosDoc)}</p>
+            </div>
+          </div>
+          <div class="text-right shrink-0">
+            <span class="inline-block px-3 py-1 rounded-full text-xs font-bold ${esActivo ? 'bg-morado text-white shadow-sm' : 'bg-gray-100 text-slate2'}">
+              ${listaDoc.length} estudiante${listaDoc.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+        </button>`;
+    }))).join('');
+
+    // 2. Detalle de estudiantes del docente seleccionado
+    const listaSeleccionada = porDocente[informesAdminState.docenteSeleccionado] || [];
+    const listaOrdenada = listaSeleccionada.slice().sort((a, b) => (a.estudiante || '').localeCompare(b.estudiante || ''));
+
+    const cursoDocenteSeleccionado = await cursoDeDocenteEnCohorte(informesAdminState.docenteSeleccionado, informesAdminState.cohorte, informesAdminState.mes);
+
+    const notasValidas = listaOrdenada.filter(i => i.promedio !== null && i.promedio !== undefined).map(i => Number(i.promedio));
+    const promDocente = notasValidas.length ? (notasValidas.reduce((a, b) => a + b, 0) / notasValidas.length).toFixed(1) : '—';
+    const asistValidas = listaOrdenada.filter(i => i.asistenciaPct !== null && i.asistenciaPct !== undefined).map(i => Number(i.asistenciaPct));
+    const asistDocente = asistValidas.length ? Math.round(asistValidas.reduce((a, b) => a + b, 0) / asistValidas.length) + '%' : '—';
+
+    const filasEstudiantes = listaOrdenada.map(i => {
+      let cursoEst = (i.curso || (i.materia && i.materia !== 'Formacion' && i.materia !== 'Formación' ? i.materia : null)) || cursoDocenteSeleccionado;
+      return `
+      <tr class="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
+        <td class="py-3.5 px-4 text-sm font-semibold text-ink">
+          <div class="flex items-center gap-2.5">
+            <span class="w-8 h-8 rounded-full bg-turquesa/15 text-turquesa font-bold text-xs grid place-items-center shrink-0">
+              ${(i.estudiante || 'E').charAt(0).toUpperCase()}
+            </span>
+            <div class="min-w-0">
+              <p class="font-bold text-ink leading-tight">${nombrePersonaClicable(i.estudiante, 'Estudiante')}</p>
+            </div>
+          </div>
+        </td>
+        <td class="py-3.5 px-4 text-sm text-slate2">${escapeHtml(cursoEst || '—')}</td>
+        <td class="py-3.5 px-4 text-sm text-slate2 whitespace-nowrap">${i.fecha ? fmtDate(i.fecha) : '—'}</td>
+        <td class="py-3.5 px-4 text-sm">
+          ${i.asistenciaPct !== null && i.asistenciaPct !== undefined
+            ? `<span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${Number(i.asistenciaPct) >= 80 ? 'bg-turquesa/10 text-turquesa' : 'bg-coral/10 text-coral'}">${i.asistenciaPct}%</span>`
+            : '<span class="text-slate2 text-xs">Sin datos</span>'}
+        </td>
+        <td class="py-3.5 px-4 text-sm whitespace-nowrap">
+          ${i.promedio !== null && i.promedio !== undefined
+            ? `<span class="font-extrabold text-sm" style="color:${colorCualitativa(i.promedio)}">${Number(i.promedio).toFixed(1)}</span>
+               <span class="text-[11px] font-semibold text-slate2 block">${escapeHtml(i.cualitativa || '')}</span>`
+            : '<span class="text-slate2 text-xs">Sin datos</span>'}
+        </td>
+        <td class="py-3.5 px-4 text-sm text-ink max-w-sm leading-relaxed">
+          ${i.observaciones ? `<p class="font-medium text-ink">${escapeHtml(i.observaciones)}</p>` : '<span class="text-slate2 italic text-xs">Sin observaciones personales</span>'}
+          ${i.conclusion ? `<p class="text-[11px] text-slate2 mt-1 leading-normal border-t border-gray-100 pt-1">${escapeHtml(i.conclusion)}</p>` : ''}
+        </td>
+      </tr>`;
     }).join('');
 
     wrap.innerHTML = `
-      <p class="text-xs text-slate2 mb-4">${escapeHtml(informesAdminState.cohorte)} · ${informesAdminState.mes ? escapeHtml(mesLabel(informesAdminState.mes)) : 'General — todos los meses'}</p>
-      ${bloquesDocente || `<div class="admin-panel-card p-8 text-center"><p class="text-sm text-slate2">No hay informes para este filtro todavía.</p></div>`}`;
+      <div class="mb-6">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <p class="text-xs font-bold uppercase tracking-wider text-slate2">
+            Profesores con informes en esta cohorte (${docentesConInformes.length})
+          </p>
+          <span class="text-xs text-morado font-semibold">Toca un profesor para ver sus estudiantes</span>
+        </div>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          ${botonesDocenteHtml}
+        </div>
+      </div>
+
+      <div class="admin-panel-card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-4 border-b border-gray-100">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold uppercase tracking-wide text-morado">Informes individuales</span>
+              <span class="text-xs text-slate2">•</span>
+              <span class="text-xs font-bold text-slate2">${informesAdminState.mes ? mesLabel(informesAdminState.mes) : 'General (Todos los meses)'}</span>
+            </div>
+            <h3 class="text-lg font-black text-ink mt-0.5">
+              Profesor: ${nombrePersonaClicable(informesAdminState.docenteSeleccionado, 'Docente')}
+            </h3>
+          </div>
+
+          <div class="flex items-center gap-3 shrink-0">
+            <div class="bg-gray-50 rounded-xl px-3.5 py-1.5 text-right border border-gray-100">
+              <p class="text-[10px] uppercase font-bold text-slate2">Estudiantes evaluados</p>
+              <p class="text-sm font-extrabold text-ink">${listaOrdenada.length}</p>
+            </div>
+            <div class="bg-gray-50 rounded-xl px-3.5 py-1.5 text-right border border-gray-100">
+              <p class="text-[10px] uppercase font-bold text-slate2">Promedio del grupo</p>
+              <p class="text-sm font-extrabold text-morado">${promDocente}</p>
+            </div>
+            <div class="bg-gray-50 rounded-xl px-3.5 py-1.5 text-right border border-gray-100">
+              <p class="text-[10px] uppercase font-bold text-slate2">Asistencia media</p>
+              <p class="text-sm font-extrabold text-turquesa">${asistDocente}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full admin-table">
+            <thead>
+              <tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+                <th class="py-3 px-4">Estudiante</th>
+                <th class="py-3 px-4">Curso</th>
+                <th class="py-3 px-4">Fecha</th>
+                <th class="py-3 px-4">Asistencia</th>
+                <th class="py-3 px-4">Nota</th>
+                <th class="py-3 px-4">Observaciones y Conclusión</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filasEstudiantes || '<tr><td colspan="6" class="py-6 text-center text-sm text-slate2">No hay estudiantes informados para este profesor.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
   }
 
   // ---------- RENDER: Encuestas de satisfacción ----------
@@ -6346,6 +6757,100 @@
         </div>
       </div>
 
+      <!-- Panel de Notificaciones por Correo (EmailJS / SMTP) -->
+      <div class="admin-panel-card p-6 sm:p-8 max-w-2xl mt-6">
+        <h2 class="text-lg font-extrabold text-ink mb-1">Servicio de correos (Aprobación de Estudiantes)</h2>
+        <p class="text-sm text-slate2 mb-4">Define cómo se enviarán los correos de aprobación/rechazo a los estudiantes inscritos. Puedes usar <strong>EmailJS</strong> (desde el navegador) o un <strong>Servidor SMTP</strong> (directo desde PHP / Gmail / Outlook).</p>
+
+        <div class="mb-4">
+          <label class="block text-xs font-semibold text-slate2 mb-1.5">Método de envío</label>
+          <select id="cfg_emailMetodo" onchange="toggleCamposMetodoEmail(this.value)" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado font-medium">
+            <option value="emailjs" ${(cfg.emailMetodo || 'emailjs') === 'emailjs' ? 'selected' : ''}>EmailJS (Desde el navegador)</option>
+            <option value="smtp" ${(cfg.emailMetodo || '') === 'smtp' ? 'selected' : ''}>Servidor SMTP (Directo desde PHP / Gmail / Outlook)</option>
+          </select>
+        </div>
+
+        <!-- Campos EmailJS -->
+        <div id="seccion_emailjs" class="space-y-3 ${(cfg.emailMetodo || 'emailjs') === 'smtp' ? 'hidden' : ''}">
+          <div class="rounded-xl p-3.5 bg-morado/5 border border-morado/20 text-xs text-slate2 space-y-1">
+            <p class="font-bold text-morado">¿Cómo obtener tus credenciales de EmailJS?</p>
+            <ol class="list-decimal list-inside space-y-0.5 text-[11px]">
+              <li>Crea una cuenta gratis en <a href="https://www.emailjs.com/" target="_blank" class="text-morado underline font-semibold">emailjs.com</a>.</li>
+              <li>En <em>Email Services</em>, conecta tu Gmail/Outlook y copia el <strong>Service ID</strong>.</li>
+              <li>En <em>Email Templates</em>, crea una plantilla con variables <code>{{to_email}}</code>, <code>{{to_name}}</code>, <code>{{subject}}</code>, <code>{{message}}</code> y copia el <strong>Template ID</strong>.</li>
+              <li>En <em>Account &gt; General</em>, copia tu <strong>Public Key</strong> y pégala abajo.</li>
+            </ol>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1">Public Key (User ID)</label>
+            <input id="cfg_emailjsPublicKey" type="text" value="${escapeHtml(cfg.emailjsPublicKey || 'eIyshGVkR2fYZQJfO')}" placeholder="Ej: eIyshGVkR2fYZQJfO" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado font-mono text-xs" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1">Service ID</label>
+              <input id="cfg_emailjsServiceId" type="text" value="${escapeHtml(cfg.emailjsServiceId || 'service_20mxfgu')}" placeholder="Ej: service_xxx" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado font-mono text-xs" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1">Template ID</label>
+              <input id="cfg_emailjsTemplateId" type="text" value="${escapeHtml(cfg.emailjsTemplateId || 'template_qvmzl1l')}" placeholder="Ej: template_xxx" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado font-mono text-xs" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Campos SMTP -->
+        <div id="seccion_smtp" class="space-y-3 ${(cfg.emailMetodo || 'emailjs') === 'smtp' ? '' : 'hidden'}">
+          <div class="rounded-xl p-3.5 bg-morado/5 border border-morado/20 text-xs text-slate2 space-y-1">
+            <p class="font-bold text-morado">Configuración SMTP recomendada (Gmail / Outlook / Hosting)</p>
+            <p class="text-[11px]">Para Gmail: Servidor <code>smtp.gmail.com</code>, Puerto <code>465</code> (SSL) o <code>587</code> (TLS). En contraseña, usa una <em>Contraseña de aplicación</em> de Google (16 caracteres) generada en myaccount.google.com/apppasswords.</p>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div class="col-span-2">
+              <label class="block text-xs font-semibold text-slate2 mb-1">Servidor SMTP</label>
+              <input id="cfg_smtpHost" type="text" value="${escapeHtml(cfg.smtpHost || 'smtp.gmail.com')}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1">Puerto</label>
+              <input id="cfg_smtpPort" type="number" value="${cfg.smtpPort || 465}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1">Usuario / Correo emisor</label>
+              <input id="cfg_smtpUser" type="email" value="${escapeHtml(cfg.smtpUser || '')}" placeholder="ej: tu_correo@gmail.com" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1">Contraseña de aplicación</label>
+              <input id="cfg_smtpPass" type="password" value="${escapeHtml(cfg.smtpPass || '')}" placeholder="••••••••••••••••" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1">Nombre / Correo Remitente (From)</label>
+              <input id="cfg_smtpFrom" type="text" value="${escapeHtml(cfg.smtpFrom || 'info@fundacionamas.org.co')}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1">Seguridad</label>
+              <select id="cfg_smtpSecure" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+                <option value="ssl" ${(cfg.smtpSecure || 'ssl') === 'ssl' ? 'selected' : ''}>SSL (Puerto 465)</option>
+                <option value="tls" ${(cfg.smtpSecure || '') === 'tls' ? 'selected' : ''}>TLS (Puerto 587)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Probar envío de correo -->
+        <div class="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <input id="cfg_correoPrueba" type="email" placeholder="Ingresa tu correo para probar envío" class="rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-morado/30 flex-1" />
+          <button type="button" onclick="probarEnvioCorreoTest()" class="rounded-xl bg-morado/10 hover:bg-morado/20 text-morado font-bold text-xs px-4 py-2.5 transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0">
+            <span>🧪 Probar envío de correo</span>
+          </button>
+        </div>
+
+        <div class="mt-6 pt-5 border-t border-gray-100">
+          <button onclick="saveConfiguracion()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition shadow-sm cursor-pointer">Guardar configuración</button>
+        </div>
+      </div>
+
       <div class="admin-panel-card p-6 sm:p-8 max-w-2xl mt-6">
         <h2 class="text-lg font-extrabold text-ink mb-1">Postulación pública</h2>
         <p class="text-sm text-slate2 mb-6">Controla el botón "Postular" del sitio público. Pega aquí el link del cuestionario externo (Google Forms u otro) donde los interesados dejan sus datos, y actívalo cuando quieras recibir postulaciones.</p>
@@ -6366,6 +6871,34 @@
       </div>
       ${seguridadSuperadmin}`;
   }
+
+  function toggleCamposMetodoEmail(metodo) {
+    const elEmailjs = document.getElementById('seccion_emailjs');
+    const elSmtp = document.getElementById('seccion_smtp');
+    if (elEmailjs) elEmailjs.classList.toggle('hidden', metodo === 'smtp');
+    if (elSmtp) elSmtp.classList.toggle('hidden', metodo !== 'smtp');
+  }
+  window.toggleCamposMetodoEmail = toggleCamposMetodoEmail;
+
+  async function probarEnvioCorreoTest() {
+    const emailInput = document.getElementById('cfg_correoPrueba');
+    const email = (emailInput ? emailInput.value : '').trim();
+    if (!email) {
+      toast('Ingresa un correo electrónico para enviar la prueba.', 'err');
+      if (emailInput) emailInput.focus();
+      return;
+    }
+    toast('Enviando correo de prueba...', 'ok');
+    const res = await notificarEstadoRegistroPorCorreo(email, 'Usuario de Prueba', 'aprobado', {
+      password: 'DemoPassword123*',
+      passwordModificada: true,
+      cohorte: 'Cohorte 1 (Demostración)',
+    });
+    if (res && res.ok) {
+      toast('¡Correo de prueba enviado con éxito a ' + email + '!', 'ok');
+    }
+  }
+  window.probarEnvioCorreoTest = probarEnvioCorreoTest;
 
   // Cambia el correo y/o la contraseña con los que se inicia sesión como
   // Superadmin. Exige la contraseña actual para confirmar el cambio; si
@@ -6407,13 +6940,21 @@
       notificacionesIA: document.getElementById('cfg_notifIA').checked,
       postulacionHabilitada: habilitarPostulacion,
       postulacionUrl: urlPostulacion,
+      emailMetodo: document.getElementById('cfg_emailMetodo') ? document.getElementById('cfg_emailMetodo').value : 'emailjs',
+      emailjsPublicKey: document.getElementById('cfg_emailjsPublicKey') ? document.getElementById('cfg_emailjsPublicKey').value.trim() : '',
+      emailjsServiceId: document.getElementById('cfg_emailjsServiceId') ? document.getElementById('cfg_emailjsServiceId').value.trim() : '',
+      emailjsTemplateId: document.getElementById('cfg_emailjsTemplateId') ? document.getElementById('cfg_emailjsTemplateId').value.trim() : '',
+      smtpHost: document.getElementById('cfg_smtpHost') ? document.getElementById('cfg_smtpHost').value.trim() : 'smtp.gmail.com',
+      smtpPort: document.getElementById('cfg_smtpPort') ? parseInt(document.getElementById('cfg_smtpPort').value, 10) || 465 : 465,
+      smtpUser: document.getElementById('cfg_smtpUser') ? document.getElementById('cfg_smtpUser').value.trim() : '',
+      smtpPass: document.getElementById('cfg_smtpPass') ? document.getElementById('cfg_smtpPass').value : '',
+      smtpFrom: document.getElementById('cfg_smtpFrom') ? document.getElementById('cfg_smtpFrom').value.trim() : 'info@fundacionamas.org.co',
+      smtpSecure: document.getElementById('cfg_smtpSecure') ? document.getElementById('cfg_smtpSecure').value : 'ssl',
     };
     await Store.set('configuracion', cfg);
-    toast('Configuración guardada', 'ok');
+    toast('Configuración guardada con éxito', 'ok');
     renderSemaforo();
     renderResumen();
-    // El sitio público (Contáctanos + botón Postular) vive en el mismo
-    // documento que el panel Admin, así que se actualiza al instante.
     renderContactoPublico();
     actualizarBotonesPostular();
   }
@@ -6815,17 +7356,82 @@
   // Ambos códigos codifican una URL real a esta misma página
   // (?qr=docente|estudiante&t=TOKEN) para que abrirlos con la cámara de un
   // celular funcione de verdad en cuanto el sitio esté publicado en una URL.
+  function fechaHoyLocal() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dia}`;
+  }
+
   // async: 'qr_tokens' vía MySQL.
-  async function getOrCrearTokenQR(tipo, cohorteNombre, docenteNombre) {
+  // Genera un token aleatorio nuevo CADA DÍA para evitar fraude.
+  // Los códigos QR de días anteriores expiran automáticamente.
+  async function getOrCrearTokenQR(tipo, cohorteNombre, docenteNombre, forzarNuevo = false) {
+    const hoy = fechaHoyLocal();
     const tokens = await Store.list('qr_tokens');
     let rec = tokens.find(t => t.tipo === tipo && t.cohorte === cohorteNombre && t.docente === docenteNombre);
-    if (!rec) {
-      rec = { id: uid('qr'), tipo, cohorte: cohorteNombre, docente: docenteNombre, token: Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4) };
-      tokens.push(rec);
-      await Store.set('qr_tokens', tokens);
+
+    // Si ya existe y corresponde a hoy (y no se forzó nueva generación), reutilizar el de hoy
+    if (rec && rec.fecha === hoy && !forzarNuevo) {
+      return rec.token;
     }
+
+    // Si no existía, o es de un día anterior, o se forzó regeneración:
+    // Generar un token aleatorio completamente nuevo para el día de hoy
+    const nuevoToken = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    if (rec) {
+      rec.token = nuevoToken;
+      rec.fecha = hoy;
+    } else {
+      rec = { id: uid('qr'), tipo, cohorte: cohorteNombre, docente: docenteNombre, token: nuevoToken, fecha: hoy };
+      tokens.push(rec);
+    }
+    await Store.set('qr_tokens', tokens);
     return rec.token;
   }
+
+  async function regenerarTokensQRCohorte(cohorteNombre, docenteNombre) {
+    if (!confirm('¿Deseas generar nuevos códigos QR aleatorios para hoy? Los códigos anteriores quedarán invalidados de inmediato.')) return;
+    const hoy = fechaHoyLocal();
+    const tokens = await Store.list('qr_tokens');
+
+    const nuevoTokenDoc = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    let recDoc = tokens.find(t => t.tipo === 'docente' && t.cohorte === cohorteNombre && t.docente === docenteNombre);
+    if (recDoc) {
+      recDoc.token = nuevoTokenDoc;
+      recDoc.fecha = hoy;
+    } else {
+      tokens.push({ id: uid('qr'), tipo: 'docente', cohorte: cohorteNombre, docente: docenteNombre, token: nuevoTokenDoc, fecha: hoy });
+    }
+
+    const nuevoTokenEst = Math.random().toString(36).slice(2, 10) + (Date.now() + 7).toString(36).slice(-4);
+    let recEst = tokens.find(t => t.tipo === 'estudiante' && t.cohorte === cohorteNombre && t.docente === docenteNombre);
+    if (recEst) {
+      recEst.token = nuevoTokenEst;
+      recEst.fecha = hoy;
+    } else {
+      tokens.push({ id: uid('qr'), tipo: 'estudiante', cohorte: cohorteNombre, docente: docenteNombre, token: nuevoTokenEst, fecha: hoy });
+    }
+
+    await Store.set('qr_tokens', tokens);
+
+    // Reiniciar también la hora de inicio de la sesión de hoy para que la ventana de tiempo comience desde cero con el nuevo QR
+    try {
+      const sesiones = await Store.list('sesiones_asistencia');
+      const sesHoy = sesiones.find(s => s.cohorte === cohorteNombre && s.iniciadaPor === docenteNombre && s.fecha === hoy);
+      if (sesHoy) {
+        sesHoy.horaInicio = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        await Store.set('sesiones_asistencia', sesiones);
+      }
+    } catch (e) {}
+
+    toast('¡Códigos QR renovados con éxito! Los anteriores han expirado.', 'ok');
+
+    if (typeof renderCodigosQr === 'function') await renderCodigosQr();
+    if (typeof renderAsistenciaDocente === 'function') await renderAsistenciaDocente();
+  }
+  window.regenerarTokensQRCohorte = regenerarTokensQRCohorte;
 
   // El curso que dicta un docente específico dentro de una cohorte, según
   // el Horario (solo franjas Activas). Si el docente tiene varias franjas,
@@ -6840,9 +7446,29 @@
     return null;
   }
 
-  function urlQr(tipo, token) {
-    return location.origin + location.pathname + '?qr=' + tipo + '&t=' + token;
+  function urlQr(tipo, token, forzarLocal = false) {
+    let origin = location.origin;
+    // Si estamos en localhost y es para un código QR (que se escaneará desde un celular),
+    // debemos usar la IP de la red local para que el celular no intente conectarse a sí mismo.
+    if (!forzarLocal && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+      const lanIp = (typeof window !== 'undefined' && window.SERVER_LAN_IP) ? window.SERVER_LAN_IP : '192.168.1.35';
+      origin = location.protocol + '//' + lanIp + (location.port ? ':' + location.port : '');
+    }
+    return origin + location.pathname + '?qr=' + tipo + '&t=' + token;
   }
+
+  function copiarLinkQr(url) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(() => {
+        if (typeof toast === 'function') toast('Enlace copiado al portapapeles', 'ok');
+      }).catch(() => {
+        prompt('Copia este enlace para el celular:', url);
+      });
+    } else {
+      prompt('Copia este enlace para el celular:', url);
+    }
+  }
+  window.copiarLinkQr = copiarLinkQr;
 
   // Dibuja un QR real (librería qrcodejs, cargada en index.html) dentro de divId.
   function pintarQrImprimible(divId, texto) {
@@ -6912,21 +7538,28 @@
     return 'Falla';
   }
 
-  // Una vez cerrada la ventana (50 min), a quien nunca escaneó se le crea
-  // automáticamente el registro "Falla". Se llama cada vez que se pinta el
-  // panel de asistencia (docente o estudiante), así todo queda al día solo.
-  // Se compara por sesionId (única por docente+cohorte+día), así la
-  // asistencia de cada materia queda completamente separada.
+  // ASISTENCIA POR DEFECTO: En cuanto se crea la sesión, todos los estudiantes
+  // de la cohorte inician con registro 'Falla' (pérdida por defecto).
+  // Si el estudiante escanea o digita el código, su registro se actualiza a Presente o Tarde.
   // async: 'asistencia' vía MySQL.
   async function sincronizarAusentesSesion(sesion, estudiantesCohorte) {
-    if (!sesion) return;
-    if (minutosTranscurridos(sesion.horaInicio) <= VENTANA_TARDE_MIN) return;
+    if (!sesion || !estudiantesCohorte || !estudiantesCohorte.length) return;
     const registros = await Store.list('asistencia');
     let cambiado = false;
     estudiantesCohorte.forEach(e => {
       const yaTiene = registros.some(r => r.estudiante === e.nombre && r.sesionId === sesion.id);
       if (!yaTiene) {
-        registros.push({ id: uid('as'), estudiante: e.nombre, modulo: sesion.modulo, docente: sesion.iniciadaPor, materia: sesion.materia || sesion.modulo, fecha: sesion.fecha, estado: 'Falla', sesionId: sesion.id, automatico: true });
+        registros.push({
+          id: uid('as'),
+          estudiante: e.nombre,
+          modulo: sesion.modulo,
+          docente: sesion.iniciadaPor,
+          materia: sesion.materia || sesion.modulo,
+          fecha: sesion.fecha,
+          estado: 'Falla',
+          sesionId: sesion.id,
+          automatico: true
+        });
         cambiado = true;
       }
     });
@@ -6937,7 +7570,7 @@
     const mins = minutosTranscurridos(sesion.horaInicio);
     if (mins <= VENTANA_PUNTUAL_MIN) return { texto: `Ventana de puntualidad activa — quedan ${Math.ceil(VENTANA_PUNTUAL_MIN - mins)} min`, color: '#0f8f89' };
     if (mins <= VENTANA_TARDE_MIN) return { texto: `Ventana de tolerancia (llegada tarde) activa — quedan ${Math.ceil(VENTANA_TARDE_MIN - mins)} min`, color: '#b5790f' };
-    return { texto: 'Sesión cerrada — quien no escaneó quedó automáticamente como ausente', color: '#F0455C' };
+    return { texto: 'Sesión cerrada — quien no escaneó quedó como ausente (Falla definitiva)', color: '#F0455C' };
   }
 
   // async: 'asistencia' vía MySQL.
@@ -6945,9 +7578,7 @@
     if (!sesion) return { estado: 'Sin sesión', automatico: false };
     const registro = (await Store.list('asistencia')).find(r => r.estudiante === estudianteNombreVal && r.sesionId === sesion.id);
     if (registro) return { estado: registro.estado, automatico: !!registro.automatico };
-    return minutosTranscurridos(sesion.horaInicio) <= VENTANA_TARDE_MIN
-      ? { estado: 'Esperando escaneo', automatico: false }
-      : { estado: 'Falla', automatico: true };
+    return { estado: 'Falla', automatico: true };
   }
 
   // ---------- RENDER: Asistencia (QR automático) — docente ----------
@@ -6992,14 +7623,24 @@
     const tarjetasQr = `
       <div class="grid sm:grid-cols-2 gap-5 mb-6">
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 text-center">
-          <p class="text-sm font-bold text-ink mb-1">Tu código — actívalo cada día</p>
-          <p class="text-xs text-slate2 mb-4">Este código es solo tuyo, para <strong>${escapeHtml(materiaDoc)}</strong>. Imprímelo una sola vez. Escanéalo al empezar tu clase para activar la ventana de asistencia de hoy; al día siguiente funciona igual.</p>
+          <div class="flex items-center justify-between mb-1">
+            <p class="text-sm font-bold text-ink">Tu código — actívalo cada día</p>
+            <span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">Código de hoy</span>
+          </div>
+          <p class="text-xs text-slate2 mb-4">Código para <strong>${escapeHtml(materiaDoc)}</strong>. Se renueva aleatoriamente cada día para evitar fraude.</p>
           <div id="qrDocenteImg" class="flex justify-center mb-4"></div>
-          <button onclick="imprimirQr('Código del docente — ${escapeHtml(materiaDoc)}','Escanéalo para activar la asistencia de hoy','qrDocenteImg')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+          <div class="flex items-center justify-center gap-3">
+            <button onclick="imprimirQr('Código del docente — ${escapeHtml(materiaDoc)}','Escanéalo para activar la asistencia de hoy','qrDocenteImg')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+            <span class="text-slate2">·</span>
+            <button type="button" onclick="regenerarTokensQRCohorte('${escapeHtml(moduloSel.nombre)}', '${escapeHtml(doc.nombre)}')" class="text-xs font-semibold text-turquesa hover:underline">🔄 Renovar QR ahora</button>
+          </div>
         </div>
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 text-center">
-          <p class="text-sm font-bold text-ink mb-1">Código para tus estudiantes</p>
-          <p class="text-xs text-slate2 mb-4">Imprímelo y pégalo en el salón. Solo aplica para <strong>${escapeHtml(materiaDoc)}</strong>: cada estudiante lo escanea, escribe su correo registrado y su asistencia se aplica sola según la hora.</p>
+          <div class="flex items-center justify-between mb-1">
+            <p class="text-sm font-bold text-ink">Código para tus estudiantes</p>
+            <span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">Código de hoy</span>
+          </div>
+          <p class="text-xs text-slate2 mb-4">Proyéctalo en pantalla o en el salón. Se actualiza cada día para que no puedan reutilizar fotos de clases anteriores.</p>
           <div id="qrEstudianteImg" class="flex justify-center mb-4"></div>
           <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(materiaDoc)}','Escanéalo e ingresa tu correo institucional','qrEstudianteImg')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
         </div>
@@ -7011,7 +7652,7 @@
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div>
             <p class="text-sm font-bold text-ink">Asistencia de hoy: sin activar</p>
-            <p class="text-xs text-slate2 mt-1">Actívala escaneando tu código QR de arriba, o con este botón si estás en este mismo dispositivo. Desde ahí, tus estudiantes tendrán ${VENTANA_PUNTUAL_MIN} minutos para llegar puntuales y hasta ${VENTANA_TARDE_MIN} para llegar tarde. Después, quien no escaneó queda ausente solo.</p>
+            <p class="text-xs text-slate2 mt-1">Actívala escaneando tu código QR de arriba, o con este botón si estás en este mismo dispositivo. Todos los estudiantes inician con <strong>Falla (pérdida)</strong> por defecto y tienen hasta ${VENTANA_PUNTUAL_MIN} min para llegar puntuales y hasta ${VENTANA_TARDE_MIN} min para llegar tarde.</p>
           </div>
           <button onclick="habilitarSesionAsistenciaDocente()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-2.5 px-6 hover:bg-morado transition shrink-0">Activar ahora</button>
         </div>`;
@@ -7020,7 +7661,7 @@
       tarjetaSesion = `
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
           <p class="text-sm font-bold text-ink">Asistencia de hoy: activa</p>
-          <p class="text-xs text-slate2 mt-1">Activada a las ${new Date(sesion.horaInicio).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}${sesion.iniciadaPor ? ' por ' + escapeHtml(sesion.iniciadaPor) : ''}.</p>
+          <p class="text-xs text-slate2 mt-1">Activada a las ${new Date(sesion.horaInicio).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}${sesion.iniciadaPor ? ' por ' + escapeHtml(sesion.iniciadaPor) : ''}. Todos los estudiantes inician con <strong>Falla</strong> por defecto hasta que escaneen su código.</p>
           <p class="text-xs font-bold mt-2" style="color:${ventana.color}">${ventana.texto}</p>
         </div>`;
     }
@@ -7028,10 +7669,9 @@
     const infoPorEstudiante = await Promise.all(estudiantes.map(e => estadoActualEstudianteSesion(sesion, e.nombre)));
     const filasHoy = estudiantes.length ? estudiantes.map((e, i) => {
       const info = infoPorEstudiante[i];
-      const etiqueta = info.estado === 'Falla' && info.automatico ? 'Falla (automático)' : info.estado;
       return `<tr class="border-b border-gray-50 last:border-0">
         <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(e.nombre)}</td>
-        <td class="py-3 px-4">${statusPill(info.estado === 'Falla' ? 'Falla' : info.estado, pillMap)}${info.automatico && info.estado === 'Falla' ? '<span class="text-[10px] text-slate2 ml-2">automático</span>' : ''}</td>
+        <td class="py-3 px-4">${statusPill(info.estado === 'Falla' ? 'Falla' : info.estado, pillMap)}${info.automatico && info.estado === 'Falla' ? '<span class="text-[10px] text-coral font-medium ml-2 bg-coral/10 px-2 py-0.5 rounded-full border border-coral/20">por defecto (pérdida)</span>' : ''}</td>
       </tr>`;
     }).join('') : `<tr><td colspan="2" class="text-sm text-slate2 text-center py-6">Esta cohorte aún no tiene estudiantes matriculados.</td></tr>`;
 
@@ -7138,18 +7778,37 @@
               <p class="text-sm font-bold text-ink">${escapeHtml(combo.cohorte)}</p>
               <p class="text-xs text-slate2">${escapeHtml(combo.materia)} · ${modulo ? escapeHtml(modulo.modulo) : ''}</p>
             </div>
-            <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-morado/10 text-morado">${escapeHtml(combo.docente)}</span>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="regenerarTokensQRCohorte('${escapeHtml(combo.cohorte)}', '${escapeHtml(combo.docente)}')" class="text-[11px] font-bold text-morado bg-morado/10 hover:bg-morado/20 px-2.5 py-1 rounded-full flex items-center gap-1 transition cursor-pointer" title="Generar un nuevo código aleatorio inmediatamente para evitar fraude">
+                🔄 Renovar QR
+              </button>
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-morado/10 text-morado">${escapeHtml(combo.docente)}</span>
+            </div>
           </div>
           <div class="grid sm:grid-cols-2 gap-4">
             <div class="rounded-2xl border border-gray-100 p-4 text-center">
               <p class="text-xs font-bold text-ink mb-3">QR del docente</p>
               <div id="${idDoc}" class="flex justify-center mb-3"></div>
-              <button onclick="imprimirQr('Código del docente — ${escapeHtml(combo.docente)} · ${escapeHtml(combo.materia)}','Escanéalo para activar la asistencia de hoy','${idDoc}')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+              <div class="flex flex-col gap-2 mt-2">
+                <button onclick="imprimirQr('Código del docente — ${escapeHtml(combo.docente)} · ${escapeHtml(combo.materia)}','Escanéalo para activar la asistencia de hoy','${idDoc}')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+                <div class="flex items-center justify-center gap-2 text-[11px] pt-2 border-t border-gray-100">
+                  <a href="${escapeHtml(urlQr('docente', tokenDoc, true))}" target="_blank" class="text-morado font-bold hover:underline" title="Probar activación directamente en el navegador">🔗 Activar en PC</a>
+                  <span class="text-slate2">·</span>
+                  <button type="button" onclick="copiarLinkQr('${escapeHtml(urlQr('docente', tokenDoc))}')" class="text-turquesa font-bold hover:underline">📋 Copiar enlace</button>
+                </div>
+              </div>
             </div>
             <div class="rounded-2xl border border-gray-100 p-4 text-center">
               <p class="text-xs font-bold text-ink mb-3">QR de estudiantes</p>
               <div id="${idEst}" class="flex justify-center mb-3"></div>
-              <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(combo.cohorte)} · ${escapeHtml(combo.materia)}','Escanéalo e ingresa tu correo institucional','${idEst}')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+              <div class="flex flex-col gap-2 mt-2">
+                <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(combo.cohorte)} · ${escapeHtml(combo.materia)}','Escanéalo e ingresa tu correo institucional','${idEst}')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+                <div class="flex items-center justify-center gap-2 text-[11px] pt-2 border-t border-gray-100">
+                  <a href="${escapeHtml(urlQr('estudiante', tokenEst, true))}" target="_blank" class="text-morado font-bold hover:underline" title="Probar formulario directamente en el navegador">🔗 Abrir en PC</a>
+                  <span class="text-slate2">·</span>
+                  <button type="button" onclick="copiarLinkQr('${escapeHtml(urlQr('estudiante', tokenEst))}')" class="text-turquesa font-bold hover:underline">📋 Copiar enlace</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>`,
@@ -7157,10 +7816,17 @@
       };
     });
 
+    const fechaHoyStr = fmtDate(new Date().toISOString().slice(0, 10));
     document.getElementById('mount-codigosqr').innerHTML = `
       <div class="admin-panel-card p-6 mb-6">
-        <h2 class="text-lg font-extrabold text-ink">Códigos QR de asistencia</h2>
-        <p class="text-sm text-slate2 mt-1">Un par de códigos estables por cada docente + cohorte, calculados a partir del panel <span class="font-semibold text-ink">Horario</span>. Imprímelos una sola vez y entrégalos: el docente escanea el suyo para activar la clase, los estudiantes escanean el de la cohorte para registrar su asistencia.</p>
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-lg">🛡️</span>
+          <h2 class="text-lg font-extrabold text-ink">Códigos QR de asistencia — Renovación diaria antifraude</h2>
+        </div>
+        <p class="text-sm text-slate2 mt-1">Los códigos QR de cada clase se <strong>actualizan aleatoriamente cada día de forma automática</strong>. De esta manera se evita el fraude: los enlaces de días anteriores expiran para asegurar que los estudiantes solo puedan registrar asistencia si están presentes en la clase del día.</p>
+        <div class="mt-3 flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 inline-flex font-medium">
+          <span>✓ Códigos activos generados para hoy: <strong>${fechaHoyStr}</strong></span>
+        </div>
       </div>
       <div class="grid lg:grid-cols-2 gap-5">${tarjetas.map(t => t.html).join('')}</div>`;
 
@@ -7182,14 +7848,41 @@
     const moduloSel = (await docenteModulosActivos()).find(m => m.nombre === docenteAsistCohorte);
     if (!moduloSel) return;
     if (await sesionAsistenciaHoy(moduloSel.nombre, doc.nombre)) { toast('Ya hay un código de asistencia activo hoy para tu materia', 'info'); renderAsistenciaDocente(); return; }
+    const cursoNombre = (await cursoDeDocenteEnCohorte(doc.nombre, moduloSel.nombre)) || moduloSel.modulo;
     const sesiones = await Store.list('sesiones_asistencia');
+    const nuevaSesId = uid('ses');
+    const hoy = new Date().toISOString().slice(0, 10);
     sesiones.push({
-      id: uid('ses'), cohorte: moduloSel.nombre, modulo: moduloSel.modulo,
-      materia: (await materiaDeDocenteEnCohorte(moduloSel.nombre, doc.nombre)) || moduloSel.modulo, fecha: new Date().toISOString().slice(0, 10),
+      id: nuevaSesId, cohorte: moduloSel.nombre, modulo: cursoNombre,
+      materia: cursoNombre, fecha: hoy,
       horaInicio: new Date().toISOString(), codigo: generarCodigoSesion(), iniciadaPor: doc.nombre
     });
     await Store.set('sesiones_asistencia', sesiones);
-    toast('Código habilitado: los estudiantes tienen ' + VENTANA_PUNTUAL_MIN + ' minutos para llegar puntuales', 'ok');
+
+    // Pre-poblar asistencia con 'Falla' (por defecto pérdida) para todos los estudiantes de la cohorte
+    const estudiantes = await docenteEstudiantesDeCohorte(moduloSel.nombre);
+    const registros = await Store.list('asistencia');
+    let cambiado = false;
+    estudiantes.forEach(e => {
+      const yaTiene = registros.some(r => r.estudiante === e.nombre && r.sesionId === nuevaSesId);
+      if (!yaTiene) {
+        registros.push({
+          id: uid('as'),
+          estudiante: e.nombre,
+          modulo: cursoNombre,
+          docente: doc.nombre,
+          materia: cursoNombre,
+          fecha: hoy,
+          estado: 'Falla',
+          sesionId: nuevaSesId,
+          automatico: true
+        });
+        cambiado = true;
+      }
+    });
+    if (cambiado) await Store.set('asistencia', registros);
+
+    toast('Código habilitado: los estudiantes inician con Falla por defecto y tienen ' + VENTANA_PUNTUAL_MIN + ' min para llegar puntuales', 'ok');
     renderAsistenciaDocente();
   }
 
@@ -7259,8 +7952,17 @@
     const qrView = document.getElementById('qrView');
     if (qrView) qrView.classList.remove('hidden');
 
+    let devId = '';
     try {
-      const resp = await fetch(API_BASE_URL + '/api/qr_asistencia?tipo=' + encodeURIComponent(tipo) + '&token=' + encodeURIComponent(token), {
+      devId = localStorage.getItem('fa_dispositivo_id') || '';
+      if (!devId) {
+        devId = 'dev_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+        localStorage.setItem('fa_dispositivo_id', devId);
+      }
+    } catch (e) {}
+
+    try {
+      const resp = await fetch(API_BASE_URL + '/api/qr_asistencia?tipo=' + encodeURIComponent(tipo) + '&token=' + encodeURIComponent(token) + '&devId=' + encodeURIComponent(devId), {
         headers: { 'Cache-Control': 'no-cache' }
       });
       const datos = await resp.json().catch(() => ({}));
@@ -7277,6 +7979,16 @@
 
       if (tipo === 'docente') {
         renderQrLandingDocente(datos);
+      } else if (datos.yaRegistradoDispositivo) {
+        // Antifraude: el dispositivo o IP ya registró asistencia en esta clase
+        renderConfirmacionGoogleForm({
+          estudiante: datos.estudianteRegistrado,
+          estado: datos.estadoRegistrado,
+          cohorte: (datos.registro && datos.registro.cohorte) || '',
+          materia: (datos.sesion && datos.sesion.materia) || '',
+          yaRegistrado: true,
+          ipCliente: datos.ipCliente
+        }, token);
       } else {
         renderQrLandingEstudianteGoogleForm(datos);
       }
@@ -7376,6 +8088,7 @@
           <div>
             <p class="text-xs font-bold text-ink">Sesión abierta por el docente</p>
             <p class="text-[11px] font-semibold mt-0.5" style="color:${ventana.color}">${ventana.texto}</p>
+            <p class="text-[11px] text-coral font-medium mt-1">⚠️ Recuerda: tu asistencia inicia marcada como <strong>Falla (pérdida)</strong> por defecto hasta que envíes este formulario.</p>
           </div>
         </div>`;
     } else {
@@ -7497,11 +8210,20 @@
     if (btnText) btnText.textContent = 'Enviando...';
     if (btnSpinner) btnSpinner.classList.remove('hidden');
 
+    let devId = '';
+    try {
+      devId = localStorage.getItem('fa_dispositivo_id') || '';
+      if (!devId) {
+        devId = 'dev_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+        localStorage.setItem('fa_dispositivo_id', devId);
+      }
+    } catch (e) {}
+
     try {
       const resp = await fetch(API_BASE_URL + '/api/qr_asistencia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
-        body: JSON.stringify({ token, usuario: valor })
+        body: JSON.stringify({ token, usuario: valor, dispositivoId: devId })
       });
       const res = await resp.json().catch(() => ({}));
 
@@ -7564,10 +8286,9 @@
               </div>` : ''}
             </div>
 
-            <div class="pt-2">
-              <a href="javascript:void(0)" onclick="location.reload()" class="text-xs font-semibold text-[#1a73e8] hover:underline cursor-pointer">
-                Enviar otra respuesta
-              </a>
+            <div class="pt-3 flex items-center gap-2.5 text-xs text-[#0f8f89] font-medium bg-[#1FC8C014] p-3 rounded-xl border border-[#1FC8C0]/30">
+              <svg class="w-4 h-4 shrink-0 text-[#0f8f89]" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+              <span>Tu respuesta ha sido registrada y bloqueada para esta clase. No se permite enviar otra respuesta.</span>
             </div>
           </div>
         </div>
@@ -7953,8 +8674,20 @@
   let docenteInformesSeleccion = null; // "cohorte__mes"
 
   // async: 'asistencia' y 'notas_modulos' vía MySQL.
-  async function generarDatosInformeEstudiante(estudianteNombre, cohorteNombre, materiaNombre, mes) {
-    const asistReg = (await Store.list('asistencia')).filter(a => a.estudiante === estudianteNombre && a.modulo === materiaNombre);
+  async function generarDatosInformeEstudiante(estudianteNombre, cohorteNombre, cursoNombre, mes, docenteNombre) {
+    const asistList = await Store.list('asistencia');
+    const asistReg = asistList.filter(a => {
+      if (a.estudiante !== estudianteNombre) return false;
+      if (docenteNombre && a.docente && a.docente === docenteNombre) {
+        if (mes && a.fecha && a.fecha.slice(0, 7) !== mes) return false;
+        return true;
+      }
+      if (cursoNombre && (a.materia === cursoNombre || a.modulo === cursoNombre)) {
+        if (mes && a.fecha && a.fecha.slice(0, 7) !== mes) return false;
+        return true;
+      }
+      return false;
+    });
     const presentes = asistReg.filter(a => a.estado === 'Presente').length;
     const pctAsistencia = asistReg.length ? Math.round((presentes / asistReg.length) * 100) : null;
 
@@ -7971,7 +8704,7 @@
     if (pctAsistencia !== null) partes.push('una asistencia del ' + pctAsistencia + '%');
     if (nota !== null) partes.push('una nota cuantitativa de ' + nota.toFixed(1) + ' (' + calificacionCualitativa(nota) + ')');
     const conclusion = partes.length
-      ? 'Durante el módulo, el/la estudiante registró ' + partes.join(' y ') + '.'
+      ? 'Durante el curso, el/la estudiante registró ' + partes.join(' y ') + '.'
       : 'Aún no hay suficientes datos de asistencia o calificaciones para generar una conclusión automática.';
 
     return { pctAsistencia, nota, cualitativa: nota !== null ? calificacionCualitativa(nota) : null, conclusion };
@@ -8005,30 +8738,92 @@
     return arr;
   }
 
-  // async: docenteEstudiantesDeCohorte ahora es async.
-  async function renderInformesDocente() {
-    const opciones = await docenteInformesOpciones();
-    if (!docenteInformesSeleccion || !opciones.some(o => o.key === docenteInformesSeleccion)) {
-      docenteInformesSeleccion = opciones.length ? opciones[0].key : null;
-    }
-    const sel = opciones.find(o => o.key === docenteInformesSeleccion) || null;
+  // Estado del filtro del panel Informes del Docente:
+  let docenteInformesCohorte = null; // cohorte seleccionada
+  let docenteInformesMes = null;     // mes "YYYY-MM" seleccionado
 
-    if (!opciones.length) {
+  async function cambiarCohorteInformesDocente(cohorte) {
+    docenteInformesCohorte = cohorte || null;
+    docenteInformesMes = null;
+    await renderInformesDocente();
+  }
+  window.cambiarCohorteInformesDocente = cambiarCohorteInformesDocente;
+
+  async function cambiarMesInformesDocente(mes) {
+    docenteInformesMes = mes || null;
+    await renderInformesDocente();
+  }
+  window.cambiarMesInformesDocente = cambiarMesInformesDocente;
+
+  // async: docenteEstudiantesDeCohorte y docenteModulosActivos son async.
+  async function renderInformesDocente() {
+    const doc = currentDocente || {};
+    if (!doc.nombre) return;
+    const modulosDoc = await docenteModulosActivos();
+
+    if (!modulosDoc.length) {
       document.getElementById('mount-t-informes').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
         <p class="text-sm text-slate2">Aún no tienes cohortes asignadas para generar informes.</p>
       </div>`;
       return;
     }
 
-    const estudiantes = await docenteEstudiantesDeCohorte(sel.cohorte);
-    const doc = currentDocente || {};
-    const guardados = (await Store.list('informes_docente')).filter(i => i.docente === doc.nombre && i.cohorte === sel.cohorte && i.mes === sel.mes);
+    if (!docenteInformesCohorte || !modulosDoc.some(m => m.nombre === docenteInformesCohorte)) {
+      docenteInformesCohorte = modulosDoc[0].nombre;
+      docenteInformesMes = null;
+    }
 
-    const selector = `<select onchange="cambiarSeleccionInformesDocente(this.value)" class="rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
-      ${opciones.map(o => `<option value="${escapeHtml(o.key)}" ${o.key === docenteInformesSeleccion ? 'selected' : ''}>${escapeHtml(o.cohorte)} — ${escapeHtml(mesLabel(o.mes))}${o.esActual ? '' : (o.esFuturo ? ' (aún no disponible)' : ' (historial)')}</option>`).join('')}
-    </select>`;
+    const cohorteSel = modulosDoc.find(m => m.nombre === docenteInformesCohorte) || modulosDoc[0];
+    const slotsDocente = await getSlotsDocente(doc.nombre);
+    const slotsCohorte = slotsDocente.filter(s => s.cohorte === docenteInformesCohorte);
+    
+    // Meses del horario para esta cohorte
+    let mesesCohorte = [...new Set(slotsCohorte.map(s => s.mes))].filter(Boolean).sort().reverse();
+    if (!mesesCohorte.length) {
+      mesesCohorte = generarOpcionesMes(cohorteSel).map(o => o.value).reverse();
+    }
+    if (!mesesCohorte.length) {
+      mesesCohorte = [mesActualReal()];
+    }
 
-    const datosPorEstudiante = await Promise.all(estudiantes.map(e => generarDatosInformeEstudiante(e.nombre, sel.cohorte, sel.materia, sel.mes)));
+    if (!docenteInformesMes || !mesesCohorte.includes(docenteInformesMes)) {
+      const mesActualCohorte = await mesActualParaDocenteCohorte(doc.nombre, docenteInformesCohorte);
+      docenteInformesMes = (mesActualCohorte && mesesCohorte.includes(mesActualCohorte))
+        ? mesActualCohorte
+        : mesesCohorte[0];
+    }
+
+    const estudiantes = await docenteEstudiantesDeCohorte(docenteInformesCohorte);
+    const guardados = (await Store.list('informes_docente')).filter(i => 
+      i.docente === doc.nombre && 
+      i.cohorte === docenteInformesCohorte && 
+      (i.mes === docenteInformesMes || (i.fecha && i.fecha.slice(0, 7) === docenteInformesMes))
+    );
+
+    const cursoSel = await cursoDeDocenteEnCohorte(doc.nombre, docenteInformesCohorte, docenteInformesMes);
+    const datosPorEstudiante = await Promise.all(estudiantes.map(e => generarDatosInformeEstudiante(e.nombre, docenteInformesCohorte, cursoSel, docenteInformesMes, doc.nombre)));
+
+    const enviadosCount = guardados.filter(g => g.estado === 'Enviado').length;
+    const todosEnviados = estudiantes.length > 0 && enviadosCount === estudiantes.length;
+
+    const selectorCohortes = `
+      <div>
+        <label class="block text-xs font-semibold text-slate2 mb-1.5" for="docenteInfCohorteSelect">
+          Cohorte ${modulosDoc.length > 1 ? `<span class="text-morado font-bold">(${modulosDoc.length} asignadas)</span>` : ''}
+        </label>
+        <select id="docenteInfCohorteSelect" onchange="cambiarCohorteInformesDocente(this.value)" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado font-semibold">
+          ${modulosDoc.map(m => `<option value="${escapeHtml(m.nombre)}" ${m.nombre === docenteInformesCohorte ? 'selected' : ''}>${escapeHtml(m.nombre)}</option>`).join('')}
+        </select>
+      </div>`;
+
+    const selectorMeses = `
+      <div>
+        <label class="block text-xs font-semibold text-slate2 mb-1.5" for="docenteInfMesSelect">Periodo (Mes)</label>
+        <select id="docenteInfMesSelect" onchange="cambiarMesInformesDocente(this.value)" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado font-semibold">
+          ${mesesCohorte.map(m => `<option value="${m}" ${m === docenteInformesMes ? 'selected' : ''}>${mesLabel(m)}</option>`).join('')}
+        </select>
+      </div>`;
+
     const tarjetas = estudiantes.length ? estudiantes.map((e, i) => {
       const datos = datosPorEstudiante[i];
       const guardado = guardados.find(g => g.estudiante === e.nombre);
@@ -8042,14 +8837,14 @@
             ${datos.nota !== null ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${colorCualitativa(datos.nota)}1A;color:${colorCualitativa(datos.nota)}">${datos.cualitativa}</span>` : ''}
           </div>
         </div>
-        <p class="text-xs text-slate2 mb-1">Asistencia: <strong class="text-ink">${datos.pctAsistencia !== null ? datos.pctAsistencia + '%' : 'Sin datos'}</strong> · Nota cuantitativa: <strong class="text-ink">${datos.nota !== null ? datos.nota.toFixed(1) : 'Sin datos'}</strong></p>
+        <p class="text-xs text-slate2 mb-1">Curso: <strong class="text-ink">${escapeHtml(cursoSel)}</strong> · Asistencia: <strong class="text-ink">${datos.pctAsistencia !== null ? datos.pctAsistencia + '%' : 'Sin datos'}</strong> · Nota cuantitativa: <strong class="text-ink">${datos.nota !== null ? datos.nota.toFixed(1) : 'Sin datos'}</strong></p>
         <p class="text-sm text-ink mb-3">${escapeHtml(datos.conclusion)}</p>
         <label class="block text-xs font-semibold text-slate2 mb-1.5">Observaciones personales del docente</label>
-        <textarea id="obs_${e.id}" rows="2" placeholder="Ej. Durante las clases mostró mayor liderazgo." ${enviado ? 'disabled' : `oninput="autoguardarBorradorInforme('${e.id}','${sel.cohorte}','${sel.mes}')"`} class="w-full rounded-xl border border-morado/25 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado ${enviado ? 'bg-gray-50 text-slate2 cursor-not-allowed' : 'bg-morado/5'}">${escapeHtml(guardado ? guardado.observaciones : '')}</textarea>
+        <textarea id="obs_${e.id}" rows="2" placeholder="Ej. Durante las clases mostró mayor liderazgo y compromiso." ${enviado ? 'disabled' : `oninput="autoguardarBorradorInforme('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')"`} class="w-full rounded-xl border border-morado/25 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado ${enviado ? 'bg-gray-50 text-slate2 cursor-not-allowed' : 'bg-morado/5'}">${escapeHtml(guardado ? guardado.observaciones : '')}</textarea>
         <div class="flex items-center gap-3 mt-3">
           ${enviado
             ? `<span class="text-xs text-slate2">Informe enviado el ${fmtDate(guardado.fecha)} · ya no se puede editar</span>`
-            : `<button onclick="enviarInformeDocente('${e.id}','${sel.cohorte}','${sel.mes}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-xs py-2.5 px-5 hover:bg-morado transition">Enviar informe</button>
+            : `<button onclick="enviarInformeDocente('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-xs py-2.5 px-5 hover:bg-morado transition shadow-sm">Enviar informe</button>
                <span id="autoguardado_${e.id}" class="text-xs text-slate2"></span>`}
         </div>
       </div>`;
@@ -8057,83 +8852,108 @@
 
     document.getElementById('mount-t-informes').innerHTML = `
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
           <div>
-            <p class="text-sm font-bold text-ink">Autocompletado inteligente de informes</p>
-            <p class="text-xs text-slate2 mt-0.5">El sistema completa asistencia, nota y conclusión automáticamente a partir de tus datos reales. Tu observación se guarda sola mientras escribes; al enviar, el informe queda definitivo y no se puede editar más. Cada mes del Horario tiene su propio informe, independiente de los demás.</p>
+            <h2 class="text-lg font-black text-ink">Informes mensuales de estudiantes</h2>
+            <p class="text-xs text-slate2 mt-0.5 max-w-xl">El sistema autocompleta asistencia, notas y conclusión a partir de tus registros reales. Filtra por cohorte y mes para redactar tus observaciones y enviar los informes definitivos a la administración.</p>
           </div>
-          ${selector}
+          <div class="bg-gray-50 rounded-2xl px-4 py-2 border border-gray-100 shrink-0 text-right">
+            <span class="text-[11px] font-bold text-slate2 uppercase tracking-wide">Estado de envíos</span>
+            <p class="text-sm font-extrabold ${todosEnviados ? 'text-turquesa' : 'text-morado'}">${enviadosCount} de ${estudiantes.length} enviados</p>
+          </div>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+          ${selectorCohortes}
+          ${selectorMeses}
         </div>
       </div>
       ${tarjetas}`;
   }
 
-  async function cambiarCohorteInformesDocente(value) {
-    docenteInformesCohorte = value;
-    await renderInformesDocente();
-  }
-
   // async: 'usuarios' vía MySQL.
   // guardarInformeDocenteInterno(): helper compartido por el autoguardado
-  // de borrador y por el envío definitivo — arma y persiste el registro,
-  // sin decidir el "estado" final (eso lo decide quien llama).
-  async function guardarInformeDocenteInterno(estudianteId, cohorteNombre, estadoFinal) {
+  // de borrador y por el envío definitivo — arma y persiste el registro.
+  async function guardarInformeDocenteInterno(estudianteId, cohorteNombre, mes, estadoFinal) {
     const est = (await Store.list('usuarios')).find(u => u.id === estudianteId);
     const doc = currentDocente || {};
-    const moduloSel = (await docenteModulosActivos()).find(m => m.nombre === cohorteNombre);
+    const modulosDoc = await docenteModulosActivos();
+    const moduloSel = modulosDoc.find(m => m.nombre === cohorteNombre);
     if (!est || !moduloSel) return null;
     const textarea = document.getElementById('obs_' + estudianteId);
     const observaciones = textarea ? textarea.value.trim() : '';
-    const datos = await generarDatosInformeEstudiante(est.nombre, cohorteNombre, moduloSel.modulo);
+
+    const curso = await cursoDeDocenteEnCohorte(doc.nombre, cohorteNombre, mes);
+
+    const datos = await generarDatosInformeEstudiante(est.nombre, cohorteNombre, curso, mes, doc.nombre);
     const registros = await Store.list('informes_docente');
-    const idx = registros.findIndex(r => r.docente === doc.nombre && r.estudiante === est.nombre && r.cohorte === cohorteNombre);
-    // CORREGIDO: si el informe ya estaba Enviado, nunca se vuelve a
-    // tocar desde aquí (ni el autoguardado ni un doble clic accidental
-    // en enviar deberían poder alterarlo) — el backend también lo
-    // protege, pero conviene no ni intentarlo desde el frontend.
+    const mesComparar = mes || (new Date().toISOString().slice(0, 7));
+
+    const idx = registros.findIndex(r => 
+      r.docente === doc.nombre && 
+      r.estudiante === est.nombre && 
+      r.cohorte === cohorteNombre && 
+      (r.mes === mesComparar || (r.fecha && r.fecha.slice(0, 7) === mesComparar))
+    );
+
     if (idx >= 0 && registros[idx].estado === 'Enviado') return registros[idx];
+
+    const hoyStr = new Date().toISOString().slice(0, 10);
+    const fechaInforme = (mesComparar && mesComparar !== hoyStr.slice(0, 7)) ? `${mesComparar}-01` : hoyStr;
+
     const registro = {
       id: idx >= 0 ? registros[idx].id : uid('inf'),
-      docente: doc.nombre, estudiante: est.nombre, cohorte: cohorteNombre, materia: moduloSel.modulo,
-      fecha: new Date().toISOString().slice(0, 10),
-      asistenciaPct: datos.pctAsistencia, promedio: datos.nota, cualitativa: datos.cualitativa,
-      conclusion: datos.conclusion, observaciones,
+      docente: doc.nombre,
+      estudiante: est.nombre,
+      cohorte: cohorteNombre,
+      curso: curso,
+      materia: curso,
+      mes: mesComparar,
+      fecha: fechaInforme,
+      asistenciaPct: datos.pctAsistencia,
+      promedio: datos.nota,
+      cualitativa: datos.cualitativa,
+      conclusion: datos.conclusion,
+      observaciones,
       estado: estadoFinal,
     };
-    if (idx >= 0) registros[idx] = registro; else registros.push(registro);
+
+    if (idx >= 0) registros[idx] = registro;
+    else registros.push(registro);
+
     await Store.set('informes_docente', registros);
     return registro;
   }
 
   // Autoguardado silencioso mientras el docente escribe la observación
   // (debounce de 900ms) — así el texto no se pierde si recarga la
-  // página o cambia de cohorte antes de enviar. Queda como 'Borrador':
-  // NO envía el informe ni lo hace definitivo, solo lo respalda.
+  // página o cambia de cohorte antes de enviar. Queda como 'Borrador'.
   let _timersAutoguardadoInforme = {};
-  function autoguardarBorradorInforme(estudianteId, cohorteNombre) {
+  function autoguardarBorradorInforme(estudianteId, cohorteNombre, mes) {
     clearTimeout(_timersAutoguardadoInforme[estudianteId]);
     const indicador = document.getElementById('autoguardado_' + estudianteId);
     if (indicador) indicador.textContent = 'Guardando borrador…';
     _timersAutoguardadoInforme[estudianteId] = setTimeout(async () => {
-      await guardarInformeDocenteInterno(estudianteId, cohorteNombre, 'Borrador');
+      await guardarInformeDocenteInterno(estudianteId, cohorteNombre, mes, 'Borrador');
       const ind = document.getElementById('autoguardado_' + estudianteId);
-      if (ind) ind.textContent = 'Borrador guardado automáticamente';
+      if (ind) ind.textContent = 'Borrador guardado automáticamente ✓';
     }, 900);
   }
+  window.autoguardarBorradorInforme = autoguardarBorradorInforme;
 
   // Envío definitivo: pide confirmación porque, una vez enviado, el
-  // informe ya no se puede editar (ni el docente ni nadie más desde
-  // este panel) — tanto aquí como en el backend (ver manejarInformesDocente()
-  // en api/index.php, que ignora cualquier cambio posterior a un
-  // informe con estado 'Enviado').
-  async function enviarInformeDocente(estudianteId, cohorteNombre) {
+  // informe ya no se puede editar.
+  async function enviarInformeDocente(estudianteId, cohorteNombre, mes) {
     const est = (await Store.list('usuarios')).find(u => u.id === estudianteId);
-    const confirmado = confirm(`¿Enviar el informe de ${est ? est.nombre : 'este estudiante'}?\n\nUna vez enviado no podrás editarlo.`);
+    const confirmado = confirm(`¿Enviar el informe de ${est ? est.nombre : 'este estudiante'}?\n\nUna vez enviado quedará definitivo y no se podrá editar.`);
     if (!confirmado) return;
-    const registro = await guardarInformeDocenteInterno(estudianteId, cohorteNombre, 'Enviado');
-    if (registro) toast('Informe enviado: ' + registro.estudiante, 'ok');
+    const registro = await guardarInformeDocenteInterno(estudianteId, cohorteNombre, mes, 'Enviado');
+    if (registro) {
+      if (typeof toast === 'function') toast('Informe enviado con éxito: ' + registro.estudiante, 'ok');
+    }
     await renderInformesDocente();
   }
+  window.enviarInformeDocente = enviarInformeDocente;
 
   // ---------- Pensum curricular (docente) ----------
   async function renderPensumDocente() {
@@ -8790,10 +9610,12 @@
           const info = estadoActualEstudianteSesion(sesion, nombre);
           const materiaLabel = sesion.materia || sesion.modulo;
           const yaReg = registros.find(r => r.sesionId === sesion.id);
+          const mins = minutosTranscurridos(sesion.horaInicio);
 
-          if (yaReg) {
-            const color = yaReg.estado === 'Presente' ? '#0f8f89' : yaReg.estado === 'Tarde' ? '#b5790f' : '#F0455C';
-            const texto = yaReg.estado === 'Presente' ? 'Llegaste puntual' : yaReg.estado === 'Tarde' ? 'Llegaste tarde' : 'Quedaste ausente';
+          // Si el estudiante ya confirmó su asistencia y quedó en Presente o Tarde
+          if (yaReg && (yaReg.estado === 'Presente' || yaReg.estado === 'Tarde')) {
+            const color = yaReg.estado === 'Presente' ? '#0f8f89' : '#b5790f';
+            const texto = yaReg.estado === 'Presente' ? 'Llegaste puntual' : 'Llegaste tarde';
             return `
               <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
                 <div class="w-28 h-28 rounded-2xl border-2 grid place-items-center shrink-0" style="border-color:${color}">
@@ -8802,10 +9624,15 @@
                 <div class="flex-1 text-center sm:text-left">
                   <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
                   <p class="text-xs text-slate2 mt-1">Docente: ${escapeHtml(sesion.iniciadaPor || '—')} · ${fmtDate(sesion.fecha)}</p>
+                  <div class="mt-2 flex items-center gap-2 justify-center sm:justify-start">
+                    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold text-white" style="background:${color}">✓ ${yaReg.estado}</span>
+                  </div>
                 </div>
               </div>`;
           }
-          if (info.estado === 'Falla') {
+
+          // Si ya expiró la ventana de tolerancia (+50 min) y quedó con Falla definitiva
+          if (mins > VENTANA_TARDE_MIN) {
             return `
               <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
                 <div class="w-28 h-28 rounded-2xl border-2 border-coral grid place-items-center shrink-0">
@@ -8813,23 +9640,35 @@
                 </div>
                 <div class="flex-1 text-center sm:text-left">
                   <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)} — la ventana ya cerró</p>
-                  <p class="text-xs text-slate2 mt-1">Quedaste registrado como ausente automáticamente. Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
+                  <p class="text-xs text-slate2 mt-1">Quedaste registrado como ausente (Falla definitiva). Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
+                  <div class="mt-2 flex items-center gap-2 justify-center sm:justify-start">
+                    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-coral/15 text-coral border border-coral/20">Falla</span>
+                  </div>
                 </div>
               </div>`;
           }
+
+          // Ventana de asistencia activa (<= 50 min): la asistencia está en 'Falla' por defecto, el estudiante PUEDE escanear o ingresar el código
           const ventana = estadoVentanaSesion(sesion);
           return `
             <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
-              <div class="w-28 h-28 rounded-2xl border-2 border-dashed border-gray-200 grid place-items-center shrink-0">
-                <svg class="w-12 h-12 text-slate2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.3"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h3v3h-3zM19 14v3M14 19h2M19 19h1"/></svg>
+              <div class="w-28 h-28 rounded-2xl border-2 border-dashed border-coral/50 bg-coral/5 grid place-items-center shrink-0">
+                <div class="text-center p-2">
+                  <span class="text-xs font-extrabold text-coral block">FALLA</span>
+                  <span class="text-[10px] text-slate2 block">(por defecto)</span>
+                </div>
               </div>
               <div class="flex-1 text-center sm:text-left">
-                <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
-                <p class="text-xs text-slate2 mt-1 mb-1">Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
-                <p class="text-xs font-bold mb-3" style="color:${ventana.color}">${ventana.texto}</p>
+                <div class="flex items-center gap-2 justify-center sm:justify-start mb-1 flex-wrap">
+                  <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
+                  <span class="text-[11px] px-2 py-0.5 rounded-full font-bold bg-coral/10 text-coral border border-coral/20">Estado actual: Pérdida</span>
+                </div>
+                <p class="text-xs text-slate2 mt-0.5 mb-1">Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
+                <p class="text-xs font-bold mb-2" style="color:${ventana.color}">${ventana.texto}</p>
+                <p class="text-xs text-slate2 mb-3">Tu asistencia inició en <strong>Falla</strong>. Escanea el código QR del salón o escribe el código de clase para cambiarla a Presente:</p>
                 <div class="flex flex-col sm:flex-row gap-2 max-w-xs mx-auto sm:mx-0">
                   <input id="codigo_qr_estudiante_${sesion.id}" type="text" maxlength="6" placeholder="Código (ej. 7F3K9A)" class="flex-1 rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm uppercase tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
-                  <button onclick="escanearAsistencia('${sesion.id}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-2.5 px-5 hover:bg-morado transition">Escanear</button>
+                  <button onclick="escanearAsistencia('${sesion.id}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-2.5 px-5 hover:bg-morado transition shadow-sm">Confirmar</button>
                 </div>
               </div>
             </div>`;
@@ -8877,8 +9716,11 @@
     const sesion = (await Store.list('sesiones_asistencia')).find(s => s.id === sesionId && s.cohorte === mod.nombre && s.fecha === hoy);
     if (!sesion) { toast('Esa sesión ya no está disponible', 'err'); renderAsistenciaEstudiante(); return; }
     const registros = await Store.list('asistencia');
-    if (registros.some(r => r.estudiante === nombre && r.sesionId === sesion.id)) {
-      toast('Ya registraste tu asistencia en esta materia hoy', 'info'); renderAsistenciaEstudiante(); return;
+    const registroExistente = registros.find(r => r.estudiante === nombre && r.sesionId === sesion.id);
+    if (registroExistente && (registroExistente.estado === 'Presente' || registroExistente.estado === 'Tarde')) {
+      toast('Ya registraste tu asistencia en esta materia hoy: ' + registroExistente.estado, 'info');
+      renderAsistenciaEstudiante();
+      return;
     }
     const mins = minutosTranscurridos(sesion.horaInicio);
     if (mins > VENTANA_TARDE_MIN) {
@@ -8890,7 +9732,23 @@
     if (codigo !== sesion.codigo) { toast('El código no coincide con el de la sesión de hoy', 'err'); return; }
 
     const estado = estadoPorTiempo(mins);
-    registros.push({ id: uid('as'), estudiante: nombre, modulo: sesion.modulo, docente: sesion.iniciadaPor, materia: sesion.materia || sesion.modulo, fecha: sesion.fecha, estado, sesionId: sesion.id });
+    if (registroExistente) {
+      registroExistente.estado = estado;
+      registroExistente.automatico = false;
+      registroExistente.materia = sesion.materia || sesion.modulo;
+    } else {
+      registros.push({
+        id: uid('as'),
+        estudiante: nombre,
+        modulo: sesion.modulo,
+        docente: sesion.iniciadaPor,
+        materia: sesion.materia || sesion.modulo,
+        fecha: sesion.fecha,
+        estado,
+        sesionId: sesion.id,
+        automatico: false
+      });
+    }
     await Store.set('asistencia', registros);
     const msg = estado === 'Presente' ? 'Asistencia registrada: llegaste puntual.' : 'Asistencia registrada: llegaste tarde.';
     toast(msg, 'ok');

@@ -1,0 +1,12 @@
+{
+  "name": "fundacion-api",
+  "version": "1.0.0",
+  "description": "Plataforma de Gestion Educativa - Fundacion A+",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

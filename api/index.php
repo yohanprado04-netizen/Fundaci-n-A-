@@ -112,6 +112,9 @@ switch ($entidad) {
     case 'configuracion':
         manejarConfiguracion($pdo);
         break;
+    case 'enviar_correo':
+        manejarEnviarCorreo($pdo);
+        break;
     case 'superadmin_credentials':
         manejarSuperadminCredentials($pdo);
         break;
@@ -128,10 +131,7 @@ switch ($entidad) {
 /* =====================================================================
    FASE 4 — Configuración institucional (configuracion)
    Objeto único: la plataforma tiene UNA sola configuración, guardada en
-   la fila con id=1 de la tabla `configuracion` (columnas específicas:
-   nombre, ciudad, direccion, correo, telefono, cupo_maximo,
-   notas_minima_aprobacion, asistencia_minima, notificaciones_email,
-   notificaciones_ia, postulacion_habilitada, postulacion_url).
+   la fila con id=1 de la tabla `configuracion`.
    GET  → devuelve { data: { nombre, ciudad, correo, … } } (camelCase)
    POST → recibe { data: { … } } (camelCase) y actualiza esa única fila.
    Solo Superadmin puede leerla y modificarla.
@@ -144,7 +144,9 @@ function manejarConfiguracion(PDO $pdo): void {
         $fila = $pdo->query(
             "SELECT nombre, ciudad, direccion, correo, telefono,
                     asistencia_minima, notificaciones_email, notificaciones_ia,
-                    postulacion_habilitada, postulacion_url
+                    postulacion_habilitada, postulacion_url,
+                    email_metodo, emailjs_public_key, emailjs_service_id, emailjs_template_id,
+                    smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_secure
              FROM configuracion WHERE id = 1"
         )->fetch();
         if (!$fila) {
@@ -160,15 +162,19 @@ function manejarConfiguracion(PDO $pdo): void {
                 'notificacionesIA'       => true,
                 'postulacionHabilitada'  => false,
                 'postulacionUrl'         => '',
+                'emailMetodo'            => 'emailjs',
+                'emailjsPublicKey'       => 'elyshGVkR2fYZQJfO',
+                'emailjsServiceId'       => 'service_20mxfgu',
+                'emailjsTemplateId'      => 'template_qvmzl1l',
+                'smtpHost'               => 'smtp.gmail.com',
+                'smtpPort'               => 465,
+                'smtpUser'               => '',
+                'smtpPass'               => '',
+                'smtpFrom'               => 'info@fundacionamas.org.co',
+                'smtpSecure'             => 'ssl',
             ]]);
             return;
         }
-        // La tabla usa snake_case; el frontend espera camelCase.
-        // cupoMaximo/notasMinimaAprobacion ya NO se exponen aquí: la nota
-        // mínima quedó fija en el código (NOTA_MINIMA_APROBACION en
-        // app.js, valor 6.0) y el cupo dejó de ser configurable — las
-        // columnas siguen existiendo en MySQL por si se retoman más
-        // adelante, pero este endpoint ya no las lee ni las escribe.
         responderJson(['data' => [
             'nombre'                => $fila['nombre'],
             'ciudad'                => $fila['ciudad'],
@@ -180,6 +186,16 @@ function manejarConfiguracion(PDO $pdo): void {
             'notificacionesIA'      => (bool) $fila['notificaciones_ia'],
             'postulacionHabilitada' => (bool) $fila['postulacion_habilitada'],
             'postulacionUrl'        => $fila['postulacion_url'],
+            'emailMetodo'           => $fila['email_metodo'] ?? 'emailjs',
+            'emailjsPublicKey'      => $fila['emailjs_public_key'] ?? 'elyshGVkR2fYZQJfO',
+            'emailjsServiceId'      => $fila['emailjs_service_id'] ?? 'service_20mxfgu',
+            'emailjsTemplateId'     => $fila['emailjs_template_id'] ?? 'template_qvmzl1l',
+            'smtpHost'              => $fila['smtp_host'] ?? 'smtp.gmail.com',
+            'smtpPort'              => (int)($fila['smtp_port'] ?? 465),
+            'smtpUser'              => $fila['smtp_user'] ?? '',
+            'smtpPass'              => $fila['smtp_pass'] ?? '',
+            'smtpFrom'              => $fila['smtp_from'] ?? 'info@fundacionamas.org.co',
+            'smtpSecure'            => $fila['smtp_secure'] ?? 'ssl',
         ]]);
         return;
     }
@@ -187,28 +203,20 @@ function manejarConfiguracion(PDO $pdo): void {
     if ($metodo === 'POST') {
         exigirSesion(['Superadmin']);
         $body = leerBodyJson();
-        // El frontend envía { data: { … } }
         $cfg = $body['data'] ?? $body;
         if (!is_array($cfg)) {
             responderError('Se esperaba un objeto de configuración en body.data.', 400);
         }
-        // saveConfiguracion() en app.js hace un MERGE sobre la configuración
-        // ya existente antes de mandar el POST, así que $cfg siempre debería
-        // traer el objeto completo — pero por robustez, se lee cada campo
-        // con un valor por defecto sensato si llegara a faltar alguno.
-        // cupo_maximo/notas_minima_aprobacion se escriben con un valor fijo
-        // (30 y 6.0) en vez de leerlos de $cfg: dejaron de ser
-        // configurables desde el panel, pero las columnas siguen
-        // existiendo en la tabla (NOT NULL en el esquema original), así
-        // que se les manda un valor válido sin depender de lo que venga
-        // en el body.
+
         $stmt = $pdo->prepare(
             "INSERT INTO configuracion
                 (id, nombre, ciudad, direccion, correo, telefono, cupo_maximo,
                  notas_minima_aprobacion, asistencia_minima,
                  notificaciones_email, notificaciones_ia,
-                 postulacion_habilitada, postulacion_url)
-             VALUES (1, ?, ?, ?, ?, ?, 30, 6.0, ?, ?, ?, ?, ?)
+                 postulacion_habilitada, postulacion_url,
+                 email_metodo, emailjs_public_key, emailjs_service_id, emailjs_template_id,
+                 smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_secure)
+             VALUES (1, ?, ?, ?, ?, ?, 30, 6.0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                 nombre = VALUES(nombre), ciudad = VALUES(ciudad),
                 direccion = VALUES(direccion), correo = VALUES(correo),
@@ -217,7 +225,17 @@ function manejarConfiguracion(PDO $pdo): void {
                 notificaciones_email = VALUES(notificaciones_email),
                 notificaciones_ia = VALUES(notificaciones_ia),
                 postulacion_habilitada = VALUES(postulacion_habilitada),
-                postulacion_url = VALUES(postulacion_url)"
+                postulacion_url = VALUES(postulacion_url),
+                email_metodo = VALUES(email_metodo),
+                emailjs_public_key = VALUES(emailjs_public_key),
+                emailjs_service_id = VALUES(emailjs_service_id),
+                emailjs_template_id = VALUES(emailjs_template_id),
+                smtp_host = VALUES(smtp_host),
+                smtp_port = VALUES(smtp_port),
+                smtp_user = VALUES(smtp_user),
+                smtp_pass = VALUES(smtp_pass),
+                smtp_from = VALUES(smtp_from),
+                smtp_secure = VALUES(smtp_secure)"
         );
         $stmt->execute([
             $cfg['nombre'] ?? 'Fundación A+',
@@ -230,12 +248,82 @@ function manejarConfiguracion(PDO $pdo): void {
             !empty($cfg['notificacionesIA']) ? 1 : 0,
             !empty($cfg['postulacionHabilitada']) ? 1 : 0,
             $cfg['postulacionUrl'] ?? '',
+            $cfg['emailMetodo'] ?? 'emailjs',
+            $cfg['emailjsPublicKey'] ?? 'elyshGVkR2fYZQJfO',
+            $cfg['emailjsServiceId'] ?? 'service_20mxfgu',
+            $cfg['emailjsTemplateId'] ?? 'template_qvmzl1l',
+            $cfg['smtpHost'] ?? 'smtp.gmail.com',
+            (int)($cfg['smtpPort'] ?? 465),
+            $cfg['smtpUser'] ?? '',
+            $cfg['smtpPass'] ?? '',
+            $cfg['smtpFrom'] ?? 'info@fundacionamas.org.co',
+            $cfg['smtpSecure'] ?? 'ssl',
         ]);
         responderJson(['ok' => true]);
         return;
     }
 
     responderError('Método no permitido.', 405);
+}
+
+// ---- enviar_correo (envío de notificaciones por correo vía SMTP / prueba) ----
+function manejarEnviarCorreo(PDO $pdo): void {
+    $metodo = $_SERVER['REQUEST_METHOD'];
+    if ($metodo !== 'POST') {
+        responderError('Método no permitido.', 405);
+    }
+    
+    exigirSesion();
+    require_once __DIR__ . '/mailer.php';
+
+    $body = leerBodyJson();
+    $destinatarioEmail = trim($body['destinatarioEmail'] ?? '');
+    $destinatarioNombre = trim($body['destinatarioNombre'] ?? 'Estudiante');
+    $asunto = trim($body['asunto'] ?? 'Notificación Fundación A+');
+    $mensaje = trim($body['mensaje'] ?? '');
+    $mensajeHtml = trim($body['mensajeHtml'] ?? '');
+    $esPrueba = !empty($body['esPrueba']);
+
+    if (!$destinatarioEmail) {
+        responderError('El correo del destinatario es obligatorio.', 400);
+    }
+
+    $fila = $pdo->query('SELECT * FROM configuracion WHERE id = 1')->fetch();
+    if (!$fila) {
+        responderError('No se encontró la configuración institucional.', 500);
+    }
+
+    $metodoEnvio = $fila['email_metodo'] ?? 'emailjs';
+
+    if ($metodoEnvio === 'smtp') {
+        $res = enviarCorreoSmtp([
+            'smtp_host' => $fila['smtp_host'] ?? '',
+            'smtp_port' => (int)($fila['smtp_port'] ?? 465),
+            'smtp_user' => $fila['smtp_user'] ?? '',
+            'smtp_pass' => $fila['smtp_pass'] ?? '',
+            'smtp_from' => $fila['smtp_from'] ?? 'info@fundacionamas.org.co',
+            'smtp_from_name' => $fila['nombre'] ?? 'Fundación A+',
+            'smtp_secure' => $fila['smtp_secure'] ?? 'ssl',
+        ], $destinatarioEmail, $destinatarioNombre, $asunto, $mensaje, $mensajeHtml);
+
+        if (!$res['ok']) {
+            responderError($res['error'], 400);
+        }
+
+        responderJson(['ok' => true, 'metodo' => 'smtp', 'mensaje' => 'Correo enviado exitosamente vía SMTP']);
+        return;
+    }
+
+    // Si es EmailJS
+    responderJson([
+        'ok' => true,
+        'metodo' => 'emailjs',
+        'config' => [
+            'publicKey' => $fila['emailjs_public_key'] ?? '',
+            'serviceId' => $fila['emailjs_service_id'] ?? '',
+            'templateId' => $fila['emailjs_template_id'] ?? ''
+        ]
+    ]);
 }
 
 /* =====================================================================
@@ -379,7 +467,7 @@ function manejarUsuarios(PDO $pdo): void {
     if ($metodo === 'GET') {
         exigirSesion(); // cualquier rol autenticado puede leer
         $filas = $pdo->query(
-            'SELECT id, nombre, email, password, rol, estado, estado_registro,
+            'SELECT id, nombre, email, password, password_plano, rol, estado, estado_registro,
                     cohorte, telefono, fue_estudiante, foto_url, descripcion,
                     creado_en, actualizado_en
              FROM usuarios'
@@ -424,6 +512,7 @@ function mapearUsuariosACamelCase(array $filas, array $perfilesPorUsuario = []):
             'nombre' => $fila['nombre'],
             'email' => $fila['email'],
             'password' => $fila['password'],
+            'passwordPlano' => $fila['password_plano'] ?? '',
             'rol' => $fila['rol'],
             'estado' => $fila['estado'],
             'estadoRegistro' => $fila['estado_registro'],
@@ -465,11 +554,19 @@ function mapearUsuariosACamelCase(array $filas, array $perfilesPorUsuario = []):
 function reemplazarTablaUsuarios(PDO $pdo, array $usuarios): void {
     $pdo->beginTransaction();
     try {
+        $planoPrevioMap = [];
+        try {
+            $filasPlanos = $pdo->query("SELECT id, password_plano FROM usuarios WHERE password_plano IS NOT NULL AND password_plano != ''")->fetchAll();
+            foreach ($filasPlanos as $fp) {
+                $planoPrevioMap[$fp['id']] = $fp['password_plano'];
+            }
+        } catch (Exception $e) {}
+
         $pdo->exec('DELETE FROM usuarios');
         $stmt = $pdo->prepare(
             'INSERT INTO usuarios
-                (id, nombre, email, password, rol, estado, estado_registro, cohorte, telefono, fue_estudiante, foto_url, descripcion)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                (id, nombre, email, password, password_plano, rol, estado, estado_registro, cohorte, telefono, fue_estudiante, foto_url, descripcion)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmtPerfil = $pdo->prepare(
             'INSERT INTO usuario_perfiles (usuario_id, perfil_id) VALUES (?, ?)'
@@ -480,17 +577,30 @@ function reemplazarTablaUsuarios(PDO $pdo, array $usuarios): void {
         $perfilesValidos = array_column($pdo->query('SELECT id FROM perfiles')->fetchAll(), 'id');
 
         foreach ($usuarios as $u) {
-            $passwordFinal = esHashBcrypt($u['password'] ?? '')
-                ? $u['password']
-                : password_hash((string)($u['password'] ?? ''), PASSWORD_BCRYPT);
-
             $idUsuario = $u['id'] ?? bin2hex(random_bytes(16));
+            $passRecibido = (string)($u['password'] ?? '');
+            $passPlanoRecibido = (string)($u['passwordPlano'] ?? '');
+
+            if (!esHashBcrypt($passRecibido)) {
+                $passwordFinal = $passRecibido !== '' ? password_hash($passRecibido, PASSWORD_BCRYPT) : '';
+                $passwordPlanoFinal = $passRecibido !== '' ? $passRecibido : null;
+            } else {
+                $passwordFinal = $passRecibido;
+                if (!empty($passPlanoRecibido) && !esHashBcrypt($passPlanoRecibido)) {
+                    $passwordPlanoFinal = $passPlanoRecibido;
+                } elseif (isset($planoPrevioMap[$idUsuario])) {
+                    $passwordPlanoFinal = $planoPrevioMap[$idUsuario];
+                } else {
+                    $passwordPlanoFinal = null;
+                }
+            }
 
             $stmt->execute([
                 $idUsuario,
                 $u['nombre'] ?? '',
                 strtolower($u['email'] ?? ''),
                 $passwordFinal,
+                $passwordPlanoFinal,
                 $u['rol'] ?? 'Estudiante',
                 $u['estado'] ?? 'Activo',
                 $u['estadoRegistro'] ?? null,
@@ -737,12 +847,13 @@ function manejarAsistencia(PDO $pdo): void {
     $metodo = $_SERVER['REQUEST_METHOD'];
     if ($metodo === 'GET') {
         exigirSesion();
-        $filas = $pdo->query('SELECT id, estudiante, docente, modulo, materia, fecha, estado, sesion_id, automatico FROM asistencia')->fetchAll();
+        $filas = $pdo->query('SELECT id, estudiante, docente, modulo, materia, fecha, estado, sesion_id, automatico, ip_origen, dispositivo_id FROM asistencia')->fetchAll();
         responderJson(array_map(function ($f) {
             return [
                 'id' => $f['id'], 'estudiante' => $f['estudiante'], 'docente' => $f['docente'],
                 'modulo' => $f['modulo'], 'materia' => $f['materia'], 'fecha' => $f['fecha'],
                 'estado' => $f['estado'], 'sesionId' => $f['sesion_id'], 'automatico' => (bool)$f['automatico'],
+                'ipOrigen' => $f['ip_origen'] ?? null, 'dispositivoId' => $f['dispositivo_id'] ?? null,
             ];
         }, $filas));
         return;
@@ -752,12 +863,13 @@ function manejarAsistencia(PDO $pdo): void {
         $pdo->beginTransaction();
         try {
             $pdo->exec('DELETE FROM asistencia');
-            $stmt = $pdo->prepare('INSERT INTO asistencia (id, estudiante, docente, modulo, materia, fecha, estado, sesion_id, automatico) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt = $pdo->prepare('INSERT INTO asistencia (id, estudiante, docente, modulo, materia, fecha, estado, sesion_id, automatico, ip_origen, dispositivo_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             foreach ($registros as $r) {
                 $stmt->execute([
                     $r['id'] ?? bin2hex(random_bytes(16)), $r['estudiante'] ?? '', $r['docente'] ?? null,
                     $r['modulo'] ?? null, $r['materia'] ?? null, $r['fecha'] ?? date('Y-m-d'),
                     $r['estado'] ?? 'Falla', $r['sesionId'] ?? null, !empty($r['automatico']) ? 1 : 0,
+                    $r['ipOrigen'] ?? null, $r['dispositivoId'] ?? null,
                 ]);
             }
             $pdo->commit();
@@ -815,9 +927,12 @@ function manejarQrTokens(PDO $pdo): void {
     $metodo = $_SERVER['REQUEST_METHOD'];
     if ($metodo === 'GET') {
         exigirSesion();
-        $filas = $pdo->query('SELECT id, tipo, cohorte, docente, token FROM qr_tokens')->fetchAll();
+        $filas = $pdo->query('SELECT id, tipo, cohorte, docente, token, fecha FROM qr_tokens')->fetchAll();
         responderJson(array_map(function ($f) {
-            return ['id' => $f['id'], 'tipo' => $f['tipo'], 'cohorte' => $f['cohorte'], 'docente' => $f['docente'], 'token' => $f['token']];
+            return [
+                'id' => $f['id'], 'tipo' => $f['tipo'], 'cohorte' => $f['cohorte'],
+                'docente' => $f['docente'], 'token' => $f['token'], 'fecha' => $f['fecha'] ?? null
+            ];
         }, $filas));
         return;
     }
@@ -826,11 +941,11 @@ function manejarQrTokens(PDO $pdo): void {
         $pdo->beginTransaction();
         try {
             $pdo->exec('DELETE FROM qr_tokens');
-            $stmt = $pdo->prepare('INSERT INTO qr_tokens (id, tipo, cohorte, docente, token) VALUES (?, ?, ?, ?, ?)');
+            $stmt = $pdo->prepare('INSERT INTO qr_tokens (id, tipo, cohorte, docente, token, fecha) VALUES (?, ?, ?, ?, ?, ?)');
             foreach ($registros as $r) {
                 $stmt->execute([
                     $r['id'] ?? bin2hex(random_bytes(16)), $r['tipo'] ?? 'estudiante', $r['cohorte'] ?? '',
-                    $r['docente'] ?? '', $r['token'] ?? '',
+                    $r['docente'] ?? '', $r['token'] ?? '', $r['fecha'] ?? date('Y-m-d'),
                 ]);
             }
             $pdo->commit();
@@ -856,7 +971,7 @@ function manejarQrAsistencia(PDO $pdo): void {
             responderError('Faltan parámetros tipo y token.', 400);
         }
 
-        $stmt = $pdo->prepare('SELECT id, tipo, cohorte, docente, token FROM qr_tokens WHERE tipo = ? AND token = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT id, tipo, cohorte, docente, token, fecha FROM qr_tokens WHERE tipo = ? AND token = ? LIMIT 1');
         $stmt->execute([$tipo, $token]);
         $qr = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$qr) {
@@ -864,6 +979,9 @@ function manejarQrAsistencia(PDO $pdo): void {
         }
 
         $hoy = date('Y-m-d');
+        if (!empty($qr['fecha']) && $qr['fecha'] !== $hoy) {
+            responderError('Este código QR ha expirado (corresponde al día ' . $qr['fecha'] . '). Para evitar fraude, cada día los códigos QR se actualizan. Escanea el código del día de hoy.', 403);
+        }
 
         // Buscar sesión de hoy para esta cohorte y docente
         $stmtSesion = $pdo->prepare('SELECT id, cohorte, modulo, materia, fecha, hora_inicio, codigo, iniciada_por FROM sesiones_asistencia WHERE cohorte = ? AND iniciada_por = ? AND fecha = ? ORDER BY id DESC LIMIT 1');
@@ -874,11 +992,25 @@ function manejarQrAsistencia(PDO $pdo): void {
         if ($tipo === 'docente') {
             $recienActivada = false;
             if (!$sesion) {
-                // Obtener nombre del módulo
-                $stmtMod = $pdo->prepare('SELECT modulo FROM modulos WHERE nombre = ? LIMIT 1');
-                $stmtMod->execute([$qr['cohorte']]);
-                $modRow = $stmtMod->fetch(PDO::FETCH_ASSOC);
-                $moduloNombre = $modRow ? $modRow['modulo'] : $qr['cohorte'];
+                // Obtener nombre del curso real del horario para esta cohorte y docente
+                $stmtHor = $pdo->prepare('SELECT franjas FROM horarios WHERE cohorte = ?');
+                $stmtHor->execute([$qr['cohorte']]);
+                $moduloNombre = null;
+                while ($hRow = $stmtHor->fetch(PDO::FETCH_ASSOC)) {
+                    $franjas = json_decode($hRow['franjas'], true) ?? [];
+                    foreach ($franjas as $f) {
+                        if (($f['docente'] ?? '') === $qr['docente'] && !empty($f['curso']) && $f['curso'] !== 'Formacion') {
+                            $moduloNombre = $f['curso'];
+                            break 2;
+                        }
+                    }
+                }
+                if (!$moduloNombre) {
+                    $stmtMod = $pdo->prepare('SELECT modulo FROM modulos WHERE nombre = ? LIMIT 1');
+                    $stmtMod->execute([$qr['cohorte']]);
+                    $modRow = $stmtMod->fetch(PDO::FETCH_ASSOC);
+                    $moduloNombre = $modRow ? $modRow['modulo'] : $qr['cohorte'];
+                }
 
                 $nuevaSesId = 'ses_' . bin2hex(random_bytes(6)) . time();
                 $horaInicio = date('Y-m-d H:i:s');
@@ -894,6 +1026,17 @@ function manejarQrAsistencia(PDO $pdo): void {
                 ];
                 $recienActivada = true;
             } else {
+                // Si la sesión existente ya superó los 50 minutos de tolerancia (sesión expirada) o el docente vuelve a abrir
+                // el QR de la clase, renovamos hora_inicio a NOW() para que la ventana de la clase actual esté activa.
+                $horaInicioTs = strtotime($sesion['hora_inicio']);
+                $minsTranscurridos = $horaInicioTs > 0 ? (time() - $horaInicioTs) / 60 : 0;
+                if ($minsTranscurridos > 50) {
+                    $nuevaHora = date('Y-m-d H:i:s');
+                    $pdo->prepare('UPDATE sesiones_asistencia SET hora_inicio = ? WHERE id = ?')->execute([$nuevaHora, $sesion['id']]);
+                    $sesion['hora_inicio'] = $nuevaHora;
+                    $recienActivada = true;
+                }
+
                 $sesion = [
                     'id' => $sesion['id'], 'cohorte' => $sesion['cohorte'], 'modulo' => $sesion['modulo'],
                     'materia' => $sesion['materia'], 'fecha' => $sesion['fecha'], 'horaInicio' => $sesion['hora_inicio'],
@@ -901,14 +1044,39 @@ function manejarQrAsistencia(PDO $pdo): void {
                 ];
             }
 
-            // Buscar token del estudiante correspondiente para mostrar su QR en pantalla
-            $stmtTokenEst = $pdo->prepare('SELECT token FROM qr_tokens WHERE tipo = "estudiante" AND cohorte = ? AND docente = ? LIMIT 1');
-            $stmtTokenEst->execute([$qr['cohorte'], $qr['docente']]);
+            // --- ASISTENCIA POR DEFECTO COMO PÉRDIDA (FALLA) ---
+            // Para todos los estudiantes de la cohorte, insertar registro en 'asistencia' con estado = 'Falla' si aún no existe
+            $stmtEsts = $pdo->prepare('SELECT nombre FROM usuarios WHERE rol = "Estudiante" AND cohorte = ?');
+            $stmtEsts->execute([$qr['cohorte']]);
+            $estudiantesCohorte = $stmtEsts->fetchAll(PDO::FETCH_ASSOC);
+
+            $stmtCheckAsist = $pdo->prepare('SELECT id FROM asistencia WHERE sesion_id = ? AND estudiante = ? LIMIT 1');
+            $stmtInsDef = $pdo->prepare('INSERT INTO asistencia (id, estudiante, docente, modulo, materia, fecha, estado, sesion_id, automatico) VALUES (?, ?, ?, ?, ?, ?, "Falla", ?, 1)');
+
+            foreach ($estudiantesCohorte as $estRow) {
+                $stmtCheckAsist->execute([$sesion['id'], $estRow['nombre']]);
+                if (!$stmtCheckAsist->fetch()) {
+                    $nuevoId = 'as_' . bin2hex(random_bytes(6)) . time();
+                    $stmtInsDef->execute([
+                        $nuevoId,
+                        $estRow['nombre'],
+                        $sesion['iniciadaPor'],
+                        $sesion['modulo'],
+                        $sesion['materia'],
+                        $sesion['fecha'],
+                        $sesion['id']
+                    ]);
+                }
+            }
+
+            // Buscar token del estudiante correspondiente para mostrar su QR en pantalla (priorizar hoy)
+            $stmtTokenEst = $pdo->prepare('SELECT token FROM qr_tokens WHERE tipo = "estudiante" AND cohorte = ? AND docente = ? ORDER BY (fecha = ?) DESC, id DESC LIMIT 1');
+            $stmtTokenEst->execute([$qr['cohorte'], $qr['docente'], $hoy]);
             $tokenEstRow = $stmtTokenEst->fetch(PDO::FETCH_ASSOC);
             $tokenEstudiante = $tokenEstRow ? $tokenEstRow['token'] : null;
 
-            // Contar cuántos estudiantes ya registraron asistencia hoy en esta sesión
-            $stmtCount = $pdo->prepare('SELECT COUNT(*) FROM asistencia WHERE sesion_id = ?');
+            // Contar cuántos estudiantes ya registraron asistencia hoy en esta sesión (Presente o Tarde)
+            $stmtCount = $pdo->prepare('SELECT COUNT(*) FROM asistencia WHERE sesion_id = ? AND estado IN ("Presente", "Tarde")');
             $stmtCount->execute([$sesion['id']]);
             $totalAsistencias = (int)$stmtCount->fetchColumn();
 
@@ -935,12 +1103,48 @@ function manejarQrAsistencia(PDO $pdo): void {
             ];
         }
 
+        // COMPROBACIÓN ANTIFRAUDE EN GET:
+        // Si este dispositivo o IP ya confirmó la asistencia de un estudiante hoy para este docente/clase,
+        // avisar al frontend para bloquear el formulario y mostrar de inmediato el estado confirmado.
+        $ipCliente = obtenerIpCliente();
+        $dispositivoId = trim($_GET['devId'] ?? '');
+
+        $yaRegistradoDispositivo = false;
+        $estudianteRegistrado = null;
+        $estadoRegistrado = null;
+
+        if ($sesion && $ipCliente && $ipCliente !== '0.0.0.0') {
+            $stmtPrevioGet = $pdo->prepare('
+                SELECT a.estudiante, a.estado, a.fecha, a.ip_origen 
+                FROM asistencia a 
+                WHERE (a.sesion_id = ? OR (a.fecha = ? AND a.docente = ?))
+                  AND a.estado IN ("Presente", "Tarde") 
+                  AND (
+                    (a.ip_origen IS NOT NULL AND a.ip_origen != "" AND a.ip_origen = ?)
+                    OR (? != "" AND a.dispositivo_id IS NOT NULL AND a.dispositivo_id != "" AND a.dispositivo_id = ?)
+                  )
+                ORDER BY a.id DESC
+                LIMIT 1
+            ');
+            $stmtPrevioGet->execute([$sesion['id'], $hoy, $qr['docente'], $ipCliente, $dispositivoId, $dispositivoId]);
+            $previoGet = $stmtPrevioGet->fetch(PDO::FETCH_ASSOC);
+            if ($previoGet) {
+                $yaRegistradoDispositivo = true;
+                $estudianteRegistrado = $previoGet['estudiante'];
+                $estadoRegistrado = $previoGet['estado'];
+            }
+        }
+
         responderJson([
             'ok' => true,
             'tipo' => 'estudiante',
             'registro' => $qr,
             'sesionActiva' => $sesionActiva,
             'sesion' => $sesionData,
+            'yaRegistradoDispositivo' => $yaRegistradoDispositivo,
+            'estudianteRegistrado' => $estudianteRegistrado,
+            'estadoRegistrado' => $estadoRegistrado,
+            'ipCliente' => $ipCliente,
         ]);
         return;
     }
@@ -955,8 +1159,8 @@ function manejarQrAsistencia(PDO $pdo): void {
             responderError('Ingresa tu correo institucional o nombre de usuario para confirmar tu asistencia.', 400);
         }
 
-        // 1. Validar token del estudiante
-        $stmt = $pdo->prepare('SELECT id, tipo, cohorte, docente, token FROM qr_tokens WHERE tipo = "estudiante" AND token = ? LIMIT 1');
+        // 1. Validar token del estudiante y verificar que corresponda a hoy
+        $stmt = $pdo->prepare('SELECT id, tipo, cohorte, docente, token, fecha FROM qr_tokens WHERE tipo = "estudiante" AND token = ? LIMIT 1');
         $stmt->execute([$token]);
         $qr = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$qr) {
@@ -964,6 +1168,9 @@ function manejarQrAsistencia(PDO $pdo): void {
         }
 
         $hoy = date('Y-m-d');
+        if (!empty($qr['fecha']) && $qr['fecha'] !== $hoy) {
+            responderError('Este código QR ha expirado (corresponde al día ' . $qr['fecha'] . '). Para evitar fraude, cada día los códigos QR se actualizan. Escanea el código del día de hoy.', 403);
+        }
 
         // 2. Verificar que el docente haya iniciado la sesión de hoy
         $stmtSesion = $pdo->prepare('SELECT id, cohorte, modulo, materia, fecha, hora_inicio, codigo, iniciada_por FROM sesiones_asistencia WHERE cohorte = ? AND iniciada_por = ? AND fecha = ? ORDER BY id DESC LIMIT 1');
@@ -974,7 +1181,67 @@ function manejarQrAsistencia(PDO $pdo): void {
             responderError('Tu docente (' . $qr['docente'] . ') aún no ha activado la asistencia de hoy. Espera a que el profesor escanee su código QR.', 400);
         }
 
-        // 3. Verificar ventana de tiempo
+        // 3. CONTROL ANTIFRAUDE POR IP Y DISPOSITIVO (PRIMERO):
+        // Si este dispositivo o IP ya confirmó la asistencia de un estudiante en esta sesión/clase,
+        // se bloquea de inmediato cualquier intento de registrar a una persona distinta.
+        $ipCliente = obtenerIpCliente();
+        $dispositivoId = trim($body['dispositivoId'] ?? '');
+
+        if ($ipCliente && $ipCliente !== '0.0.0.0') {
+            $stmtPrevio = $pdo->prepare('
+                SELECT a.estudiante, u.email 
+                FROM asistencia a 
+                LEFT JOIN usuarios u ON (u.nombre = a.estudiante OR u.email = a.estudiante) AND u.rol = "Estudiante"
+                WHERE (a.sesion_id = ? OR (a.fecha = ? AND a.docente = ?))
+                  AND a.estado IN ("Presente", "Tarde") 
+                  AND (
+                    (a.ip_origen IS NOT NULL AND a.ip_origen != "" AND a.ip_origen = ?)
+                    OR (? != "" AND a.dispositivo_id IS NOT NULL AND a.dispositivo_id != "" AND a.dispositivo_id = ?)
+                  )
+                ORDER BY a.id DESC
+                LIMIT 1
+            ');
+            $stmtPrevio->execute([$sesion['id'], $hoy, $qr['docente'], $ipCliente, $dispositivoId, $dispositivoId]);
+            $previo = $stmtPrevio->fetch(PDO::FETCH_ASSOC);
+
+            if ($previo) {
+                // Verificar si la entrada corresponde al mismo estudiante que ya registró este dispositivo
+                $emailPrevio = strtolower(trim($previo['email'] ?? ''));
+                $userPartPrevio = $emailPrevio ? explode('@', $emailPrevio)[0] : '';
+                $nomPrevio = strtolower(trim($previo['estudiante']));
+                $entradaNorm = strtolower(trim($usuarioEntrada));
+
+                // Buscar en usuarios para verificar equivalencia exacta
+                $stmtCheckMismo = $pdo->prepare('
+                    SELECT id, nombre, email FROM usuarios 
+                    WHERE rol = "Estudiante" 
+                      AND (
+                        LOWER(TRIM(email)) = LOWER(?) 
+                        OR LOWER(TRIM(nombre)) = LOWER(?) 
+                        OR LOWER(TRIM(SUBSTRING_INDEX(email, "@", 1))) = LOWER(?)
+                      )
+                    LIMIT 1
+                ');
+                $stmtCheckMismo->execute([$usuarioEntrada, $usuarioEntrada, $usuarioEntrada]);
+                $estEntrada = $stmtCheckMismo->fetch(PDO::FETCH_ASSOC);
+
+                $esElMismo = false;
+                if ($estEntrada) {
+                    $esElMismo = (strtolower(trim($estEntrada['nombre'])) === $nomPrevio || ($emailPrevio && strtolower(trim($estEntrada['email'])) === $emailPrevio));
+                } else {
+                    $esElMismo = ($entradaNorm === $nomPrevio || ($emailPrevio && $entradaNorm === $emailPrevio) || ($userPartPrevio && $entradaNorm === $userPartPrevio));
+                }
+
+                if (!$esElMismo) {
+                    responderError(
+                        'Acceso no permitido: este dispositivo (IP: ' . $ipCliente . ') ya registró la asistencia de "' . $previo['estudiante'] . '" en esta clase. Por motivos de seguridad y prevención de fraude, no se permite registrar a otro compañero desde el mismo celular o computador.',
+                        403
+                    );
+                }
+            }
+        }
+
+        // 4. Verificar ventana de tiempo
         $horaInicioTs = strtotime($sesion['hora_inicio']);
         $minsTranscurridos = $horaInicioTs > 0 ? (time() - $horaInicioTs) / 60 : 0;
 
@@ -984,7 +1251,7 @@ function manejarQrAsistencia(PDO $pdo): void {
 
         $estado = ($minsTranscurridos <= 20) ? 'Presente' : 'Tarde';
 
-        // 4. Buscar al estudiante en usuarios por email, usuario o nombre
+        // 5. Buscar al estudiante en usuarios por email, usuario o nombre
         $stmtEst = $pdo->prepare('
             SELECT id, nombre, email, rol, cohorte, estado 
             FROM usuarios 
@@ -1009,11 +1276,17 @@ function manejarQrAsistencia(PDO $pdo): void {
         }
 
         // 6. Verificar si ya registró asistencia hoy en esta sesión
-        $stmtYa = $pdo->prepare('SELECT id, estado, fecha FROM asistencia WHERE sesion_id = ? AND estudiante = ? LIMIT 1');
+        $stmtYa = $pdo->prepare('SELECT id, estado, fecha, ip_origen FROM asistencia WHERE sesion_id = ? AND estudiante = ? LIMIT 1');
         $stmtYa->execute([$sesion['id'], $estudiante['nombre']]);
         $asistExistente = $stmtYa->fetch(PDO::FETCH_ASSOC);
 
-        if ($asistExistente) {
+        // Si ya confirmó con puntualidad o tardanza, asegurar que su IP actual quede vinculada y responder
+        if ($asistExistente && ($asistExistente['estado'] === 'Presente' || $asistExistente['estado'] === 'Tarde')) {
+            // Guardar o actualizar la IP y dispositivo del estudiante si aún no estaban guardados
+            if (empty($asistExistente['ip_origen']) || $asistExistente['ip_origen'] !== $ipCliente) {
+                $pdo->prepare('UPDATE asistencia SET ip_origen = ?, dispositivo_id = ? WHERE id = ?')
+                    ->execute([$ipCliente, $dispositivoId ?: null, $asistExistente['id']]);
+            }
             responderJson([
                 'ok' => true,
                 'yaRegistrado' => true,
@@ -1026,9 +1299,37 @@ function manejarQrAsistencia(PDO $pdo): void {
             return;
         }
 
-        // 7. Insertar asistencia en MySQL
+        if ($asistExistente) {
+            // Tenía 'Falla' (pérdida por defecto): actualizar al nuevo estado alcanzado (Presente o Tarde)
+            $stmtUpd = $pdo->prepare('UPDATE asistencia SET estado = ?, automatico = 0, materia = ?, modulo = ?, docente = ?, fecha = ?, ip_origen = ?, dispositivo_id = ? WHERE id = ?');
+            $stmtUpd->execute([
+                $estado,
+                $sesion['materia'],
+                $sesion['modulo'],
+                $sesion['iniciada_por'],
+                $sesion['fecha'],
+                $ipCliente,
+                $dispositivoId ?: null,
+                $asistExistente['id']
+            ]);
+
+            responderJson([
+                'ok' => true,
+                'yaRegistrado' => false,
+                'estudiante' => $estudiante['nombre'],
+                'estado' => $estado,
+                'cohorte' => $qr['cohorte'],
+                'materia' => $sesion['materia'],
+                'docente' => $sesion['iniciada_por'],
+                'hora' => date('h:i A'),
+                'mensaje' => $estado === 'Presente' ? '¡Asistencia registrada con puntualidad!' : 'Asistencia registrada (llegada tarde).',
+            ]);
+            return;
+        }
+
+        // 7. Insertar asistencia en MySQL si no existía fila previa
         $nuevoAsistId = 'as_' . bin2hex(random_bytes(6)) . time();
-        $stmtInsAsist = $pdo->prepare('INSERT INTO asistencia (id, estudiante, docente, modulo, materia, fecha, estado, sesion_id, automatico) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)');
+        $stmtInsAsist = $pdo->prepare('INSERT INTO asistencia (id, estudiante, docente, modulo, materia, fecha, estado, sesion_id, automatico, ip_origen, dispositivo_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)');
         $stmtInsAsist->execute([
             $nuevoAsistId,
             $estudiante['nombre'],
@@ -1038,6 +1339,8 @@ function manejarQrAsistencia(PDO $pdo): void {
             $sesion['fecha'],
             $estado,
             $sesion['id'],
+            $ipCliente,
+            $dispositivoId ?: null,
         ]);
 
         responderJson([

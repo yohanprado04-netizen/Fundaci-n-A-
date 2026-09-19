@@ -108,3 +108,38 @@ function leerBodyJson(): array {
     }
     return $datos ?? [];
 }
+
+/**
+ * Obtiene la dirección IP real del cliente que realiza la petición,
+ * considerando proxies o conexión directa en la red local.
+ */
+function obtenerIpCliente(): string {
+    $encabezados = [
+        'HTTP_CF_CONNECTING_IP',
+        'HTTP_X_FORWARDED_FOR',
+        'HTTP_X_REAL_IP',
+        'HTTP_CLIENT_IP',
+        'REMOTE_ADDR'
+    ];
+    foreach ($encabezados as $header) {
+        if (!empty($_SERVER[$header])) {
+            $lista = explode(',', $_SERVER[$header]);
+            $ip = trim($lista[0]);
+            // Quitar puerto si viene incluido (ej. 192.168.1.34:54321)
+            if (preg_match('/^(\d+\.\d+\.\d+\.\d+):\d+$/', $ip, $m)) {
+                $ip = $m[1];
+            }
+            if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                if ($ip === '::1') {
+                    return '127.0.0.1';
+                }
+                return $ip;
+            }
+        }
+    }
+    $rem = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    if ($rem === '::1') {
+        return '127.0.0.1';
+    }
+    return $rem;
+}

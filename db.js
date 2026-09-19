@@ -35,15 +35,14 @@ const API_BASE_URL = (function() {
     return BACKEND_PRODUCCION_URL.replace(/\/+$/, '');
   }
   if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      const pathname = window.location.pathname;
-      const match = pathname.match(/^\/([^/]+)/);
-      if (match && match[1].toLowerCase() === 'fundacion-api') {
-        return window.location.origin + '/' + match[1];
-      }
-      return 'http://localhost/fundacion-api';
+    const pathname = window.location.pathname;
+    const match = pathname.match(/^\/([^/]+)/);
+    // Si la app se ejecuta dentro del subdirectorio /fundacion-api (ej. Apache en XAMPP)
+    if (match && match[1].toLowerCase() === 'fundacion-api') {
+      return window.location.origin + '/' + match[1];
     }
+    // Si se ejecuta en la raíz del servidor (ej. http://localhost:8000, http://192.168.X.X:8000 o dominio web)
+    return window.location.origin;
   }
   return '';
 })();
