@@ -26,6 +26,15 @@ define('DB_USER', 'root');
 define('DB_PASSWORD', '');
 // ─────────────────────────────────────────────────────────────────────
 
+// Compresión GZIP automática para minimizar tráfico de red en respuestas JSON
+if (!ob_get_level()) {
+    if (extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
+        ob_start('ob_gzhandler');
+    } else {
+        ob_start();
+    }
+}
+
 // CORS: mientras desarrollas en local (ej. Live Server en 127.0.0.1:5500
 // hablando con este backend en otro puerto), el navegador exige estos
 // headers para permitir la petición cruzada. En producción, si sirves

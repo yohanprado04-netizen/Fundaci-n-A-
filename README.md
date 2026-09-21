@@ -1,225 +1,189 @@
-# Fundación A+ — Plataforma con base de datos MySQL (Hostinger)
+# Fundación A+ — Plataforma de Gestión Académica y Chat IA
 
-Este paquete reemplaza el plan anterior basado en Supabase/Postgres por
-una base de datos **MySQL propia** y una **API en PHP**, pensadas para
-correr en un hosting **compartido o Cloud de Hostinger** (solo PHP +
-MySQL, sin Node.js).
-
-## Contenido
-
-| Archivo/carpeta         | Qué es |
-|--------------------------|--------|
-| `index.html`, `style.css`, `app.js`, `qrcode.min.js`, `Logo.jpg` | Front-end del prototipo. Sin cambios de diseño; solo se actualizó el comentario sobre `db.js` en `index.html`. |
-| `schema_mysql.sql`        | Esquema completo de la base de datos (MySQL/MariaDB), listo para importar por phpMyAdmin. Incluye la tabla `horarios` (panel "Horario") y `sesiones` (login propio). |
-| `db.js`                   | Cliente de la API (fetch) que expone `Store`/`Auth` con la misma forma que usaba el prototipo — **aún no conectado a app.js**, ver "Pasos pendientes" abajo. |
-| `api/config.php`          | Credenciales de la base de datos y ajustes (CORS, subida de archivos). **Edítalo con tus datos reales.** |
-| `api/db.php`              | Conexión PDO + helpers (`uuidv4()`, respuestas JSON). |
-| `api/auth.php`            | Login propio: valida `usuarios.password_hash` y emite tokens de sesión. |
-| `api/entidades.php`       | Lista blanca de tablas expuestas por la API + permisos por rol (léela si vas a agregar una tabla nueva). |
-| `api/index.php`           | Router único de la API: `?action=login/logout/me` y CRUD genérico `?entity=...`. |
-| `api/upload.php`          | Sube el archivo adjunto de una PQR (PDF/imagen) y devuelve su URL pública. |
-| `api/seed.php`            | Script de un solo uso para crear tu primer Superadmin. **Bórralo después de usarlo.** |
-| `api/.htaccess`, `api/uploads/.htaccess` | Bloquean el acceso directo a los archivos internos y evitan que se ejecute código dentro de `uploads/`. |
-
-Los archivos `schema.sql` y `supabase_schema.sql` de la versión anterior
-**ya no se usan** (eran para Postgres/Supabase); puedes borrarlos.
-
-## Puesta en marcha en Hostinger (hosting compartido/Cloud)
-
-### 1. Crear la base de datos MySQL
-
-En **hPanel → Bases de datos → Bases de datos MySQL**:
-1. Crea una base de datos (anota el nombre, algo como `u123456789_fundacion`).
-2. Crea un usuario y una contraseña, y asígnaselo con todos los privilegios.
-3. Anota el **host** (casi siempre `localhost` en hosting compartido).
-
-### 2. Importar el esquema
-
-En **hPanel → Bases de datos → phpMyAdmin**, entra a tu base y usa la
-pestaña **Importar** para subir `schema_mysql.sql` completo. Esto crea
-todas las tablas, la vista de encuestas y el catálogo de insignias.
-
-### 3. Subir los archivos
-
-Vía **Administrador de archivos** de hPanel o por FTP, sube TODO el
-contenido de este paquete a `public_html` (o a la subcarpeta de tu
-dominio/subdominio):
-
-```
-public_html/
-├── index.html
-├── style.css
-├── app.js
-├── db.js
-├── qrcode.min.js
-├── Logo.jpg
-└── api/
-    ├── config.php
-    ├── db.php
-    ├── auth.php
-    ├── entidades.php
-    ├── index.php
-    ├── upload.php
-    ├── seed.php
-    ├── .htaccess
-    └── uploads/
-        └── .htaccess
-```
-
-### 4. Configurar credenciales
-
-Abre `api/config.php` y reemplaza `DB_HOST`, `DB_NAME`, `DB_USER` y
-`DB_PASS` con los datos del paso 1.
-
-En hPanel, revisa en **Sitios web → PHP Configuration** que la versión
-de PHP sea **8.0 o superior** (necesaria para `password_hash` moderno
-y tipos de datos usados aquí).
-
-### 5. Crear tu primer Superadmin
-
-Abre en el navegador (una sola vez):
-
-```
-https://tudominio.com/api/seed.php?clave_maestra=TU-CLAVE&nombre=Tu%20Nombre&email=admin@tudominio.com&password=UnaClaveFuerte123
-```
-
-Antes de esto, edita `CLAVE_MAESTRA` dentro de `api/seed.php` para que
-no sea la de ejemplo. **Después de crear el Superadmin, borra
-`api/seed.php` del servidor** (cualquiera con la URL podría crear
-cuentas mientras exista).
-
-### 6. Probar la API
-
-```
-GET  https://tudominio.com/api/index.php?action=me   → 401 si no hay sesión (correcto)
-POST https://tudominio.com/api/index.php?action=login  { "email": "...", "password": "..." }
-```
-
-Si todo responde en JSON (no un error 500 de PHP), la base de datos y
-la API están listas.
-
-## Pasos pendientes en `app.js` (importante)
-
-`db.js` ya expone `Store`/`Auth` async y compatibles, **pero `app.js`
-(≈4900 líneas) todavía usa su `Store` original de `localStorage` y el
-login con contraseñas hardcodeadas** — por eso en `index.html` la
-carga de `db.js` sigue comentada: cargar los dos a la vez rompe la app
-(dos `const Store` chocan en el mismo scope).
-
-Para dejar la app 100% conectada a MySQL falta, en `app.js`:
-
-1. Quitar el `const Store = {...}` de localStorage y descomentar
-   `<script src="db.js">` en `index.html`.
-2. Agregar `await` a cada `Store.list/save/get/set(...)` y marcar
-   `async` las funciones que las contienen (son muchas: todos los
-   `render...()` del panel admin, docente y estudiante).
-3. Reemplazar `submitLogin`, `logout`, `logoutDocente`,
-   `logoutEstudiante` por `Auth.login(...)`/`Auth.logout()` (código de
-   ejemplo completo dentro de `db.js`, al final del archivo).
-4. Quitar `seedIfEmpty()` / `resetDemoData()` (ya no aplican).
-5. Donde el código compara por nombre de texto libre (ej.
-   `c.estudiante === nombre`), cambiar a comparar por id
-   (`c.estudiante_id === currentEstudiante.id`), porque el esquema
-   normalizado usa llaves foráneas.
-6. En el flujo de PQR, subir el archivo con `Store.subirArchivo(file)`
-   antes de crear el registro (ejemplo en `db.js`).
-7. La tabla `horarios` identifica la cohorte por `cohorte_id` (llave
-   foránea), mientras que hoy `app.js` arma cada horario buscando la
-   cohorte por su **nombre** de texto (`cohorte === mod.nombre`). Al
-   migrar ese bloque, resuelve primero el `id` de la cohorte y guárdalo
-   en `cohorte_id` en vez del nombre.
-
-Es un trabajo mecánico pero grande por el tamaño actual de `app.js`;
-dado que cada punto tiene ejemplo de código en `db.js`, puedo hacerlo
-contigo por partes (por ejemplo: primero el panel Superadmin, luego
-Docente, luego Estudiante) si quieres que lo hagamos ahora.
-
-## Modelo de seguridad de la API (resumen)
-
-- **Autenticación**: `usuarios.password_hash` (bcrypt) + tokens de
-  sesión en la tabla `sesiones`, con expiración (`SESION_HORAS` en
-  `config.php`). Se envían como `Authorization: Bearer <token>`.
-- **Autorización por rol**: `api/entidades.php` define, por cada
-  tabla, quién puede leer y quién puede escribir (Superadmin,
-  Administrador, Coordinador, Docente, Estudiante).
-- **Aislamiento de datos personales**: en tablas como `calificaciones`,
-  `asistencia`, `pqr`, `agenda_estudiante` o `correos_estudiante`, un
-  Estudiante (o Docente, en PQR) **solo puede ver/crear/editar sus
-  propios registros**, sin importar qué id le pida al servidor — el
-  filtro lo fuerza la API, no el front-end.
-- **Contraseñas**: nunca se guardan ni se transmiten en texto plano;
-  se hashean con `password_hash()` (bcrypt) en el servidor.
-- **Subida de archivos**: `api/upload.php` valida tamaño y extensión, y
-  la carpeta `uploads/` tiene un `.htaccess` que impide ejecutar código
-  aunque alguien lograra subir un archivo malicioso.
-
-### Limitaciones conocidas (para seguir endureciendo si el proyecto crece)
-
-- Revisando el `app.js` actual (localStorage), además de las entidades
-  de `schema_mysql.sql` usa algunas llaves internas que **todavía no
-  tienen tabla equivalente**: `administradores`, `alumnos_cohorte`,
-  `agenda_docente`, `informes_docente`, `memorandos_leidos`,
-  `notas_modulos`, `qr_tokens`, `sesiones_asistencia`,
-  `superadmin_credentials`. Al hacer la migración de `app.js` (sección
-  anterior) hay que revisar una por una: algunas son datos reales que
-  necesitan su propia tabla, y otras probablemente se puedan reemplazar
-  por las tablas que ya existen (por ejemplo `notas_modulos` parece
-  duplicar `calificaciones`). Puedo ayudarte a mapear cada una cuando
-  lleguemos a esa parte.
-- El diseño original de `pqr` preveía que el estado pasara solo de
-  "Pendiente" a "Activo" cuando el administrador abre el PDF por
-  primera vez. La API genérica no implementa ese efecto automático al
-  leer: hoy el administrador debe hacer un `PUT` explícito para
-  cambiar el estado (sencillo de agregar como caso especial si lo
-  necesitas).
-- El aislamiento de un Docente a **solo su propia cohorte** (por
-  ejemplo, en `calificaciones`/`asistencia`) no está forzado a nivel de
-  fila todavía — hoy un Docente autenticado puede escribir notas/
-  asistencia de cualquier cohorte, no solo la suya. Si esto importa,
-  se agrega fácilmente en `api/index.php` cruzando `cohortes.docente_id`.
-- No hay límite de intentos de login (rate limiting) ni bloqueo tras
-  varios intentos fallidos; para producción con muchos usuarios
-  conviene agregarlo.
-- No hay renovación automática de token (el usuario debe volver a
-  iniciar sesión cuando expira, cada `SESION_HORAS`).
-- `api/config.php` guarda la contraseña de la base de datos en texto
-  plano en el servidor (es lo normal en hosting compartido sin
-  variables de entorno); asegúrate de que `.htaccess` bloquee su
-  acceso directo (ya incluido) y no subas ese archivo a un repositorio
-  público con las credenciales reales.
+Plataforma web integral de administración académica, control de asistencia automatizado con códigos QR, detección temprana en semáforo de riesgo y asistente conversacional inteligente impulsado por IA para la **Fundación A+**.
 
 ---
 
-## Fase 4 — Tablas nuevas requeridas (configuracion, superadmin_credentials, perfiles)
+## 1. Arquitectura del Sistema
 
-Ejecuta el siguiente SQL en phpMyAdmin (o en tu cliente MySQL) para crear las 3 tablas que necesita la Fase 4:
+La solución está construida sobre una arquitectura desacoplada, ligera y de alto rendimiento:
 
-```sql
--- Configuración institucional (objeto único, una sola fila con clave 'default')
-CREATE TABLE IF NOT EXISTS configuracion (
-  clave  VARCHAR(64)  NOT NULL DEFAULT 'default',
-  valor  MEDIUMTEXT   NOT NULL COMMENT 'JSON del objeto de configuración',
-  PRIMARY KEY (clave)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+1. **Frontend Web (Single Page Application)**:
+   - Desarrollado en JavaScript Vanilla modular, HTML5 semántico y Tailwind CSS.
+   - Iconografía vectorial limpia estandarizada con **Heroicons SVG** (sin emojis).
+   - Generación y lectura de códigos QR con `qrcode.min.js`.
+   - Gráficas estadísticas interactivas con `Chart.js`.
+   - Notificaciones y correos transaccionales directos vía `EmailJS`.
+   - Caché en memoria con TTL de 25 segundos y deduplicación de peticiones concurrentes en `db.js`.
 
--- Credenciales del Superadmin (objeto único, una sola fila con id 'default')
-CREATE TABLE IF NOT EXISTS superadmin_credentials (
-  id       VARCHAR(32)  NOT NULL DEFAULT 'default',
-  email    VARCHAR(255) NOT NULL,
-  password VARCHAR(255) NOT NULL COMMENT 'Hash bcrypt',
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+2. **Backend API (PHP 8.0+)**:
+   - Ubicado en la carpeta `/api`.
+   - Manejador de persistencia relacional con **PDO y MySQL**.
+   - Respuestas JSON ultralivianas con compresión automática GZIP (`ob_gzhandler`).
+   - Descarga y visualización de archivos PDF bajo demanda (PQR, memorandos, pensum y trainee), evitando la sobrecarga de datos en listados generales.
+   - Control de zona horaria local (`America/Bogota`, UTC-5).
 
--- Perfiles y permisos (array — reemplazo total en cada guardado)
-CREATE TABLE IF NOT EXISTS perfiles (
-  id          VARCHAR(64)  NOT NULL,
-  nombre      VARCHAR(255) NOT NULL,
-  categoria   VARCHAR(64)  NOT NULL DEFAULT 'Administrativo',
-  descripcion TEXT,
-  es_sistema  TINYINT(1)   NOT NULL DEFAULT 0,
-  permisos    MEDIUMTEXT   NOT NULL DEFAULT '{}' COMMENT 'JSON de permisos por panel',
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+3. **Backend de Chat Inteligente (Python / FastAPI)**:
+   - Ubicado en la carpeta `/backend_chat`.
+   - Microservicio asíncrono con streaming en tiempo real (Server-Sent Events - SSE) en el puerto `8001`.
+   - Conexión directa a MySQL para alimentar el contexto del usuario autenticado y leer la base de conocimiento en vivo (`chat_voz_conocimiento`).
+   - Cascada multimodelo con tolerancia a fallos: **OpenRouter (Meta Llama 3.3 70B)** → **Groq (Llama 3.3 / GPT-OSS 20B)** → **Google Gemini (Gemini 2.5 Flash)**.
+
+4. **Base de Datos (MySQL / MariaDB)**:
+   - Esquema relacional con integridad referencial (`schema_mysql.sql`).
+   - Tablas principales: `usuarios`, `perfiles`, `usuario_perfiles`, `modulos` (cohortes), `horarios`, `notas_modulos`, `sesiones_asistencia`, `asistencia`, `pqr`, `memorandos`, `chat_voz_conocimiento`, `configuracion`.
+
+---
+
+## 2. Estructura del Proyecto
+
+```
+fundacion-api/
+├── index.html                  # Interfaz principal (sitio público y paneles de usuario)
+├── style.css                   # Estilos personalizados y variables de diseño institucional
+├── app.js                      # Controlador principal de la interfaz, lógica de negocio y renderizado
+├── db.js                       # Capa cliente HTTP (Store, Auth, caché y peticiones a la API)
+├── schema_mysql.sql            # Esquema completo de la base de datos MySQL
+├── router.php                  # Enrutador para servidor de desarrollo PHP integrado
+├── iniciar_servidor.bat        # Script para iniciar servidor web y Chat IA simultáneamente
+├── iniciar_chat.bat            # Script para iniciar exclusivamente el Chat IA
+├── abrir_puerto_firewall.bat   # Script para habilitar puertos en el Firewall de Windows para red local
+├── README.md                   # Documentación técnica general de la plataforma
+│
+├── api/                        # Backend PHP
+│   ├── config.php              # Conexión MySQL, compresión GZIP, cabeceras CORS y zona horaria
+│   ├── db.php                  # Instancia PDO y funciones de respuesta JSON
+│   ├── auth.php                # Autenticación de credenciales, hash bcrypt y emisión de tokens
+│   ├── index.php               # Enrutador REST API (CRUD, QR de asistencia y descarga de archivos)
+│   ├── public_info.php         # Endpoint público ligero para el portal institucional
+│   └── .htaccess               # Protección de acceso a archivos internos
+│
+└── backend_chat/               # Servidor de Chat IA (FastAPI)
+    ├── chat_backend.py         # Endpoints /chat, /chat/stream y orquestador LLM
+    ├── db.py                   # Consultas MySQL y armado de contextos por rol
+    ├── auth.py                 # Validación de tokens JWT para el chat
+    ├── requirements.txt        # Dependencias de Python (FastAPI, Uvicorn, PyMySQL, PyJWT)
+    ├── .env.example            # Plantilla de variables de entorno para el chat
+    ├── DEPLOY_RENDER.md        # Guía de despliegue en la nube
+    └── README.md               # Documentación específica del servidor de chat
 ```
 
-> **Nota:** Después de importar las tablas, la primera vez que el Superadmin abra el panel "Configuración" el backend devuelve los valores por defecto del SEED (la fila aún no existe en MySQL). Al guardar por primera vez, se crea la fila. Los perfiles de sistema se crean automáticamente al iniciar sesión si la tabla está vacía (misma lógica que antes, ahora escribe en MySQL).
+---
+
+## 3. Módulos y Funcionalidades Destacadas
+
+### A. Semáforo en Riesgo Académico
+- **Superadmin y Administradores**:
+  - Habilitado de forma nativa para el **Superadmin** en el menú lateral bajo "Gestión académica".
+  - Configurable en **Perfiles y Permisos**: los administradores pueden recibir permisos específicos de **Ver**, **Crear**, **Editar** o **Eliminar**.
+  - **Filtro dinámico por cohorte**: Permite filtrar instantáneamente para visualizar únicamente los estudiantes de una cohorte seleccionada o ver todas las cohortes consolidadas.
+  - Indicadores en vivo de estudiantes en estado **Crítico (Rojo)**, **Alerta (Amarillo)** y **Óptimo (Verde)**.
+  - Exportación a formato CSV adaptada a la cohorte filtrada.
+- **Docentes**:
+  - Si el docente tiene **dos o más cohortes asignadas**, dispone de un filtro desplegable para aislar y evaluar a los estudiantes de cada cohorte por separado.
+  - Si tiene una sola cohorte, el sistema fija automáticamente la vista en su grupo con una insignia informativa.
+
+### B. Control de Asistencia Inteligente vía Código QR
+- **Activación única por día (Blindaje Antifraude)**:
+  - Una vez que el docente abre el enlace o escanea su QR para iniciar la clase, la sesión queda registrada en la base de datos con su `hora_inicio` inmutable.
+  - Si el docente vuelve a abrir el enlace o reescanear el QR ese mismo día, el sistema detecta la activación previa (`yaEstabaActivada: true`), impidiendo reiniciar el temporizador, sobrescribir horas o alterar registros.
+- **Ventana de tolerancia reglamentaria (50 minutos)**:
+  - Primeros 15 minutos: Registro de asistencia en estado **Presente**.
+  - Minuto 16 al 50: Registro de asistencia en estado **Tarde**.
+  - Superados los 50 minutos: Registro cerrado automáticamente; los alumnos no registrados conservan su estado de **Falla (pérdida)**.
+- **Autonomía para docentes**: Cada docente genera, proyecta, copia y renueva sus propios códigos QR de inicio de clase y de estudiantes desde su panel.
+- **Asistencia 0-Click para estudiantes**: Al escanear el QR o abrir el enlace en su dispositivo, el sistema registra su asistencia de inmediato sin necesidad de presionar botones adicionales.
+
+### C. Horarios y Calificaciones por Mes
+- **Restricción de periodo**: Un docente con horario definido únicamente puede enviar reportes y calificaciones correspondientes al **mes calendario en curso** (por ejemplo, en septiembre no es posible registrar periodos futuros como octubre).
+- **Criterios ponderados**: Configuración flexible de porcentajes de evaluación por materia y cohorte.
+
+### D. Perfiles y Permisos Granulares
+- El Superadmin puede definir múltiples perfiles dentro de la categoría `Administrativo` (ej. Coordinador Académico, Asistente de Matrícula, Soporte).
+- Asignación matriz por panel: Ver, Crear, Editar y Eliminar.
+
+### E. Chat Asistente con Base de Conocimiento en Tiempo Real
+- El panel administrativo permite redactar temas en la base de conocimiento (`chat_voz_conocimiento`).
+- El asistente de IA responde de forma contextualizada reconociendo quién pregunta (Estudiante, Docente, Admin o Visitante) y personalizando las respuestas con datos reales de notas, asistencias u horarios.
+
+---
+
+## 4. Guía de Instalación y Puesta en Marcha (Entorno Local)
+
+### Requisitos previos:
+- **XAMPP** con Apache y MySQL instalados y en ejecución.
+- **PHP 8.0** o superior (incluido en versiones recientes de XAMPP).
+- **Python 3.10** o superior con `pip`.
+
+### Paso 1: Configurar la Base de Datos
+1. Abre el panel de control de XAMPP e inicia los módulos **Apache** y **MySQL**.
+2. Ingresa a `http://localhost/phpmyadmin`.
+3. Crea una base de datos llamada `fundacionamas_db` con cotejamiento `utf8mb4_unicode_ci`.
+4. Selecciona la base creada, dirígete a la pestaña **Importar** y selecciona el archivo [`schema_mysql.sql`](file:///c:/xampp/htdocs/fundacion-api/schema_mysql.sql) de este repositorio.
+
+### Paso 2: Configurar las Credenciales de la API PHP
+Verifica que [`api/config.php`](file:///c:/xampp/htdocs/fundacion-api/api/config.php) contenga los datos de conexión a tu MySQL local:
+
+```php
+define('DB_HOST', '127.0.0.1');
+define('DB_PORT', '3306');
+define('DB_NAME', 'fundacionamas_db');
+define('DB_USER', 'root');
+define('DB_PASSWORD', '');
+```
+
+### Paso 3: Configurar el Chat IA
+1. Abre una consola en la carpeta `backend_chat/`:
+   ```bash
+   cd backend_chat
+   pip install -r requirements.txt
+   copy .env.example .env
+   ```
+2. Edita el archivo `backend_chat/.env` con tus claves de API (OpenRouter, Groq o Gemini) y verifica la conexión a la base de datos.
+
+### Paso 4: Iniciar la Plataforma
+Para iniciar todo el ecosistema con un solo clic:
+- Haz doble clic en [`iniciar_servidor.bat`](file:///c:/xampp/htdocs/fundacion-api/iniciar_servidor.bat).
+
+Este script:
+1. Detecta tu dirección IP de red local automáticamente.
+2. Inicia el servidor de Chat IA en `http://localhost:8001`.
+3. Inicia el servidor web PHP en `http://localhost:8000`.
+4. Abre automáticamente tu navegador predeterminado en la plataforma.
+
+> **Acceso desde celulares en la red WiFi**: Si deseas escanear códigos QR o probar la asistencia desde teléfonos móviles conectados a la misma red WiFi, ejecuta [`abrir_puerto_firewall.bat`](file:///c:/xampp/htdocs/fundacion-api/abrir_puerto_firewall.bat) una sola vez como Administrador para habilitar los puertos 8000 y 8001.
+
+---
+
+## 5. Puesta en Marcha en Producción (Hostinger / cPanel / Cloud)
+
+1. **Base de Datos**:
+   - Crea la base de datos MySQL y el usuario con privilegios en tu proveedor de hosting.
+   - Importa `schema_mysql.sql` mediante phpMyAdmin.
+
+2. **Carga de Archivos Web**:
+   - Sube todos los archivos del proyecto a `public_html` (o al subdirectorio correspondiente).
+   - Edita `api/config.php` con el `DB_HOST`, `DB_NAME`, `DB_USER` y `DB_PASSWORD` proporcionados por tu hosting.
+   - Asegúrate de que la versión de PHP en tu panel esté configurada en **PHP 8.1 o PHP 8.2**.
+
+3. **Despliegue del Chat IA**:
+   - Despliega la carpeta `backend_chat` en un servicio en la nube compatible con Python (por ejemplo, [Render.com](https://render.com), Railway o VPS) siguiendo la guía [`backend_chat/DEPLOY_RENDER.md`](file:///c:/xampp/htdocs/fundacion-api/backend_chat/DEPLOY_RENDER.md).
+   - Configura las variables de entorno en el panel del servicio en la nube.
+   - En `app.js`, configura la URL pública de tu chat desplegado en la variable `CHAT_CONFIG.baseUrl`.
+
+---
+
+## 6. Verificación de Integridad
+
+Para verificar la sintaxis del proyecto sin errores:
+
+```bash
+# Validar backend PHP
+php -l api/index.php
+php -l api/config.php
+php -l api/auth.php
+
+# Validar frontend JavaScript
+node --check app.js
+node --check db.js
+```

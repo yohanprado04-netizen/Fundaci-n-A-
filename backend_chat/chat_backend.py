@@ -11,14 +11,10 @@ MySQL (ver db.py):
   2. El contexto propio de quien pregunta (sus notas si es estudiante, sus
      cohortes si es docente, PQR/memorandos si es admin) — ver auth.py.
 
--------------------------------------------------------------------------
-INSTALACIÓN (la primera vez)
--------------------------------------------------------------------------
+### Instalación (primera vez)
     pip install -r requirements.txt
 
--------------------------------------------------------------------------
-CONFIGURACIÓN
--------------------------------------------------------------------------
+### Configuración
 Crea un archivo .env (en la misma carpeta que este archivo) con:
 
     GEMINI_API_KEY=tu_api_key_de_gemini
@@ -33,14 +29,10 @@ Crea un archivo .env (en la misma carpeta que este archivo) con:
 Consigues una key de Gemini gratis en https://aistudio.google.com/apikey,
 y una de Groq gratis en https://console.groq.com/keys.
 
--------------------------------------------------------------------------
-EJECUTAR EN LOCAL (para probar antes de subirlo a internet)
--------------------------------------------------------------------------
+### Ejecutar en local (pruebas previas)
     uvicorn chat_backend:app --reload --port 8000
 
--------------------------------------------------------------------------
-DESPLEGAR EN PRODUCCIÓN (Render, gratis) — ver también DEPLOY_RENDER.md
--------------------------------------------------------------------------
+### Desplegar en producción (Render) — ver también DEPLOY_RENDER.md
 1. Sube esta carpeta a un repositorio en GitHub.
 2. En https://render.com crea un "Web Service" nuevo apuntando a ese repo.
 3. Build command:  pip install -r requirements.txt
@@ -53,9 +45,7 @@ DESPLEGAR EN PRODUCCIÓN (Render, gratis) — ver también DEPLOY_RENDER.md
    https://tu-servicio.onrender.com) — esa es la que va en API_URL dentro
    del widget del chat (ver chat_widget_fundacion_a_mas.html).
 
--------------------------------------------------------------------------
-AUTENTICACIÓN Y CONTEXTO EN VIVO DESDE MYSQL (auth.py / db.py)
--------------------------------------------------------------------------
+### Autenticación y contexto en vivo desde MySQL (auth.py / db.py)
 Este backend YA NO confía en un rol o email que el navegador diga tener
 "de palabra". El flujo real es:
 
@@ -75,9 +65,7 @@ Este backend YA NO confía en un rol o email que el navegador diga tener
 Todas las consultas en db.py son de SOLO LECTURA — el chat nunca modifica
 ningún dato del sistema.
 
--------------------------------------------------------------------------
-BASE DE CONOCIMIENTO (chat_voz_conocimiento en MySQL)
--------------------------------------------------------------------------
+### Base de conocimiento (chat_voz_conocimiento en MySQL)
 El panel "Chat de voz" del Superadmin (dentro de la app principal) escribe
 directamente en la tabla chat_voz_conocimiento de MySQL. Este backend la
 consulta en cada mensaje del chat (ver db.obtener_base_conocimiento) — ya
@@ -92,10 +80,12 @@ import os
 import time
 import urllib.error
 import urllib.request
+from collections import defaultdict
+import threading
 from typing import AsyncGenerator, List, Literal, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -115,15 +105,52 @@ import db
 
 app = FastAPI(title="Chat Backend Fundación A+ (Groq & Gemini + MySQL)")
 
-# --------------------------------------------------------------------------
 # CORS: orígenes permitidos
-# --------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate Limiting: control de tasa y protección contra denegación de servicio
+class RateLimiter:
+    """Controlador de tasa en memoria por IP usando ventana deslizante thread-safe.
+    Incluye auto-poda periódica de IPs inactivas para garantizar uso de memoria acotado O(1)."""
+    def __init__(self, max_requests: int = 40, window_seconds: int = 60):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._requests = defaultdict(list)
+        self._lock = threading.Lock()
+        self._last_cleanup = time.time()
+
+    def is_allowed(self, client_ip: str) -> bool:
+        if not client_ip:
+            client_ip = "anon"
+        now = time.time()
+        with self._lock:
+            # Poda periódica cada 5 minutos de registros inactivos para evitar fugas de memoria
+            if now - self._last_cleanup > 300:
+                cutoff_global = now - self.window_seconds
+                self._requests = defaultdict(list, {
+                    ip: [t for t in ts if t > cutoff_global]
+                    for ip, ts in self._requests.items()
+                    if any(t > cutoff_global for t in ts)
+                })
+                self._last_cleanup = now
+
+            timestamps = self._requests[client_ip]
+            cutoff = now - self.window_seconds
+            self._requests[client_ip] = [t for t in timestamps if t > cutoff]
+            if len(self._requests[client_ip]) >= self.max_requests:
+                return False
+            self._requests[client_ip].append(now)
+            return True
+
+
+chat_rate_limiter = RateLimiter(max_requests=45, window_seconds=60)
+auth_rate_limiter = RateLimiter(max_requests=15, window_seconds=60)
+
 
 # Las API keys se leen SOLO de variables de entorno (archivo .env en local,
 # o "Environment" en Render) — nunca deben escribirse aquí como texto plano.
@@ -205,6 +232,11 @@ def construir_bloque_conocimiento(hay_sesion: bool) -> str:
 
 
 def construir_system_prompt(hay_sesion: bool) -> str:
+    """
+    Construye y devuelve el prompt del sistema (instrucciones base, reglas de longitud,
+    alcance institucional, enlaces oficiales y base de conocimiento) según si el usuario
+    cuenta con una sesión activa autenticada o es un visitante anónimo.
+    """
     base = (
         "Eres el asistente virtual de la Fundación A+, integrado en el chat de su sitio web. "
         "Respondes SIEMPRE en español, con un tono cercano, profesional y amable.\n\n"
@@ -526,6 +558,10 @@ def llamar_openrouter_stream(messages: list, system_prompt: str):
 
 
 def llamar_groq(messages: list, system_prompt: str) -> str:
+    """
+    Envía la solicitud de completado a la API de Groq con el historial reciente
+    y el prompt del sistema. Incluye reintentos automáticos si se alcanza el límite de tasa (HTTP 429).
+    """
     # El historial crece sin límite del lado del frontend (se manda la
     # conversación completa en cada mensaje). Eso hace que el prompt total
     # (system + historial) crezca en cada turno. Solución simple: solo se
@@ -708,12 +744,16 @@ async def generar_stream_sse(request: "ChatRequest") -> AsyncGenerator[bytes, No
 
 
 @app.post("/auth/login", response_model=LoginResponse)
-def login(request: LoginRequest):
+def login(request: LoginRequest, req: Request):
     """Valida email+password contra MySQL (misma tabla usuarios /
     superadmin_credentials que usa el login normal de la app) y devuelve
     un token de sesión para el chat. El frontend llama esto UNA VEZ, justo
     después de un login exitoso en la app, y guarda el token para
     mandarlo en cada mensaje del chat (ChatRequest.token)."""
+    client_ip = req.client.host if req.client else "unknown"
+    if not auth_rate_limiter.is_allowed(client_ip):
+        raise HTTPException(status_code=429, detail="Demasiados intentos de inicio de sesión. Por favor espera un minuto.")
+
     if not db.db_configurada():
         raise HTTPException(status_code=503, detail="La base de datos no está configurada en este servidor.")
     token = auth.intentar_login(request.email, request.password)
@@ -723,7 +763,15 @@ def login(request: LoginRequest):
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest):
+def chat(request: ChatRequest, req: Request):
+    """
+    Endpoint síncrono para procesar mensajes del chat. Resuelve el contexto dinámico
+    según el token del usuario y ejecuta la llamada con cascada de proveedores (OpenRouter -> Groq -> Gemini).
+    """
+    client_ip = req.client.host if req.client else "unknown"
+    if not chat_rate_limiter.is_allowed(client_ip):
+        raise HTTPException(status_code=429, detail="Límite de mensajes alcanzado. Por favor espera un minuto antes de enviar más preguntas.")
+
     if not request.messages:
         raise HTTPException(status_code=400, detail="El historial de mensajes está vacío")
 
@@ -801,7 +849,7 @@ def chat(request: ChatRequest):
 
 
 @app.post("/chat/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(request: ChatRequest, req: Request):
     """Igual que POST /chat, pero devuelve la respuesta en streaming
     (Server-Sent Events) a medida que el modelo la genera, en vez de
     esperar a tenerla completa. El widget del frontend usa este endpoint
@@ -813,6 +861,10 @@ async def chat_stream(request: ChatRequest):
     terminando con `data: {"done": true}\\n\\n` si todo salió bien, o
     `data: {"error": "..."}\\n\\n` si algo falló a mitad de camino (el
     endpoint /chat sin streaming sigue disponible como respaldo)."""
+    client_ip = req.client.host if req.client else "unknown"
+    if not chat_rate_limiter.is_allowed(client_ip):
+        raise HTTPException(status_code=429, detail="Límite de mensajes alcanzado. Por favor espera un minuto antes de enviar más preguntas.")
+
     if not request.messages:
         raise HTTPException(status_code=400, detail="El historial de mensajes está vacío")
     return StreamingResponse(
@@ -827,6 +879,10 @@ async def chat_stream(request: ChatRequest):
 
 @app.get("/health")
 def health():
+    """
+    Endpoint de monitoreo y verificación de salud del servicio. Comprueba el estado
+    de los proveedores LLM configurados y la conectividad en vivo con la base de datos MySQL.
+    """
     # obtener_base_conocimiento() abre una conexión real a MySQL — si la
     # base de datos está configurada pero momentáneamente inalcanzable
     # (apagada, credenciales erróneas, firewall, etc.), /health no debe

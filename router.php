@@ -17,6 +17,9 @@ if (strpos($uri, '/fundacion-api') === 0) {
     if ($uri === '') $uri = '/';
 }
 
+/**
+ * Obtiene la dirección IP de la interfaz de red local activa en Windows.
+ */
 function obtenerIpLocal(): string {
     $out = @shell_exec('route print 0.0.0.0');
     if ($out && preg_match('/0\.0\.0\.0\s+0\.0\.0\.0\s+\S+\s+(\d+\.\d+\.\d+\.\d+)/', $out, $m)) {
@@ -27,6 +30,9 @@ function obtenerIpLocal(): string {
     return '192.168.1.35';
 }
 
+/**
+ * Sirve el archivo index.html inyectando la IP local del servidor para los enlaces QR.
+ */
 function servirIndex(string $docRoot): void {
     header('Content-Type: text/html; charset=utf-8');
     header('Access-Control-Allow-Origin: *');

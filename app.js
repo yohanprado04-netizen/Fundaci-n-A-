@@ -45,6 +45,7 @@
   const CONSTELLATION_COLORS = ['#1FC8C0', '#8B5CF6', '#F5A623', '#9A5B3F', '#EC4899', '#F0455C'];
   const CONSTELLATION_MIN_NODOS = 60;
   const constellationReduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ICON_CLIP_SVG = '<svg class="w-3.5 h-3.5 inline-block shrink-0 align-middle mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>';
 
   function seededRandom(seed) {
     let s = seed;
@@ -60,29 +61,22 @@
   // async: Store.list('usuarios') ahora habla con MySQL (ver db.js) — las
   // 4 llamadas a esta función son "fire and forget" (no esperan su
   // resultado), así que no hace falta await en cada punto de llamada.
-  async function renderConstellation() {
+  async function renderConstellation(totalEstudiantesDirecto) {
     const container = document.getElementById('constellation');
     if (!container) return;
     // El elemento puede seguir existiendo en el DOM aunque esté oculto
     // (p. ej. el sitio público vive siempre en el HTML, solo se le pone
     // "hidden" mientras alguien está adentro del panel interno).
-    // offsetParent es null en cualquiera de esos casos (display:none en
-    // el propio elemento o en un ancestro) — evita gastar una consulta a
-    // la base de datos para redibujar algo que nadie está viendo ahora
-    // mismo. Se vuelve a llamar de todas formas cada vez que se
-    // crea/edita un usuario, así que en cuanto la persona SÍ esté viendo
-    // el sitio público, ya la habrá disparado alguna otra acción o la
-    // llamada inicial al cargar la página.
     if (container.offsetParent === null) return;
     container.innerHTML = '';
 
-    let totalEstudiantes = 0;
-    try {
-      // Solo cuentan estudiantes ya aprobados/matriculados de verdad — una
-      // solicitud de autorregistro con estadoRegistro='Pendiente' todavía
-      // no es un estudiante inscrito, así que no debe inflar el contador.
-      totalEstudiantes = (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && u.estadoRegistro !== 'Pendiente').length;
-    } catch (e) { /* Store aún no listo */ }
+    let totalEstudiantes = typeof totalEstudiantesDirecto === 'number' ? totalEstudiantesDirecto : 0;
+    if (typeof totalEstudiantesDirecto !== 'number') {
+      try {
+        // Solo cuentan estudiantes ya aprobados/matriculados de verdad
+        totalEstudiantes = (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && u.estadoRegistro !== 'Pendiente').length;
+      } catch (e) { /* Store aún no listo */ }
+    }
     const nodeCount = Math.max(CONSTELLATION_MIN_NODOS, totalEstudiantes);
 
     // Semilla fija: mismos nodos "decorativos extra" siempre en la misma
@@ -145,21 +139,12 @@
   // login (ver iniciarSesionChat, más abajo) y mandarlo en cada mensaje.
 
 
-  /* =====================================================================
-     AUDITORÍA — solo lectura, visible únicamente para el Superadmin
-     (panel "Auditoría" bajo Sistema). Tres bitácoras, las tres ya en
-     MySQL (Fase 4):
-     1) auditoria_login: cada intento (exitoso o fallido) de login de
-        cualquier rol. Se registra directamente en api/auth.php en el
-        servidor (registrarAuditoriaLogin() en PHP) — por eso ya NO existe
-        una función homónima aquí: el login pasa por apiLogin()/db.js, no
-        por código de este archivo, así que no hay nada que auditar del
-        lado del cliente para este caso.
-     2) auditoria_acciones: acciones relevantes dentro del sistema (hoy,
-        que un docente suba/actualice notas).
-     3) auditoria_horario: cada cambio de Materia o Docente en una celda
-        del Horario — quién lo hizo, cuándo, y el valor anterior/nuevo.
-     ===================================================================== */
+  /**
+   * Auditoría del sistema (solo lectura para el Superadmin).
+   * 1) auditoria_login: intentos de login registrados en backend PHP.
+   * 2) auditoria_acciones: acciones operativas registradas por los usuarios.
+   * 3) auditoria_horario: cambios de franjas horarias y asignación docente.
+   */
   function fechaHoraActual() {
     const ahora = new Date();
     return {
@@ -168,13 +153,7 @@
     };
   }
 
-  // Bitácora de ACCIONES relevantes (no login) para el dashboard de
-  // "Actividad reciente": hoy solo se usa para que quede registro de
-  // cuándo un docente sube/actualiza notas, pero está pensada para poder
-  // sumar más tipos de evento a futuro sin cambiar la forma del registro.
-  // Persistencia aparte de auditoria_login porque es otro tipo de bitácora
-  // (acciones dentro del sistema, no intentos de acceso).
-  // async: 'auditoria_acciones' vía MySQL.
+  // Bitácora de acciones relevantes dentro del sistema
   async function registrarAuditoriaAccion(tipo, actor, rol, detalle) {
     const { fecha, hora } = fechaHoraActual();
     const registros = await Store.list('auditoria_acciones');
@@ -182,20 +161,19 @@
     await Store.save('auditoria_acciones', registros.slice(0, 500));
   }
 
-  // Nombre a mostrar de quien está haciendo un cambio administrativo ahora
-  // mismo (Superadmin o el nombre real del Coordinador que inició sesión).
+  // Nombre a mostrar de quien realiza la acción administrativa actual
   function actorAdminActual() {
     if (currentAdminRole === 'superadmin') return 'Superadmin';
     if (currentAdminRole === 'administracion' && currentAdminUser) return currentAdminUser.nombre + ' (Administración)';
     return 'Desconocido';
   }
 
-  // Etiqueta legible de una franja del Horario: "Lunes 08:00–09:50".
+  // Etiqueta descriptiva de una franja de horario
   function franjaLabel(franja) {
     return franja ? (franja.dia + ' ' + franja.inicio + '–' + franja.fin) : '';
   }
 
-  // async: 'auditoria_horario' vía MySQL.
+  // Auditoría de cambios en el horario
   async function registrarAuditoriaHorario(cohorte, mes, franjaEtiqueta, campo, valorAnterior, valorNuevo) {
     const { fecha, hora } = fechaHoraActual();
     const registros = await Store.list('auditoria_horario');
@@ -207,14 +185,12 @@
     await Store.save('auditoria_horario', registros.slice(0, 1000));
   }
 
-  /* =====================================================================
-     SEGURIDAD DEL LOGIN — 3 capas
-     1) Bloqueo temporal tras varios intentos fallidos (anti fuerza bruta).
-     2) Cierre de sesión automático por inactividad (ver iniciarControlInactividad).
-     3) Contraseñas con una fortaleza mínima al crearlas (ver validarFortalezaPassword,
-        usado tanto en el modal de Usuarios como en Crear Cohorte + Administrador).
-     ===================================================================== */
-
+  /**
+   * Seguridad del login y control de acceso:
+   * 1) Bloqueo temporal tras intentos fallidos consecutivos.
+   * 2) Cierre de sesión automático tras periodo de inactividad.
+   * 3) Validación de fortaleza mínima en contraseñas.
+   */
   function validarFortalezaPassword(pw) {
     return typeof pw === 'string' && pw.length >= 6 && /[A-Za-z]/.test(pw) && /[0-9]/.test(pw);
   }
@@ -432,6 +408,7 @@
 
     if (usuario.rol === 'Estudiante') {
       currentEstudiante = usuario;
+      try { localStorage.setItem('aplus_estudiante_email', usuario.email || usuario.nombre); } catch (e) {}
       document.getElementById('siteView').classList.add('hidden');
       document.getElementById('studentView').classList.remove('hidden');
       await initEstudiante();
@@ -605,6 +582,7 @@
     currentAdminRole = null;
     currentAdminUser = null;
     panelActivoAdmin = null;
+    semaforoCohorteFiltro = '';
     document.getElementById('dashboardView').classList.add('hidden');
     document.getElementById('siteView').classList.remove('hidden');
     document.getElementById('loginEmail').value = '';
@@ -622,6 +600,7 @@
     detenerControlInactividad();
     currentDocente = null;
     panelActivoDocente = null;
+    docenteRiesgoCohorte = '';
     document.getElementById('teacherView').classList.add('hidden');
     document.getElementById('siteView').classList.remove('hidden');
     document.getElementById('loginEmail').value = '';
@@ -743,10 +722,9 @@
     actualizarBadgePqrAdmin();
   }
 
-  /* =====================================================================
-     PANEL ADMINISTRATIVO — motor de datos y CRUD
-     Persistencia: localStorage (namespace "aplus_admin_v1")
-     ===================================================================== */
+  /**
+   * Panel administrativo — motor de datos y CRUD.
+   */
 
   const DB_PREFIX = 'aplus_admin_v1_';
   let ADMIN_BOOTED = false;
@@ -768,15 +746,11 @@
     return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
-  /* =====================================================================
-     HORARIO (antes "Módulos y cohortes") — franjas de horario LIBRES.
-     El administrador elige una Cohorte y un Mes; agrega franjas sueltas,
-     cada una con: Día, Curso, Trainer (docente), hora de inicio, hora de
-     fin, y Estado (Activo/Inactivo — reemplaza al "eliminar": una franja
-     inactiva no cuenta para nadie, pero queda en el historial).
-     Persistencia: Store('horarios'), un registro por Cohorte + Mes, con
-     un array 'franjas' (antes era una matriz fija 'celdas').
-     ===================================================================== */
+  /**
+   * Horario — franjas de horario libres por cohorte y mes.
+   * Cada franja incluye: día, curso, trainer, hora inicio/fin y estado.
+   * Persistencia: Store('horarios'), un registro por cohorte + mes.
+   */
   // Logo real de la Fundación A+ (logo.jpg), incrustado como Data URL para
   // usarlo en documentos que se abren en una ventana/pestaña nueva sin DOM
   // compartido con index.html (ej. la carta de memorando en
@@ -974,14 +948,7 @@
     }, 1000);
   }
 
-  // ---------------------------------------------------------------------
-  // Feedback inmediato de clic para acciones async (guardar, enviar, etc).
-  // Sin esto, entre el clic y que termine la operación el botón se ve
-  // "muerto" y el usuario puede hacer doble clic, disparando un segundo
-  // guardado duplicado. Deshabilita el botón, muestra un spinner, y
-  // siempre lo restaura al terminar (éxito o error).
-  // Uso: onclick="withBotonCargando(this, funcionAsync)"
-  // ---------------------------------------------------------------------
+  // Feedback inmediato de clic para acciones async (previene envíos duplicados)
   async function withBotonCargando(boton, fnAsync, textoCargando) {
     if (!boton || boton.dataset.cargando === '1') return;
     const textoOriginal = boton.innerHTML;
@@ -1011,24 +978,11 @@
     return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
-  // =====================================================================
-  // SISTEMA DE PERFILES Y PERMISOS (100% local / localStorage)
-  // =====================================================================
-  // Concepto: el Superadmin crea "perfiles" (ej. "Coordinador Académico",
-  // "Docente Estándar") marcando, panel por panel, 4 casillas: Ver, Crear,
-  // Editar, Eliminar. Cada usuario puede tener VARIOS perfiles asignados a
-  // la vez — sus permisos se combinan por unión (si CUALQUIERA de sus
-  // perfiles da acceso a algo, el usuario lo tiene).
-  //
-  // usuarios.rol se conserva tal cual estaba (Estudiante/Docente/
-  // Coordinador/Administrador): sigue decidiendo cuál de las 3 vistas
-  // (Admin/Docente/Estudiante) carga al iniciar sesión. usuarios.perfiles
-  // (array de ids de "perfiles") decide QUÉ VE dentro de esa vista.
-  //
-  // Un usuario sin ningún perfil asignado (perfiles: [] o ausente) puede
-  // iniciar sesión pero no ve ningún panel — se le muestra un aviso para
-  // que contacte al Superadmin.
-  // =====================================================================
+  /**
+   * Sistema de perfiles y permisos granulares.
+   * Permite definir permisos por panel (Ver, Crear, Editar, Eliminar)
+   * asignables a usuarios con combinación aditiva.
+   */
 
   // Catálogo fijo de paneles reales del sistema — mismo código que usa
   // data-panel-code en los botones de menú de index.html. Namespaced por
@@ -1043,7 +997,7 @@
     { codigo: 'admin.horario', categoria: 'Administrativo', etiqueta: 'Horario' },
     { codigo: 'admin.codigosqr', categoria: 'Administrativo', etiqueta: 'Códigos QR' },
     { codigo: 'admin.pensum', categoria: 'Administrativo', etiqueta: 'Pensum' },
-    { codigo: 'admin.semaforo', categoria: 'Administrativo', etiqueta: 'Semáforo académico' },
+    { codigo: 'admin.semaforo', categoria: 'Administrativo', etiqueta: 'Semáforo en riesgo' },
     { codigo: 'admin.memorandos', categoria: 'Administrativo', etiqueta: 'Memorandos' },
     { codigo: 'admin.pqr', categoria: 'Administrativo', etiqueta: 'PQR' },
     { codigo: 'admin.calificaciones', categoria: 'Administrativo', etiqueta: 'Calificaciones' },
@@ -1315,9 +1269,7 @@
         { key: 'estado', label: 'Estado', type: 'select', options: ['Activo', 'Inactivo'], default: 'Activo' },
       ]
     },
-    // ---------------------------------------------------------------------
-    // MÓDULO: Chat conocimiento — base de conocimiento del chat con IA
-    // ---------------------------------------------------------------------
+    // Base de conocimiento del chat con IA (tabla chat_voz_conocimiento)
     // El chat de texto (widget flotante, backend_chat/ con Groq/Gemini) ya
     // está implementado y responde preguntas usando IA real. Esta base de
     // conocimiento es la fuente que consulta para lo que no puede resolver
@@ -2068,26 +2020,10 @@
     toast('Registro eliminado', 'ok');
   }
 
-  /* =====================================================================
-     NOTA HISTÓRICA — módulo "Cohortes + Administrador exclusivo" retirado
-     ---------------------------------------------------------------------
-     Existía aquí un segundo sistema de "Administrador" en paralelo al real
-     (Store('administradores') con aislamiento multi-tenant por cohorteId),
-     pensado para que cada cohorte tuviera su propio admin exclusivo. Nunca
-     llegó a conectarse a la interfaz: su render (que pintaba la tabla y el
-     botón que abría el modal de creación) apuntaba a un contenedor
-     ("mount-cohorte-admin") que no existe en ningún tab del menú, así que
-     ese botón jamás se mostraba y el modal de creación era inalcanzable.
-     El Administrador real de la app es el rol "Coordinador" dentro de
-     Store('usuarios'), gestionado por completo desde el panel
-     "Administradores" (ver renderAdministradores() más abajo).
-     Se eliminó código muerto: crearCohorteConAdmin(), abrirModalCohorteAdmin(),
-     cerrarModalCohorteAdmin(), guardarCohorteAdmin(), renderCohorteAdminModule()
-     y el modal #modalCohorteAdmin en index.html. No afecta ninguna
-     funcionalidad visible: nada de eso se ejecutaba nunca.
-     ===================================================================== */
+  // Nota histórica: módulo "Cohortes + Administrador exclusivo" retirado;
+  // la administración se centraliza en el rol Coordinador gestionado desde panel Administradores.
 
-  // ---------- Exportar CSV ----------
+  // Exportar CSV
   // async porque algunas entidades (pqr, auditoria_*, y las que se vayan
   // migrando) ya viven en MySQL vía Store — Store.list() para esas
   // devuelve una Promise, no un array directo.
@@ -2112,11 +2048,11 @@
   // vive en MySQL, ver-el-backend/db.py lee esa tabla directamente en cada
   // pregunta — ya no hace falta exportar/subir un knowledge.json a mano.)
 
-  // =====================================================================
-  // GESTOR UNIVERSAL DE TABLAS Y GRANDES VOLÚMENES DE DATOS (TableManager)
-  // Paginación dinámica, búsqueda en tiempo real con contador,
-  // ordenamiento por columnas, sticky headers y estado vacío inteligente.
-  // =====================================================================
+  /**
+   * Gestor universal de tablas y grandes volúmenes de datos (TableManager).
+   * Paginación dinámica, búsqueda en tiempo real con contador,
+   * ordenamiento por columnas, sticky headers y estado vacío inteligente.
+   */
 
   const TableManager = {
     states: {}, // { [tableId]: { page: 1, pageSize: 15, search: '', sortCol: -1, sortAsc: true } }
@@ -2416,6 +2352,7 @@
 
   // ---------- Recarga en vivo bajo demanda (al clic) ----------
   async function recargarPanelActual() {
+    if (typeof Store.clearCache === 'function') Store.clearCache();
     if (currentAdminRole || currentAdminUser) {
       if (panelActivoAdmin && RENDERERS[panelActivoAdmin]) {
         await RENDERERS[panelActivoAdmin]();
@@ -2508,12 +2445,7 @@
     riesgo: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86l-8.18 14.18A1.5 1.5 0 003.5 20.5h17a1.5 1.5 0 001.39-2.46L13.71 3.86a1.5 1.5 0 00-2.42 0z"/></svg>',
   };
 
-  // =====================================================================
-  // SISTEMA VISUAL DE DASHBOARDS — compartido por Resumen (Superadmin,
-  // Docente, Estudiante). Un solo elemento distintivo (el anillo de
-  // progreso) se repite en los 3, con el color de marca correspondiente,
-  // en vez de decorar cada panel con algo distinto.
-  // =====================================================================
+  // Sistema visual de dashboards: compartido por Resumen (Superadmin, Docente, Estudiante).
 
   // Anillo de progreso SVG hecho a mano (sin librerías): recibe 0-100 y
   // devuelve un <svg> circular con el trazo proporcional al valor. track
@@ -3228,7 +3160,7 @@
     // ENTIDADES_MYSQL (ver db.js), Store.list() devuelve una Promise; sin
     // el await, "archivosTodos" habría quedado como esa Promise en vez
     // del array, rompiendo el .filter() de abajo.
-    const archivosTodos = (await Store.list('trainee_archivos')).filter(a => a.estudianteId === est.id).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const archivosTodos = (await Store.list('trainee_archivos', { query: 'estudiante_id=' + encodeURIComponent(est.id) + '&con_datos=1' })).filter(a => a.estudianteId === est.id).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
     const totalArchivos = archivosTodos.length;
     const totalImagenes = archivosTodos.filter(a => (a.tipo || '').startsWith('image/')).length;
     const totalPdfs = archivosTodos.filter(a => (a.tipo === 'application/pdf' || (a.nombre || '').toLowerCase().endsWith('.pdf'))).length;
@@ -3451,7 +3383,7 @@
             </svg>
             <input id="traineeArchivoBusqueda" type="text" value="${escapeHtml(traineeState.busquedaArchivo || '')}" placeholder="Buscar por nombre..." oninput="buscarArchivoTrainee(this.value)" class="w-full pl-9 pr-8 py-2 rounded-xl border border-gray-200 bg-white text-xs text-ink placeholder-slate2/60 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
             ${traineeState.busquedaArchivo ? `
-              <button onclick="buscarArchivoTrainee('')" class="absolute right-2.5 top-2 text-slate2 hover:text-ink text-xs font-bold w-5 h-5 rounded-full hover:bg-gray-100 flex items-center justify-center">✕</button>
+              <button onclick="buscarArchivoTrainee('')" class="absolute right-2.5 top-2 text-slate2 hover:text-ink w-5 h-5 rounded-full hover:bg-gray-100 flex items-center justify-center"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
             ` : ''}
           </div>
         </div>
@@ -3731,9 +3663,14 @@
   }
 
   async function verArchivoTraineeModal(archivoId) {
-    const archivos = await Store.list('trainee_archivos');
-    const arch = archivos.find(a => a.id === archivoId);
-    if (!arch) { toast('Archivo no encontrado', 'err'); return; }
+    let arch = null;
+    try {
+      arch = await Store.getArchivo('trainee_archivos', archivoId);
+    } catch (e) {
+      const archivos = await Store.list('trainee_archivos');
+      arch = archivos.find(a => a.id === archivoId);
+    }
+    if (!arch || !arch.datos || arch.datos === '1') { toast('Archivo no encontrado o datos no disponibles', 'err'); return; }
 
     let modal = document.getElementById('traineeArchivoModal');
     if (!modal) {
@@ -3765,8 +3702,8 @@
                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                 <span>Descargar</span>
               </a>
-              <button onclick="cerrarArchivoTraineeModal()" class="w-8 h-8 rounded-xl bg-gray-200/80 hover:bg-gray-300 text-ink flex items-center justify-center transition text-sm font-bold">
-                ✕
+              <button onclick="cerrarArchivoTraineeModal()" class="w-8 h-8 rounded-xl bg-gray-200/80 hover:bg-gray-300 text-ink flex items-center justify-center transition" aria-label="Cerrar">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
           </div>
@@ -3928,8 +3865,8 @@
 </head>
 <body>
   <div class="action-bar">
-    <button onclick="window.print()">🖨️ Descargar / Imprimir en PDF</button>
-    <button class="close-btn" onclick="window.close()">✕ Cerrar</button>
+    <button onclick="window.print()"><svg style="width:15px;height:15px;display:inline-block;vertical-align:middle;margin-right:6px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>Descargar / Imprimir en PDF</button>
+    <button class="close-btn" onclick="window.close()"><svg style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-right:4px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>Cerrar</button>
   </div>
   
   <div class="page">
@@ -4074,7 +4011,7 @@
           </tr>
         `).join('')}
       </tbody>
-    </table>` : '<p style="font-size:12px;color:#059669;font-weight:600;">✓ El estudiante no cuenta con memorandos ni observaciones disciplinarias.</p>'}
+    </table>` : '<p style="font-size:12px;color:#059669;font-weight:600;display:flex;align-items:center;gap:6px;"><svg style="width:14px;height:14px;display:inline-block;vertical-align:middle;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>El estudiante no cuenta con memorandos ni observaciones disciplinarias.</p>'}
 
     <div class="section-title">
       <span>4. Portafolio de Archivos y Evidencias Adjuntas</span>
@@ -4171,33 +4108,11 @@
       </div>`;
   }
 
-  /* =====================================================================
-     MÓDULO: Chat conocimiento
-     ---------------------------------------------------------------------
-     Estado actual:
-     - El chat con IA (widget flotante visible en el sitio, texto — no de
-       voz pese al nombre interno que quedó de una fase anterior) YA está
-       implementado (backend_chat/, Groq/Gemini) y responde en producción.
-     - Este panel de Superadmin alimenta la "Base de conocimiento" (temas
-       generales tipo "¿Cuándo se abren las convocatorias?") que el chat
-       consulta cuando no encuentra la respuesta en los datos propios del
-       sistema. Vive en MySQL (Fase 6) — lo que se guarda aquí lo lee el
-       backend directo en cada pregunta, sin exportar/subir ningún archivo
-       a mano.
-     - Regla de negocio (ver campo "visibilidad" en SCHEMAS):
-         · Visitante SIN sesión -> el chat solo puede usar entradas
-           "Pública" de esta base, y nunca datos internos del sistema
-           (notas, usuarios, etc.).
-         · Usuario CON sesión (Estudiante/Docente/Administración) -> el
-           chat puede usar TODA esta base ("Pública" + "Solo usuarios con
-           sesión") y además, cuando corresponda, datos propios de ESE
-           usuario (sus notas, su asistencia, etc. — nunca de otro usuario).
-     - buscarEnBaseConocimientoChatVoz() más abajo es un placeholder VIEJO
-       que ya no usa el chat real — quedó de antes de conectar el backend
-       Python; el chat real resuelve esto en backend_chat/db.py, leyendo
-       la misma tabla MySQL directamente con IA (no búsqueda de texto).
-     Persistencia: Store('chat_voz_conocimiento').
-     ===================================================================== */
+  /**
+   * Módulo: Chat conocimiento
+   * Alimenta la base de conocimiento general en MySQL (tabla chat_voz_conocimiento).
+   * Persistencia: Store('chat_voz_conocimiento').
+   */
   // async: 'chat_voz_conocimiento' vía MySQL (Fase 6).
   async function renderChatVozConocimiento() {
     const records = [...(await Store.list('chat_voz_conocimiento'))].sort((a, b) => (a.titulo || '').localeCompare(b.titulo || ''));
@@ -4773,6 +4688,7 @@ Fundación A+`;
       perfiles.push({ id: uid('perf'), nombre, categoria, descripcion, esSistema: false, permisos });
     }
     await Store.set('perfiles', perfiles);
+    invalidarCachePerfiles();
     cerrarEditorPerfil();
     renderPerfiles();
     toast('Perfil guardado', 'ok');
@@ -5465,16 +5381,19 @@ Fundación A+`;
   // Abre en una pestaña nueva el archivo adjunto de un tema del pensum
   // (guardado como data URL). Usado desde el panel admin y el de estudiante.
   function verArchivoPensum(id) {
-    // window.open() se llama de inmediato y de forma síncrona (mismo tick
-    // del clic) para que los navegadores no lo bloqueen como popup — el
-    // contenido se rellena después, cuando llegan los datos de MySQL.
     const win = window.open();
     if (!win) { toast('Habilita las ventanas emergentes para ver el archivo', 'err'); return; }
-    Store.list('pensum').then(records => {
-      const p = records.find(x => x.id === id);
-      if (!p || !p.archivoDatos) { win.close(); toast('Este tema aún no tiene un archivo adjunto', 'info'); return; }
+    Store.getArchivo('pensum', id).then(p => {
+      if (!p || !p.archivoDatos || p.archivoDatos === '1') {
+        win.close();
+        toast('Este tema aún no tiene un archivo adjunto disponible', 'info');
+        return;
+      }
       win.document.write(`<iframe src="${p.archivoDatos}" style="border:0;width:100%;height:100vh"></iframe>`);
       win.document.title = p.archivoNombre || p.tema;
+    }).catch(() => {
+      win.close();
+      toast('No se pudo cargar el archivo del pensum', 'err');
     });
   }
 
@@ -5492,7 +5411,7 @@ Fundación A+`;
               <span class="w-6 h-6 rounded-full bg-gray-100 text-slate2 text-xs font-bold grid place-items-center shrink-0">${p.orden}</span>
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-semibold text-ink truncate">${escapeHtml(p.tema)}</p>
-                <p class="text-xs text-slate2">${escapeHtml(p.docente || '—')} · ${p.horas} h${p.archivoNombre ? ' · 📎 ' + escapeHtml(p.archivoNombre) : ''}</p>
+                <p class="text-xs text-slate2">${escapeHtml(p.docente || '—')} · ${p.horas} h${p.archivoNombre ? ' · ' + ICON_CLIP_SVG + escapeHtml(p.archivoNombre) : ''}</p>
               </div>
               ${p.archivoDatos ? `<button onclick="verArchivoPensum('${p.id}')" class="text-xs font-semibold text-turquesa hover:underline mr-3">Ver archivo</button>` : ''}
               <button onclick="openModal('pensum','${p.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
@@ -5521,9 +5440,20 @@ Fundación A+`;
   // suficiente información real para evaluarlo.
   // async: 'usuarios' vía MySQL + promedioGeneralEstudianteCohorte() (que
   // también es async, usa 'horarios' vía MySQL) resueltos con Promise.all
-  // ANTES del .map() que arma cada fila (ese .map() no puede usar await).
-  async function computeSemaforo() {
-    const usuarios = (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante');
+  // computeSemaforo: cálculo optimizado en servidor MySQL (/api/semaforo) en ~7ms.
+  // Cuenta con fallback resiliente a cálculo local si el backend está temporalmente inaccesible.
+  async function computeSemaforo(cohorteFiltro = '') {
+    try {
+      const q = cohorteFiltro ? ('?cohorte=' + encodeURIComponent(cohorteFiltro)) : '';
+      const datos = await Store.list('semaforo' + q);
+      if (Array.isArray(datos) && datos.length > 0) {
+        return datos;
+      }
+    } catch (e) {
+      console.warn('[computeSemaforo] Fallback a cálculo local:', e.message);
+    }
+
+    const usuarios = (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && (!cohorteFiltro || u.cohorte === cohorteFiltro));
     const asistenciaTodos = await Store.list('asistencia');
     const cfg = (await Store.get('configuracion')) || SEED.configuracion;
     const resultadosPromedio = await Promise.all(usuarios.map(u => u.cohorte ? promedioGeneralEstudianteCohorte(u.nombre, u.cohorte, null) : null));
@@ -5554,18 +5484,45 @@ Fundación A+`;
     });
   }
 
+  let semaforoCohorteFiltro = '';
+
+  async function cambiarFiltroSemaforoCohorte(cohorte) {
+    semaforoCohorteFiltro = cohorte || '';
+    await renderSemaforo();
+  }
+  window.cambiarFiltroSemaforoCohorte = cambiarFiltroSemaforoCohorte;
+
   async function renderSemaforo() {
-    const data = await computeSemaforo();
+    const [data, modulos] = await Promise.all([computeSemaforo(), Store.list('modulos')]);
     const riesgoColor = { Verde: { bg: '#1FC8C01A', text: '#0f8f89', dot: '#1FC8C0' }, Amarillo: { bg: '#F5A6231A', text: '#b5790f', dot: '#F5A623' }, Rojo: { bg: '#F0455C1A', text: '#F0455C', dot: '#F0455C' } };
 
-    const rows = data.map(s => `
-      <tr data-search="${escapeHtml((s.nombre + ' ' + s.cohorte).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+    // Lista ordenada de cohortes únicas disponibles
+    const cohortes = Array.from(new Set([
+      ...modulos.map(m => m.nombre).filter(Boolean),
+      ...data.map(s => s.cohorte).filter(Boolean)
+    ])).sort();
+
+    // Si el filtro seleccionado ya no existe en el sistema, reiniciar
+    if (semaforoCohorteFiltro && !cohortes.includes(semaforoCohorteFiltro)) {
+      semaforoCohorteFiltro = '';
+    }
+
+    const dataFiltrada = semaforoCohorteFiltro
+      ? data.filter(s => s.cohorte === semaforoCohorteFiltro)
+      : data;
+
+    const enRiesgo = dataFiltrada.filter(s => s.riesgo === 'Rojo').length;
+    const enAlerta = dataFiltrada.filter(s => s.riesgo === 'Amarillo').length;
+    const enVerde = dataFiltrada.filter(s => s.riesgo === 'Verde').length;
+
+    const rows = dataFiltrada.map(s => `
+      <tr data-search="${escapeHtml((s.nombre + ' ' + (s.cohorte || '') + ' ' + s.riesgo + ' ' + (s.motivo || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-3 px-4 text-sm font-semibold text-ink">
           <span class="inline-block w-2 h-2 rounded-full mr-2" style="background:${riesgoColor[s.riesgo].dot}"></span>${escapeHtml(s.nombre)}
         </td>
         <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(s.cohorte || '—')}</td>
-        <td class="py-3 px-4 text-sm text-slate2">${s.promedio}</td>
-        <td class="py-3 px-4 text-sm text-slate2">${s.asistencia === '—' ? '—' : s.asistencia + '%'}</td>
+        <td class="py-3 px-4 text-sm text-slate2 font-mono">${s.promedio}</td>
+        <td class="py-3 px-4 text-sm text-slate2 font-mono">${s.asistencia === '—' ? '—' : s.asistencia + '%'}</td>
         <td class="py-3 px-4">
           <span class="text-xs font-semibold rounded-full px-2.5 py-1" style="background:${riesgoColor[s.riesgo].bg};color:${riesgoColor[s.riesgo].text}">${s.riesgo}</span>
         </td>
@@ -5574,17 +5531,42 @@ Fundación A+`;
 
     document.getElementById('mount-semaforo').innerHTML = `
       <div class="admin-panel-card p-6">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5 pb-4 border-b border-gray-100">
           <div>
-            <h2 class="text-lg font-extrabold text-ink">Semáforo de riesgo</h2>
-            <p class="text-sm text-slate2 mt-0.5">100% automático: calculado con el promedio real de calificaciones y el % real de asistencia de cada estudiante. Solo lectura — ajusta los umbrales desde Configuración si necesitas cambiar la sensibilidad.</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="relative">
-              <input oninput="filterTable('semaforo', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
-              <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-extrabold text-ink">Semáforo de riesgo</h2>
+              <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-morado/10 text-morado">${dataFiltrada.length} estudiante${dataFiltrada.length === 1 ? '' : 's'}</span>
+              ${semaforoCohorteFiltro ? `<span class="text-xs font-semibold px-2 py-0.5 rounded-md bg-gray-100 text-slate2">Cohorte: ${escapeHtml(semaforoCohorteFiltro)}</span>` : ''}
             </div>
-            <button onclick="exportarSemaforoCSV()" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-sm font-semibold px-3.5 py-2 transition">CSV</button>
+            <p class="text-sm text-slate2 mt-0.5">Calculado automáticamente con el promedio real de calificaciones y el % real de asistencia de cada estudiante.</p>
+            <div class="flex items-center gap-2 mt-2">
+              <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>${enRiesgo} en riesgo
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>${enAlerta} en alerta
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-teal-500"></span>${enVerde} en orden
+              </span>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <div class="flex items-center gap-1.5">
+              <label for="filtroSemaforoCohorte" class="text-xs font-semibold text-slate2 shrink-0">Cohorte:</label>
+              <select id="filtroSemaforoCohorte" onchange="cambiarFiltroSemaforoCohorte(this.value)" class="rounded-xl border border-morado/25 bg-morado/5 px-3 py-2 text-xs sm:text-sm font-medium text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition">
+                <option value="">Todas las cohortes (${data.length})</option>
+                ${cohortes.map(c => {
+                  const cant = data.filter(s => s.cohorte === c).length;
+                  return `<option value="${escapeHtml(c)}" ${semaforoCohorteFiltro === c ? 'selected' : ''}>${escapeHtml(c)} (${cant})</option>`;
+                }).join('')}
+              </select>
+            </div>
+            <div class="relative">
+              <input data-table="table-semaforo" oninput="filterTable('semaforo', this.value)" type="text" placeholder="Buscar estudiante..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-44 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <button onclick="exportarSemaforoCSV()" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-xs sm:text-sm font-semibold px-3.5 py-2 transition">CSV</button>
           </div>
         </div>
         <div class="table-responsive-container">
@@ -5592,7 +5574,7 @@ Fundación A+`;
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
               <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Promedio</th><th class="py-2.5 px-4">Asistencia</th><th class="py-2.5 px-4">Riesgo</th><th class="py-2.5 px-4">Motivo</th>
             </tr></thead>
-            <tbody>${rows || emptyRow(6)}</tbody>
+            <tbody>${rows || '<tr><td colspan="6" class="text-sm text-slate2 text-center py-6">No se encontraron estudiantes para los criterios seleccionados.</td></tr>'}</tbody>
           </table>
         </div>
         ${!data.length ? '<p class="text-sm text-slate2 text-center py-4">Crea usuarios con rol "Estudiante" para que aparezcan aquí.</p>' : ''}
@@ -5602,18 +5584,22 @@ Fundación A+`;
 
   // El semáforo se calcula en vivo (no vive en Store como lista), así que
   // no puede usar exportCSV(entity) genérico — arma el CSV directamente
-  // desde computeSemaforo().
+  // desde computeSemaforo(), respetando el filtro de cohorte si está activo.
   async function exportarSemaforoCSV() {
     const data = await computeSemaforo();
-    if (!data.length) { toast('No hay datos para exportar', 'err'); return; }
+    const dataFiltrada = semaforoCohorteFiltro
+      ? data.filter(s => s.cohorte === semaforoCohorteFiltro)
+      : data;
+    if (!dataFiltrada.length) { toast('No hay datos para exportar', 'err'); return; }
     const keys = ['nombre', 'cohorte', 'promedio', 'asistencia', 'riesgo', 'motivo'];
     const rows = [keys.join(',')].concat(
-      data.map(r => keys.map(k => '"' + String(r[k] ?? '').replace(/"/g, '""') + '"').join(','))
+      dataFiltrada.map(r => keys.map(k => '"' + String(r[k] ?? '').replace(/"/g, '""') + '"').join(','))
     );
     const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'semaforo.csv';
+    const sufijo = semaforoCohorteFiltro ? '_' + semaforoCohorteFiltro.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
+    a.href = url; a.download = `semaforo_riesgo${sufijo}.csv`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
     toast('Archivo CSV exportado', 'ok');
@@ -5796,7 +5782,7 @@ Fundación A+`;
 </style></head>
 <body>
   <div class="barra-accion">
-    ${m.archivoDatos ? `<button class="adjunto" onclick="window.open('${m.archivoDatos}','_blank')">📎 Ver archivo adjunto</button>` : ''}
+    ${m.archivoDatos ? `<button class="adjunto" onclick="window.open('${m.archivoDatos}','_blank')"><svg style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:6px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>Ver archivo adjunto</button>` : ''}
     <button onclick="window.print()">Descargar / Imprimir</button>
   </div>
   <div class="hoja">
@@ -5822,7 +5808,7 @@ Fundación A+`;
     <div class="cuerpo">
       <p>Estimado/a ${escapeHtml(nombrePila)},</p>
       <p>Por medio del presente memorando, la Fundación A+ le informa que el documento oficial correspondiente a este comunicado se encuentra adjunto.</p>
-      ${m.archivoDatos ? `<p style="text-align:center;margin:22px 0"><button class="adjunto" onclick="window.open('${m.archivoDatos}','_blank')" style="border:none;border-radius:9999px;padding:12px 28px;font-size:14px;font-weight:700;cursor:pointer;background:#F5A623;color:#fff;font-family:'Inter',Arial,sans-serif">📎 Abrir ${escapeHtml(m.archivoNombre || 'documento adjunto')}</button></p>` : '<p><em>Este memorando no tiene un archivo adjunto.</em></p>'}
+      ${m.archivoDatos ? `<p style="text-align:center;margin:22px 0"><button class="adjunto" onclick="window.open('${m.archivoDatos}','_blank')" style="border:none;border-radius:9999px;padding:12px 28px;font-size:14px;font-weight:700;cursor:pointer;background:#F5A623;color:#fff;font-family:'Inter',Arial,sans-serif"><svg style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>Abrir ${escapeHtml(m.archivoNombre || 'documento adjunto')}</button></p>` : '<p><em>Este memorando no tiene un archivo adjunto.</em></p>'}
       <div class="firma">
         <p>Cordialmente,</p>
         <p><strong>Equipo Directivo</strong><br/>Fundación A+</p>
@@ -5881,7 +5867,7 @@ Fundación A+`;
         <td class="py-3 px-4">${statusPill(m.estado, ESTADO_COLORS)}</td>
         <td class="py-3 px-4 text-right whitespace-nowrap">
           <button onclick="abrirMemorandoCarta('${m.id}')" class="text-xs font-semibold text-turquesa hover:underline mr-3">Ver carta</button>
-          ${m.archivoDatos ? `<button onclick="verArchivoMemorando('${m.id}')" class="text-xs font-semibold text-oro hover:underline mr-3">📎 Archivo</button>` : ''}
+          ${m.archivoDatos ? `<button onclick="verArchivoMemorando('${m.id}')" class="text-xs font-semibold text-oro hover:underline mr-3 inline-flex items-center gap-1">${ICON_CLIP_SVG}Archivo</button>` : ''}
           <button onclick="openModal('memorandos','${m.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
           <button onclick="askDelete('memorandos','${m.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
         </td>
@@ -5901,16 +5887,20 @@ Fundación A+`;
       </div>`;
   }
 
-  // Abre el archivo adjunto de un memorando (PDF/Word/PowerPoint) en una
-  // pestaña nueva — mismo patrón que verArchivoPensum()/descargarPqrAdmin().
   function verArchivoMemorando(id) {
-    // window.open() síncrono primero, mismo patrón que verArchivoPensum().
     const win = window.open('', '_blank');
     if (!win) { toast('Habilita las ventanas emergentes para ver el archivo', 'err'); return; }
-    Store.list('memorandos').then(records => {
-      const m = records.find(x => x.id === id);
-      if (!m || !m.archivoDatos) { win.close(); toast('Este memorando no tiene un archivo adjunto', 'info'); return; }
+    Store.getArchivo('memorandos', id).then(m => {
+      if (!m || !m.archivoDatos || m.archivoDatos === '1') {
+        win.close();
+        toast('Este memorando no tiene un archivo adjunto disponible', 'info');
+        return;
+      }
       win.document.write(`<iframe src="${m.archivoDatos}" style="border:0;width:100%;height:100vh"></iframe>`);
+      win.document.title = m.archivoNombre || m.titulo;
+    }).catch(() => {
+      win.close();
+      toast('No se pudo cargar el archivo del memorando', 'err');
     });
   }
 
@@ -5996,20 +5986,34 @@ Fundación A+`;
   // cuidado que en abrirMemorandoCarta/descargarPensumEstudiante).
   async function descargarPqrAdmin(id) {
     const win = window.open('', '_blank');
-    const registros = await Store.list('pqr');
-    const p = registros.find(r => r.id === id);
-    if (!p || !p.archivoDatos) { toast('Esta PQR no tiene un archivo adjunto', 'info'); win.close(); return; }
+    let p = null;
+    try {
+      p = await Store.getArchivo('pqr', id);
+    } catch (e) {
+      const registros = await Store.list('pqr');
+      p = registros.find(r => r.id === id);
+    }
+    if (!p || !p.archivoDatos || p.archivoDatos === '1') {
+      toast('Esta PQR no tiene un archivo adjunto disponible', 'info');
+      if (win) win.close();
+      return;
+    }
 
     win.document.write(`<iframe src="${p.archivoDatos}" style="border:0;width:100%;height:100vh"></iframe>`);
     win.document.title = p.archivoNombre || p.asunto;
 
     if (p.estado !== 'Activo') {
-      p.estado = 'Activo';
-      p.fechaActivacion = new Date().toISOString().slice(0, 10);
-      await Store.set('pqr', registros);
+      const registros = await Store.list('pqr');
+      const idx = registros.findIndex(r => r.id === id);
+      if (idx !== -1) {
+        registros[idx].estado = 'Activo';
+        registros[idx].fechaActivacion = new Date().toISOString().slice(0, 10);
+        await Store.set('pqr', registros);
+      }
       renderPqr();
       toast('PDF descargado. Estado actualizado a Activo.', 'ok');
-    }  }
+    }
+  }
 
   // Estado del filtro del panel Calificaciones (Admin). mes=null significa
   // "General": promedia TODOS los meses con notas de cada docente en esa
@@ -6383,7 +6387,9 @@ Fundación A+`;
     if (!docentesConInformes.length) {
       wrap.innerHTML = `
         <div class="admin-panel-card p-10 text-center">
-          <div class="w-12 h-12 rounded-2xl bg-morado/10 text-morado grid place-items-center text-xl mx-auto mb-3">📋</div>
+          <div class="w-12 h-12 rounded-2xl bg-morado/10 text-morado grid place-items-center mx-auto mb-3">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          </div>
           <p class="text-base font-extrabold text-ink">No hay informes enviados para este periodo</p>
           <p class="text-xs text-slate2 mt-1 max-w-md mx-auto leading-relaxed">Los docentes de la cohorte "${escapeHtml(informesAdminState.cohorte)}" aún no han enviado informes para ${informesAdminState.mes ? mesLabel(informesAdminState.mes) : 'este periodo'}.</p>
         </div>`;
@@ -6842,7 +6848,8 @@ Fundación A+`;
         <div class="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <input id="cfg_correoPrueba" type="email" placeholder="Ingresa tu correo para probar envío" class="rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-morado/30 flex-1" />
           <button type="button" onclick="probarEnvioCorreoTest()" class="rounded-xl bg-morado/10 hover:bg-morado/20 text-morado font-bold text-xs px-4 py-2.5 transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0">
-            <span>🧪 Probar envío de correo</span>
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+            <span>Probar envío de correo</span>
           </button>
         </div>
 
@@ -6963,10 +6970,10 @@ Fundación A+`;
 
   /** Pinta el bloque "Contacto" del footer público con los datos reales de la fundación. */
   // async: 'configuracion' vía MySQL (Fase 4).
-  async function renderContactoPublico() {
+  async function renderContactoPublico(cfgDirecta) {
     const el = document.getElementById('contactoPublico');
     if (!el) return; // el sitio público aún no está en el DOM (no debería pasar, pero por seguridad)
-    const cfg = (await Store.get('configuracion')) || SEED.configuracion;
+    const cfg = cfgDirecta || (await Store.get('configuracion')) || SEED.configuracion;
 
     const filas = [];
     if (cfg.correo) filas.push(`<a href="mailto:${escapeHtml(cfg.correo)}" class="flex items-center gap-2 hover:text-ink transition">${escapeHtml(cfg.correo)}</a>`);
@@ -6979,8 +6986,8 @@ Fundación A+`;
 
   /** Activa/desactiva y enlaza los botones "Postular" del sitio con el link que definió el Superadmin. */
   // async: 'configuracion' vía MySQL (Fase 4).
-  async function actualizarBotonesPostular() {
-    const cfg = (await Store.get('configuracion')) || SEED.configuracion;
+  async function actualizarBotonesPostular(cfgDirecta) {
+    const cfg = cfgDirecta || (await Store.get('configuracion')) || SEED.configuracion;
     const habilitada = !!(cfg.postulacionHabilitada && cfg.postulacionUrl);
     document.querySelectorAll('.btn-postular').forEach(btn => {
       btn.classList.toggle('opacity-50', !habilitada);
@@ -7025,19 +7032,16 @@ Fundación A+`;
   // migrada a MySQL) — submitLogin ya la llama con await.
   async function initAdmin() {
     await seedIfEmpty();
+    await migrarNotasModulosSinMes();
     if (!ADMIN_BOOTED) {
       ADMIN_BOOTED = true;
     }
     actualizarBadgePqrAdmin();
   }
 
-  /* =====================================================================
-     PANEL DOCENTE — módulos funcionales
-     Persistencia: localStorage (misma capa Store del panel administrativo).
-     Todas las entidades nuevas (notas_modulos, informes_docente,
-     agenda_docente) arrancan vacías: sin datos ficticios, listas para que
-     el docente las llene con información real.
-     ===================================================================== */
+  /**
+   * Panel Docente — módulos funcionales.
+   */
 
   // Cohortes/módulos que dicta el docente que inició sesión.
   // Se calcula a partir del Horario real (docentesDeCohorte), que es la
@@ -7364,6 +7368,17 @@ Fundación A+`;
     return `${y}-${m}-${dia}`;
   }
 
+  function horaHoyLocal() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `${y}-${m}-${dia} ${h}:${min}:${s}`;
+  }
+
   // async: 'qr_tokens' vía MySQL.
   // Genera un token aleatorio nuevo CADA DÍA para evitar fraude.
   // Los códigos QR de días anteriores expiran automáticamente.
@@ -7416,16 +7431,7 @@ Fundación A+`;
 
     await Store.set('qr_tokens', tokens);
 
-    // Reiniciar también la hora de inicio de la sesión de hoy para que la ventana de tiempo comience desde cero con el nuevo QR
-    try {
-      const sesiones = await Store.list('sesiones_asistencia');
-      const sesHoy = sesiones.find(s => s.cohorte === cohorteNombre && s.iniciadaPor === docenteNombre && s.fecha === hoy);
-      if (sesHoy) {
-        sesHoy.horaInicio = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        await Store.set('sesiones_asistencia', sesiones);
-      }
-    } catch (e) {}
-
+    // Nota antifraude: la hora de inicio de la sesión de hoy nunca se altera; la clase solo se activa una vez al día.
     toast('¡Códigos QR renovados con éxito! Los anteriores han expirado.', 'ok');
 
     if (typeof renderCodigosQr === 'function') await renderCodigosQr();
@@ -7524,12 +7530,16 @@ Fundación A+`;
 
   // async: 'sesiones_asistencia' vía MySQL.
   async function sesionAsistenciaHoy(cohorteNombre, docenteNombre) {
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = fechaHoyLocal();
     return (await Store.list('sesiones_asistencia')).find(s => s.cohorte === cohorteNombre && s.fecha === hoy && s.iniciadaPor === docenteNombre) || null;
   }
 
-  function minutosTranscurridos(horaInicioISO) {
-    return (Date.now() - new Date(horaInicioISO).getTime()) / 60000;
+  function minutosTranscurridos(horaInicioStr) {
+    if (!horaInicioStr) return 0;
+    const s = String(horaInicioStr).trim();
+    const d = new Date(s.includes('T') ? s : s.replace(' ', 'T'));
+    const diffMs = Date.now() - d.getTime();
+    return Math.max(0, diffMs / 60000);
   }
 
   function estadoPorTiempo(mins) {
@@ -7622,46 +7632,87 @@ Fundación A+`;
 
     const tarjetasQr = `
       <div class="grid sm:grid-cols-2 gap-5 mb-6">
+        <!-- Tarjeta QR Docente -->
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 text-center">
-          <div class="flex items-center justify-between mb-1">
-            <p class="text-sm font-bold text-ink">Tu código — actívalo cada día</p>
-            <span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">Código de hoy</span>
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2 text-left">
+              <div class="w-7 h-7 rounded-lg bg-morado/10 text-morado flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 14v6m-4-2.5v2.5m8-2.5v2.5"/></svg>
+              </div>
+              <p class="text-sm font-bold text-ink">Tu código de inicio de clase</p>
+            </div>
+            <span class="text-[10px] ${sesion ? 'bg-morado/10 text-morado border border-morado/20' : 'bg-emerald-100 text-emerald-800'} px-2 py-0.5 rounded-full font-semibold">${sesion ? 'Activada hoy (' + fmtHora(sesion.horaInicio) + ')' : 'Código de hoy'}</span>
           </div>
-          <p class="text-xs text-slate2 mb-4">Código para <strong>${escapeHtml(materiaDoc)}</strong>. Se renueva aleatoriamente cada día para evitar fraude.</p>
-          <div id="qrDocenteImg" class="flex justify-center mb-4"></div>
-          <div class="flex items-center justify-center gap-3">
-            <button onclick="imprimirQr('Código del docente — ${escapeHtml(materiaDoc)}','Escanéalo para activar la asistencia de hoy','qrDocenteImg')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
-            <span class="text-slate2">·</span>
-            <button type="button" onclick="regenerarTokensQRCohorte('${escapeHtml(moduloSel.nombre)}', '${escapeHtml(doc.nombre)}')" class="text-xs font-semibold text-turquesa hover:underline">🔄 Renovar QR ahora</button>
+          <p class="text-xs text-slate2 mb-4 text-left">${sesion ? `Esta clase ya fue activada hoy a las <strong>${fmtHora(sesion.horaInicio)}</strong>. La asistencia solo se activa una vez al día; si vuelves a escanear o abrir el enlace, el sistema no volverá a activar la sesión.` : `Escanéalo con tu celular o ábrelo en el navegador para activar la asistencia de hoy en <strong>${escapeHtml(materiaDoc)}</strong>.`}</p>
+          <div id="qrDocenteImg" class="flex justify-center mb-4 min-h-[160px] items-center"></div>
+          <div class="flex flex-wrap items-center justify-center gap-3 pt-2 border-t border-gray-100">
+            <a href="${urlQr('docente', tokenDocente, true)}" target="_blank" class="text-xs font-semibold text-morado hover:underline flex items-center gap-1">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+              ${sesion ? 'Ver estado de sesión' : 'Abrir enlace'}
+            </a>
+            <span class="text-slate2/40">•</span>
+            <button type="button" onclick="copiarEnlaceDocente('${tokenDocente}')" class="text-xs font-semibold text-turquesa hover:underline flex items-center gap-1 cursor-pointer">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+              Copiar enlace
+            </button>
+            <span class="text-slate2/40">•</span>
+            <button onclick="imprimirQr('Código del docente — ${escapeHtml(materiaDoc)}','Escanéalo para activar la asistencia de hoy','qrDocenteImg')" class="text-xs font-semibold text-morado hover:underline">
+              Imprimir
+            </button>
+            <span class="text-slate2/40">•</span>
+            <button type="button" onclick="regenerarTokensQRCohorte('${escapeHtml(moduloSel.nombre)}', '${escapeHtml(doc.nombre)}')" class="text-xs font-semibold text-coral hover:underline flex items-center gap-1" title="Generar nuevo código para hoy">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Renovar QR
+            </button>
           </div>
         </div>
+
+        <!-- Tarjeta QR Estudiantes -->
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 text-center">
-          <div class="flex items-center justify-between mb-1">
-            <p class="text-sm font-bold text-ink">Código para tus estudiantes</p>
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2 text-left">
+              <div class="w-7 h-7 rounded-lg bg-turquesa/10 text-turquesa flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 14v6m-4-2.5v2.5m8-2.5v2.5"/></svg>
+              </div>
+              <p class="text-sm font-bold text-ink">Código para tus estudiantes</p>
+            </div>
             <span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">Código de hoy</span>
           </div>
-          <p class="text-xs text-slate2 mb-4">Proyéctalo en pantalla o en el salón. Se actualiza cada día para que no puedan reutilizar fotos de clases anteriores.</p>
-          <div id="qrEstudianteImg" class="flex justify-center mb-4"></div>
-          <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(materiaDoc)}','Escanéalo e ingresa tu correo institucional','qrEstudianteImg')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
+          <p class="text-xs text-slate2 mb-4 text-left">Proyéctalo en clase o comparte el enlace. Al escanearlo, su asistencia se registrará automáticamente en el sistema.</p>
+          <div id="qrEstudianteImg" class="flex justify-center mb-4 min-h-[160px] items-center"></div>
+          <div class="flex flex-wrap items-center justify-center gap-3 pt-2 border-t border-gray-100">
+            <button type="button" onclick="copiarEnlaceEstudiante('${tokenEstudiante}')" class="text-xs font-semibold text-turquesa hover:underline flex items-center gap-1 cursor-pointer">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+              Copiar enlace
+            </button>
+            <span class="text-slate2/40">•</span>
+            <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(materiaDoc)}','Escanéalo para registrar tu asistencia','qrEstudianteImg')" class="text-xs font-semibold text-morado hover:underline">
+              Descargar / Agrandar
+            </button>
+          </div>
         </div>
       </div>`;
 
     let tarjetaSesion;
     if (!sesion) {
       tarjetaSesion = `
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <p class="text-sm font-bold text-ink">Asistencia de hoy: sin activar</p>
-            <p class="text-xs text-slate2 mt-1">Actívala escaneando tu código QR de arriba, o con este botón si estás en este mismo dispositivo. Todos los estudiantes inician con <strong>Falla (pérdida)</strong> por defecto y tienen hasta ${VENTANA_PUNTUAL_MIN} min para llegar puntuales y hasta ${VENTANA_TARDE_MIN} min para llegar tarde.</p>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-xl bg-slate2/10 text-slate2 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            </div>
+            <div>
+              <p class="text-sm font-bold text-ink">Asistencia de hoy: sin activar</p>
+              <p class="text-xs text-slate2 mt-1">Para activar la clase de hoy, <strong>escanea tu código QR del docente</strong> o haz clic en <a href="${urlQr('docente', tokenDocente, true)}" target="_blank" class="text-turquesa font-semibold underline">Abrir enlace</a>. Al activarla, todos los estudiantes inician con <strong>Falla (pérdida)</strong> por defecto hasta que escaneen el código QR de estudiantes.</p>
+            </div>
           </div>
-          <button onclick="habilitarSesionAsistenciaDocente()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-2.5 px-6 hover:bg-morado transition shrink-0">Activar ahora</button>
         </div>`;
     } else {
       const ventana = estadoVentanaSesion(sesion);
       tarjetaSesion = `
         <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
-          <p class="text-sm font-bold text-ink">Asistencia de hoy: activa</p>
-          <p class="text-xs text-slate2 mt-1">Activada a las ${new Date(sesion.horaInicio).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}${sesion.iniciadaPor ? ' por ' + escapeHtml(sesion.iniciadaPor) : ''}. Todos los estudiantes inician con <strong>Falla</strong> por defecto hasta que escaneen su código.</p>
+          <p class="text-sm font-bold text-ink">Asistencia de hoy: ya activada (única activación del día)</p>
+          <p class="text-xs text-slate2 mt-1">Activada a las ${fmtHora(sesion.horaInicio)}${sesion.iniciadaPor ? ' por ' + escapeHtml(sesion.iniciadaPor) : ''}. Todos los estudiantes iniciaron con <strong>Falla</strong> por defecto hasta que confirmen su asistencia. Por seguridad, esta clase no se puede volver a activar en el día.</p>
           <p class="text-xs font-bold mt-2" style="color:${ventana.color}">${ventana.texto}</p>
         </div>`;
     }
@@ -7693,12 +7744,13 @@ Fundación A+`;
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <p class="text-sm font-bold text-ink">Asistencia de hoy — ${escapeHtml(moduloSel.modulo)}</p>
-            <p class="text-xs text-slate2 mt-0.5">${fmtDate(new Date().toISOString().slice(0, 10))} · Todo se calcula automáticamente por tiempo, sin marcado manual.</p>
+            <p class="text-xs text-slate2 mt-0.5">${fmtDate(fechaHoyLocal())} · Todo se calcula automáticamente por tiempo, sin marcado manual.</p>
           </div>
           ${selector}
         </div>
       </div>
       ${tarjetaSesion}
+      ${tarjetasQr}
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden mb-6">
         <div class="overflow-x-auto">
           <table class="w-full">
@@ -7716,6 +7768,10 @@ Fundación A+`;
           </table>
         </div>
       </div>`;
+
+    // Renderizar los códigos QR visibles en pantalla para el docente
+    pintarQrImprimible('qrDocenteImg', urlQr('docente', tokenDocente));
+    pintarQrImprimible('qrEstudianteImg', urlQr('estudiante', tokenEstudiante));
 
     asistenciaDocenteTimer = setInterval(() => {
       const panel = document.getElementById('panel-t-asistencia');
@@ -7780,7 +7836,8 @@ Fundación A+`;
             </div>
             <div class="flex items-center gap-2">
               <button type="button" onclick="regenerarTokensQRCohorte('${escapeHtml(combo.cohorte)}', '${escapeHtml(combo.docente)}')" class="text-[11px] font-bold text-morado bg-morado/10 hover:bg-morado/20 px-2.5 py-1 rounded-full flex items-center gap-1 transition cursor-pointer" title="Generar un nuevo código aleatorio inmediatamente para evitar fraude">
-                🔄 Renovar QR
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                Renovar QR
               </button>
               <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-morado/10 text-morado">${escapeHtml(combo.docente)}</span>
             </div>
@@ -7792,9 +7849,15 @@ Fundación A+`;
               <div class="flex flex-col gap-2 mt-2">
                 <button onclick="imprimirQr('Código del docente — ${escapeHtml(combo.docente)} · ${escapeHtml(combo.materia)}','Escanéalo para activar la asistencia de hoy','${idDoc}')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
                 <div class="flex items-center justify-center gap-2 text-[11px] pt-2 border-t border-gray-100">
-                  <a href="${escapeHtml(urlQr('docente', tokenDoc, true))}" target="_blank" class="text-morado font-bold hover:underline" title="Probar activación directamente en el navegador">🔗 Activar en PC</a>
+                  <a href="${escapeHtml(urlQr('docente', tokenDoc, true))}" target="_blank" class="text-morado font-bold hover:underline flex items-center gap-1" title="Probar activación directamente en el navegador">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    Activar en PC
+                  </a>
                   <span class="text-slate2">·</span>
-                  <button type="button" onclick="copiarLinkQr('${escapeHtml(urlQr('docente', tokenDoc))}')" class="text-turquesa font-bold hover:underline">📋 Copiar enlace</button>
+                  <button type="button" onclick="copiarLinkQr('${escapeHtml(urlQr('docente', tokenDoc))}')" class="text-turquesa font-bold hover:underline flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                    Copiar enlace
+                  </button>
                 </div>
               </div>
             </div>
@@ -7804,9 +7867,15 @@ Fundación A+`;
               <div class="flex flex-col gap-2 mt-2">
                 <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(combo.cohorte)} · ${escapeHtml(combo.materia)}','Escanéalo e ingresa tu correo institucional','${idEst}')" class="text-xs font-semibold text-morado hover:underline">Descargar / Imprimir</button>
                 <div class="flex items-center justify-center gap-2 text-[11px] pt-2 border-t border-gray-100">
-                  <a href="${escapeHtml(urlQr('estudiante', tokenEst, true))}" target="_blank" class="text-morado font-bold hover:underline" title="Probar formulario directamente en el navegador">🔗 Abrir en PC</a>
+                  <a href="${escapeHtml(urlQr('estudiante', tokenEst, true))}" target="_blank" class="text-morado font-bold hover:underline flex items-center gap-1" title="Probar formulario directamente en el navegador">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    Abrir en PC
+                  </a>
                   <span class="text-slate2">·</span>
-                  <button type="button" onclick="copiarLinkQr('${escapeHtml(urlQr('estudiante', tokenEst))}')" class="text-turquesa font-bold hover:underline">📋 Copiar enlace</button>
+                  <button type="button" onclick="copiarLinkQr('${escapeHtml(urlQr('estudiante', tokenEst))}')" class="text-turquesa font-bold hover:underline flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                    Copiar enlace
+                  </button>
                 </div>
               </div>
             </div>
@@ -7816,16 +7885,19 @@ Fundación A+`;
       };
     });
 
-    const fechaHoyStr = fmtDate(new Date().toISOString().slice(0, 10));
+    const fechaHoyStr = fmtDate(fechaHoyLocal());
     document.getElementById('mount-codigosqr').innerHTML = `
       <div class="admin-panel-card p-6 mb-6">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="text-lg">🛡️</span>
+        <div class="flex items-center gap-2.5 mb-1">
+          <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          </div>
           <h2 class="text-lg font-extrabold text-ink">Códigos QR de asistencia — Renovación diaria antifraude</h2>
         </div>
         <p class="text-sm text-slate2 mt-1">Los códigos QR de cada clase se <strong>actualizan aleatoriamente cada día de forma automática</strong>. De esta manera se evita el fraude: los enlaces de días anteriores expiran para asegurar que los estudiantes solo puedan registrar asistencia si están presentes en la clase del día.</p>
         <div class="mt-3 flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 inline-flex font-medium">
-          <span>✓ Códigos activos generados para hoy: <strong>${fechaHoyStr}</strong></span>
+          <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          <span>Códigos activos generados para hoy: <strong>${fechaHoyStr}</strong></span>
         </div>
       </div>
       <div class="grid lg:grid-cols-2 gap-5">${tarjetas.map(t => t.html).join('')}</div>`;
@@ -7851,11 +7923,11 @@ Fundación A+`;
     const cursoNombre = (await cursoDeDocenteEnCohorte(doc.nombre, moduloSel.nombre)) || moduloSel.modulo;
     const sesiones = await Store.list('sesiones_asistencia');
     const nuevaSesId = uid('ses');
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = fechaHoyLocal();
     sesiones.push({
       id: nuevaSesId, cohorte: moduloSel.nombre, modulo: cursoNombre,
       materia: cursoNombre, fecha: hoy,
-      horaInicio: new Date().toISOString(), codigo: generarCodigoSesion(), iniciadaPor: doc.nombre
+      horaInicio: horaHoyLocal(), codigo: generarCodigoSesion(), iniciadaPor: doc.nombre
     });
     await Store.set('sesiones_asistencia', sesiones);
 
@@ -7886,14 +7958,10 @@ Fundación A+`;
     renderAsistenciaDocente();
   }
 
-  /* =====================================================================
-     ESCANEO REAL DE LOS QR IMPRESOS (?qr=docente|estudiante&t=TOKEN)
-     ---------------------------------------------------------------------
-     Al abrir con la cámara del celular la URL codificada en el QR, esta
-     pantalla (qrView) toma el control ANTES de cualquier login: el token
-     ya identifica sin ambigüedad la cohorte + docente + materia, así que
-     no hace falta iniciar sesión para activar o registrar asistencia.
-     ===================================================================== */
+  /**
+   * Escaneo de códigos QR de asistencia (?qr=docente|estudiante&t=TOKEN).
+   * Identifica cohorte, docente y materia para activación o registro de asistencia.
+   */
 
   function qrLandingShell(icono, color, titulo, subtitulo, cuerpoHtml) {
     return `
@@ -7908,9 +7976,25 @@ Fundación A+`;
 
   function fmtHora(iso) {
     if (!iso) return '—';
-    const d = new Date(iso);
-    return isNaN(d) ? iso : d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const s = String(iso).trim();
+    const d = new Date(s.includes('T') ? s : s.replace(' ', 'T'));
+    return isNaN(d.getTime()) ? iso : d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
   }
+
+  // Copia el enlace de activación para el docente
+  function copiarEnlaceDocente(token) {
+    const enlace = urlQr('docente', token);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(enlace).then(() => {
+        toast('Enlace del docente copiado al portapapeles', 'ok');
+      }).catch(() => {
+        prompt('Copia este enlace para activar la clase:', enlace);
+      });
+    } else {
+      prompt('Copia este enlace para activar la clase:', enlace);
+    }
+  }
+  window.copiarEnlaceDocente = copiarEnlaceDocente;
 
   // Copia el enlace de asistencia para compartirlo con los estudiantes
   function copiarEnlaceEstudiante(token) {
@@ -7969,7 +8053,9 @@ Fundación A+`;
       if (!resp.ok) {
         document.getElementById('qrViewCard').innerHTML = `
           <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center max-w-md mx-auto">
-            <div class="w-14 h-14 rounded-full bg-coral/10 text-coral flex items-center justify-center mx-auto mb-4 text-2xl">⚠️</div>
+            <div class="w-14 h-14 rounded-full bg-coral/10 text-coral flex items-center justify-center mx-auto mb-4">
+              <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            </div>
             <h2 class="text-xl font-bold text-ink mb-2">Código no válido o expirado</h2>
             <p class="text-sm text-slate2 mb-6">${escapeHtml(datos.error || 'Este QR no corresponde a ninguna cohorte activa.')}</p>
             <a href="${location.pathname}" class="inline-block rounded-full bg-morado text-white text-xs font-semibold px-6 py-2.5 hover:opacity-90 transition">Volver al inicio</a>
@@ -7995,7 +8081,9 @@ Fundación A+`;
     } catch (e) {
       document.getElementById('qrViewCard').innerHTML = `
         <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center max-w-md mx-auto">
-          <div class="w-14 h-14 rounded-full bg-coral/10 text-coral flex items-center justify-center mx-auto mb-4 text-2xl">⚠️</div>
+          <div class="w-14 h-14 rounded-full bg-coral/10 text-coral flex items-center justify-center mx-auto mb-4">
+            <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          </div>
           <h2 class="text-xl font-bold text-ink mb-2">Error de conexión</h2>
           <p class="text-sm text-slate2 mb-6">No se pudo conectar con el servidor local. Verifica que XAMPP (Apache y MySQL) esté iniciado.</p>
         </div>`;
@@ -8004,18 +8092,20 @@ Fundación A+`;
 
   // ---- Landing del QR del DOCENTE: activa la sesión de hoy y proyecta el QR del estudiante ----
   function renderQrLandingDocente(datos) {
-    const { registro, sesion, recienActivada, tokenEstudiante, totalAsistencias } = datos;
+    const { registro, sesion, recienActivada, yaEstabaActivada, tokenEstudiante, totalAsistencias } = datos;
+    const mins = minutosTranscurridos(sesion.horaInicio);
     const ventana = estadoVentanaSesion(sesion);
+    const esCerrada = mins > VENTANA_TARDE_MIN;
     const idQrEst = 'qrDocenteEstudianteScreen';
 
-    const qrEstudianteHtml = tokenEstudiante ? `
+    const qrEstudianteHtml = (tokenEstudiante && !esCerrada) ? `
       <div class="bg-white rounded-2xl border border-gray-200 p-6 mb-5 shadow-sm text-center">
         <p class="text-xs font-bold text-morado tracking-wide uppercase mb-1">Código QR para tus estudiantes</p>
         <p class="text-sm font-semibold text-ink mb-4">Muestra este código a tus estudiantes para que lo escaneen y confirmen su asistencia:</p>
         <div id="${idQrEst}" class="flex justify-center mb-4"></div>
         <div class="flex items-center justify-center gap-3">
           <button onclick="imprimirQr('Código de estudiantes — ${escapeHtml(registro.cohorte)} · ${escapeHtml(sesion.materia)}','Escanéalo para ingresar tu usuario de asistencia','${idQrEst}')" class="text-xs font-semibold text-morado hover:underline flex items-center gap-1.5 cursor-pointer">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
             Imprimir / Agrandar
           </button>
           <span class="text-slate2/40">•</span>
@@ -8025,18 +8115,41 @@ Fundación A+`;
           </button>
         </div>
       </div>
-    ` : '';
+    ` : (esCerrada ? `
+      <div class="bg-gray-50 rounded-2xl border border-gray-200 p-6 mb-5 text-center">
+        <div class="w-10 h-10 rounded-xl bg-gray-200 text-slate2 flex items-center justify-center mx-auto mb-2">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        </div>
+        <p class="text-xs font-bold text-ink uppercase tracking-wide">Registro de asistencia cerrado</p>
+        <p class="text-xs text-slate2 mt-1">El periodo de tolerancia concluyó. Los registros de asistencia para esta fecha ya han quedado consolidados.</p>
+      </div>
+    ` : '');
+
+    const bannerEstado = recienActivada ? `
+      <div class="rounded-2xl p-5 border-l-4" style="background:#1FC8C014; border-left-color:#1FC8C0">
+        <div class="flex items-center gap-2 mb-1">
+          <div class="w-6 h-6 rounded-md bg-turquesa/20 text-turquesa flex items-center justify-center shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          </div>
+          <p class="text-base font-extrabold text-ink">¡Asistencia de hoy activada!</p>
+        </div>
+        <p class="text-xs font-semibold mt-1" style="color:${ventana.color}">${ventana.texto}</p>
+        <p class="text-xs text-slate2 mt-2">Hora de inicio: <strong>${fmtHora(sesion.horaInicio)}</strong></p>
+      </div>` : `
+      <div class="rounded-2xl p-5 border-l-4" style="background:#8B5CF614; border-left-color:#8B5CF6">
+        <div class="flex items-center gap-2 mb-1">
+          <div class="w-6 h-6 rounded-md bg-morado/20 text-morado flex items-center justify-center shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          </div>
+          <p class="text-base font-extrabold text-ink">Asistencia ya activada el día de hoy</p>
+        </div>
+        <p class="text-xs text-slate2 mt-1">Esta clase ya fue activada a las <strong>${fmtHora(sesion.horaInicio)}</strong>. Por control antifraude, <strong>no es posible volver a activar la asistencia</strong> para este mismo día.</p>
+        <p class="text-xs font-semibold mt-2" style="color:${ventana.color}">${ventana.texto}</p>
+      </div>`;
 
     const cuerpo = `
       <div class="flex flex-col gap-4">
-        <div class="rounded-2xl p-5 border-l-4" style="background:#1FC8C014; border-left-color:#1FC8C0">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="text-lg">✅</span>
-            <p class="text-base font-extrabold text-ink">${recienActivada ? '¡Asistencia de hoy activada!' : 'Sesión activa para hoy'}</p>
-          </div>
-          <p class="text-xs font-semibold mt-1" style="color:${ventana.color}">${ventana.texto}</p>
-          <p class="text-xs text-slate2 mt-2">Hora de inicio: <strong>${fmtHora(sesion.horaInicio)}</strong></p>
-        </div>
+        ${bannerEstado}
 
         ${qrEstudianteHtml}
 
@@ -8060,8 +8173,8 @@ Fundación A+`;
 
     document.getElementById('qrViewCard').innerHTML = `
       <div class="bg-white rounded-3xl shadow-softLg border border-gray-100 p-8 max-w-lg mx-auto">
-        <div class="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-4" style="background:#8B5CF61A">
-          <span class="text-2xl">👨‍🏫</span>
+        <div class="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-4 bg-morado/10 text-morado">
+          <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 14v6m-4-2.5v2.5m8-2.5v2.5"/></svg>
         </div>
         <h1 class="text-xl font-extrabold text-ink mb-1">Docente: ${escapeHtml(registro.docente)}</h1>
         <p class="text-xs text-slate2 mb-6">Cohorte <strong class="text-ink">${escapeHtml(registro.cohorte)}</strong> · ${escapeHtml(sesion.materia)}</p>
@@ -8073,35 +8186,94 @@ Fundación A+`;
     }
   }
 
-  // ---- Landing del QR del ESTUDIANTE: Formulario estilo Google Forms ----
-  function renderQrLandingEstudianteGoogleForm(datos) {
+  // ---- Landing del QR del ESTUDIANTE: Flujo 100% automatizado ----
+  let timerEsperaDocenteQr = null;
+
+  function renderQrLandingEstudianteGoogleForm(datos, errorInicial = '') {
+    window.__ultimoQrDatosEstudiante = datos;
+    if (timerEsperaDocenteQr) {
+      clearInterval(timerEsperaDocenteQr);
+      timerEsperaDocenteQr = null;
+    }
+
     const { registro, sesionActiva, sesion } = datos;
     const token = registro.token;
     const hoy = new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Determinar si ya tenemos la identidad del estudiante guardada (login o escaneo previo)
+    let savedEmail = '';
+    try {
+      savedEmail = (currentEstudiante && (currentEstudiante.email || currentEstudiante.nombre)) 
+        || localStorage.getItem('aplus_estudiante_email') 
+        || '';
+    } catch (e) {}
+
+    // Si la sesión está activa y tenemos la identidad y NO venimos de un error inicial:
+    // PROCESO AUTOMÁTICO INMEDIATO:
+    if (sesionActiva && savedEmail && !errorInicial) {
+      document.getElementById('qrViewCard').innerHTML = `
+        <div class="space-y-4 max-w-xl mx-auto">
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden text-center p-8">
+            <div class="h-2.5 -mx-8 -mt-8 mb-6" style="background: #673ab7;"></div>
+            <div class="w-16 h-16 rounded-full bg-morado/10 text-morado flex items-center justify-center mx-auto mb-4">
+              <svg class="h-8 w-8 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            </div>
+            <h2 class="text-xl font-extrabold text-ink mb-1">Registrando asistencia automáticamente...</h2>
+            <p class="text-xs text-slate2 mb-3">Identificado como <strong class="text-morado font-bold">${escapeHtml(savedEmail)}</strong></p>
+            <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-turquesa/10 text-turquesa text-xs font-semibold">
+              <span>Cohorte: ${escapeHtml(registro.cohorte)} · ${escapeHtml(sesion ? (sesion.materia || sesion.modulo) : '')}</span>
+            </div>
+          </div>
+          <p class="text-center text-[11px] text-slate2">Sistema de Asistencia Automatizada · Fundación A+</p>
+        </div>`;
+
+      // Se ejecuta de inmediato el registro
+      setTimeout(() => {
+        enviarFormularioAsistencia(token, savedEmail);
+      }, 350);
+      return;
+    }
+
+    // Si la sesión no está activa, activamos sondeo cada 3 segundos
+    if (!sesionActiva) {
+      timerEsperaDocenteQr = setInterval(() => {
+        const qrView = document.getElementById('qrView');
+        if (qrView && !qrView.classList.contains('hidden')) {
+          manejarQrEnURL();
+        } else {
+          clearInterval(timerEsperaDocenteQr);
+          timerEsperaDocenteQr = null;
+        }
+      }, 3000);
+    }
 
     let estadoSesionHtml = '';
     if (sesionActiva) {
       const ventana = estadoVentanaSesion(sesion);
       estadoSesionHtml = `
         <div class="rounded-xl p-3.5 mb-5 text-left flex items-start gap-2.5" style="background:#1FC8C014; border-left: 4px solid #1FC8C0;">
-          <span class="text-base leading-none mt-0.5">🟢</span>
+          <span class="relative flex h-3 w-3 mt-1 shrink-0">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          </span>
           <div>
             <p class="text-xs font-bold text-ink">Sesión abierta por el docente</p>
             <p class="text-[11px] font-semibold mt-0.5" style="color:${ventana.color}">${ventana.texto}</p>
-            <p class="text-[11px] text-coral font-medium mt-1">⚠️ Recuerda: tu asistencia inicia marcada como <strong>Falla (pérdida)</strong> por defecto hasta que envíes este formulario.</p>
+            <p class="text-[11px] text-coral font-medium mt-1.5 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              <span>Recuerda: tu asistencia inicia marcada como <strong>Falla (pérdida)</strong> por defecto hasta que confirmes tu usuario.</span>
+            </p>
           </div>
         </div>`;
     } else {
       estadoSesionHtml = `
         <div class="rounded-xl p-3.5 mb-5 text-left flex items-start gap-2.5" style="background:#F5A62314; border-left: 4px solid #F5A623;">
-          <span class="text-base leading-none mt-0.5">⏳</span>
+          <div class="w-5 h-5 shrink-0 mt-0.5">
+            <svg class="w-4 h-4 animate-spin text-oro" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+          </div>
           <div>
-            <p class="text-xs font-bold text-ink">Sesión aún no activada por el docente</p>
-            <p class="text-[11px] text-slate2 mt-0.5">El docente (${escapeHtml(registro.docente)}) aún no ha escaneado su código de inicio de clase. Espera a que lo active y haz clic en verificar.</p>
-            <button onclick="verificarSesionEstudianteQr('${token}')" class="mt-2 text-xs font-bold text-morado hover:underline flex items-center gap-1 cursor-pointer">
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-              Comprobar si ya fue activada
-            </button>
+            <p class="text-xs font-bold text-ink">Esperando activación de clase...</p>
+            <p class="text-[11px] text-slate2 mt-0.5">El docente (${escapeHtml(registro.docente)}) aún no ha abierto la sesión. En cuanto la active, tu asistencia se registrará automáticamente en segundo plano.</p>
           </div>
         </div>`;
     }
@@ -8126,11 +8298,11 @@ Fundación A+`;
         </div>
 
         <!-- Card 2: Pregunta / Formulario estilo Google Forms -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-left transition" id="cardPreguntaUsuario">
+        <div class="bg-white rounded-xl shadow-sm border ${errorInicial ? 'border-red-400' : 'border-gray-200'} p-6 text-left transition" id="cardPreguntaUsuario">
           <label for="googleFormUsuarioInput" class="block text-sm font-semibold text-[#202124] mb-1">
             Correo institucional o Usuario asignado <span class="text-[#d93025]">*</span>
           </label>
-          <p class="text-xs text-[#5f6368] mb-4">Ingresa tu correo institucional asignado (ej. estudiante@aplus.org) o tu nombre de usuario para confirmar la asistencia en el sistema.</p>
+          <p class="text-xs text-[#5f6368] mb-4">Ingresa tu correo institucional o tu nombre de usuario para registrar tu asistencia automáticamente en esta y futuras clases.</p>
           
           <div class="relative mb-2">
             <input 
@@ -8138,12 +8310,13 @@ Fundación A+`;
               type="text" 
               autocomplete="email" 
               placeholder="Tu respuesta" 
+              value="${escapeHtml(savedEmail)}"
               class="w-full text-sm text-[#202124] py-2.5 px-3 border-b-2 border-gray-300 focus:border-[#673ab7] focus:outline-none transition bg-transparent placeholder-gray-400"
             />
           </div>
-          <div id="googleFormErrorMsg" class="hidden text-xs text-[#d93025] mt-1.5 flex items-center gap-1">
+          <div id="googleFormErrorMsg" class="${errorInicial ? '' : 'hidden'} text-xs text-[#d93025] mt-1.5 flex items-center gap-1">
             <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-            <span id="googleFormErrorText"></span>
+            <span id="googleFormErrorText">${escapeHtml(errorInicial)}</span>
           </div>
         </div>
 
@@ -8183,9 +8356,9 @@ Fundación A+`;
   }
 
   // Envía la respuesta del formulario y la procesa en MySQL
-  async function enviarFormularioAsistencia(token) {
+  async function enviarFormularioAsistencia(token, valorDirecto) {
     const input = document.getElementById('googleFormUsuarioInput');
-    const valor = (input ? input.value : '').trim();
+    const valor = ((valorDirecto !== undefined && valorDirecto !== null) ? valorDirecto : (input ? input.value : '')).trim();
     const errorEl = document.getElementById('googleFormErrorMsg');
     const errorText = document.getElementById('googleFormErrorText');
     const cardPregunta = document.getElementById('cardPreguntaUsuario');
@@ -8228,6 +8401,11 @@ Fundación A+`;
       const res = await resp.json().catch(() => ({}));
 
       if (!resp.ok) {
+        // Si falló en modo automático, renderizar formulario editable con el error
+        if (!document.getElementById('googleFormUsuarioInput')) {
+          renderQrLandingEstudianteGoogleForm(window.__ultimoQrDatosEstudiante || { registro: { token }, sesionActiva: true }, res.error || 'Error al registrar asistencia.');
+          return;
+        }
         if (btn) btn.disabled = false;
         if (btnText) btnText.textContent = 'Enviar';
         if (btnSpinner) btnSpinner.classList.add('hidden');
@@ -8239,8 +8417,17 @@ Fundación A+`;
         return;
       }
 
+      // Guardamos la identidad para futuros escaneos automatizados
+      try {
+        localStorage.setItem('aplus_estudiante_email', valor);
+      } catch (e) {}
+
       renderConfirmacionGoogleForm(res, token);
     } catch (err) {
+      if (!document.getElementById('googleFormUsuarioInput')) {
+        renderQrLandingEstudianteGoogleForm(window.__ultimoQrDatosEstudiante || { registro: { token }, sesionActiva: true }, 'No se pudo comunicar con el servidor local.');
+        return;
+      }
       if (btn) btn.disabled = false;
       if (btnText) btnText.textContent = 'Enviar';
       if (btnSpinner) btnSpinner.classList.add('hidden');
@@ -8254,9 +8441,14 @@ Fundación A+`;
 
   // Pantalla de confirmación estilo Google Forms
   function renderConfirmacionGoogleForm(res, token) {
+    if (timerEsperaDocenteQr) {
+      clearInterval(timerEsperaDocenteQr);
+      timerEsperaDocenteQr = null;
+    }
+
     const estadoBadge = res.estado === 'Presente' 
-      ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-white" style="background:#0f8f89;">✓ Presente (Puntual)</span>'
-      : '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-white" style="background:#b5790f;">⏰ Llegada con retraso (Tarde)</span>';
+      ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-white" style="background:#0f8f89;"><svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Presente (Puntual)</span>'
+      : '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-white" style="background:#b5790f;"><svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Llegada con retraso (Tarde)</span>';
 
     document.getElementById('qrViewCard').innerHTML = `
       <div class="space-y-4 text-left max-w-xl mx-auto">
@@ -8301,32 +8493,70 @@ Fundación A+`;
   window.renderConfirmacionGoogleForm = renderConfirmacionGoogleForm;
 
 
+  let docenteRiesgoCohorte = '';
+
+  async function cambiarDocenteRiesgoCohorte(cohorte) {
+    docenteRiesgoCohorte = cohorte || '';
+    await renderRiesgoDocente();
+  }
+  window.cambiarDocenteRiesgoCohorte = cambiarDocenteRiesgoCohorte;
+
   // ---------- RENDER: Semáforo de riesgo — docente ----------
   async function renderRiesgoDocente() {
-    const cohortes = (await docenteModulosActivos()).map(m => m.nombre);
-    const data = (await computeSemaforo()).filter(s => cohortes.includes(s.cohorte));
+    const modulosDoc = await docenteModulosActivos();
+    const cohortes = Array.from(new Set(modulosDoc.map(m => m.nombre).filter(Boolean))).sort();
+    const tieneMultiplesCohortes = cohortes.length >= 2;
+
+    if (docenteRiesgoCohorte && !cohortes.includes(docenteRiesgoCohorte)) {
+      docenteRiesgoCohorte = '';
+    }
+
+    const dataSemaforo = (await computeSemaforo(docenteRiesgoCohorte || '')).filter(s => cohortes.includes(s.cohorte));
+    const dataFiltrada = docenteRiesgoCohorte
+      ? dataSemaforo.filter(s => s.cohorte === docenteRiesgoCohorte)
+      : dataSemaforo;
+
     const riesgoColor = { Verde: { bg: '#1FC8C01A', text: '#0f8f89', dot: '#1FC8C0' }, Amarillo: { bg: '#F5A6231A', text: '#b5790f', dot: '#F5A623' }, Rojo: { bg: '#F0455C1A', text: '#F0455C', dot: '#F0455C' } };
 
-    const rows = data.map(s => `
+    const rows = dataFiltrada.map(s => `
       <tr data-search="${escapeHtml((s.nombre + ' ' + (s.cohorte || '') + ' ' + s.riesgo + ' ' + (s.motivo || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-3 px-4 text-sm font-semibold text-ink"><span class="inline-block w-2 h-2 rounded-full mr-2" style="background:${riesgoColor[s.riesgo].dot}"></span>${escapeHtml(s.nombre)}</td>
         <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(s.cohorte || '—')}</td>
-        <td class="py-3 px-4 text-sm text-slate2">${s.promedio}</td>
-        <td class="py-3 px-4 text-sm text-slate2">${s.asistencia === '—' ? '—' : s.asistencia + '%'}</td>
+        <td class="py-3 px-4 text-sm text-slate2 font-mono">${s.promedio}</td>
+        <td class="py-3 px-4 text-sm text-slate2 font-mono">${s.asistencia === '—' ? '—' : s.asistencia + '%'}</td>
         <td class="py-3 px-4"><span class="text-xs font-semibold px-2.5 py-1 rounded-full" style="background:${riesgoColor[s.riesgo].bg};color:${riesgoColor[s.riesgo].text}">${s.riesgo}</span></td>
         <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(s.motivo) || '—'}</td>
       </tr>`).join('');
+
+    const filtroCohorteHtml = tieneMultiplesCohortes
+      ? `<div class="flex items-center gap-1.5">
+           <label for="filtroDocenteRiesgoCohorte" class="text-xs font-semibold text-slate2 shrink-0">Filtrar cohorte:</label>
+           <select id="filtroDocenteRiesgoCohorte" onchange="cambiarDocenteRiesgoCohorte(this.value)" class="rounded-xl border border-morado/25 bg-morado/5 px-3 py-1.5 text-xs sm:text-sm font-medium text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition">
+             <option value="">Todas mis cohortes (${dataSemaforo.length})</option>
+             ${cohortes.map(c => {
+               const cant = dataSemaforo.filter(s => s.cohorte === c).length;
+               return `<option value="${escapeHtml(c)}" ${docenteRiesgoCohorte === c ? 'selected' : ''}>${escapeHtml(c)} (${cant})</option>`;
+             }).join('')}
+           </select>
+         </div>`
+      : (cohortes.length === 1 ? `<span class="text-xs font-semibold px-3 py-1 bg-turquesa/10 text-turquesa rounded-xl border border-turquesa/20">Cohorte: ${escapeHtml(cohortes[0])}</span>` : '');
 
     document.getElementById('mount-t-riesgo').innerHTML = `
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-4 border-b border-gray-100">
           <div>
-            <p class="text-sm font-bold text-ink tracking-tight">Semáforo de riesgo académico</p>
-            <p class="text-xs text-slate2 mt-0.5">100% automático: calculado con el promedio real de notas y el % real de asistencia de tus estudiantes.</p>
+            <div class="flex items-center gap-2">
+              <p class="text-sm font-bold text-ink tracking-tight">Semáforo de riesgo académico</p>
+              <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-turquesa/10 text-turquesa">${dataFiltrada.length} estudiante${dataFiltrada.length === 1 ? '' : 's'}</span>
+            </div>
+            <p class="text-xs text-slate2 mt-0.5">Calculado automáticamente con el promedio de notas y el % de asistencia de tus estudiantes.</p>
           </div>
-          <div class="relative">
-            <input data-table="table-docente-riesgo" oninput="TableManager.filter('table-docente-riesgo', this.value)" type="text" placeholder="Buscar estudiante..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <div class="flex flex-wrap items-center gap-2.5">
+            ${filtroCohorteHtml}
+            <div class="relative">
+              <input data-table="table-docente-riesgo" oninput="TableManager.filter('table-docente-riesgo', this.value)" type="text" placeholder="Buscar estudiante..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
           </div>
         </div>
         <div class="table-responsive-container">
@@ -8334,7 +8564,7 @@ Fundación A+`;
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
               <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Promedio</th><th class="py-2.5 px-4">Asistencia</th><th class="py-2.5 px-4">Riesgo</th><th class="py-2.5 px-4">Motivo</th>
             </tr></thead>
-            <tbody>${rows || '<tr><td colspan="6" class="text-sm text-slate2 text-center py-6">Aún no tienes estudiantes en tus cohortes asignadas.</td></tr>'}</tbody>
+            <tbody>${rows || '<tr><td colspan="6" class="text-sm text-slate2 text-center py-6">Aún no tienes estudiantes en la cohorte seleccionada.</td></tr>'}</tbody>
           </table>
         </div>
       </div>`;
@@ -8786,12 +9016,18 @@ Fundación A+`;
       mesesCohorte = [mesActualReal()];
     }
 
+    const mesHoy = mesActualReal();
+    const mesActualCohorte = await mesActualParaDocenteCohorte(doc.nombre, docenteInformesCohorte);
+
     if (!docenteInformesMes || !mesesCohorte.includes(docenteInformesMes)) {
-      const mesActualCohorte = await mesActualParaDocenteCohorte(doc.nombre, docenteInformesCohorte);
       docenteInformesMes = (mesActualCohorte && mesesCohorte.includes(mesActualCohorte))
         ? mesActualCohorte
-        : mesesCohorte[0];
+        : (mesesCohorte.find(m => m <= mesHoy) || mesesCohorte[0]);
     }
+
+    const esFuturo = docenteInformesMes > mesHoy;
+    const esMesActivo = (docenteInformesMes === mesActualCohorte) && !esFuturo;
+    const esPeriodoEditable = esMesActivo;
 
     const estudiantes = await docenteEstudiantesDeCohorte(docenteInformesCohorte);
     const guardados = (await Store.list('informes_docente')).filter(i => 
@@ -8805,6 +9041,31 @@ Fundación A+`;
 
     const enviadosCount = guardados.filter(g => g.estado === 'Enviado').length;
     const todosEnviados = estudiantes.length > 0 && enviadosCount === estudiantes.length;
+
+    let avisoPeriodoHtml = '';
+    if (esFuturo) {
+      avisoPeriodoHtml = `
+        <div class="rounded-xl p-4 mb-5 bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-2.5 text-xs">
+          <div class="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div>
+            <p class="font-bold">Periodo planificado para el futuro — Aún no disponible (${escapeHtml(mesLabel(docenteInformesMes))})</p>
+            <p class="text-slate2 mt-0.5">El horario de este mes ya está definido, pero los informes solo se pueden redactar y enviar durante el mes en curso. Actualmente estamos en <strong>${escapeHtml(mesLabel(mesHoy))}</strong>.</p>
+          </div>
+        </div>`;
+    } else if (!esMesActivo) {
+      avisoPeriodoHtml = `
+        <div class="rounded-xl p-3.5 mb-5 bg-gray-50 border border-gray-200 text-slate2 flex items-start gap-2 text-xs">
+          <div class="w-6 h-6 rounded-lg bg-gray-200 text-slate2 flex items-center justify-center shrink-0 mt-0.5">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+          </div>
+          <div>
+            <p class="font-bold text-ink">Historial de informes (${escapeHtml(mesLabel(docenteInformesMes))})</p>
+            <p class="mt-0.5">Estás consultando un periodo anterior cerrado. Los informes de meses pasados se conservan como historial en modo solo lectura.</p>
+          </div>
+        </div>`;
+    }
 
     const selectorCohortes = `
       <div>
@@ -8820,7 +9081,12 @@ Fundación A+`;
       <div>
         <label class="block text-xs font-semibold text-slate2 mb-1.5" for="docenteInfMesSelect">Periodo (Mes)</label>
         <select id="docenteInfMesSelect" onchange="cambiarMesInformesDocente(this.value)" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado font-semibold">
-          ${mesesCohorte.map(m => `<option value="${m}" ${m === docenteInformesMes ? 'selected' : ''}>${mesLabel(m)}</option>`).join('')}
+          ${mesesCohorte.map(m => {
+            const esFut = m > mesHoy;
+            const esAct = m === mesActualCohorte;
+            const tag = esFut ? ' (aún no disponible)' : (esAct ? ' (mes activo)' : ' (historial)');
+            return `<option value="${m}" ${m === docenteInformesMes ? 'selected' : ''}>${mesLabel(m)}${tag}</option>`;
+          }).join('')}
         </select>
       </div>`;
 
@@ -8840,12 +9106,19 @@ Fundación A+`;
         <p class="text-xs text-slate2 mb-1">Curso: <strong class="text-ink">${escapeHtml(cursoSel)}</strong> · Asistencia: <strong class="text-ink">${datos.pctAsistencia !== null ? datos.pctAsistencia + '%' : 'Sin datos'}</strong> · Nota cuantitativa: <strong class="text-ink">${datos.nota !== null ? datos.nota.toFixed(1) : 'Sin datos'}</strong></p>
         <p class="text-sm text-ink mb-3">${escapeHtml(datos.conclusion)}</p>
         <label class="block text-xs font-semibold text-slate2 mb-1.5">Observaciones personales del docente</label>
-        <textarea id="obs_${e.id}" rows="2" placeholder="Ej. Durante las clases mostró mayor liderazgo y compromiso." ${enviado ? 'disabled' : `oninput="autoguardarBorradorInforme('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')"`} class="w-full rounded-xl border border-morado/25 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado ${enviado ? 'bg-gray-50 text-slate2 cursor-not-allowed' : 'bg-morado/5'}">${escapeHtml(guardado ? guardado.observaciones : '')}</textarea>
+        <textarea id="obs_${e.id}" rows="2" placeholder="${esFuturo ? 'No disponible hasta que inicie el mes correspondiente.' : 'Ej. Durante las clases mostró mayor liderazgo y compromiso.'}" ${(!esPeriodoEditable || enviado) ? 'disabled' : `oninput="autoguardarBorradorInforme('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')"`} class="w-full rounded-xl border border-morado/25 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado ${(!esPeriodoEditable || enviado) ? 'bg-gray-50 text-slate2 cursor-not-allowed' : 'bg-morado/5'}">${escapeHtml(guardado ? guardado.observaciones : '')}</textarea>
         <div class="flex items-center gap-3 mt-3">
           ${enviado
             ? `<span class="text-xs text-slate2">Informe enviado el ${fmtDate(guardado.fecha)} · ya no se puede editar</span>`
-            : `<button onclick="enviarInformeDocente('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-xs py-2.5 px-5 hover:bg-morado transition shadow-sm">Enviar informe</button>
-               <span id="autoguardado_${e.id}" class="text-xs text-slate2"></span>`}
+            : (esFuturo
+                ? `<span class="text-xs text-amber-700 font-medium inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> No disponible para enviar hasta que inicie ${escapeHtml(mesLabel(docenteInformesMes))}</span>`
+                : (!esMesActivo
+                    ? `<span class="text-xs text-slate2 italic">Periodo anterior cerrado (historial)</span>`
+                    : `<button onclick="enviarInformeDocente('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-xs py-2.5 px-5 hover:bg-morado transition shadow-sm">Enviar informe</button>
+                       <span id="autoguardado_${e.id}" class="text-xs text-slate2"></span>`
+                  )
+              )
+          }
         </div>
       </div>`;
     }).join('') : '<p class="text-sm text-slate2 text-center py-8">Esta cohorte aún no tiene estudiantes matriculados.</p>';
@@ -8868,6 +9141,7 @@ Fundación A+`;
           ${selectorMeses}
         </div>
       </div>
+      ${avisoPeriodoHtml}
       ${tarjetas}`;
   }
 
@@ -8875,6 +9149,14 @@ Fundación A+`;
   // guardarInformeDocenteInterno(): helper compartido por el autoguardado
   // de borrador y por el envío definitivo — arma y persiste el registro.
   async function guardarInformeDocenteInterno(estudianteId, cohorteNombre, mes, estadoFinal) {
+    const mesHoy = mesActualReal();
+    const mesComparar = mes || mesHoy;
+
+    // REGLA: Un profesor no puede redactar ni enviar informes de un mes futuro (ej. octubre estando en septiembre)
+    if (mesComparar > mesHoy) {
+      return null;
+    }
+
     const est = (await Store.list('usuarios')).find(u => u.id === estudianteId);
     const doc = currentDocente || {};
     const modulosDoc = await docenteModulosActivos();
@@ -8887,7 +9169,6 @@ Fundación A+`;
 
     const datos = await generarDatosInformeEstudiante(est.nombre, cohorteNombre, curso, mes, doc.nombre);
     const registros = await Store.list('informes_docente');
-    const mesComparar = mes || (new Date().toISOString().slice(0, 7));
 
     const idx = registros.findIndex(r => 
       r.docente === doc.nombre && 
@@ -8898,7 +9179,7 @@ Fundación A+`;
 
     if (idx >= 0 && registros[idx].estado === 'Enviado') return registros[idx];
 
-    const hoyStr = new Date().toISOString().slice(0, 10);
+    const hoyStr = fechaHoyLocal();
     const fechaInforme = (mesComparar && mesComparar !== hoyStr.slice(0, 7)) ? `${mesComparar}-01` : hoyStr;
 
     const registro = {
@@ -8930,13 +9211,15 @@ Fundación A+`;
   // página o cambia de cohorte antes de enviar. Queda como 'Borrador'.
   let _timersAutoguardadoInforme = {};
   function autoguardarBorradorInforme(estudianteId, cohorteNombre, mes) {
+    const mesHoy = mesActualReal();
+    if (mes && mes > mesHoy) return; // Bloquear guardado de meses futuros
     clearTimeout(_timersAutoguardadoInforme[estudianteId]);
     const indicador = document.getElementById('autoguardado_' + estudianteId);
     if (indicador) indicador.textContent = 'Guardando borrador…';
     _timersAutoguardadoInforme[estudianteId] = setTimeout(async () => {
       await guardarInformeDocenteInterno(estudianteId, cohorteNombre, mes, 'Borrador');
       const ind = document.getElementById('autoguardado_' + estudianteId);
-      if (ind) ind.textContent = 'Borrador guardado automáticamente ✓';
+      if (ind) ind.innerHTML = '<span class="inline-flex items-center gap-1 text-emerald-600 font-medium"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Borrador guardado automáticamente</span>';
     }, 900);
   }
   window.autoguardarBorradorInforme = autoguardarBorradorInforme;
@@ -8944,6 +9227,17 @@ Fundación A+`;
   // Envío definitivo: pide confirmación porque, una vez enviado, el
   // informe ya no se puede editar.
   async function enviarInformeDocente(estudianteId, cohorteNombre, mes) {
+    const mesHoy = mesActualReal();
+    if (mes && mes > mesHoy) {
+      toast(`No puedes enviar informes de un mes futuro (${mesLabel(mes)}). El mes actual es ${mesLabel(mesHoy)}.`, 'err');
+      return;
+    }
+    const mesActualCohorte = await mesActualParaDocenteCohorte(currentDocente?.nombre || '', cohorteNombre);
+    if (mesActualCohorte && mes !== mesActualCohorte) {
+      toast(`Solo se pueden enviar informes del mes actual activo (${mesLabel(mesActualCohorte)}).`, 'err');
+      return;
+    }
+
     const est = (await Store.list('usuarios')).find(u => u.id === estudianteId);
     const confirmado = confirm(`¿Enviar el informe de ${est ? est.nombre : 'este estudiante'}?\n\nUna vez enviado quedará definitivo y no se podrá editar.`);
     if (!confirmado) return;
@@ -9141,10 +9435,9 @@ Fundación A+`;
     renderPqrDocente();
   }
 
-  /* =====================================================================
-     PANEL ESTUDIANTE — módulo completo
-     Persistencia: localStorage (misma capa Store del panel administrativo)
-     ===================================================================== */
+  /**
+   * Panel Estudiante — módulos y seguimiento académico.
+   */
 
   const PANEL_COLOR_ESTUDIANTE = '#F5A623';
 
@@ -9584,7 +9877,7 @@ Fundación A+`;
           <p class="text-sm text-slate2">No tienes un módulo activo asignado.</p>
         </div>`;
     } else {
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = fechaHoyLocal();
       const sesionesHoy = (await Store.list('sesiones_asistencia')).filter(s => s.cohorte === mod.nombre && s.fecha === hoy);
 
       if (!sesionesHoy.length) {
@@ -9625,7 +9918,7 @@ Fundación A+`;
                   <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
                   <p class="text-xs text-slate2 mt-1">Docente: ${escapeHtml(sesion.iniciadaPor || '—')} · ${fmtDate(sesion.fecha)}</p>
                   <div class="mt-2 flex items-center gap-2 justify-center sm:justify-start">
-                    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold text-white" style="background:${color}">✓ ${yaReg.estado}</span>
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-white" style="background:${color}"><svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> ${yaReg.estado}</span>
                   </div>
                 </div>
               </div>`;
@@ -9648,7 +9941,7 @@ Fundación A+`;
               </div>`;
           }
 
-          // Ventana de asistencia activa (<= 50 min): la asistencia está en 'Falla' por defecto, el estudiante PUEDE escanear o ingresar el código
+          // Ventana de asistencia activa (<= 50 min): la asistencia está en 'Falla' por defecto
           const ventana = estadoVentanaSesion(sesion);
           return `
             <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
@@ -9665,10 +9958,12 @@ Fundación A+`;
                 </div>
                 <p class="text-xs text-slate2 mt-0.5 mb-1">Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
                 <p class="text-xs font-bold mb-2" style="color:${ventana.color}">${ventana.texto}</p>
-                <p class="text-xs text-slate2 mb-3">Tu asistencia inició en <strong>Falla</strong>. Escanea el código QR del salón o escribe el código de clase para cambiarla a Presente:</p>
-                <div class="flex flex-col sm:flex-row gap-2 max-w-xs mx-auto sm:mx-0">
-                  <input id="codigo_qr_estudiante_${sesion.id}" type="text" maxlength="6" placeholder="Código (ej. 7F3K9A)" class="flex-1 rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm uppercase tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
-                  <button onclick="escanearAsistencia('${sesion.id}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-2.5 px-5 hover:bg-morado transition shadow-sm">Confirmar</button>
+                <div class="p-3 bg-morado/5 rounded-xl border border-morado/15 max-w-md">
+                  <p class="text-xs text-morado font-medium flex items-center gap-1.5 justify-center sm:justify-start">
+                    <svg class="w-4 h-4 shrink-0 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+                    Asistencia 100% automatizada vía QR
+                  </p>
+                  <p class="text-[11px] text-slate2 mt-1">Escanea el código QR proyectado en clase o abre el enlace compartido para registrar tu asistencia automáticamente en el sistema.</p>
                 </div>
               </div>
             </div>`;
@@ -9712,7 +10007,7 @@ Fundación A+`;
     const nombre = estudianteNombre();
     const mod = await estudianteModulo();
     if (!mod) { toast('No tienes un módulo activo asignado', 'err'); return; }
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = fechaHoyLocal();
     const sesion = (await Store.list('sesiones_asistencia')).find(s => s.id === sesionId && s.cohorte === mod.nombre && s.fecha === hoy);
     if (!sesion) { toast('Esa sesión ya no está disponible', 'err'); renderAsistenciaEstudiante(); return; }
     const registros = await Store.list('asistencia');
@@ -9995,7 +10290,7 @@ Fundación A+`;
                 <td class="py-3 px-4 text-sm text-slate2">${p.orden}</td>
                 <td class="py-3 px-4 text-sm text-ink font-semibold">${escapeHtml(p.tema)}</td>
                 <td class="py-3 px-4 text-sm text-slate2">${p.horas} h</td>
-                <td class="py-3 px-4 text-sm">${p.archivoDatos ? `<button onclick="verArchivoPensum('${p.id}')" class="text-xs font-semibold text-morado hover:underline">📎 ${escapeHtml(p.archivoNombre || 'Ver archivo')}</button>` : '<span class="text-xs text-slate2">Sin archivo</span>'}</td>
+                <td class="py-3 px-4 text-sm">${p.archivoDatos ? `<button onclick="verArchivoPensum('${p.id}')" class="text-xs font-semibold text-morado hover:underline inline-flex items-center gap-1">${ICON_CLIP_SVG}${escapeHtml(p.archivoNombre || 'Ver archivo')}</button>` : '<span class="text-xs text-slate2">Sin archivo</span>'}</td>
               </tr>`).join('') || '<tr><td colspan="4" class="text-sm text-slate2 text-center py-6">Sin temas registrados.</td></tr>'}
             </tbody>
           </table>
@@ -10046,7 +10341,7 @@ Fundación A+`;
                   ${statusPill(m.estado, ESTADO_COLORS)}
                 </div>
                 <p class="text-xs text-slate2 mb-2">${fmtDate(m.fecha)} · De: Equipo Directivo Fundación A+</p>
-                <p class="text-sm text-slate2">${m.archivoDatos ? `📎 ${escapeHtml(m.archivoNombre || 'Documento adjunto')}` : 'Sin archivo adjunto'}</p>
+                <p class="text-sm text-slate2 flex items-center gap-1">${m.archivoDatos ? `${ICON_CLIP_SVG} ${escapeHtml(m.archivoNombre || 'Documento adjunto')}` : 'Sin archivo adjunto'}</p>
                 <p class="text-xs font-semibold text-morado mt-2">Ver memorando en formato de carta →</p>
               </div>
             </div>
@@ -10080,7 +10375,7 @@ Fundación A+`;
                   ${statusPill(m.estado, ESTADO_COLORS)}
                 </div>
                 <p class="text-xs text-slate2 mb-2">${fmtDate(m.fecha)} · De: Equipo Directivo Fundación A+</p>
-                <p class="text-sm text-slate2">${m.archivoDatos ? `📎 ${escapeHtml(m.archivoNombre || 'Documento adjunto')}` : 'Sin archivo adjunto'}</p>
+                <p class="text-sm text-slate2 flex items-center gap-1">${m.archivoDatos ? `${ICON_CLIP_SVG} ${escapeHtml(m.archivoNombre || 'Documento adjunto')}` : 'Sin archivo adjunto'}</p>
                 <p class="text-xs font-semibold text-morado mt-2">Ver memorando en formato de carta →</p>
               </div>
             </div>
@@ -10161,7 +10456,7 @@ Fundación A+`;
         <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(p.tipo)}</td>
         <td class="py-3 px-4 text-sm text-ink font-semibold">${escapeHtml(p.asunto)}</td>
         <td class="py-3 px-4">${statusPill(p.estado, ESTADO_COLORS)}</td>
-        <td class="py-3 px-4 text-sm">${p.archivoDatos ? `<button onclick="verPqrPropia('${p.id}')" class="text-xs font-semibold text-morado hover:underline">📎 ${escapeHtml(p.archivoNombre || 'Ver PDF')}</button>` : '—'}</td>
+        <td class="py-3 px-4 text-sm">${p.archivoDatos ? `<button onclick="verPqrPropia('${p.id}')" class="text-xs font-semibold text-morado hover:underline inline-flex items-center gap-1">${ICON_CLIP_SVG}${escapeHtml(p.archivoNombre || 'Ver PDF')}</button>` : '—'}</td>
       </tr>`;
   }
 
@@ -10318,91 +10613,54 @@ Fundación A+`;
   // cámara), toma el control ANTES que cualquier otra cosa.
   manejarQrEnURL();
 
-  // Pinta el sitio público (Contáctanos + botón Postular) con lo que el
-  // Superadmin haya guardado en Configuración. Se ejecuta al cargar la
-  // página para que cualquier visitante vea siempre los datos vigentes.
-  // Nota: seedIfEmpty ahora es async, pero se deja sin await aquí a
-  // propósito — este es código de nivel superior del script (no dentro de
-  // una función async), y seedIfEmpty ya NO toca 'usuarios' (ver su
-  // propio comentario), así que nada de lo que sigue depende de esperarla.
-  seedIfEmpty();
   // Limpieza única: 'alumnos_cohorte' fue una entidad de prueba del
-  // simulador de roles (ya retirado) que llegó a guardar alumnos ficticios
-  // en el localStorage de instalaciones anteriores. Se borra para dejar
-  // la base de datos local realmente en blanco.
+  // simulador de roles (ya retirado). Se borra para dejar el almacenamiento limpio.
   localStorage.removeItem(DB_PREFIX + 'alumnos_cohorte');
-  // Migración única: las calificaciones (notas_modulos) empezaron a
-  // separarse por mes además de por cohorte/docente. Cualquier registro
-  // guardado antes de este cambio (sin campo "mes") se etiqueta con el mes
-  // más reciente que ese docente tuvo asignado en esa cohorte según el
-  // Horario, para que no se pierda como historial.
-  migrarNotasModulosSinMes();
-  renderContactoPublico();
-  actualizarBotonesPostular();
-  // Pinta la constelación de nodos con el número real de estudiantes
-  // inscritos (ver renderConstellation() al inicio del archivo). Se llama
-  // aquí, después de seedIfEmpty(), para garantizar que Store('usuarios')
-  // ya tenga los datos reales cargados.
-  renderConstellation();
+
+  /**
+   * Carga optimizada del sitio público: una única petición ultraliviana (/api/public_info)
+   * que solo trae lo necesario para visitantes (contacto, postulación y total para la constelación).
+   * No ejecuta seedIfEmpty, ni migraciones administrativas, ni descarga la tabla de usuarios.
+   */
+  async function cargarInfoPublica() {
+    try {
+      const resp = await fetch(API_BASE_URL + '/api/public_info');
+      if (resp.ok) {
+        const info = await resp.json();
+        if (info && info.configuracion) {
+          renderContactoPublico(info.configuracion);
+          actualizarBotonesPostular(info.configuracion);
+        }
+        renderConstellation(info ? info.totalEstudiantes : 0);
+        return;
+      }
+    } catch (e) {
+      console.warn('[cargarInfoPublica] Modo local offline:', e.message);
+    }
+    // Respaldo offline si el servidor no responde
+    renderContactoPublico();
+    actualizarBotonesPostular();
+    renderConstellation();
+  }
+  cargarInfoPublica();
 
   // Arranca el widget de chat (público + dentro de cualquier login), ver
   // bloque "WIDGET: Chat de la Fundación A+" más abajo.
   initAplusChat();
 
-  /* =====================================================================
-     WIDGET: Chat de la Fundación A+ (texto)
-     ---------------------------------------------------------------------
-     El HTML/CSS del botón flotante y el panel de conversación ya están en
-     index.html / style.css (prefijo "aplus-chat", fuera de cualquier
-     vista específica, así que se ve tanto en el sitio público como dentro
-     de cualquier login). Esta sección es SOLO la lógica: abrir/cerrar el
-     panel, mandar el mensaje al backend en streaming, mostrar la
-     respuesta a medida que llega, chips de sugerencias por rol, contador
-     de caracteres, limpiar conversación, estado del backend, timestamps.
-
-     ESTADO ACTUAL (para quien retome esto): es un chat de TEXTO, no de
-     voz — no hay reconocimiento ni síntesis de voz implementados. El
-     nombre "chat de voz" quedó como referencia del pedido original; si
-     más adelante se agrega voz de verdad, lo natural es sumar un botón de
-     micrófono que transcriba con la Web Speech API (o similar) y rellene
-     el mismo input de texto de aquí abajo, reutilizando todo lo demás.
-
-     BACKEND: corre aparte, fuera de este proyecto (que es HTML/JS
-     estático, sin servidor propio) — es un servicio Python/FastAPI que
-     llama a la API de Groq/Gemini y consulta MySQL para el contexto por
-     rol. Responde en streaming vía POST /chat/stream (Server-Sent Events:
-     eventos "delta" con fragmentos de texto, "done" al terminar, "error"
-     si algo falla a mitad de camino) — ver chat_backend.py y
-     backend_chat/DEPLOY_RENDER.md para desplegarlo gratis en Render.
-     Mientras ese backend no esté desplegado, CHAT_CONFIG.baseUrl de abajo
-     queda apuntando a "http://127.0.0.1:8000" (solo funciona si lo corres
-     en tu propia máquina) — actualízala con la URL real una vez desplegado.
-
-     AUTENTICACIÓN DEL CHAT: el backend ya NO confía en un rol/contexto que
-     este archivo le arme y le mande "de palabra" — verifica un token
-     firmado que él mismo emite (POST /auth/login) tras validar el email y
-     la contraseña contra MySQL. Por eso, justo después de cada login
-     exitoso (ver submitLogin), se llama a iniciarSesionChat(email,
-     password) para obtener y guardar ese token; sendMessage() lo manda en
-     cada mensaje. Si no hay token (visitante sin sesión, o el backend de
-     autenticación no respondió), el chat sigue funcionando igual que
-     antes: simplemente responde como visitante público.
-
-     BASE DE CONOCIMIENTO: el panel "Chat conocimiento" del Superadmin
-     (ver renderChatVozConocimiento()) vive en MySQL (tabla
-     chat_voz_conocimiento, Fase 6) — el backend del chat la consulta
-     directamente en cada pregunta, sin exportar/subir ningún archivo a
-     mano.
-     ===================================================================== */
+  /**
+   * Widget de chat con IA (Fundación A+).
+   * Comunicación fluida con backend FastAPI / Groq & Gemini y base de conocimiento MySQL.
+   */
   const CHAT_CONFIG = {
-    // Backend local (uvicorn corriendo en tu propia máquina, ver
-    // backend_chat/chat_backend.py). Cuando despliegues este backend a
-    // internet (Render u otro), reemplaza esto por esa URL pública —
-    // localhost solo funciona mientras tú mismo lo pruebas en tu PC.
-    baseUrl: "http://127.0.0.1:8000",
-    // Cada cuánto se vuelve a comprobar /health mientras el chat está
-    // abierto, para reflejar si el backend se cayó/volvió (ver
-    // checkBackendStatus). No corre mientras el panel está cerrado.
+    // Backend local de Chat IA (uvicorn corriendo en el puerto 8001).
+    // Usa dinámicamente el host actual (localhost, 127.0.0.1 o IP de red WiFi del celular).
+    baseUrl: (function() {
+      const host = (typeof window !== 'undefined' && window.location && window.location.hostname) ? window.location.hostname : '127.0.0.1';
+      const proto = (typeof window !== 'undefined' && window.location && window.location.protocol.startsWith('http')) ? window.location.protocol : 'http:';
+      return `${proto}//${host}:8001`;
+    })(),
+    // Cada cuánto se vuelve a comprobar /health mientras el chat está abierto
     healthCheckIntervalMs: 30000,
   };
 

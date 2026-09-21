@@ -135,6 +135,7 @@ async function apiFetch(entidad, opciones = {}) {
 const ENTIDADES_MYSQL = new Set([
   'usuarios',
   'modulos', 'horarios', 'notas_modulos', 'asistencia', 'sesiones_asistencia', 'qr_tokens',
+  'semaforo',
   'pqr', 'encuestas', 'cursos',
   'auditoria_login', 'auditoria_acciones', 'auditoria_horario',
   'informes_docente', 'agenda_docente', 'agenda_estudiante',
@@ -158,19 +159,68 @@ const ENTIDADES_OBJETO_ANIDADO = new Set([
   'memorandos_leidos',
 ]);
 
+// ── Capa de Caché en Memoria y Deduplicación de Peticiones ─────────────
+// Evita consultas redundantes al backend y agrupa llamadas concurrentes
+// a la misma entidad en una sola petición de red en curso (in-flight).
+const _storeCache = new Map();     // key -> { data, ts }
+const _storeInFlight = new Map();  // key -> Promise
+const CACHE_TTL_MS = 25000;        // 25 segundos de vigencia para lecturas
+
+function _getCached(key) {
+  const item = _storeCache.get(key);
+  if (!item) return null;
+  if (Date.now() - item.ts > CACHE_TTL_MS) {
+    _storeCache.delete(key);
+    return null;
+  }
+  return typeof structuredClone === 'function' ? structuredClone(item.data) : JSON.parse(JSON.stringify(item.data));
+}
+
+function _setCached(key, data) {
+  try {
+    const copia = typeof structuredClone === 'function' ? structuredClone(data) : JSON.parse(JSON.stringify(data));
+    _storeCache.set(key, { data: copia, ts: Date.now() });
+  } catch (e) {
+    _storeCache.set(key, { data, ts: Date.now() });
+  }
+}
+
+function _invalidateCache(entity) {
+  if (!entity) {
+    _storeCache.clear();
+    return;
+  }
+  for (const key of _storeCache.keys()) {
+    if (key === entity || key.startsWith(entity + '?') || key.startsWith(entity + ':')) {
+      _storeCache.delete(key);
+    }
+  }
+}
+
 /**
- * Store — Capa de persistencia local resiliente.
+ * Store — Capa de persistencia local resiliente con caché y deduplicación.
  * Se comunica con la base de datos MySQL local (XAMPP). Si el servidor local
  * está apagado o en mantenimiento, cuenta con respaldo automático a localStorage
  * para que la interfaz nunca se rompa.
  */
 const Store = {
-  get(entity) {
+  get(entity, opciones = {}) {
+    const forceRefresh = opciones.forceRefresh === true;
     if (ENTIDADES_MYSQL.has(entity)) {
-      return apiFetch(entity, { method: 'GET' }).then(data => {
-        if (ENTIDADES_OBJETO_UNICO.has(entity)) return data.data ?? data ?? null;
-        if (ENTIDADES_OBJETO_ANIDADO.has(entity)) return data ?? {};
-        return data;
+      const cacheKey = entity;
+      if (!forceRefresh) {
+        const cached = _getCached(cacheKey);
+        if (cached !== null) return Promise.resolve(cached);
+        if (_storeInFlight.has(cacheKey)) return _storeInFlight.get(cacheKey);
+      }
+
+      const p = apiFetch(entity, { method: 'GET' }).then(data => {
+        let res;
+        if (ENTIDADES_OBJETO_UNICO.has(entity)) res = data.data ?? data ?? null;
+        else if (ENTIDADES_OBJETO_ANIDADO.has(entity)) res = data ?? {};
+        else res = data;
+        _setCached(cacheKey, res);
+        return res;
       }).catch(err => {
         console.warn(`[Store.get] Modo local offline para "${entity}":`, err.message);
         try {
@@ -178,7 +228,12 @@ const Store = {
           if (raw) return JSON.parse(raw);
           return ENTIDADES_OBJETO_ANIDADO.has(entity) ? {} : (ENTIDADES_OBJETO_UNICO.has(entity) ? null : []);
         } catch (e) { return null; }
+      }).finally(() => {
+        _storeInFlight.delete(cacheKey);
       });
+
+      _storeInFlight.set(cacheKey, p);
+      return p;
     }
     try {
       const raw = localStorage.getItem(DB_PREFIX_TOKEN + entity);
@@ -189,12 +244,9 @@ const Store = {
   // Devuelve un objeto { ok, remoto } — no solo `true` a secas — para que
   // quien llame pueda distinguir "se guardó de verdad en el servidor"
   // (remoto: true) de "solo quedó en este navegador porque el servidor no
-  // respondió o respondió con error" (remoto: false). Antes esto devolvía
-  // `true` en ambos casos por igual, así que un error real del backend
-  // (por ejemplo, una tabla con columnas distintas a las que espera el
-  // PHP) quedaba invisible: el usuario veía "Configuración guardada" en
-  // pantalla aunque el dato nunca hubiera llegado a MySQL.
+  // respondió o respondió con error" (remoto: false).
   set(entity, data) {
+    _invalidateCache(entity);
     try {
       localStorage.setItem(DB_PREFIX_TOKEN + entity, JSON.stringify(data));
     } catch (e) {}
@@ -211,54 +263,92 @@ const Store = {
     return { ok: true, remoto: false };
   },
 
-  list(entity) {
-    if (ENTIDADES_MYSQL.has(entity)) {
-      if (ENTIDADES_OBJETO_UNICO.has(entity) || ENTIDADES_OBJETO_ANIDADO.has(entity)) return this.get(entity);
-      return apiFetch(entity, { method: 'GET' }).then(datos => {
-        if (entity === 'trainee_archivos') {
-          try {
-            const raw = localStorage.getItem(DB_PREFIX_TOKEN + 'trainee_archivos');
-            if (raw) {
-              const locales = JSON.parse(raw);
-              if (Array.isArray(locales) && locales.length > 0) {
-                // Sube automáticamente a MySQL los archivos locales pendientes
-                apiFetch('trainee_archivos', { method: 'POST', body: JSON.stringify(locales) })
-                  .then(() => { localStorage.removeItem(DB_PREFIX_TOKEN + 'trainee_archivos'); })
-                  .catch(() => {});
-                const mapa = new Map();
-                (Array.isArray(datos) ? datos : []).forEach(d => mapa.set(d.id, d));
-                locales.forEach(l => { if (!mapa.has(l.id)) mapa.set(l.id, l); });
-                return Array.from(mapa.values());
-              }
-            }
-          } catch (e) {}
+  list(entity, opciones = {}) {
+    const forceRefresh = opciones.forceRefresh === true;
+    const baseEntity = entity.includes('?') ? entity.split('?')[0] : entity;
+    if (ENTIDADES_MYSQL.has(baseEntity)) {
+      if (ENTIDADES_OBJETO_UNICO.has(baseEntity) || ENTIDADES_OBJETO_ANIDADO.has(baseEntity)) {
+        return this.get(baseEntity, opciones);
+      }
+
+      let queryString = '';
+      if (entity.includes('?')) {
+        queryString = entity.slice(entity.indexOf('?'));
+      } else if (opciones.query) {
+        queryString = '?' + (opciones.query.startsWith('?') ? opciones.query.slice(1) : opciones.query);
+      } else if (opciones.params && typeof opciones.params === 'object') {
+        const p = new URLSearchParams();
+        for (const [k, v] of Object.entries(opciones.params)) {
+          if (v !== undefined && v !== null && v !== '') p.set(k, v);
         }
-        return Array.isArray(datos) ? datos : [];
+        const qs = p.toString();
+        if (qs) queryString = '?' + qs;
+      }
+
+      const endpoint = baseEntity + queryString;
+      const cacheKey = endpoint;
+
+      if (!forceRefresh) {
+        const cached = _getCached(cacheKey);
+        if (cached !== null) return Promise.resolve(cached);
+        if (_storeInFlight.has(cacheKey)) return _storeInFlight.get(cacheKey);
+      }
+
+      const p = apiFetch(endpoint, { method: 'GET' }).then(datos => {
+        let resultado = [];
+        if (Array.isArray(datos)) {
+          resultado = datos;
+        } else if (datos && Array.isArray(datos.data)) {
+          resultado = datos.data;
+        }
+        _setCached(cacheKey, resultado);
+        return resultado;
       }).catch(err => {
         console.warn(`[Store.list] Modo local offline para "${entity}":`, err.message);
-        const raw = localStorage.getItem(DB_PREFIX_TOKEN + entity);
+        const raw = localStorage.getItem(DB_PREFIX_TOKEN + baseEntity);
         return raw ? JSON.parse(raw) : [];
+      }).finally(() => {
+        _storeInFlight.delete(cacheKey);
       });
+
+      _storeInFlight.set(cacheKey, p);
+      return p;
     }
     return this.get(entity) || [];
   },
 
   save(entity, records) {
+    _invalidateCache(entity);
     return this.set(entity, records);
   },
 
   /**
-   * Actualiza SOLO fotoUrl y/o descripcion del usuario actualmente
-   * logueado (el id sale del token en el backend, nunca de aquí). Usa
-   * PUT /api/perfil_propio en vez de Store.set('usuarios', ...), que
-   * exige rol Superadmin/Coordinador y por eso un Docente/Estudiante
-   * nunca lograba guardar su propia foto o descripción (ver
-   * manejarPerfilPropio() en api/index.php para el detalle del bug).
-   * Devuelve { ok, remoto } igual que Store.set, para que el código que
-   * ya llamaba a actualizarUsuarioDocenteActual/EstudianteActual no
-   * tenga que cambiar cómo interpreta el resultado.
+   * Obtiene un archivo/documento puntual bajo demanda por su ID.
+   * Evita transferir archivos pesados en listados.
+   */
+  getArchivo(entidad, id) {
+    return apiFetch(`${entidad}?id=${encodeURIComponent(id)}`, { method: 'GET' });
+  },
+
+  /**
+   * Invalida la caché de una entidad o de todo el Store.
+   */
+  invalidate(entity) {
+    _invalidateCache(entity);
+  },
+
+  /**
+   * Limpia toda la caché en memoria para forzar recargas frescas.
+   */
+  clearCache() {
+    _invalidateCache();
+  },
+
+  /**
+   * Actualiza SOLO fotoUrl y/o descripcion del usuario actualmente logueado.
    */
   actualizarPerfilPropio(cambios) {
+    _invalidateCache('usuarios');
     return apiFetch('perfil_propio', { method: 'PUT', body: JSON.stringify(cambios) })
       .then(() => ({ ok: true, remoto: true }))
       .catch(err => {
@@ -272,12 +362,12 @@ const Store = {
    * Devuelve { ok, remoto, id }.
    */
   agregarArchivo(archivo) {
+    _invalidateCache('trainee_archivos');
     if (!archivo.id) archivo.id = 'ta_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
     return apiFetch('trainee_archivos', {
       method: 'POST',
       body: JSON.stringify(archivo),
     }).then(res => {
-      // Limpia del localStorage si existiera copia previa para que no quede en el navegador
       try {
         localStorage.removeItem(DB_PREFIX_TOKEN + 'trainee_archivos');
       } catch (e) {}
@@ -293,6 +383,7 @@ const Store = {
    * Devuelve { ok, remoto }.
    */
   eliminarArchivo(archivoId) {
+    _invalidateCache('trainee_archivos');
     return apiFetch('trainee_archivos?id=' + encodeURIComponent(archivoId), {
       method: 'DELETE',
       body: JSON.stringify({ id: archivoId }),
@@ -308,10 +399,11 @@ const Store = {
   },
 };
 
-// Migración transparente: si hay archivos que habían quedado guardados en el
-// navegador (localStorage), se envían a la base de datos MySQL y se liberan del navegador.
+// Migración transparente: si hay archivos guardados en localStorage,
+// se envían a MySQL SOLO si el usuario ya tiene sesión iniciada.
 (function migrarTraineeArchivosDeLocalStorage() {
   try {
+    if (!authToken) return; // No generar peticiones no autorizadas en visitantes públicos
     const raw = localStorage.getItem(DB_PREFIX_TOKEN + 'trainee_archivos');
     if (!raw) return;
     const locales = JSON.parse(raw);

@@ -27,6 +27,8 @@ servidor (ver auth.py), no que el contenido del contexto sea más pobre.
 import json as _json
 import os
 import re
+import queue
+import threading
 from contextlib import contextmanager
 from typing import Optional
 
@@ -60,41 +62,108 @@ DB_SSL_CA = os.getenv("DB_SSL_CA")
 
 
 def db_configurada() -> bool:
+    """Verifica si las variables esenciales de conexión a MySQL están presentes."""
     return bool(DB_HOST and DB_USER and DB_NAME)
+
+
+class MySQLConnectionPool:
+    """Pool de conexiones thread-safe y resiliente para MySQL/MariaDB.
+    Reutiliza conexiones TCP/SSL reduciendo drásticamente la latencia por consulta
+    y validando automáticamente el estado de la conexión mediante ping activo."""
+
+    def __init__(self, max_connections: int = 12):
+        self.max_connections = max_connections
+        self._pool = queue.Queue(maxsize=max_connections)
+        self._lock = threading.Lock()
+        self._created_connections = 0
+
+    def _create_raw_connection(self):
+        return pymysql.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            cursorclass=pymysql.cursors.DictCursor,
+            connect_timeout=6,
+            read_timeout=8,
+            charset="utf8mb4",
+            autocommit=True,
+            **({"ssl": {"ca": DB_SSL_CA}} if DB_SSL_CA else {}),
+        )
+
+    def acquire(self):
+        conn = None
+        try:
+            conn = self._pool.get_nowait()
+        except queue.Empty:
+            with self._lock:
+                if self._created_connections < self.max_connections:
+                    conn = self._create_raw_connection()
+                    self._created_connections += 1
+            if conn is None:
+                try:
+                    conn = self._pool.get(timeout=5.0)
+                except queue.Empty:
+                    raise RuntimeError("Tiempo de espera agotado: todas las conexiones del pool MySQL están en uso.")
+
+        # Verificar vitalidad de la conexión y reconectar si se cayó o expiró
+        try:
+            conn.ping(reconnect=True)
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            conn = self._create_raw_connection()
+
+        return conn
+
+    def release(self, conn):
+        if conn is None:
+            return
+        try:
+            self._pool.put_nowait(conn)
+        except queue.Full:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            with self._lock:
+                self._created_connections -= 1
+
+
+_global_pool: Optional[MySQLConnectionPool] = None
+_pool_lock = threading.Lock()
+
+
+def get_pool() -> MySQLConnectionPool:
+    global _global_pool
+    if _global_pool is None:
+        with _pool_lock:
+            if _global_pool is None:
+                _global_pool = MySQLConnectionPool(max_connections=12)
+    return _global_pool
 
 
 @contextmanager
 def get_connection():
-    """Abre una conexión nueva por request (nada de pool persistente: el
-    volumen de este chat no lo justifica y así se evita lidiar con
-    conexiones muertas de un servidor MySQL compartido/gratuito)."""
+    """Obtiene una conexión activa desde el pool persistente y la libera al finalizar."""
     if not db_configurada():
         raise RuntimeError(
             "La base de datos no está configurada (faltan DB_HOST/DB_USER/DB_NAME "
             "en las variables de entorno)."
         )
-    conn = pymysql.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME,
-        cursorclass=pymysql.cursors.DictCursor,
-        connect_timeout=6,
-        read_timeout=8,
-        charset="utf8mb4",
-        # Solo se activa SSL si DB_SSL_CA está definido (Aiven, PlanetScale,
-        # etc.) — en XAMPP local, DB_SSL_CA no existe y pymysql se conecta
-        # exactamente igual que antes, sin SSL.
-        **({"ssl": {"ca": DB_SSL_CA}} if DB_SSL_CA else {}),
-    )
+    pool = get_pool()
+    conn = pool.acquire()
     try:
         yield conn
     finally:
-        conn.close()
+        pool.release(conn)
 
 
 def _as_list(valor):
+    """Normaliza un valor a lista. Parsea cadenas JSON si es necesario."""
     if isinstance(valor, list):
         return valor
     if isinstance(valor, str):
@@ -107,6 +176,7 @@ def _as_list(valor):
 
 
 def _as_dict(valor):
+    """Normaliza un valor a diccionario. Parsea cadenas JSON si es necesario."""
     if isinstance(valor, dict):
         return valor
     if isinstance(valor, str):
@@ -118,10 +188,8 @@ def _as_dict(valor):
     return {}
 
 
-# =====================================================================
 # AUTENTICACIÓN — usada solo por auth.py para emitir el token de sesión.
 # Nunca se expone la contraseña ni se usa fuera de esa verificación.
-# =====================================================================
 
 def _password_coincide(password_en_texto_plano: str, hash_guardado: str) -> bool:
     """Verifica una contraseña contra el hash guardado en MySQL.
@@ -188,9 +256,7 @@ def buscar_usuario_por_credenciales(email: str, password: str) -> Optional[dict]
     return None
 
 
-# =====================================================================
 # BASE DE CONOCIMIENTO (reemplaza a knowledge.json)
-# =====================================================================
 
 def obtener_base_conocimiento() -> list:
     if not db_configurada():
@@ -204,10 +270,8 @@ def obtener_base_conocimiento() -> list:
         return cur.fetchall()
 
 
-# =====================================================================
 # CONFIGURACIÓN — umbrales y estado del botón "Postular" (compartido por
 # los 4 roles y también por visitantes sin sesión).
-# =====================================================================
 
 # Nota mínima de aprobación: fija en el código (igual que
 # NOTA_MINIMA_APROBACION en app.js) — ya no es configurable desde el
@@ -269,11 +333,9 @@ def contexto_postulacion(cur) -> str:
     return base
 
 
-# =====================================================================
 # CÁLCULO DE NOTAS — replica calcularNotaFinal() de app.js: si algún
 # criterio no tiene valor cargado para ese estudiante, la nota se
 # considera "pendiente" (no se cuenta como 0, se EXCLUYE del promedio).
-# =====================================================================
 
 def _calcular_nota_final(criterios: list, valores_estudiante: dict) -> Optional[float]:
     if not criterios:
@@ -457,11 +519,9 @@ def calcular_semaforo(cur) -> list:
     return resultado
 
 
-# =====================================================================
 # CONTEXTO PÚBLICO (visitante SIN sesión) — solo lo estrictamente
 # necesario para reconocer si mencionan a alguien de la fundación por
 # nombre, sin exponer ningún dato interno/privado.
-# =====================================================================
 
 def contexto_publico_persona_mencionada(texto_ultimo_mensaje: str) -> str:
     """Contexto en vivo para un visitante SIN sesión: siempre incluye el
@@ -480,10 +540,8 @@ def contexto_publico_persona_mencionada(texto_ultimo_mensaje: str) -> str:
         return "\n".join(p for p in partes if p)
 
 
-# =====================================================================
 # CONTEXTO POR ROL — cada función asume que el email/rol YA fueron
 # verificados por auth.py (nunca reciben el rol "de palabra" del cliente).
-# =====================================================================
 
 def contexto_estudiante(email: str, nombre: str, cohorte: Optional[str] = None) -> str:
     with get_connection() as conn, conn.cursor() as cur:

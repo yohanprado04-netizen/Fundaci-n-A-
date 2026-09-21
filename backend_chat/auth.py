@@ -46,6 +46,10 @@ HORAS_EXPIRACION = 8
 
 
 def crear_token(usuario: dict) -> str:
+    """
+    Genera y firma un token JWT con la información del usuario autenticado
+    (email, nombre, rol, id y cohorte) y un tiempo de expiración determinado.
+    """
     ahora = datetime.now(timezone.utc)
     payload = {
         "email": usuario["email"],
