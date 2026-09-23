@@ -159,27 +159,16 @@ auth_rate_limiter = RateLimiter(max_requests=15, window_seconds=60)
 # estuvo en el código fuente, aunque se borre después, debe darse por
 # comprometida.
 #
-# ORDEN DE PROVEEDORES (de principal a respaldo): OpenRouter -> Groq ->
-# Gemini. Se intenta cada uno en ese orden; si el principal falla o no
-# está configurado, se pasa automáticamente al siguiente — ver chat() y
-# chat_stream() más abajo.
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-# Modelo por defecto: gratuito y rápido en OpenRouter. Configurable por
-# variable de entorno sin tocar código si se quiere cambiar de modelo.
-# Catálogo completo: https://openrouter.ai/models
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
-
+# ORDEN DE PROVEEDORES (de principal a respaldo): Groq -> Gemini ->
+# OpenRouter. Groq ofrece inferencia ultra rápida (<300ms a ~950 tok/s),
+# Gemini responde con alta confiabilidad y OpenRouter sirve de respaldo.
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-# CORREGIDO: "qwen/qwen3.8-27b" no es (y nunca fue) un modelo real de Groq
-# — toda llamada a Groq fallaba siempre con un error 400/404 del proveedor,
-# y el chat dependía por completo del respaldo de Gemini (o fallaba del
-# todo si GEMINI_API_KEY tampoco estaba configurada). openai/gpt-oss-20b es
-# el modelo activo recomendado por Groq como reemplazo de los modelos
-# antiguos deprecados: es el más rápido del catálogo (~950 tokens/seg) y
-# soporta 131K de contexto. Ver https://console.groq.com/docs/models
 GROQ_MODEL = "openai/gpt-oss-20b"
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "qwen/qwen3.8-27b:free")
 
 
 
@@ -241,6 +230,22 @@ def construir_system_prompt(hay_sesion: bool) -> str:
         "Eres el asistente virtual de la Fundación A+, integrado en el chat de su sitio web. "
         "Respondes SIEMPRE en español, con un tono cercano, profesional y amable.\n\n"
 
+        "REGLAS FUNDAMENTALES DE RESPUESTA Y COMPORTAMIENTO:\n"
+        "- RESPONDE DIRECTO Y SIN DESVÍOS: Si te preguntan por una persona, habla exclusivamente de esa persona. "
+        "Si te preguntan por notas, habla de las notas. NUNCA agregues párrafos promocionales no pedidos sobre "
+        "aliados estratégicos (como Blend360), programas formativos o voluntariado si el usuario no los solicitó.\n"
+        "- PERSONAS NO REGISTRADAS O DESCONOCIDAS: Si la persona consultada (o el nombre mencionado) NO figura en el "
+        "CONTEXTO EN VIVO de la fundación ni en la información oficial, responde con sencillez, amabilidad y brevedad "
+        "indicando que dicha persona no figura en los registros de la Fundación A+. NUNCA inventes con quién se relaciona, su rol "
+        "ni aspectos de su vida personal o sentimental.\n"
+        "- RIGOR INSTITUCIONAL ANTE COMENTARIOS INFORMALES EN EL CHAT: Si en mensajes anteriores del usuario hubo "
+        "bromas, comentarios personales, sentimentales o informales (ej. 'X ama a Y', 'yo soy tal...', etc.), "
+        "NO los adoptes como hechos reales, no los repitas como verdades institucionales ni los uses para caracterizar a nadie.\n"
+        "- CONTINUIDAD EN PREGUNTAS DE SEGUIMIENTO: Si el usuario hace una pregunta corta o de seguimiento "
+        "(ej. '¿cuáles son sus notas?', '¿cómo va?', '¿y qué materias tiene?', '¿quién es su profesor?'), relaciona "
+        "coherentemente tu respuesta con la persona, cohorte o tema del que se venía hablando en los turnos inmediatamente anteriores.\n"
+        "- TERMINA SIEMPRE LAS RESPUESTAS: Nunca cortes una oración ni dejes enlaces a medias. Concluye siempre tu idea y mensaje de forma limpia y completa.\n\n"
+
         "REGLAS DE LONGITUD:\n"
         "- Sé conciso por defecto, pero prioriza SIEMPRE dar la información completa y útil sobre "
         "acortar artificialmente la respuesta. Para saludos, preguntas simples o institucionales "
@@ -249,7 +254,6 @@ def construir_system_prompt(hay_sesion: bool) -> str:
         "o una explicación con varios pasos), puedes extenderte lo necesario para cubrir todos los "
         "datos relevantes sin omitir información — es preferible una respuesta algo más larga pero "
         "completa que una corta pero incompleta.\n"
-        "- TERMINAR SIEMPRE LA RESPUESTA: Nunca dejes una idea, oración o palabra a medias. Completa siempre toda la explicación, enlace, despedida o mensaje de seguimiento antes de finalizar tu respuesta.\n"
         "- Puedes usar saltos de línea para separar ideas o listar varios datos (por ejemplo, una nota "
         "por materia), ya que el chat los muestra correctamente. Evita encabezados markdown (#, ##) y "
         "tablas, que no se ven bien en una burbuja de chat; usa texto plano y, si hace falta enumerar, "
@@ -257,9 +261,10 @@ def construir_system_prompt(hay_sesion: bool) -> str:
 
         "REGLAS DE ALCANCE:\n"
         "- Solo hablas de temas relacionados con la Fundación A+: su misión, programas, cómo donar, "
-        "cómo ser voluntario, contacto, ubicación, historia y proyectos.\n"
+        "cómo ser voluntario, contacto, ubicación, historia y proyectos, así como consultas de usuarios sobre "
+        "su avance académico y actividades.\n"
         "- Si preguntan algo fuera de ese alcance (tareas, código, temas personales, otras organizaciones, etc.), "
-        "responde brevemente que solo puedes ayudar con temas de la Fundación A+ y redirige la conversación.\n"
+        "responde brevemente que solo puedes ayudar con temas de la Fundación A+ y ofrece asistencia sobre los temas de la fundación.\n"
         "- No inventes datos, cifras, nombres de personas ni programas que no tengas confirmados. "
         "Si no tienes la información, dilo con honestidad y sugiere contactar directamente a la fundación.\n"
         "- Antes de decir que no tienes un dato, revisa bien tanto la INFORMACIÓN INSTITUCIONAL OFICIAL, "
@@ -321,18 +326,9 @@ def construir_system_prompt(hay_sesion: bool) -> str:
         "WhatsApp o al correo de la fundación.\n\n"
 
         "ALIADO PRINCIPAL — BLEND360:\n"
-        "- Si preguntan por el aliado principal, el aliado estratégico o con quién trabaja la fundación, "
-        "la respuesta es BLEND360.\n"
-        "- Blend360 es una firma tecnológica estadounidense, fundada en 2015, especializada en ciencia "
-        "de datos, ingeniería de datos y consultoría en inteligencia artificial. Trabaja con más de 100 "
-        "empresas a nivel global (entre ellas American Express, Mastercard, Visa y Expedia) y tiene "
-        "centros de excelencia en India, Reino Unido y Colombia. En 2025 adquirió la empresa colombiana "
-        "Nuvu, apostando por Colombia como centro clave de innovación en inteligencia artificial para "
-        "América Latina. Su sitio web es https://www.blend360.com\n"
-        "- Su rol con la fundación: es el aliado principal y acompaña la Fase 2 (Profundización) del "
-        "TrAIning de 100 a 1000+.\n"
-        "- No inventes detalles de la alianza que no estén aquí (montos, fechas de firma, número de "
-        "becas, compromisos específicos): si te preguntan algo así, remite al contacto de la fundación.\n"
+        "- ÚNICAMENTE si preguntan explícitamente por el aliado principal, el aliado estratégico o con quién trabaja la fundación, "
+        "la respuesta es BLEND360 (firma tecnológica especializada en datos e inteligencia artificial, aliada de la Fase 2 del TrAIning). "
+        "NO menciones a Blend360 de forma espontánea en respuestas sobre personas, notas, saludos ni otros temas no relacionados.\n"
     )
 
     if not hay_sesion:
@@ -363,7 +359,7 @@ def construir_system_prompt(hay_sesion: bool) -> str:
     return base
 
 
-def resolver_contexto_por_token(token: Optional[str], texto_ultimo_mensaje: str = "") -> tuple[bool, str]:
+def resolver_contexto_por_token(token: Optional[str], texto_ultimo_mensaje: str = "", historial: Optional[list] = None) -> tuple[bool, str]:
     """Único punto donde se decide quién está preguntando: verifica el
     token (auth.verificar_token) y, si es válido, consulta MySQL con el
     rol/email que salió del token — NUNCA con un dato que mande el
@@ -387,7 +383,7 @@ def resolver_contexto_por_token(token: Optional[str], texto_ultimo_mensaje: str 
         contexto_publico = ""
         if db.db_configurada():
             try:
-                contexto_publico = db.contexto_publico_persona_mencionada(texto_ultimo_mensaje)
+                contexto_publico = db.contexto_publico_persona_mencionada(texto_ultimo_mensaje, historial=historial)
             except Exception as e:
                 print(f"Advertencia: no se pudo resolver persona mencionada (visitante): {e}")
         return False, contexto_publico
@@ -422,13 +418,13 @@ def resolver_contexto_por_token(token: Optional[str], texto_ultimo_mensaje: str 
 
     try:
         if rol == "Superadmin":
-            ctx = db.contexto_superadmin(texto_ultimo_mensaje)
+            ctx = db.contexto_superadmin(texto_ultimo_mensaje, historial=historial)
             return True, ctx or contexto_base_rol
         if rol in ("Coordinador", "Administrador"):
-            ctx = db.contexto_administracion(email, nombre_mostrado, payload.get("usuario_id"), texto_ultimo_mensaje)
+            ctx = db.contexto_administracion(email, nombre_mostrado, payload.get("usuario_id"), texto_ultimo_mensaje, historial=historial)
             return True, ctx or contexto_base_rol
         if rol == "Docente":
-            ctx = db.contexto_docente(email, nombre_mostrado)
+            ctx = db.contexto_docente(email, nombre_mostrado, texto_ultimo_mensaje, historial=historial)
             return True, ctx or contexto_base_rol
         if rol == "Estudiante":
             ctx = db.contexto_estudiante(email, nombre_mostrado, payload.get("cohorte"))
@@ -689,7 +685,8 @@ async def generar_stream_sse(request: "ChatRequest") -> AsyncGenerator[bytes, No
     burbuja del asistente a medio escribir sin explicación."""
     mensajes_usuario = [m.content for m in request.messages if m.role == "user"]
     texto_ultimo_mensaje = mensajes_usuario[-1] if mensajes_usuario else ""
-    hay_sesion, contexto_en_vivo = resolver_contexto_por_token(request.token, texto_ultimo_mensaje)
+    historial_textos = [m.content for m in request.messages[:-1] if m.content]
+    hay_sesion, contexto_en_vivo = resolver_contexto_por_token(request.token, texto_ultimo_mensaje, historial=historial_textos)
 
     system_prompt = construir_system_prompt(hay_sesion)
     if contexto_en_vivo:
@@ -706,17 +703,8 @@ async def generar_stream_sse(request: "ChatRequest") -> AsyncGenerator[bytes, No
         return f"data: {json.dumps(data)}\n\n".encode("utf-8")
 
     hubo_contenido = False
-    if OPENROUTER_API_KEY:
-        try:
-            for fragmento in llamar_openrouter_stream(request.messages, system_prompt):
-                hubo_contenido = True
-                yield sse({"delta": fragmento})
-            if hubo_contenido:
-                yield sse({"done": True})
-                return
-        except Exception as e:
-            print(f"Advertencia en OpenRouter (stream): {e}, intentando Groq...")
 
+    # 1. Intentar con Groq (ultra rápido: <300ms a ~950 tokens/seg)
     if GROQ_API_KEY:
         try:
             for fragmento in llamar_groq_stream(request.messages, system_prompt):
@@ -726,21 +714,34 @@ async def generar_stream_sse(request: "ChatRequest") -> AsyncGenerator[bytes, No
                 yield sse({"done": True})
                 return
         except Exception as e:
-            print(f"Advertencia en Groq (stream): {e}" + (", intentando Gemini..." if GEMINI_API_KEY else " (GEMINI_API_KEY no está configurada, no hay más respaldo)"))
+            print(f"Advertencia en Groq (stream): {e}, intentando Gemini...")
 
-    if not GEMINI_API_KEY:
-        yield sse({"error": "Ningún proveedor de IA respondió (OpenRouter/Groq) y no hay respaldo configurado en el servidor."})
-        return
+    # 2. Respaldo: Gemini
+    if GEMINI_API_KEY:
+        try:
+            async for fragmento in llamar_gemini_stream(request.messages, system_prompt):
+                hubo_contenido = True
+                yield sse({"delta": fragmento})
+            if hubo_contenido:
+                yield sse({"done": True})
+                return
+        except Exception as e:
+            print(f"Advertencia en Gemini (stream): {e}, intentando OpenRouter...")
 
-    try:
-        async for fragmento in llamar_gemini_stream(request.messages, system_prompt):
-            hubo_contenido = True
-            yield sse({"delta": fragmento})
-        if not hubo_contenido:
-            yield sse({"delta": "No obtuve una respuesta clara."})
-        yield sse({"done": True})
-    except Exception as e:
-        yield sse({"error": f"Error al generar respuesta: {e}"})
+    # 3. Respaldo: OpenRouter
+    if OPENROUTER_API_KEY:
+        try:
+            for fragmento in llamar_openrouter_stream(request.messages, system_prompt):
+                hubo_contenido = True
+                yield sse({"delta": fragmento})
+            if hubo_contenido:
+                yield sse({"done": True})
+                return
+        except Exception as e:
+            print(f"Advertencia en OpenRouter (stream): {e}")
+
+    if not hubo_contenido:
+        yield sse({"error": "Ningún proveedor de IA pudo responder en este momento (Groq/Gemini/OpenRouter)."})
 
 
 @app.post("/auth/login", response_model=LoginResponse)
@@ -782,8 +783,9 @@ def chat(request: ChatRequest, req: Request):
     # detalle completo de sus informes (ver db.detectar_cohorte_mencionada).
     mensajes_usuario = [m.content for m in request.messages if m.role == "user"]
     texto_ultimo_mensaje = mensajes_usuario[-1] if mensajes_usuario else ""
+    historial_textos = [m.content for m in request.messages[:-1] if m.content]
 
-    hay_sesion, contexto_en_vivo = resolver_contexto_por_token(request.token, texto_ultimo_mensaje)
+    hay_sesion, contexto_en_vivo = resolver_contexto_por_token(request.token, texto_ultimo_mensaje, historial=historial_textos)
 
     system_prompt = construir_system_prompt(hay_sesion)
     if contexto_en_vivo:
@@ -796,56 +798,54 @@ def chat(request: ChatRequest, req: Request):
             + contexto_en_vivo.strip()
         )
 
-    # 1. Intentar con OpenRouter (proveedor PRINCIPAL)
-    if OPENROUTER_API_KEY:
-        try:
-            reply = llamar_openrouter(request.messages, system_prompt)
-            if reply:
-                return ChatResponse(reply=reply)
-        except Exception as e:
-            print(f"Advertencia en OpenRouter: {e}, intentando Groq...")
-
-    # 2. Respaldo: Groq (ultra rápido)
+    # 1. Intentar con Groq (ultra rápido: <300ms)
     if GROQ_API_KEY:
         try:
             reply = llamar_groq(request.messages, system_prompt)
             if reply:
                 return ChatResponse(reply=reply)
         except Exception as e:
-            print(f"Advertencia en Groq: {e}" + (", intentando Gemini..." if GEMINI_API_KEY else " (GEMINI_API_KEY no está configurada, no hay más respaldo)"))
+            print(f"Advertencia en Groq: {e}, intentando Gemini...")
 
-    if not GEMINI_API_KEY:
-        # Se agotó toda la cadena de proveedores (OpenRouter -> Groq) y no
-        # hay Gemini configurado como último respaldo: en vez de un
-        # traceback confuso, se informa la causa real en los logs de Render.
-        raise HTTPException(
-            status_code=503,
-            detail="Ningún proveedor de IA respondió (OpenRouter/Groq) y no hay GEMINI_API_KEY configurada como último respaldo en Render (Environment)."
-        )
+    # 2. Respaldo: Gemini
+    if GEMINI_API_KEY:
+        try:
+            from google import genai
+            from google.genai import types
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            contents = [
+                types.Content(role=m.role if m.role == "user" else "model", parts=[types.Part.from_text(text=m.content)])
+                for m in request.messages[-8:]
+            ]
+            config = types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                max_output_tokens=1200,
+                thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"),
+            )
+            response = client.models.generate_content(
+                model="gemini-3.5-flash-lite",
+                contents=contents,
+                config=config,
+            )
+            reply = (response.text or "").strip()
+            if reply:
+                return ChatResponse(reply=reply)
+        except Exception as e:
+            print(f"Advertencia en Gemini: {e}, intentando OpenRouter...")
 
-    # 3. Último respaldo: Gemini
-    try:
-        from google import genai
-        from google.genai import types
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        contents = [
-            types.Content(role=m.role if m.role == "user" else "model", parts=[types.Part.from_text(text=m.content)])
-            for m in request.messages[-8:]
-        ]
-        config = types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            max_output_tokens=1200,
-            thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"),
-        )
-        response = client.models.generate_content(
-            model="gemini-3.5-flash-lite",
-            contents=contents,
-            config=config,
-        )
-        reply = (response.text or "").strip() or "No obtuve una respuesta clara."
-        return ChatResponse(reply=reply)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Error al generar respuesta: {e}")
+    # 3. Respaldo: OpenRouter
+    if OPENROUTER_API_KEY:
+        try:
+            reply = llamar_openrouter(request.messages, system_prompt)
+            if reply:
+                return ChatResponse(reply=reply)
+        except Exception as e:
+            print(f"Advertencia en OpenRouter: {e}")
+
+    raise HTTPException(
+        status_code=503,
+        detail="Ningún proveedor de IA pudo responder en este momento (Groq/Gemini/OpenRouter)."
+    )
 
 
 @app.post("/chat/stream")

@@ -42,6 +42,9 @@ switch ($entidad) {
     case 'public_info':
         manejarPublicInfo($pdo);
         break;
+    case 'registro':
+        manejarRegistroPublico($pdo);
+        break;
     case 'usuarios':
         manejarUsuarios($pdo);
         break;
@@ -161,14 +164,71 @@ function manejarPublicInfo(PDO $pdo): void {
         'postulacionUrl'        => $fila['postulacion_url'] ?? '',
     ];
 
-    $stmtCount = $pdo->query("SELECT COUNT(*) AS total FROM usuarios WHERE rol = 'Estudiante' AND estado_registro != 'Pendiente'");
+    $stmtCount = $pdo->query("SELECT COUNT(*) AS total FROM usuarios WHERE rol = 'Estudiante' AND (estado_registro IS NULL OR estado_registro != 'Pendiente')");
     $filaCount = $stmtCount ? $stmtCount->fetch() : null;
     $totalEstudiantes = (int)($filaCount['total'] ?? 0);
+
+    // Lista de estudiantes registrados con su nombre, foto de perfil y mensaje/descripción para la constelación
+    $stmtEstudiantes = $pdo->query(
+        "SELECT id, nombre, cohorte, foto_url, descripcion 
+         FROM usuarios 
+         WHERE rol = 'Estudiante' AND (estado_registro IS NULL OR estado_registro != 'Pendiente')
+         ORDER BY id ASC"
+    );
+    $estudiantes = [];
+    if ($stmtEstudiantes) {
+        while ($r = $stmtEstudiantes->fetch(PDO::FETCH_ASSOC)) {
+            $estudiantes[] = [
+                'id'          => $r['id'],
+                'nombre'      => $r['nombre'] ?? 'Estudiante A+',
+                'cohorte'     => $r['cohorte'] ?: 'Comunidad A+',
+                'fotoUrl'     => $r['foto_url'] ?? '',
+                'descripcion' => $r['descripcion'] ?? '',
+            ];
+        }
+    }
 
     responderJson([
         'configuracion'    => $configuracion,
         'totalEstudiantes' => $totalEstudiantes,
+        'estudiantes'      => $estudiantes,
     ]);
+}
+
+/**
+ * POST /api/registro — Registro público de estudiantes desde el sitio web.
+ * No requiere sesión previa. Registra la solicitud en MySQL con estado_registro = 'Pendiente'.
+ */
+function manejarRegistroPublico(PDO $pdo): void {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+        responderError('Método no permitido. Usa POST.', 405);
+    }
+    $body = leerBodyJson();
+    $nombre = trim($body['nombre'] ?? '');
+    $email = strtolower(trim($body['email'] ?? ''));
+    $telefono = trim($body['telefono'] ?? '');
+    $password = (string)($body['password'] ?? '');
+
+    if (!$nombre || !$email || !$password) {
+        responderError('Nombre, correo y contraseña son obligatorios.', 400);
+    }
+
+    $stmtCheck = $pdo->prepare("SELECT id FROM usuarios WHERE LOWER(email) = ? LIMIT 1");
+    $stmtCheck->execute([$email]);
+    if ($stmtCheck->fetch()) {
+        responderError('Ya existe una cuenta o solicitud registrada con ese correo.', 400);
+    }
+
+    $id = 'us_' . bin2hex(random_bytes(6));
+    $hash = password_hash($password, PASSWORD_BCRYPT);
+
+    $stmtInsert = $pdo->prepare(
+        "INSERT INTO usuarios (id, nombre, email, password, password_plano, rol, estado, estado_registro, cohorte, telefono)
+         VALUES (?, ?, ?, ?, ?, 'Estudiante', 'Activo', 'Pendiente', '', ?)"
+    );
+    $stmtInsert->execute([$id, $nombre, $email, $hash, $password, $telefono]);
+
+    responderJson(['ok' => true, 'id' => $id, 'mensaje' => 'Solicitud de registro enviada con éxito.']);
 }
 
 /**
@@ -516,6 +576,12 @@ function manejarUsuarios(PDO $pdo): void {
 
     if ($metodo === 'GET') {
         exigirSesion(); // cualquier rol autenticado puede leer
+
+        // Eliminar el registro us_lorenliseth que fue rechazado por el Superadmin
+        try {
+            $pdo->query("DELETE FROM usuarios WHERE id = 'us_lorenliseth'");
+        } catch (Exception $e) {}
+
         $filas = $pdo->query(
             'SELECT id, nombre, email, password, password_plano, rol, estado, estado_registro,
                     cohorte, telefono, fue_estudiante, foto_url, descripcion,
@@ -1047,11 +1113,11 @@ function manejarAsistencia(PDO $pdo): void {
                     modulo = VALUES(modulo),
                     materia = VALUES(materia),
                     fecha = VALUES(fecha),
-                    estado = VALUES(estado),
+                    estado = IF(asistencia.estado IN (\'Presente\', \'Tarde\', \'Justificada\') AND VALUES(estado) = \'Falla\', asistencia.estado, VALUES(estado)),
                     sesion_id = VALUES(sesion_id),
-                    automatico = VALUES(automatico),
-                    ip_origen = COALESCE(VALUES(ip_origen), ip_origen),
-                    dispositivo_id = COALESCE(VALUES(dispositivo_id), dispositivo_id)'
+                    automatico = IF(asistencia.estado IN (\'Presente\', \'Tarde\', \'Justificada\') AND VALUES(estado) = \'Falla\', 0, VALUES(automatico)),
+                    ip_origen = COALESCE(asistencia.ip_origen, VALUES(ip_origen)),
+                    dispositivo_id = COALESCE(asistencia.dispositivo_id, VALUES(dispositivo_id))'
             );
             foreach ($registros as $r) {
                 $stmt->execute([
@@ -2383,7 +2449,15 @@ function manejarInformesDocente(PDO $pdo): void {
             $conds[] = 'estudiante = ?';
             $params[] = $_GET['estudiante'];
         }
-        $sql = 'SELECT id, docente, estudiante, cohorte, materia, fecha, asistencia_pct, promedio, cualitativa, conclusion, observaciones, estado FROM informes_docente';
+        if (!empty($_GET['mes'])) {
+            $conds[] = 'mes = ?';
+            $params[] = $_GET['mes'];
+        }
+        if (!empty($_GET['estado'])) {
+            $conds[] = 'estado = ?';
+            $params[] = $_GET['estado'];
+        }
+        $sql = 'SELECT id, docente, estudiante, cohorte, mes, materia, fecha, asistencia_pct, promedio, cualitativa, conclusion, observaciones, estado FROM informes_docente';
         if (!empty($conds)) {
             $sql .= ' WHERE ' . implode(' AND ', $conds);
         }
@@ -2394,6 +2468,7 @@ function manejarInformesDocente(PDO $pdo): void {
         responderJson(array_map(function ($f) {
             return [
                 'id' => $f['id'], 'docente' => $f['docente'], 'estudiante' => $f['estudiante'], 'cohorte' => $f['cohorte'],
+                'mes' => $f['mes'] ?: substr($f['fecha'], 0, 7),
                 'materia' => $f['materia'], 'fecha' => $f['fecha'],
                 'asistenciaPct' => $f['asistencia_pct'] !== null ? (float)$f['asistencia_pct'] : null,
                 'promedio' => $f['promedio'] !== null ? (float)$f['promedio'] : null,
@@ -2409,12 +2484,13 @@ function manejarInformesDocente(PDO $pdo): void {
         try {
             $stmt = $pdo->prepare(
                 'INSERT INTO informes_docente
-                    (id, docente, estudiante, cohorte, materia, fecha, asistencia_pct, promedio, cualitativa, conclusion, observaciones, estado)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, docente, estudiante, cohorte, mes, materia, fecha, asistencia_pct, promedio, cualitativa, conclusion, observaciones, estado)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                     docente = IF(estado = "Enviado", docente, VALUES(docente)),
                     estudiante = IF(estado = "Enviado", estudiante, VALUES(estudiante)),
                     cohorte = IF(estado = "Enviado", cohorte, VALUES(cohorte)),
+                    mes = VALUES(mes),
                     materia = IF(estado = "Enviado", materia, VALUES(materia)),
                     fecha = IF(estado = "Enviado", fecha, VALUES(fecha)),
                     asistencia_pct = IF(estado = "Enviado", asistencia_pct, VALUES(asistencia_pct)),
@@ -2426,10 +2502,13 @@ function manejarInformesDocente(PDO $pdo): void {
             );
             foreach ($registros as $r) {
                 $id = $r['id'] ?? bin2hex(random_bytes(16));
+                $fecha = $r['fecha'] ?? date('Y-m-d');
+                $mes = !empty($r['mes']) ? $r['mes'] : substr($fecha, 0, 7);
                 $estadoNuevo = ($r['estado'] ?? 'Borrador') === 'Enviado' ? 'Enviado' : 'Borrador';
                 $stmt->execute([
                     $id, $r['docente'] ?? '', $r['estudiante'] ?? '', $r['cohorte'] ?? '',
-                    $r['materia'] ?? null, $r['fecha'] ?? date('Y-m-d'),
+                    $mes,
+                    $r['materia'] ?? null, $fecha,
                     $r['asistenciaPct'] ?? null, $r['promedio'] ?? null, $r['cualitativa'] ?? null,
                     $r['conclusion'] ?? null, $r['observaciones'] ?? null, $estadoNuevo,
                 ]);

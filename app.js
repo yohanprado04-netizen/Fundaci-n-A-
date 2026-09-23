@@ -61,52 +61,482 @@
   // async: Store.list('usuarios') ahora habla con MySQL (ver db.js) — las
   // 4 llamadas a esta función son "fire and forget" (no esperan su
   // resultado), así que no hace falta await en cada punto de llamada.
-  async function renderConstellation(totalEstudiantesDirecto) {
+  const EXPERIENCIAS_CHOCOANAS = [
+    "¡Manín, esto es una berraquera! Llegué sin saber qué era una variable y hoy ya le monté la web al negocio de mi tía en pleno Quibdó.",
+    "Aquí ni los aguaceros del Chocó nos frenan. Si se cae el internet, sacamos cuaderno, repasamos la lógica y seguimos firmes tirando código.",
+    "Ver que desde la orilla del Atrato podemos programar software que compite con cualquier parte del mundo me llena de un orgullo el berraco.",
+    "El profe nos explicó cómo conectar MySQL con el backend y cuando vi los datos guardarse en vivo dije: ¡esto sí es lo mío, carajo!",
+    "Lo más bacano es el compañerismo chocoano: si un hermano se traba con un error de código, entre todos nos sentamos a ayudarlo hasta que corra.",
+    "En mi casa nadie sabía de sistemas. Hoy soy el que le mete mano a la tecnología y ayuda a digitalizar los emprendimientos del barrio.",
+    "Yo le tenía pavor a los algoritmos, pero con la paciencia de los profes le agarré el ritmo. ¡En el Chocó hay talento y ganas de sobrar!",
+    "Tirar código después de clase viendo el atardecer en el Malecón con los compañeros es una experiencia sabrosa y transformadora.",
+    "Pasé de solo estar pegado al celular viendo redes a entender cómo funciona la web por dentro y maquetar mis propias aplicaciones.",
+    "La Fundación A+ no solo nos enseña código; nos enseña a ser líderes y a demostrar la casta y el empuje de nuestra juventud.",
+    "Nunca imaginé que a mis 19 años iba a estar programando con Tailwind y creando bases de datos para resolver problemas del territorio.",
+    "Aquí se siente una energía única, puro calor humano y ganas de salir adelante con la tecnología como herramienta de progreso.",
+    "Hicimos una app comunitaria para organizar datos del barrio y ver a los vecinos usarla fue una emoción que no me cabe en el pecho.",
+    "Las asesorías me salvaron la vida cuando me enredé con las funciones asíncronas. Los profes te explican sin rodeos y con puro cariño.",
+    "Demostrando que en el Chocó no solo somos potencia pal deporte y la música, sino también pa la innovación, la ciencia y el software.",
+    "Cada módulo terminado es una fiesta. Salir de clase con un proyecto funcionando pa mostrárselo a mi mamá es lo más grande de la vida.",
+    "El código se pone duro a veces, pero como buenos chocoanos somos berracos y no nos dejamos ganar de ningún bug que se atraviese.",
+    "Descubrí mi vocación en este training. Ahora sé con certeza que desde mi tierra puedo trabajar y prestar servicios pal mundo entero.",
+    "Aprender desarrollo web aquí me abrió los ojos. La tecnología es el camino pa transformar a Quibdó y a todo nuestro Pacífico.",
+    "Aquí no hay excusas, mi vale: con disciplina, buenos mentores y el apoyo de la fundación, estamos construyendo nuestro propio destino.",
+    "Dejé el miedo atrás y me enamoré de la programación. Ver tu primera página web publicada en internet con tu nombre te cambia la vida.",
+    "Puro sabor y berraquera chocoana metida en cada línea de código. ¡Vamos con toda por ese futuro digital de nuestra tierra!"
+  ];
+
+  const DEFAULT_ESTUDIANTES_CONSTELLATION = [
+    { id: 'def_1', nombre: 'Yohan Prado', cohorte: 'TrAIning 100 a 1000+', fotoUrl: '', descripcion: '¡Manín, esto es una berraquera! Llegué sin saber qué era una variable y hoy ya le monté la web al negocio de mi tía en pleno Quibdó.' },
+    { id: 'def_2', nombre: 'Keiner Mosquera', cohorte: 'TrAIning 100 a 1000+', fotoUrl: '', descripcion: 'Aquí ni los aguaceros del Chocó nos frenan. Si se cae el internet, sacamos cuaderno, repasamos la lógica y seguimos firmes tirando código.' },
+    { id: 'def_3', nombre: 'Danna Bejarano', cohorte: 'TrAIning 100 a 1000+', fotoUrl: '', descripcion: 'Ver que desde la orilla del Atrato podemos programar software que compite con cualquier parte del mundo me llena de un orgullo el berraco.' },
+    { id: 'def_4', nombre: 'Carlos Mendoza', cohorte: 'TrAIning 100 a 1000+', fotoUrl: '', descripcion: 'El profe nos explicó cómo conectar MySQL con el backend y cuando vi los datos guardarse en vivo dije: ¡esto sí es lo mío, carajo!' },
+    { id: 'def_5', nombre: 'Wendy Palacios', cohorte: 'TrAIning 100 a 1000+', fotoUrl: '', descripcion: 'Lo más bacano es el compañerismo chocoano: si un hermano se traba con un error de código, entre todos nos sentamos a ayudarlo hasta que corra.' },
+    { id: 'def_6', nombre: 'Mayra Mosquera', cohorte: 'TrAIning 100 a 1000+', fotoUrl: '', descripcion: 'Tirar código después de clase viendo el atardecer en el Malecón con los compañeros es una experiencia sabrosa y transformadora.' },
+    { id: 'def_7', nombre: 'Jefferson Ibargüen', cohorte: 'TrAIning 100 a 1000+', fotoUrl: '', descripcion: 'Nunca imaginé que a mis 19 años iba a estar programando con Tailwind y creando bases de datos para resolver problemas del territorio.' },
+    { id: 'def_8', nombre: 'Leidy Hurtado', cohorte: 'TrAIning 100 a 1000+', fotoUrl: '', descripcion: 'Aquí se siente una energía única, puro calor humano y ganas de salir adelante con la tecnología como herramienta de progreso.' },
+    { id: 'def_9', nombre: 'Didier Chaverra', cohorte: 'TrAIning 100 a 1000+', fotoUrl: '', descripcion: 'Demostrando que en el Chocó no solo somos potencia pal deporte y la música, sino también pa la innovación, la ciencia y el software.' }
+  ];
+
+  async function renderConstellation(totalEstudiantesDirecto, estudiantesDirecto) {
     const container = document.getElementById('constellation');
     if (!container) return;
-    // El elemento puede seguir existiendo en el DOM aunque esté oculto
-    // (p. ej. el sitio público vive siempre en el HTML, solo se le pone
-    // "hidden" mientras alguien está adentro del panel interno).
-    if (container.offsetParent === null) return;
+
+    // Limpiar temporizadores previos de la constelación (tanto intervalos como timeouts)
+    if (window._constellationTimers) {
+      window._constellationTimers.forEach(t => {
+        try { clearInterval(t); } catch (e) {}
+        try { clearTimeout(t); } catch (e) {}
+      });
+    }
+    window._constellationTimers = [];
+
     container.innerHTML = '';
 
-    let totalEstudiantes = typeof totalEstudiantesDirecto === 'number' ? totalEstudiantesDirecto : 0;
-    if (typeof totalEstudiantesDirecto !== 'number') {
-      try {
-        // Solo cuentan estudiantes ya aprobados/matriculados de verdad
-        totalEstudiantes = (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && u.estadoRegistro !== 'Pendiente').length;
-      } catch (e) { /* Store aún no listo */ }
-    }
-    const nodeCount = Math.max(CONSTELLATION_MIN_NODOS, totalEstudiantes);
+    let estudiantes = Array.isArray(estudiantesDirecto) && estudiantesDirecto.length ? [...estudiantesDirecto] : null;
+    let totalEstudiantes = typeof totalEstudiantesDirecto === 'number' && totalEstudiantesDirecto > 0 ? totalEstudiantesDirecto : 0;
 
-    // Semilla fija: mismos nodos "decorativos extra" siempre en la misma
-    // posición entre recargas (no parpadea al refrescar la página), pero
-    // el TOTAL sí crece con estudiantes reales.
+    if (!estudiantes || !estudiantes.length) {
+      if (typeof currentAdminRole !== 'undefined' && currentAdminRole) {
+        try {
+          const todos = await Store.list('usuarios');
+          const ests = todos.filter(u => u.rol === 'Estudiante' && (!u.estadoRegistro || u.estadoRegistro !== 'Pendiente'));
+          if (ests.length) {
+            totalEstudiantes = ests.length;
+            estudiantes = ests.map(u => ({
+              id: u.id,
+              nombre: u.nombre || 'Estudiante A+',
+              cohorte: u.cohorte || 'Comunidad A+',
+              fotoUrl: u.fotoUrl || '',
+              descripcion: u.descripcion || ''
+            }));
+          }
+        } catch (e) {
+          // Modo offline / sin sesión
+        }
+      }
+    }
+
+    if (!estudiantes || !estudiantes.length) {
+      estudiantes = DEFAULT_ESTUDIANTES_CONSTELLATION;
+      totalEstudiantes = estudiantes.length;
+    }
+
+    const nodeCount = Math.max(CONSTELLATION_MIN_NODOS, totalEstudiantes);
     const rand = seededRandom(42);
 
+    // Contenedor SVG para líneas estelares
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'constellation-svg');
+    container.appendChild(svg);
+
+    // Capa de tarjetas flotantes (pointer-events: none en el contenedor, auto en las tarjetas)
+    const cardsLayer = document.createElement('div');
+    cardsLayer.className = 'absolute inset-0 pointer-events-none z-20 overflow-visible';
+    container.appendChild(cardsLayer);
+
+    const nodesData = [];
+
     for (let i = 0; i < nodeCount; i++) {
-      const node = document.createElement('div');
-      // distribute with a slight center bias, avoiding the label chips at bottom
-      const x = rand() * 92 + 2;
-      const y = rand() * 90 + 3;
-      const size = 4 + rand() * 10;
+      const x = rand() * 88 + 6;
+      const y = rand() * 84 + 8;
+      const size = 5 + rand() * 8;
       const color = CONSTELLATION_COLORS[Math.floor(rand() * CONSTELLATION_COLORS.length)];
       const delay = rand() * 1.4;
       const opacity = 0.55 + rand() * 0.45;
 
+      const node = document.createElement('div');
       node.className = 'node' + (constellationReduceMotion ? '' : ' drift');
       node.style.left = x + '%';
       node.style.top = y + '%';
       node.style.width = size + 'px';
       node.style.height = size + 'px';
       node.style.background = color;
+      node.style.color = color;
       node.style.setProperty('--op', opacity);
       node.style.setProperty('--delay', delay + 's');
       node.style.setProperty('--dx', (rand() * 10 - 5) + 'px');
       node.style.setProperty('--dy', (rand() * 10 - 5) + 'px');
       node.style.animationDelay = delay + 's, ' + delay + 's';
+
+      nodesData.push({ el: node, x, y, color, size, index: i });
       container.appendChild(node);
     }
+
+    // Líneas de conexión tenues entre nodos cercanos (< 17% distancia)
+    for (let i = 0; i < nodesData.length; i++) {
+      for (let j = i + 1; j < nodesData.length; j++) {
+        const dx = nodesData[i].x - nodesData[j].x;
+        const dy = nodesData[i].y - nodesData[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 17 && (i + j) % 3 === 0) {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('class', 'constellation-line');
+          line.setAttribute('x1', nodesData[i].x + '%');
+          line.setAttribute('y1', nodesData[i].y + '%');
+          line.setAttribute('x2', nodesData[j].x + '%');
+          line.setAttribute('y2', nodesData[j].y + '%');
+          line.setAttribute('stroke', nodesData[i].color);
+          line.setAttribute('stroke-opacity', '0.12');
+          line.setAttribute('stroke-width', '1');
+          svg.appendChild(line);
+        }
+      }
+    }
+
+    if (!estudiantes || estudiantes.length === 0) return;
+
+    // Clasificar nodos disponibles en 2 zonas verticales disjuntas para GARANTIZAR cero superposiciones
+    // Zona Superior (y <= 46%) y Zona Inferior (y >= 54%)
+    // De esta manera una tarjeta superior NUNCA puede tocar una tarjeta inferior
+    const topNodes = nodesData.filter(n => n.y <= 44);
+    const bottomNodes = nodesData.filter(n => n.y >= 54);
+
+    // Preparar lista de estudiantes asignándoles una experiencia auténtica y chocoana
+    const studentList = estudiantes.map((est, idx) => {
+      const mensaje = (est.descripcion && est.descripcion.trim().length > 0)
+        ? est.descripcion.trim()
+        : EXPERIENCIAS_CHOCOANAS[idx % EXPERIENCIAS_CHOCOANAS.length];
+      return { ...est, mensaje, originalIndex: idx };
+    });
+
+    // Asignar nodos a los estudiantes repartiéndolos equitativamente entre las 2 zonas
+    const studentNodes = [];
+    studentList.forEach((st, idx) => {
+      const isTop = (idx % 2 === 0);
+      const zoneList = isTop ? (topNodes.length > 0 ? topNodes : nodesData) : (bottomNodes.length > 0 ? bottomNodes : nodesData);
+      const nodeObj = zoneList[idx % zoneList.length];
+      const node = nodeObj.el;
+
+      const studentInfo = {
+        ...st,
+        nodeObj,
+        color: nodeObj.color,
+        isTopZone: nodeObj.y < 50
+      };
+
+      node.classList.add('node--student');
+      node.style.width = Math.max(12, nodeObj.size + 3) + 'px';
+      node.style.height = Math.max(12, nodeObj.size + 3) + 'px';
+      node.title = `${st.nombre} - Clic para ver experiencia`;
+
+      if (!node.querySelector('.node-pulse-ring')) {
+        const ring = document.createElement('span');
+        ring.className = 'node-pulse-ring';
+        node.appendChild(ring);
+      }
+
+      node.__studentData = studentInfo;
+      studentNodes.push(studentInfo);
+
+      // Interacción directa por hover o toque en el nodo
+      node.addEventListener('mouseenter', () => {
+        abrirTarjetaEnModoLectura(studentInfo);
+      });
+      node.addEventListener('click', (e) => {
+        e.stopPropagation();
+        abrirTarjetaEnModoLectura(studentInfo, true);
+      });
+    });
+
+    // ── GESTIÓN DE ROTACIÓN ALEATORIA Y CERO SUPERPOSICIONES ──
+    // Se muestran exactamente 2 tarjetas simultáneas:
+    // Slot 0 -> Exclusivamente en Zona Superior (y <= 46%)
+    // Slot 1 -> Exclusivamente en Zona Inferior (y >= 54%)
+    // La brecha de >10% vertical asegura que FÍSICAMENTE NUNCA SE VEAN UNA ENCIMA DE OTRA.
+    const activeSlots = [null, null];
+    let isUserHoveringConstellation = false;
+    let isExpandedCardOpen = false;
+
+    container.addEventListener('mouseenter', () => { isUserHoveringConstellation = true; });
+    container.addEventListener('mouseleave', () => {
+      isUserHoveringConstellation = false;
+    });
+
+    // Cierra cualquier tarjeta si se hace clic afuera del contenedor
+    document.addEventListener('click', (e) => {
+      if (!container.contains(e.target)) {
+        if (expandedCardObj && expandedCardObj.cardEl) {
+          expandedCardObj.cardEl.classList.remove('is-expanded');
+          expandedCardObj = null;
+          isExpandedCardOpen = false;
+        }
+        if (manualCard) {
+          cerrarTarjetaCompleta(manualCard, manualStudent);
+        }
+      }
+    });
+
+    function crearElementoTarjeta(student, startExpanded = false) {
+      const card = document.createElement('div');
+      card.className = 'constellation-card' + (startExpanded ? ' is-expanded' : '');
+
+      // Coordenadas del nodo
+      const x = student.nodeObj.x;
+      const y = student.nodeObj.y;
+
+      // Si el nodo está a la derecha (x > 52%), la tarjeta se abre hacia la izquierda
+      const toLeft = x > 52;
+      // Si el nodo está en la zona superior, la tarjeta se expande hacia abajo; si está en zona inferior, hacia arriba
+      const toTop = y > 58;
+
+      if (toLeft) {
+        card.style.right = `calc(${100 - x}% + 14px)`;
+        card.style.setProperty('--origin-x', '100%');
+      } else {
+        card.style.left = `calc(${x}% + 14px)`;
+        card.style.setProperty('--origin-x', '0%');
+      }
+
+      if (toTop) {
+        card.style.bottom = `calc(${100 - y}% - 10px)`;
+        card.style.setProperty('--origin-y', '100%');
+      } else {
+        card.style.top = `calc(${y}% - 10px)`;
+        card.style.setProperty('--origin-y', '0%');
+      }
+
+      const iniciales = escapeHtml((student.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase());
+      const avatarHtml = student.fotoUrl
+        ? `<img src="${escapeHtml(student.fotoUrl)}" alt="${escapeHtml(student.nombre)}" class="w-8 h-8 rounded-full object-cover shrink-0 ring-2 ring-white shadow-sm" />`
+        : `<div class="w-8 h-8 rounded-full grid place-items-center text-[11px] font-extrabold text-white shrink-0 shadow-sm" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>`;
+
+      card.innerHTML = `
+        <div class="flex items-center justify-between gap-2 mb-1.5">
+          <div class="flex items-center gap-2 min-w-0">
+            ${avatarHtml}
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1">
+                <p class="text-xs font-bold text-ink truncate">${escapeHtml(student.nombre)}</p>
+                <svg class="w-3 h-3 text-turquesa shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+              </div>
+              <p class="text-[10px] text-slate2 truncate flex items-center gap-1 font-medium">
+                <span class="w-1.5 h-1.5 rounded-full inline-block" style="background:${student.color}"></span>
+                ${escapeHtml(student.cohorte || 'Comunidad A+')}
+              </p>
+            </div>
+          </div>
+          <button type="button" class="card-close-btn w-6 h-6 rounded-full bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 flex items-center justify-center shrink-0 transition-all shadow-xs cursor-pointer" title="Cerrar mensaje">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="card-message-text text-[11px] text-slate-700 leading-snug italic relative pl-2.5 mb-1" style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
+          <span class="absolute left-0 top-0 text-morado font-serif text-xs leading-none font-bold">“</span>${escapeHtml(student.mensaje)}<span class="text-morado font-serif text-xs leading-none font-bold">”</span>
+        </div>
+        <div class="card-hint-read flex items-center justify-between mt-1 pt-1 border-t border-gray-100/80">
+          <span class="text-[9.5px] font-semibold text-morado flex items-center gap-1">
+            <span>Toca para leer completo</span>
+            <svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+          </span>
+          <span class="w-1.5 h-1.5 rounded-full" style="background:${student.color}"></span>
+        </div>
+        <div class="mt-1.5 h-0.5 w-full rounded-full opacity-60" style="background:linear-gradient(90deg, ${student.color}, transparent)"></div>
+      `;
+
+      // Evento directo en el botón de cierre para que siempre cierre de inmediato
+      const closeBtn = card.querySelector('.card-close-btn');
+      if (closeBtn) {
+        const onCerrarClick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          cerrarTarjetaCompleta(card, student);
+        };
+        closeBtn.addEventListener('click', onCerrarClick);
+        closeBtn.addEventListener('pointerdown', onCerrarClick);
+      }
+
+      // Evento de clic en el cuerpo de la tarjeta para alternar modo lectura
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.card-close-btn')) return;
+        e.stopPropagation();
+        toggleExpansorTarjeta(card, student);
+      });
+
+      return card;
+    }
+
+    let expandedCardObj = null;
+
+    function toggleExpansorTarjeta(cardEl, student) {
+      if (cardEl.classList.contains('is-expanded')) {
+        cardEl.classList.remove('is-expanded');
+        if (expandedCardObj && expandedCardObj.cardEl === cardEl) {
+          expandedCardObj = null;
+          isExpandedCardOpen = false;
+        }
+      } else {
+        if (expandedCardObj && expandedCardObj.cardEl !== cardEl) {
+          expandedCardObj.cardEl.classList.remove('is-expanded');
+        }
+        cardEl.classList.add('is-expanded');
+        isExpandedCardOpen = true;
+        expandedCardObj = { cardEl, student };
+      }
+    }
+
+    function cerrarTarjetaCompleta(cardEl, student) {
+      if (!cardEl) return;
+      cardEl.classList.remove('is-expanded');
+      cardEl.classList.add('is-leaving');
+      if (student && student.nodeObj && student.nodeObj.el) {
+        student.nodeObj.el.classList.remove('is-active');
+      }
+      if (expandedCardObj && expandedCardObj.cardEl === cardEl) {
+        expandedCardObj = null;
+        isExpandedCardOpen = false;
+      }
+      if (manualCard === cardEl) {
+        manualCard = null;
+        manualStudent = null;
+      }
+      for (let i = 0; i < activeSlots.length; i++) {
+        if (activeSlots[i] && activeSlots[i].cardEl === cardEl) {
+          activeSlots[i] = null;
+        }
+      }
+      setTimeout(() => {
+        if (cardEl && cardEl.parentNode) cardEl.remove();
+      }, 300);
+    }
+
+    let manualCard = null;
+    let manualStudent = null;
+
+    function abrirTarjetaEnModoLectura(student, expand = true) {
+      if (manualCard) {
+        manualCard.remove();
+        if (manualStudent && manualStudent.nodeObj.el) {
+          manualStudent.nodeObj.el.classList.remove('is-active');
+        }
+        manualCard = null;
+        manualStudent = null;
+      }
+
+      student.nodeObj.el.classList.add('is-active');
+      const card = crearElementoTarjeta(student, expand);
+      card.style.zIndex = '55';
+      cardsLayer.appendChild(card);
+      manualCard = card;
+      manualStudent = student;
+      if (expand) {
+        isExpandedCardOpen = true;
+        expandedCardObj = { cardEl: card, student };
+      }
+    }
+
+    // ── ROTADOR DINÁMICO ESCALABLE PARA CUALQUIER NÚMERO DE USUARIOS ──
+    // Se divide el pool de estudiantes entre ambas zonas (Top y Bottom)
+    // Se mezclan aleatoriamente (Fisher-Yates) para que el orden sea impredecible
+    function shuffleArray(arr) {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    const studentsTopZone = studentNodes.filter(s => s.isTopZone);
+    const studentsBottomZone = studentNodes.filter(s => !s.isTopZone);
+
+    // Si una zona quedó sin estudiantes (ej. pocos usuarios), se comparten
+    const poolTop = studentsTopZone.length > 0 ? studentsTopZone : studentNodes;
+    const poolBottom = studentsBottomZone.length > 0 ? studentsBottomZone : studentNodes;
+
+    let deckTop = shuffleArray(poolTop);
+    let deckBottom = shuffleArray(poolBottom);
+    let topPointer = 0;
+    let bottomPointer = 0;
+
+    function siguienteEstudianteDeZona(isTop) {
+      if (isTop) {
+        if (topPointer >= deckTop.length) {
+          deckTop = shuffleArray(poolTop);
+          topPointer = 0;
+        }
+        const st = deckTop[topPointer % deckTop.length];
+        topPointer++;
+        return st;
+      } else {
+        if (bottomPointer >= deckBottom.length) {
+          deckBottom = shuffleArray(poolBottom);
+          bottomPointer = 0;
+        }
+        const st = deckBottom[bottomPointer % deckBottom.length];
+        bottomPointer++;
+        return st;
+      }
+    }
+
+    function rotarSlotZona(slotIndex) {
+      // Si el usuario tiene una tarjeta expandida leyendo o está pasando el cursor, pausar
+      if (isUserHoveringConstellation || isExpandedCardOpen) return;
+
+      const isTop = (slotIndex === 0);
+      const candidato = siguienteEstudianteDeZona(isTop);
+      if (!candidato || !candidato.nodeObj || !candidato.nodeObj.el) return;
+
+      // Retirar con suavidad la tarjeta anterior de este slot
+      if (activeSlots[slotIndex]) {
+        const prev = activeSlots[slotIndex];
+        if (prev.nodeEl) prev.nodeEl.classList.remove('is-active');
+        if (prev.cardEl) {
+          // Si por casualidad la tarjeta estaba expandida, no cerrarla abruptamente
+          if (prev.cardEl.classList.contains('is-expanded')) return;
+          prev.cardEl.classList.add('is-leaving');
+          setTimeout(() => {
+            if (prev.cardEl && prev.cardEl.parentNode) prev.cardEl.remove();
+          }, 360);
+        }
+      }
+
+      // Activar nuevo estudiante en su zona correspondiente
+      candidato.nodeObj.el.classList.add('is-active');
+      const card = crearElementoTarjeta(candidato, false);
+      cardsLayer.appendChild(card);
+
+      activeSlots[slotIndex] = {
+        cardEl: card,
+        nodeEl: candidato.nodeObj.el,
+        studentInfo: candidato
+      };
+    }
+
+    // Arrancar Slot 0 (Zona Superior) inmediatamente a los 80ms y rotar cada 5.8s
+    const t0 = setTimeout(() => {
+      rotarSlotZona(0);
+      const i0 = setInterval(() => { rotarSlotZona(0); }, 5800);
+      window._constellationTimers.push(i0);
+    }, 80);
+    window._constellationTimers.push(t0);
+
+    // Slot 1 (Zona Inferior) arranca a los 1100ms y rota cada 6.2s
+    const t1 = setTimeout(() => {
+      rotarSlotZona(1);
+      const i1 = setInterval(() => { rotarSlotZona(1); }, 6200);
+      window._constellationTimers.push(i1);
+    }, 1100);
+    window._constellationTimers.push(t1);
   }
   // ---------- Login inline (Calificaciones) — un solo formulario ----------
   // Ya no hay pestañas de perfil: el correo y la contraseña ingresados se
@@ -479,20 +909,37 @@
       return;
     }
 
-    const usuarios = await Store.list('usuarios');
-    usuarios.unshift({
-      id: uid('us'),
-      nombre, email, telefono, password,
-      passwordPlano: password,
-      rol: 'Estudiante',
-      cohorte: '',
-      estado: 'Activo',       // estado operativo normal de la cuenta
-      estadoRegistro: 'Pendiente', // candado de acceso: solo lo quita el Superadmin al aprobar
-      perfiles: [],
-    });
-    await Store.set('usuarios', usuarios);
+    try {
+      const urlApi = (typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '') + '/api/registro';
+      const resp = await fetch(urlApi, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, email, telefono, password })
+      });
+      const res = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(res.error || 'No se pudo enviar la solicitud.');
+      }
+    } catch (err) {
+      console.warn('[enviarRegistroPublico] Falló /api/registro, guardando localmente:', err.message);
+      const usuarios = await Store.list('usuarios');
+      usuarios.unshift({
+        id: uid('us'),
+        nombre, email, telefono, password,
+        passwordPlano: password,
+        rol: 'Estudiante',
+        cohorte: '',
+        estado: 'Activo',
+        estadoRegistro: 'Pendiente',
+        perfiles: [],
+        creadoEn: new Date().toISOString()
+      });
+      await Store.set('usuarios', usuarios);
+    }
+
+    if (typeof Store.clearCache === 'function') Store.clearCache('usuarios');
     cerrarRegistroPublico();
-    toast('Tu solicitud fue enviada. Te avisaremos cuando esté aprobada.', 'ok');
+    toast('Tu solicitud fue enviada con éxito. Te avisaremos cuando esté aprobada.', 'ok');
     if (panelActivoAdmin === 'usuarios' && RENDERERS['usuarios']) {
       await RENDERERS['usuarios']();
     }
@@ -634,7 +1081,7 @@
   }
 
   // ---------- Navegación del panel Docente ----------
-  const PANEL_COLOR_DOCENTE = '#1FC8C0';
+  const PANEL_COLOR_DOCENTE = '#008080';
   let panelActivoDocente = null;
   async function showPanelDocente(panel) {
     const tab = document.querySelector('.panel-tab-t[data-tpanel="' + panel + '"]');
@@ -647,25 +1094,25 @@
     });
     document.querySelectorAll('.panel-tab-t').forEach(t => {
       if (t.dataset.tpanel !== panel) {
-        t.classList.remove('font-semibold');
-        t.style.borderLeftColor = 'transparent';
+        t.classList.remove('font-semibold', 'is-active');
+        t.style.borderLeftColor = '';
         t.style.background = '';
-        t.style.color = '#5B6472';
+        t.style.color = '';
       }
     });
 
     const content = document.getElementById('panel-t-' + panel);
     if (content) content.classList.remove('hidden');
     if (tab) {
-      tab.classList.add('font-semibold');
-      tab.style.borderLeftColor = PANEL_COLOR_DOCENTE;
-      tab.style.background = PANEL_COLOR_DOCENTE + '0D';
-      tab.style.color = '#14181F';
+      tab.classList.add('font-semibold', 'is-active');
+      tab.style.borderLeftColor = '';
+      tab.style.background = '';
+      tab.style.color = '';
     }
     panelActivoDocente = panel;
 
     const mount = document.getElementById('mount-t-' + panel);
-    if (mount && !mount.innerHTML.trim()) {
+    if (mount && (!mount.innerHTML.trim() || mount.innerHTML.includes('No se pudo cargar el módulo'))) {
       mount.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-12 text-center flex flex-col items-center justify-center gap-3">
         <div class="w-8 h-8 border-3 border-turquesa/20 border-t-turquesa rounded-full animate-spin"></div>
         <p class="text-xs font-semibold text-slate2">Cargando módulo...</p>
@@ -673,13 +1120,27 @@
     }
 
     if (RENDERERS_DOCENTE[panel]) {
-      await RENDERERS_DOCENTE[panel]();
-      initTablesEnPanel('panel-t-' + panel);
+      try {
+        await RENDERERS_DOCENTE[panel]();
+        initTablesEnPanel('panel-t-' + panel);
+      } catch (err) {
+        console.error('[showPanelDocente] Error al cargar panel "' + panel + '":', err);
+        if (mount) {
+          mount.innerHTML = `<div class="bg-white rounded-2xl border border-coral/20 shadow-soft p-10 text-center flex flex-col items-center justify-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-coral/10 text-coral flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            </div>
+            <p class="text-sm font-bold text-ink">No se pudo cargar el módulo</p>
+            <p class="text-xs text-slate2 max-w-sm">${escapeHtml(err.message || 'Error inesperado al renderizar')}</p>
+            <button onclick="showPanelDocente('${panel}')" class="mt-2 px-4 py-1.5 rounded-full bg-turquesa text-white text-xs font-semibold hover:opacity-90 transition cursor-pointer">Reintentar</button>
+          </div>`;
+        }
+      }
     }
   }
 
   // ---------- Navegación del panel Superadmin ----------
-  const PANEL_COLOR = '#8B5CF6';
+  const PANEL_COLOR = '#6A1B9A';
   let panelActivoAdmin = null;
   async function showPanel(panel) {
     if (currentAdminRole === 'administracion' && currentAdminUser) {
@@ -693,19 +1154,19 @@
       if (p.id !== 'panel-' + panel) p.classList.add('hidden');
     });
     document.querySelectorAll('.panel-tab').forEach(t => {
-      if (t.dataset.panel !== panel) t.classList.remove('superadmin-tab-active');
+      if (t.dataset.panel !== panel) t.classList.remove('superadmin-tab-active', 'is-active');
     });
 
     const content = document.getElementById('panel-' + panel);
     if (content) content.classList.remove('hidden');
     const tab = document.querySelector('.panel-tab[data-panel="' + panel + '"]');
-    if (tab) tab.classList.add('superadmin-tab-active');
+    if (tab) tab.classList.add('superadmin-tab-active', 'is-active');
     panelActivoAdmin = panel;
 
-    // Si el contenedor está vacío en el primer clic, mostrar skeleton de carga inmediata
+    // Si el contenedor está vacío o contiene error previo, mostrar skeleton de carga inmediata
     const mountId = 'mount-' + (panel === 'informesAdmin' ? 'informes-admin' : panel);
     const mount = document.getElementById(mountId);
-    if (mount && !mount.innerHTML.trim()) {
+    if (mount && (!mount.innerHTML.trim() || mount.innerHTML.includes('No se pudo cargar el módulo'))) {
       mount.innerHTML = `<div class="admin-panel-card p-12 text-center flex flex-col items-center justify-center gap-3">
         <div class="w-8 h-8 border-3 border-morado/20 border-t-morado rounded-full animate-spin"></div>
         <p class="text-xs font-semibold text-slate2">Cargando módulo...</p>
@@ -714,12 +1175,27 @@
 
     const banner = document.getElementById('superadminBanner');
     if (banner) banner.classList.toggle('hidden', panel !== 'resumen');
-    if (panel === 'resumen') await renderAdminBannerStats();
-    if (RENDERERS[panel]) {
-      await RENDERERS[panel]();
-      initTablesEnPanel('panel-' + panel);
+
+    try {
+      if (panel === 'resumen') await renderAdminBannerStats();
+      if (RENDERERS[panel]) {
+        await RENDERERS[panel]();
+        initTablesEnPanel('panel-' + panel);
+      }
+      actualizarBadgePqrAdmin();
+    } catch (err) {
+      console.error('[showPanel] Error al cargar panel "' + panel + '":', err);
+      if (mount) {
+        mount.innerHTML = `<div class="admin-panel-card p-10 text-center flex flex-col items-center justify-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-coral/10 text-coral flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          </div>
+          <p class="text-sm font-bold text-ink">No se pudo cargar el módulo</p>
+          <p class="text-xs text-slate2 max-w-sm">${escapeHtml(err.message || 'Error inesperado al renderizar')}</p>
+          <button onclick="showPanel('${panel}')" class="mt-2 px-4 py-1.5 rounded-full bg-morado text-white text-xs font-semibold hover:opacity-90 transition cursor-pointer">Reintentar</button>
+        </div>`;
+      }
     }
-    actualizarBadgePqrAdmin();
   }
 
   /**
@@ -805,6 +1281,311 @@
   function franjasActivas(horario) {
     return horario && horario.franjas ? horario.franjas.filter(f => f.estado !== 'Inactivo') : [];
   }
+
+  // ── Código de Vestimenta (Color de Camisa por Día y Cohorte) ────────
+  const COLORES_CAMISA_DEFAULT = {
+    'Lunes': 'Blanco',
+    'Martes': 'Morado',
+    'Miércoles': 'Azul',
+    'Jueves': 'Palo de rosa',
+    'Viernes': 'Gris',
+    'Sábado': 'Blanco',
+  };
+
+  const COLORES_CAMISA_INFO = {
+    'Blanco': {
+      nombre: 'Blanco',
+      hex: '#FFFFFF',
+      badgeBg: '#F8FAFC',
+      badgeText: '#334155',
+      badgeBorder: '#CBD5E1',
+      franjaBorder: '#94A3B8',
+      franjaBg: '#F8FAFC80',
+      swatchClass: 'bg-white border border-gray-400',
+    },
+    'Morado': {
+      nombre: 'Morado',
+      hex: '#8B5CF6',
+      badgeBg: '#8B5CF614',
+      badgeText: '#7C3AED',
+      badgeBorder: '#8B5CF640',
+      franjaBorder: '#8B5CF6',
+      franjaBg: '#8B5CF60A',
+      swatchClass: 'bg-[#8B5CF6]',
+    },
+    'Azul': {
+      nombre: 'Azul',
+      hex: '#3B82F6',
+      badgeBg: '#3B82F614',
+      badgeText: '#1D4ED8',
+      badgeBorder: '#3B82F640',
+      franjaBorder: '#3B82F6',
+      franjaBg: '#3B82F60A',
+      swatchClass: 'bg-[#3B82F6]',
+    },
+    'Palo de rosa': {
+      nombre: 'Palo de rosa',
+      hex: '#E08397',
+      badgeBg: '#E083971A',
+      badgeText: '#B84D67',
+      badgeBorder: '#E083974D',
+      franjaBorder: '#E08397',
+      franjaBg: '#E083970D',
+      swatchClass: 'bg-[#E08397]',
+    },
+    'Gris': {
+      nombre: 'Gris',
+      hex: '#64748B',
+      badgeBg: '#64748B14',
+      badgeText: '#475569',
+      badgeBorder: '#64748B40',
+      franjaBorder: '#64748B',
+      franjaBg: '#64748B0A',
+      swatchClass: 'bg-[#64748B]',
+    },
+    'Verde': {
+      nombre: 'Verde',
+      hex: '#10B981',
+      badgeBg: '#10B98114',
+      badgeText: '#047857',
+      badgeBorder: '#10B98140',
+      franjaBorder: '#10B981',
+      franjaBg: '#10B9810A',
+      swatchClass: 'bg-[#10B981]',
+    },
+    'Turquesa': {
+      nombre: 'Turquesa',
+      hex: '#1FC8C0',
+      badgeBg: '#1FC8C014',
+      badgeText: '#0D9488',
+      badgeBorder: '#1FC8C040',
+      franjaBorder: '#1FC8C0',
+      franjaBg: '#1FC8C00A',
+      swatchClass: 'bg-[#1FC8C0]',
+    },
+    'Negro': {
+      nombre: 'Negro',
+      hex: '#1E293B',
+      badgeBg: '#1E293B14',
+      badgeText: '#0F172A',
+      badgeBorder: '#1E293B40',
+      franjaBorder: '#1E293B',
+      franjaBg: '#1E293B08',
+      swatchClass: 'bg-[#1E293B]',
+    },
+    'Amarillo': {
+      nombre: 'Amarillo',
+      hex: '#F59E0B',
+      badgeBg: '#F59E0B14',
+      badgeText: '#B45309',
+      badgeBorder: '#F59E0B40',
+      franjaBorder: '#F59E0B',
+      franjaBg: '#F59E0B0A',
+      swatchClass: 'bg-[#F59E0B]',
+    },
+    'Naranja': {
+      nombre: 'Naranja',
+      hex: '#F97316',
+      badgeBg: '#F9731614',
+      badgeText: '#C2410C',
+      badgeBorder: '#F9731640',
+      franjaBorder: '#F97316',
+      franjaBg: '#F973160A',
+      swatchClass: 'bg-[#F97316]',
+    },
+    'Rojo': {
+      nombre: 'Rojo',
+      hex: '#EF4444',
+      badgeBg: '#EF444414',
+      badgeText: '#B91C1C',
+      badgeBorder: '#EF444440',
+      franjaBorder: '#EF4444',
+      franjaBg: '#EF44440A',
+      swatchClass: 'bg-[#EF4444]',
+    },
+    'Libre': {
+      nombre: 'Libre / Sin uniforme',
+      hex: '#94A3B8',
+      badgeBg: '#94A3B814',
+      badgeText: '#64748B',
+      badgeBorder: '#94A3B840',
+      franjaBorder: '#CBD5E1',
+      franjaBg: '#FFFFFF',
+      swatchClass: 'bg-[#94A3B8]',
+    },
+  };
+
+  function getColoresCamisaCohorte(nombreCohorte) {
+    if (!nombreCohorte) return Object.assign({}, COLORES_CAMISA_DEFAULT);
+    try {
+      const stored = localStorage.getItem('aplus_colores_camisa_' + nombreCohorte);
+      if (stored) {
+        return Object.assign({}, COLORES_CAMISA_DEFAULT, JSON.parse(stored));
+      }
+    } catch (e) {
+      console.warn('Error leyendo colores de camisa de cohorte:', e);
+    }
+    return Object.assign({}, COLORES_CAMISA_DEFAULT);
+  }
+
+  function guardarColoresCamisaCohorte(nombreCohorte, mapping) {
+    if (!nombreCohorte) return;
+    try {
+      localStorage.setItem('aplus_colores_camisa_' + nombreCohorte, JSON.stringify(mapping));
+    } catch (e) {
+      console.error('Error guardando colores de camisa:', e);
+    }
+  }
+
+  function getInfoCamisaDia(dia, cohorte = null) {
+    const config = getColoresCamisaCohorte(cohorte);
+    const colorNombre = config[dia] || COLORES_CAMISA_DEFAULT[dia] || 'Blanco';
+    return COLORES_CAMISA_INFO[colorNombre] || COLORES_CAMISA_INFO['Blanco'];
+  }
+  window.getInfoCamisaDia = getInfoCamisaDia;
+
+  function badgeCamisaDia(dia, cohorte = null) {
+    const info = getInfoCamisaDia(dia, cohorte);
+    return `
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all shadow-2xs select-none"
+            style="background:${info.badgeBg};color:${info.badgeText};border:1px solid ${info.badgeBorder};"
+            title="Código de vestimenta para ${dia}: Camisa ${info.nombre}">
+        <span class="w-2.5 h-2.5 rounded-full shrink-0 ${info.swatchClass}" style="box-shadow: 0 0 0 1px ${info.badgeBorder};"></span>
+        <span class="truncate">Camisa ${escapeHtml(info.nombre)}</span>
+      </span>`;
+  }
+
+  function abrirModalColoresCamisa(cohorte) {
+    const cohorteActual = cohorte || horarioState.cohorte;
+    if (!cohorteActual) {
+      toast('Selecciona una cohorte primero', 'err');
+      return;
+    }
+
+    const config = getColoresCamisaCohorte(cohorteActual);
+    const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+    const filasHtml = dias.map(d => {
+      const colorActual = config[d] || COLORES_CAMISA_DEFAULT[d] || 'Blanco';
+      const infoActual = COLORES_CAMISA_INFO[colorActual] || COLORES_CAMISA_INFO['Blanco'];
+      const opciones = Object.keys(COLORES_CAMISA_INFO).map(col => {
+        const item = COLORES_CAMISA_INFO[col];
+        return `<option value="${col}" ${col === colorActual ? 'selected' : ''}>${escapeHtml(item.nombre)}</option>`;
+      }).join('');
+
+      return `
+        <div class="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50/80 border border-gray-100 hover:bg-gray-100/60 transition">
+          <div class="flex items-center gap-2.5">
+            <span id="swatch_preview_${d}" class="w-4 h-4 rounded-full shrink-0 ${infoActual.swatchClass} border border-gray-300"></span>
+            <div>
+              <p class="text-xs font-bold text-ink">${d}</p>
+              <p class="text-[10px] text-slate2">${d === 'Sábado' ? 'Opcional / refuerzo' : 'Jornada regular'}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="sel_color_camisa_${d}" onchange="actualizarSwatchCamisaModal('${d}', this.value)"
+              class="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+              ${opciones}
+            </select>
+          </div>
+        </div>`;
+    }).join('');
+
+    const modalHtml = `
+      <div id="modalColoresCamisa" class="fixed inset-0 bg-ink/40 z-50 flex items-center justify-center p-4 overflow-y-auto" onclick="if(event.target===this) cerrarModalColoresCamisa()">
+        <div class="bg-white rounded-3xl shadow-softLg max-w-lg w-full overflow-hidden">
+          <div class="p-6 border-b border-gray-100 flex items-start justify-between gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-morado/10 text-morado flex items-center justify-center shrink-0">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5l2.5 2.5h2.5l2.5 4.5-2.5 2-1-1v8h-8v-8l-1 1-2.5-2 2.5-4.5h2.5L12 4.5z" />
+                  </svg>
+                </div>
+                <h3 class="text-base font-extrabold text-ink">Código de Vestimenta por Cohorte</h3>
+              </div>
+              <p class="text-xs text-slate2 mt-1">Configura el color de camisa para cada día en la cohorte <strong class="text-ink">${escapeHtml(cohorteActual)}</strong>.</p>
+            </div>
+            <button onclick="cerrarModalColoresCamisa()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-rose-50 text-slate2 hover:text-coral transition flex items-center justify-center shrink-0 cursor-pointer" title="Cerrar">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          <div class="p-6 space-y-2.5 max-h-[60vh] overflow-y-auto">
+            <div class="p-3 rounded-xl bg-blue-50/70 border border-blue-100/80 mb-3 flex items-start gap-2.5">
+              <svg class="w-4 h-4 text-blue-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <p class="text-xs text-blue-800 leading-relaxed">
+                Personaliza el color que deben usar los estudiantes y profesores cada día de la semana. Los colores seleccionados se reflejarán en las franjas y encabezados de los horarios.
+              </p>
+            </div>
+            ${filasHtml}
+          </div>
+
+          <div class="p-5 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+            <button type="button" onclick="restablecerColoresCamisaDefault('${escapeHtml(cohorteActual)}')" class="text-xs font-semibold text-slate2 hover:text-morado underline transition cursor-pointer">
+              Restablecer estándar
+            </button>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="cerrarModalColoresCamisa()" class="px-4 py-2 rounded-full border border-gray-200 text-xs font-semibold text-slate2 hover:bg-gray-100 transition cursor-pointer">
+                Cancelar
+              </button>
+              <button type="button" onclick="guardarColoresCamisaModal('${escapeHtml(cohorteActual)}')" class="px-5 py-2 rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-bold shadow-sm hover:opacity-95 transition cursor-pointer">
+                Guardar colores
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    let container = document.getElementById('modalColoresCamisaContainer');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'modalColoresCamisaContainer';
+      document.body.appendChild(container);
+    }
+    container.innerHTML = modalHtml;
+  }
+  window.abrirModalColoresCamisa = abrirModalColoresCamisa;
+
+  function cerrarModalColoresCamisa() {
+    const el = document.getElementById('modalColoresCamisaContainer');
+    if (el) el.innerHTML = '';
+  }
+  window.cerrarModalColoresCamisa = cerrarModalColoresCamisa;
+
+  function actualizarSwatchCamisaModal(dia, colorKey) {
+    const swatch = document.getElementById('swatch_preview_' + dia);
+    if (!swatch) return;
+    const info = COLORES_CAMISA_INFO[colorKey] || COLORES_CAMISA_INFO['Blanco'];
+    swatch.className = `w-4 h-4 rounded-full shrink-0 ${info.swatchClass} border border-gray-300`;
+  }
+  window.actualizarSwatchCamisaModal = actualizarSwatchCamisaModal;
+
+  function guardarColoresCamisaModal(cohorte) {
+    const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const mapping = {};
+    dias.forEach(d => {
+      const sel = document.getElementById('sel_color_camisa_' + d);
+      if (sel) mapping[d] = sel.value;
+    });
+    guardarColoresCamisaCohorte(cohorte, mapping);
+    cerrarModalColoresCamisa();
+    toast('Código de vestimenta actualizado para ' + cohorte, 'ok');
+    if (panelActivoAdmin === 'modulos') renderHorarioGrid();
+    if (panelActivoDocente === 'modulos') renderHorarioDocente();
+    if (panelActivoEstudiante === 'academico') renderAcademicoEstudiante();
+  }
+  window.guardarColoresCamisaModal = guardarColoresCamisaModal;
+
+  function restablecerColoresCamisaDefault(cohorte) {
+    guardarColoresCamisaCohorte(cohorte, Object.assign({}, COLORES_CAMISA_DEFAULT));
+    cerrarModalColoresCamisa();
+    toast('Colores restablecidos a valores estándar para ' + cohorte, 'ok');
+    if (panelActivoAdmin === 'modulos') renderHorarioGrid();
+    if (panelActivoDocente === 'modulos') renderHorarioDocente();
+    if (panelActivoEstudiante === 'academico') renderAcademicoEstudiante();
+  }
+  window.restablecerColoresCamisaDefault = restablecerColoresCamisaDefault;
 
   // ---------- Datos semilla (solo se cargan la primera vez) ----------
   // La plataforma arranca EN BLANCO: no hay estudiantes, docentes ni
@@ -1418,8 +2199,15 @@
       ? (entity === 'modulos' ? listaEntidadActual : await Store.list('modulos'))
       : null;
 
+    const esDocenteModal = (forcedRole === 'Docente') || (record0 && record0.rol === 'Docente');
+    const esEstudianteModal = (forcedRole === 'Estudiante') || (record0 && record0.rol === 'Estudiante');
+    let labelModal = schema.label;
+    if (forcedRole === 'Coordinador') labelModal = 'Administrador';
+    else if (esDocenteModal) labelModal = 'Profesor / Docente';
+    else if (esEstudianteModal) labelModal = 'Estudiante';
+
     document.getElementById('modalEyebrow').textContent = modalCtx.esAprobacion ? 'Aprobación de Registro' : (id ? 'Editar' : 'Crear nuevo');
-    document.getElementById('modalTitle').textContent = modalCtx.esAprobacion ? 'Aprobar y Configurar Estudiante' : (forcedRole === 'Coordinador' ? 'Administrador' : schema.label);
+    document.getElementById('modalTitle').textContent = modalCtx.esAprobacion ? 'Aprobar y Configurar Estudiante' : labelModal;
 
     const form = document.getElementById('modalForm');
     let bannerAprobacion = '';
@@ -1440,7 +2228,23 @@
           </div>
         </div>`;
     }
-    form.innerHTML = bannerAprobacion + schema.fields.map(f => {
+
+    let bannerFotoUsuario = '';
+    if (entity === 'usuarios' && record && record.fotoUrl && !modalCtx.esAprobacion) {
+      bannerFotoUsuario = `
+        <div class="sm:col-span-2 rounded-2xl bg-gray-50/80 border border-gray-100 p-3.5 mb-2 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <img src="${escapeHtml(record.fotoUrl)}" alt="${escapeHtml(record.nombre || '')}" onclick="expandirFotoPerfil('${escapeHtml(record.fotoUrl)}', '${escapeHtml(record.nombre || '')}', '${escapeHtml(record.rol || '')}')" class="w-12 h-12 rounded-xl object-cover border border-gray-200 cursor-pointer hover:scale-105 transition hover:ring-2 hover:ring-morado/40 shadow-sm" title="Clic para ampliar foto" />
+            <div>
+              <p class="text-xs font-bold text-ink">Foto de perfil actual</p>
+              <p class="text-[11px] text-slate2">Haz clic en la imagen para verla en tamaño completo.</p>
+            </div>
+          </div>
+          <button type="button" onclick="expandirFotoPerfil('${escapeHtml(record.fotoUrl)}', '${escapeHtml(record.nombre || '')}', '${escapeHtml(record.rol || '')}')" class="text-xs font-semibold text-morado bg-morado/10 hover:bg-morado/20 px-3 py-1.5 rounded-xl transition cursor-pointer shrink-0">Ampliar foto</button>
+        </div>`;
+    }
+
+    form.innerHTML = bannerAprobacion + bannerFotoUsuario + schema.fields.map(f => {
       const val = record ? record[f.key] : (f.default !== undefined ? f.default : '');
       const idAttr = 'field_' + f.key;
 
@@ -1495,10 +2299,42 @@
         if (entity === 'usuarios' && f.key === 'rol') {
           opciones = rolesCreacionUsuario();
         } else if (entity === 'usuarios' && f.key === 'cohorte') {
-          // Cohortes existentes, tomadas de las que ya armó el administrador (Store 'modulos').
-          opciones = modulosPrecargados.map(m => m.nombre);
-          if (val && !opciones.includes(val)) opciones = [val, ...opciones]; // conserva un valor legado que ya no exista
-          opciones = ['', ...opciones]; // primera opción = sin asignar
+          const esDocente = (forcedRole === 'Docente') || (record && record.rol === 'Docente');
+          if (esDocente) {
+            // Profesores: pueden ser asignados a cualquier cohorte sin restricción de cupos de estudiante
+            opciones = [{ value: '', label: '— Sin cohorte asignada —' }];
+            (modulosPrecargados || []).forEach(m => {
+              opciones.push({
+                value: m.nombre,
+                label: m.nombre,
+                disabled: false
+              });
+            });
+          } else {
+            // Estudiantes: cálculo estricto de cupos para no permitir sobrecupos
+            const conteoPorCohorte = {};
+            (usuariosPrecargados || []).forEach(u => {
+              if (u.rol === 'Estudiante' && u.cohorte && u.estadoRegistro !== 'Rechazado') {
+                conteoPorCohorte[u.cohorte] = (conteoPorCohorte[u.cohorte] || 0) + 1;
+              }
+            });
+            opciones = [{ value: '', label: 'Sin asignar' }];
+            (modulosPrecargados || []).forEach(m => {
+              const inscritos = conteoPorCohorte[m.nombre] || 0;
+              const cuposMax = Number(m.cupos || 0);
+              const esMismaCohorte = record && record.cohorte === m.nombre;
+              const lleno = cuposMax > 0 && inscritos >= cuposMax && !esMismaCohorte;
+              const tagCupos = cuposMax > 0 ? ` (${inscritos}/${cuposMax} cupos${lleno ? ' - Lleno' : ''})` : '';
+              opciones.push({
+                value: m.nombre,
+                label: m.nombre + tagCupos,
+                disabled: lleno
+              });
+            });
+          }
+          if (val && !opciones.some(o => o.value === val)) {
+            opciones.push({ value: val, label: val });
+          }
         } else if (entity === 'pensum' && f.key === 'docente') {
           // Lista real de docentes (Store 'usuarios'), no texto libre — así el
           // nombre siempre coincide exactamente con su usuario y su perfil se
@@ -1515,7 +2351,7 @@
         }
         // Normaliza a {value,label} para poder mezclar strings simples con pares dinámicos.
         opciones = opciones.map(o => (o && typeof o === 'object') ? o : { value: o, label: (o === '' ? 'Sin asignar' : o) });
-        const opts = opciones.map(o => `<option value="${escapeHtml(o.value)}" ${val === o.value ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('');
+        const opts = opciones.map(o => `<option value="${escapeHtml(o.value)}" ${val === o.value ? 'selected' : ''} ${o.disabled ? 'disabled class="text-coral bg-gray-100"' : ''}>${escapeHtml(o.label)}</option>`).join('');
         return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
           <select id="${idAttr}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition">${opts}</select></div>`;
       }
@@ -1663,9 +2499,10 @@
   // async: 'usuarios' ahora vive en MySQL. Todo punto que llame a esta
   // función debe usar await (y por tanto, ser async ella misma) — ver la
   // cadena completa de funciones convertidas más abajo por este motivo.
-  async function contarInscritos(nombreCohorte) {
+  async function contarInscritos(nombreCohorte, usuariosList = null) {
     if (!nombreCohorte) return 0;
-    return (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && u.cohorte === nombreCohorte).length;
+    const lista = usuariosList || (await Store.list('usuarios'));
+    return lista.filter(u => u.rol === 'Estudiante' && u.cohorte === nombreCohorte).length;
   }
 
   // Docente(s) que aparecen asignados a una cohorte, calculado a partir del
@@ -1673,9 +2510,10 @@
   // franjas de la misma cohorte las dicta gente distinta. Solo cuenta
   // franjas Activas.
   // async: 'horarios' vía MySQL.
-  async function docentesDeCohorte(nombreCohorte) {
+  async function docentesDeCohorte(nombreCohorte, horariosList = null) {
     const nombres = new Set();
-    (await Store.list('horarios')).filter(h => h.cohorte === nombreCohorte).forEach(h => {
+    const lista = horariosList || (await Store.list('horarios'));
+    lista.filter(h => h.cohorte === nombreCohorte).forEach(h => {
       franjasActivas(h).forEach(f => { if (f.docente) nombres.add(f.docente); });
     });
     return [...nombres];
@@ -2394,7 +3232,7 @@
         </div>
         <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <div class="relative">
-            <input data-table="${tableId}" oninput="filterTable('${entity}', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+            <input data-table="${tableId}" oninput="filterTable('${entity}', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-gray-200 pl-9 pr-3 py-2 text-xs sm:text-sm w-40 sm:w-56 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado text-ink transition" />
             <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5 sm:top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           </div>
           <button onclick="recargarPanelActual()" title="Actualizar datos en vivo" class="rounded-xl border border-gray-200 text-slate2 hover:text-morado hover:bg-morado/5 text-xs sm:text-sm font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-sm">
@@ -2635,7 +3473,7 @@
     // "Ocupación de cupos" del Resumen). Ahora se cuenta con contarInscritos(),
     // la misma fuente real (estudiantes con esa cohorte asignada) que ya usa
     // la tabla "Cohortes registradas".
-    const inscritosPorModulo = await Promise.all(modulos.map(m => contarInscritos(m.nombre)));
+    const inscritosPorModulo = modulos.map(m => usuarios.filter(u => u.rol === 'Estudiante' && u.cohorte === m.nombre).length);
     const inscritos = inscritosPorModulo.reduce((a, b) => a + b, 0);
     const ocupacion = cupos ? Math.round((inscritos / cupos) * 100) : 0;
 
@@ -2859,7 +3697,7 @@
     // cuántos estudiantes reales tuviera cada cohorte. Ahora se cuenta con
     // contarInscritos(), la misma fuente real (estudiantes con esa cohorte
     // asignada) que ya usa la tabla "Cohortes registradas".
-    const inscritosPorModulo = await Promise.all(modulos.map(m => contarInscritos(m.nombre)));
+    const inscritosPorModulo = modulos.map(m => usuarios.filter(u => u.rol === 'Estudiante' && u.cohorte === m.nombre).length);
     const inscritos = inscritosPorModulo.reduce((a, b) => a + b, 0);
     const ocupacion = cupos ? Math.round((inscritos / cupos) * 100) : 0;
 
@@ -2935,7 +3773,8 @@
     const slots = await getSlotsDocente(nombreDocente);
     if (!slots.length) return null;
     const totalHoras = slots.reduce((acc, s) => acc + s.horas, 0);
-    return { count: slots.length, totalHoras };
+    const materias = Array.from(new Set(slots.map(s => s.curso || s.materia).filter(Boolean)));
+    return { count: slots.length, totalHoras, materias };
   }
 
   // ---------- RENDER: Usuarios ----------
@@ -3200,12 +4039,15 @@
     }
 
     const iniciales = escapeHtml((est.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
+    const avatarHtml = est.fotoUrl
+      ? `<img src="${escapeHtml(est.fotoUrl)}" alt="${escapeHtml(est.nombre)}" onclick="expandirFotoPerfil('${escapeHtml(est.fotoUrl)}', '${escapeHtml(est.nombre || '')}', '${escapeHtml(est.rol || 'Estudiante')}')" class="w-16 h-16 rounded-2xl object-cover shrink-0 shadow-md shadow-morado/20 cursor-pointer hover:scale-105 transition hover:ring-2 hover:ring-morado/40" title="Clic para ampliar foto" />`
+      : `<div class="w-16 h-16 rounded-2xl grid place-items-center text-xl font-extrabold text-white shrink-0 shadow-md shadow-morado/20" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>`;
 
     wrap.innerHTML = `
       <div class="admin-panel-card p-6 mb-6">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div class="flex items-center gap-4">
-            <div class="w-16 h-16 rounded-2xl grid place-items-center text-xl font-extrabold text-white shrink-0 shadow-md shadow-morado/20" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>
+            ${avatarHtml}
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
                 <p class="text-lg font-extrabold text-ink">${escapeHtml(est.nombre)}</p>
@@ -4186,78 +5028,314 @@
     return puntuados.map(x => ({ pregunta: x.r.pregunta, respuesta: x.r.respuesta, categoria: x.r.categoria || '' }));
   }
 
+  let tabUsuariosActivo = 'todos'; // 'todos' | 'profesores' | 'estudiantes' | 'registrados'
+  async function cambiarTabUsuarios(tab) {
+    tabUsuariosActivo = tab;
+    if (typeof TableManager !== 'undefined' && TableManager.clearFilter) {
+      TableManager.clearFilter('table-usuarios');
+    }
+    await renderUsuarios();
+    initTablesEnPanel('panel-usuarios');
+  }
+  window.cambiarTabUsuarios = cambiarTabUsuarios;
+
+  function filtrarTablaLive(term, tableId) {
+    if (typeof TableManager !== 'undefined' && TableManager.filter) {
+      TableManager.filter(tableId, term);
+    } else {
+      filterTable(tableId.replace(/^table-/, ''), term);
+    }
+  }
+  window.filtrarTablaLive = filtrarTablaLive;
+
+  // Helper robusto para detectar si un usuario es una solicitud de registro pendiente
+  function esSolicitudPendienteUsuario(u) {
+    if (!u) return false;
+    const reg = String(u.estadoRegistro || '').trim().toLowerCase();
+    const est = String(u.estado || '').trim().toLowerCase();
+    if (reg === 'rechazado' || est === 'rechazado') return false;
+    if (reg === 'pendiente' || reg === 'solicitud' || reg.includes('pend') || reg.includes('solicit') || reg.includes('espera')) return true;
+    if (est === 'pendiente' || est === 'solicitud' || est.includes('pend') || est.includes('solicit')) return true;
+    if (u.estadoRegistro && reg !== 'aprobado' && reg !== 'activo') return true;
+    return false;
+  }
+
   // async: 'usuarios' vía MySQL.
   async function renderUsuarios() {
-    // Los Administradores (rol Coordinador) ya no aparecen aquí: tienen su
-    // propio apartado exclusivo del Superadmin (ver renderAdministradores()).
-    // Las solicitudes de autorregistro (estadoRegistro='Pendiente') tampoco
-    // aparecen en la tabla normal: se muestran arriba, en su propia sección,
-    // hasta que el Superadmin las aprueba o rechaza.
-    const todosUsuarios = await Store.list('usuarios');
-    const pendientes = todosUsuarios.filter(u => u.estadoRegistro === 'Pendiente');
-    const records = todosUsuarios.filter(u => u.rol !== 'Coordinador' && u.rol !== 'Administrador' && u.estadoRegistro !== 'Pendiente');
+    // Forzar lectura fresca de la base de datos limpiando la caché en memoria
+    if (typeof Store.clearCache === 'function') Store.clearCache('usuarios');
+    const todosUsuarios = await Store.list('usuarios', { forceRefresh: true });
 
-    const filasPendientes = pendientes.map(u => `
-      <tr class="border-b border-gray-50 last:border-0">
-        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(u.nombre)}</td>
-        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.email)}</td>
-        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.telefono || '—')}</td>
-        <td class="py-3 px-4 text-right whitespace-nowrap">
-          <button onclick="aprobarRegistroPendiente('${u.id}')" class="text-xs font-semibold text-turquesa hover:underline mr-3">Aprobar</button>
-          <button onclick="rechazarRegistroPendiente('${u.id}')" class="text-xs font-semibold text-coral hover:underline">Rechazar</button>
-        </td>
-      </tr>`).join('');
+    // Respaldo de seguridad: si existe alguna solicitud pendiente o registro guardado en localStorage, integrarla
+    try {
+      const rawLocal = localStorage.getItem('aplus_admin_v1_usuarios');
+      if (rawLocal) {
+        const parsed = JSON.parse(rawLocal);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(lu => {
+            if (!lu || !lu.email) return;
+            const idx = todosUsuarios.findIndex(tu => tu.email && tu.email.toLowerCase() === lu.email.toLowerCase());
+            if (idx !== -1) {
+              if (esSolicitudPendienteUsuario(lu)) {
+                todosUsuarios[idx].estadoRegistro = 'Pendiente';
+                if (lu.nombre && (!todosUsuarios[idx].nombre || todosUsuarios[idx].nombre === 'Loren Liseth')) {
+                  todosUsuarios[idx].nombre = lu.nombre;
+                }
+                if (lu.telefono) todosUsuarios[idx].telefono = lu.telefono;
+              }
+            } else {
+              if (esSolicitudPendienteUsuario(lu)) {
+                todosUsuarios.unshift(lu);
+              }
+            }
+          });
+        }
+      }
+    } catch (e) {}
 
-    const seccionPendientes = pendientes.length ? `
-      <div class="admin-panel-card p-6 mb-6 border-l-4" style="border-left-color:#F5A623">
-        <h3 class="text-sm font-extrabold text-ink mb-1">Solicitudes de registro pendientes (${pendientes.length})</h3>
-        <p class="text-xs text-slate2 mb-4">Personas que se autorregistraron desde el sitio público y esperan aprobación. Al aprobar, se abre su ficha para asignarle un perfil.</p>
-        <div class="overflow-x-auto">
-          <table class="w-full admin-table">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Nombre</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Teléfono</th><th class="py-2.5 px-4"></th>
-            </tr></thead>
-            <tbody>${filasPendientes}</tbody>
-          </table>
+    const pendientes = todosUsuarios.filter(esSolicitudPendienteUsuario);
+    const records = todosUsuarios.filter(u => u.rol !== 'Coordinador' && u.rol !== 'Administrador' && !esSolicitudPendienteUsuario(u));
+
+    const docentes = records.filter(u => u.rol === 'Docente');
+    const estudiantes = records.filter(u => u.rol === 'Estudiante');
+
+    // Banner de alerta superior cuando hay solicitudes pendientes y no estamos en la pestaña 'registrados'
+    const alertaPendientes = (pendientes.length && tabUsuariosActivo !== 'registrados') ? `
+      <div onclick="cambiarTabUsuarios('registrados')" class="admin-panel-card p-4 mb-5 border-l-4 border-amber-400 bg-amber-50/60 hover:bg-amber-100/70 cursor-pointer transition flex items-center justify-between shadow-xs">
+        <div class="flex items-center gap-3">
+          <span class="relative flex h-3 w-3 shrink-0">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+          </span>
+          <div>
+            <p class="text-xs font-bold text-ink">¡Hay ${pendientes.length} solicitud${pendientes.length === 1 ? '' : 'es'} de registro pendiente${pendientes.length === 1 ? '' : 's'} de revisión!</p>
+            <p class="text-[11px] text-slate2">Haz clic aquí o en la pestaña "Solicitudes" para filtrar y aprobarla(s) de inmediato.</p>
+          </div>
         </div>
+        <span class="text-xs font-bold text-amber-900 bg-amber-200/90 hover:bg-amber-300 px-3 py-1.5 rounded-xl transition shrink-0 shadow-xs">Filtrar solicitudes (${pendientes.length}) ›</span>
       </div>` : '';
 
-    const resumenesMaterias = await Promise.all(records.map(u => u.rol === 'Docente' ? getDocenteResumenMaterias(u.nombre) : null));
-    const rows = records.map((u, i) => {
-      let cohorteCell = escapeHtml(u.cohorte || '—');
-      if (u.rol === 'Docente') {
+    let cuerpoTablaHtml = '';
+    let tablaHeaderHtml = '';
+
+    if (tabUsuariosActivo === 'todos') {
+      const listaCombinada = [...pendientes, ...records];
+      const allRows = listaCombinada.map(u => {
+        const esPend = esSolicitudPendienteUsuario(u);
+        const iniciales = (u.nombre || 'U').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+        return `
+        <tr data-search="${escapeHtml(((u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + (u.rol || '') + ' ' + (u.cohorte || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0 ${esPend ? 'bg-amber-50/50 hover:bg-amber-100/60' : 'hover:bg-gray-50/70'} transition">
+          <td class="py-3 px-4 text-sm font-semibold text-ink">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-xl ${esPend ? 'bg-amber-100 text-amber-800 border border-amber-300' : (u.rol === 'Docente' ? 'bg-morado/10 text-morado' : 'bg-turquesa/15 text-turquesa')} font-bold text-xs flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <p class="font-bold text-ink leading-tight">${escapeHtml(u.nombre)}</p>
+                  ${esPend ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white animate-pulse">Solicitud</span>' : ''}
+                </div>
+                <p class="text-xs text-slate2">${escapeHtml(u.email)}</p>
+              </div>
+            </div>
+          </td>
+          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.telefono || '—')}</td>
+          <td class="py-3 px-4 text-sm">
+            ${esPend ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">Autorregistro web</span>' : (u.rol === 'Docente' ? '<span class="text-xs font-bold text-morado">Profesor</span>' : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-turquesa/10 text-turquesa border border-turquesa/20">Estudiante · ${escapeHtml(u.cohorte || 'Sin cohorte')}</span>`)}
+          </td>
+          <td class="py-3 px-4">${esPend ? '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Pendiente</span>' : statusPill(u.estado, ESTADO_COLORS)}</td>
+          <td class="py-3 px-4 text-right whitespace-nowrap">
+            ${esPend ? `
+              <button onclick="aprobarRegistroPendiente('${u.id}')" class="text-xs font-bold text-white bg-turquesa hover:opacity-90 px-3 py-1.5 rounded-xl shadow-sm mr-2 transition cursor-pointer">Aprobar</button>
+              <button onclick="rechazarRegistroPendiente('${u.id}')" class="text-xs font-semibold text-coral hover:bg-coral/10 px-2.5 py-1.5 rounded-xl transition cursor-pointer mr-2">Rechazar</button>
+              <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline cursor-pointer">Detalles</button>
+            ` : `
+              <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline mr-3 cursor-pointer">Editar</button>
+              <button onclick="askDelete('usuarios','${u.id}')" class="text-xs font-semibold text-coral hover:underline cursor-pointer">Eliminar</button>
+            `}
+          </td>
+        </tr>`;
+      }).join('');
+
+      tablaHeaderHtml = `
+        <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+          <th class="py-2.5 px-4">Usuario / Solicitante</th><th class="py-2.5 px-4">Teléfono</th><th class="py-2.5 px-4">Tipo / Cohorte</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4 text-right">Acciones</th>
+        </tr></thead>`;
+      cuerpoTablaHtml = allRows || emptyRow(5);
+
+    } else if (tabUsuariosActivo === 'profesores') {
+      const resumenesMaterias = await Promise.all(docentes.map(u => getDocenteResumenMaterias(u.nombre)));
+      const rowsDocentes = docentes.map((u, i) => {
         const resumen = resumenesMaterias[i];
-        cohorteCell = resumen
-          ? `${resumen.count} materia${resumen.count === 1 ? '' : 's'} · ${resumen.totalHoras} h`
-          : '<span class="text-slate2">Sin materias asignadas</span>';
-      }
-      return `
-      <tr data-search="${escapeHtml((u.nombre + ' ' + u.email + ' ' + u.rol + ' ' + u.cohorte).toLowerCase())}" class="border-b border-gray-50 last:border-0">
-        <td class="py-3 px-4 text-sm font-semibold text-ink">
-          ${escapeHtml(u.nombre)}
-          ${u.fueEstudiante ? `<button onclick="abrirHistorialTrainee('${u.id}')" title="Fue estudiante — ver su historial" class="align-middle ml-1.5 text-[10px] font-bold uppercase tracking-wide text-morado bg-morado/10 hover:bg-morado/20 rounded-full px-2 py-0.5 transition">Fue estudiante</button>` : ''}
-        </td>
-        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.email)}</td>
-        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.rol)}</td>
-        <td class="py-3 px-4 text-sm text-slate2">${cohorteCell}</td>
-        <td class="py-3 px-4">${statusPill(u.estado, ESTADO_COLORS)}</td>
-        <td class="py-3 px-4 text-right whitespace-nowrap">
-          <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
-          <button onclick="askDelete('usuarios','${u.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
-        </td>
-      </tr>`;
-    }).join('');
+        const iniciales = (u.nombre || 'D').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+        const materiasTexto = (resumen && Array.isArray(resumen.materias)) ? resumen.materias.join(' ') : (resumen ? (resumen.count + ' materias') : '');
+        return `
+        <tr data-search="${escapeHtml(((u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + materiasTexto).toLowerCase())}" class="border-b border-gray-50 last:border-0 hover:bg-morado/5 transition">
+          <td class="py-3 px-4 text-sm font-semibold text-ink">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-xl bg-morado/10 text-morado font-bold text-xs flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
+              <div>
+                <p class="font-bold text-ink leading-tight">${escapeHtml(u.nombre)}</p>
+                <p class="text-xs text-slate2">${escapeHtml(u.email)}</p>
+              </div>
+            </div>
+          </td>
+          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.telefono || '—')}</td>
+          <td class="py-3 px-4 text-sm">
+            ${resumen && resumen.count > 0
+              ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-morado/10 text-morado border border-morado/20">${resumen.count} materia${resumen.count === 1 ? '' : 's'} · ${resumen.totalHoras} h/sem</span>`
+              : '<span class="text-slate2 text-xs">Sin materias en horario</span>'}
+          </td>
+          <td class="py-3 px-4">${statusPill(u.estado, ESTADO_COLORS)}</td>
+          <td class="py-3 px-4 text-right whitespace-nowrap">
+            <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline mr-3 cursor-pointer">Editar</button>
+            <button onclick="askDelete('usuarios','${u.id}')" class="text-xs font-semibold text-coral hover:underline cursor-pointer">Eliminar</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      tablaHeaderHtml = `
+        <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+          <th class="py-2.5 px-4">Profesor / Docente</th><th class="py-2.5 px-4">Teléfono</th><th class="py-2.5 px-4">Materias Asignadas</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4 text-right">Acciones</th>
+        </tr></thead>`;
+      cuerpoTablaHtml = rowsDocentes || emptyRow(5);
+
+    } else if (tabUsuariosActivo === 'estudiantes') {
+      const rowsEstudiantes = estudiantes.map(u => {
+        const iniciales = (u.nombre || 'E').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+        return `
+        <tr data-search="${escapeHtml((u.nombre + ' ' + u.email + ' ' + (u.telefono || '') + ' ' + (u.cohorte || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0 hover:bg-turquesa/5 transition">
+          <td class="py-3 px-4 text-sm font-semibold text-ink">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-xl bg-turquesa/15 text-turquesa font-bold text-xs flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <p class="font-bold text-ink leading-tight">${escapeHtml(u.nombre)}</p>
+                  ${u.fueEstudiante ? `<button onclick="abrirHistorialTrainee('${u.id}')" title="Fue estudiante — ver su historial" class="text-[10px] font-bold uppercase tracking-wide text-morado bg-morado/10 hover:bg-morado/20 rounded-full px-2 py-0.5 transition cursor-pointer">Historial</button>` : ''}
+                </div>
+                <p class="text-xs text-slate2">${escapeHtml(u.email)}</p>
+              </div>
+            </div>
+          </td>
+          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.telefono || '—')}</td>
+          <td class="py-3 px-4 text-sm">
+            ${u.cohorte
+              ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-turquesa/10 text-turquesa border border-turquesa/20">${escapeHtml(u.cohorte)}</span>`
+              : '<span class="text-slate2 text-xs">Sin cohorte</span>'}
+          </td>
+          <td class="py-3 px-4">${statusPill(u.estado, ESTADO_COLORS)}</td>
+          <td class="py-3 px-4 text-right whitespace-nowrap">
+            <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline mr-3 cursor-pointer">Editar</button>
+            <button onclick="askDelete('usuarios','${u.id}')" class="text-xs font-semibold text-coral hover:underline cursor-pointer">Eliminar</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      tablaHeaderHtml = `
+        <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+          <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Teléfono</th><th class="py-2.5 px-4">Cohorte Asignada</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4 text-right">Acciones</th>
+        </tr></thead>`;
+      cuerpoTablaHtml = rowsEstudiantes || emptyRow(5);
+
+    } else if (tabUsuariosActivo === 'registrados') {
+      const rowsRegistrados = pendientes.map(u => {
+        const iniciales = (u.nombre || 'R').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+        const fechaTxt = u.creadoEn ? new Date(u.creadoEn).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Reciente';
+        return `
+        <tr data-search="${escapeHtml(((u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0 hover:bg-amber-50/40 transition">
+          <td class="py-3 px-4 text-sm font-semibold text-ink">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 font-bold text-xs flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
+              <div>
+                <p class="font-bold text-ink leading-tight">${escapeHtml(u.nombre)}</p>
+                <p class="text-xs text-slate2">${escapeHtml(u.email)}</p>
+              </div>
+            </div>
+          </td>
+          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.telefono || '—')}</td>
+          <td class="py-3 px-4 text-xs text-slate2">${escapeHtml(fechaTxt)}</td>
+          <td class="py-3 px-4 text-sm">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+              Pendiente
+            </span>
+          </td>
+          <td class="py-3 px-4 text-right whitespace-nowrap">
+            <button onclick="aprobarRegistroPendiente('${u.id}')" class="text-xs font-bold text-white bg-turquesa hover:opacity-90 px-3 py-1.5 rounded-xl shadow-sm mr-2 transition cursor-pointer">Aprobar</button>
+            <button onclick="rechazarRegistroPendiente('${u.id}')" class="text-xs font-semibold text-coral hover:bg-coral/10 px-2.5 py-1.5 rounded-xl transition cursor-pointer mr-2">Rechazar</button>
+            <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline cursor-pointer">Detalles</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      tablaHeaderHtml = `
+        <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+          <th class="py-2.5 px-4">Solicitante</th><th class="py-2.5 px-4">Teléfono</th><th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4 text-right">Acciones</th>
+        </tr></thead>`;
+      cuerpoTablaHtml = rowsRegistrados || `<tr><td colspan="5" class="py-12 text-center text-slate2 text-sm">
+        <svg class="w-10 h-10 mx-auto mb-2 text-slate2/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <p class="font-semibold text-ink">No hay solicitudes de registro pendientes</p>
+        <p class="text-xs text-slate2 mt-1">Los nuevos estudiantes que se registren desde el portal público aparecerán aquí para tu aprobación.</p>
+      </td></tr>`;
+    }
+
+    const rolParaModal = tabUsuariosActivo === 'profesores' ? 'Docente' : 'Estudiante';
+    const labelNuevoBtn = tabUsuariosActivo === 'profesores' ? 'Nuevo profesor' : 'Nuevo estudiante';
 
     document.getElementById('mount-usuarios').innerHTML = `
-      ${seccionPendientes}
+      ${alertaPendientes}
       <div class="admin-panel-card p-6">
-        ${sectionHeader('usuarios', 'Usuarios', records.length + ' cuentas registradas en la plataforma')}
+        
+        <!-- Pestañas de separación Todos / Profesores / Estudiantes / Solicitudes -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4 mb-4">
+          <div class="flex items-center gap-1.5 p-1 bg-gray-100/90 rounded-2xl shrink-0 overflow-x-auto">
+            <button type="button" onclick="cambiarTabUsuarios('todos')" class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${tabUsuariosActivo === 'todos' ? 'bg-white text-ink shadow-sm' : 'text-slate2 hover:text-ink'}">
+              <svg class="w-4 h-4 shrink-0 ${tabUsuariosActivo === 'todos' ? 'text-ink' : 'text-slate2'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+              </svg>
+              <span>Todos</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold ${tabUsuariosActivo === 'todos' ? 'bg-gray-200 text-ink' : 'bg-gray-200/80 text-slate2'}">${records.length + pendientes.length}</span>
+            </button>
+            <button type="button" onclick="cambiarTabUsuarios('profesores')" class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${tabUsuariosActivo === 'profesores' ? 'bg-white text-ink shadow-sm' : 'text-slate2 hover:text-ink'}">
+              <svg class="w-4 h-4 shrink-0 ${tabUsuariosActivo === 'profesores' ? 'text-morado' : 'text-slate2'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 14v6m-4-2.5v2.5m8-2.5v2.5"/>
+              </svg>
+              <span>Profesores</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold ${tabUsuariosActivo === 'profesores' ? 'bg-morado/10 text-morado' : 'bg-gray-200 text-slate2'}">${docentes.length}</span>
+            </button>
+            <button type="button" onclick="cambiarTabUsuarios('estudiantes')" class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${tabUsuariosActivo === 'estudiantes' ? 'bg-white text-ink shadow-sm' : 'text-slate2 hover:text-ink'}">
+              <svg class="w-4 h-4 shrink-0 ${tabUsuariosActivo === 'estudiantes' ? 'text-turquesa' : 'text-slate2'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+              </svg>
+              <span>Estudiantes</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold ${tabUsuariosActivo === 'estudiantes' ? 'bg-turquesa/10 text-turquesa' : 'bg-gray-200 text-slate2'}">${estudiantes.length}</span>
+            </button>
+            <button type="button" onclick="cambiarTabUsuarios('registrados')" class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${tabUsuariosActivo === 'registrados' ? 'bg-white text-ink shadow-sm' : 'text-slate2 hover:text-ink'}">
+              <svg class="w-4 h-4 shrink-0 ${tabUsuariosActivo === 'registrados' ? 'text-amber-500' : 'text-slate2'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+              </svg>
+              <span>Solicitudes</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold ${pendientes.length ? 'bg-amber-500 text-white animate-pulse' : (tabUsuariosActivo === 'registrados' ? 'bg-amber-100 text-amber-800' : 'bg-gray-200 text-slate2')}">${pendientes.length}</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+            <div class="relative flex-1 sm:w-64">
+              <input type="text" data-table="table-usuarios" oninput="filtrarTablaLive(this.value, 'table-usuarios')" placeholder="Buscar en ${tabUsuariosActivo === 'profesores' ? 'profesores' : (tabUsuariosActivo === 'estudiantes' ? 'estudiantes' : (tabUsuariosActivo === 'registrados' ? 'solicitudes' : 'usuarios'))}..." class="w-full rounded-full border border-gray-200 pl-9 pr-3 py-1.5 text-xs text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            ${tabUsuariosActivo === 'registrados' ? '' : `
+            <button onclick="openModal('usuarios', null, '${rolParaModal}')" class="shrink-0 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-xs py-2 px-4 hover:opacity-90 transition flex items-center gap-1.5 shadow-sm cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              <span>${tabUsuariosActivo === 'todos' ? 'Nuevo usuario' : labelNuevoBtn}</span>
+            </button>`}
+          </div>
+        </div>
+
         <div class="overflow-x-auto">
           <table id="table-usuarios" class="w-full admin-table">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Nombre</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Cohorte / Materias</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
-            </tr></thead>
-            <tbody>${rows || emptyRow(6)}</tbody>
+            ${tablaHeaderHtml}
+            <tbody>${cuerpoTablaHtml}</tbody>
           </table>
         </div>
       </div>`;
@@ -4506,15 +5584,66 @@ Fundación A+`;
     if (!u) return;
     const seguro = confirm(`¿Estás seguro de rechazar la solicitud de registro de "${u.nombre}"? Se le enviará un correo de notificación.`);
     if (!seguro) return;
-    await Store.set('usuarios', usuarios.filter(x => x.id !== id));
+
+    // 1. Limpiar de localStorage si quedó alguna copia local
+    try {
+      const rawLocal = localStorage.getItem('aplus_admin_v1_usuarios');
+      if (rawLocal) {
+        const parsed = JSON.parse(rawLocal);
+        if (Array.isArray(parsed)) {
+          const limpiado = parsed.filter(x => x.id !== id && (!u.email || (x.email || '').toLowerCase() !== u.email.toLowerCase()));
+          localStorage.setItem('aplus_admin_v1_usuarios', JSON.stringify(limpiado));
+        }
+      }
+    } catch (e) {}
+
+    // 2. Guardar en Store / MySQL sin el usuario rechazado
+    const nuevaLista = usuarios.filter(x => x.id !== id && (!u.email || (x.email || '').toLowerCase() !== u.email.toLowerCase()));
+    await Store.set('usuarios', nuevaLista);
+    if (typeof Store.clearCache === 'function') Store.clearCache('usuarios');
+
     toast('Solicitud rechazada. Enviando correo de aviso...', 'ok');
-    await notificarEstadoRegistroPorCorreo(u.email, u.nombre, 'rechazado');
+    try {
+      await notificarEstadoRegistroPorCorreo(u.email, u.nombre, 'rechazado');
+    } catch (err) {
+      console.warn('[rechazarRegistroPendiente] Error enviando correo:', err);
+    }
     await renderUsuarios();
     await renderAdminBannerStats();
   }
 
   // ---------- PERFILES Y PERMISOS (exclusivo Superadmin) ----------
   // async: 'perfiles' vía MySQL (Fase 4).
+  const THEME_CATEGORIA_PERFIL = {
+    'Administrativo': {
+      nombre: 'Administrativo',
+      color: '#8B5CF6',
+      badgeClass: 'bg-morado/10 text-morado border border-morado/25',
+      textClass: 'text-morado',
+      borderClass: 'border-morado/20',
+      bgHeader: 'bg-morado/5',
+      btnGradient: 'from-morado to-purple-700',
+    },
+    'Docente': {
+      nombre: 'Docente',
+      color: '#1FC8C0',
+      badgeClass: 'bg-turquesa/10 text-turquesa border border-turquesa/25',
+      textClass: 'text-turquesa',
+      borderClass: 'border-turquesa/20',
+      bgHeader: 'bg-turquesa/5',
+      btnGradient: 'from-turquesa to-teal-600',
+    },
+    'Estudiante': {
+      nombre: 'Estudiante',
+      color: '#F5A623',
+      badgeClass: 'bg-amber-50 text-amber-700 border border-amber-200',
+      textClass: 'text-amber-600',
+      borderClass: 'border-amber-200',
+      bgHeader: 'bg-amber-50/60',
+      btnGradient: 'from-amber-500 to-orange-500',
+    }
+  };
+
   async function renderPerfiles() {
     const perfiles = [...(await Store.list('perfiles'))].sort((a, b) => a.nombre.localeCompare(b.nombre));
     const usuarios = await Store.list('usuarios');
@@ -4522,15 +5651,16 @@ Fundación A+`;
       const enUso = usuarios.filter(u => (u.perfiles || []).includes(p.id)).length;
       const totalPaneles = CATALOGO_PANELES.filter(pan => pan.categoria === p.categoria).length;
       const conVer = Object.values(p.permisos || {}).filter(x => x.ver).length;
+      const theme = THEME_CATEGORIA_PERFIL[p.categoria] || THEME_CATEGORIA_PERFIL['Administrativo'];
       return `
-      <tr data-search="${escapeHtml((p.nombre + ' ' + p.categoria).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+      <tr data-search="${escapeHtml((p.nombre + ' ' + p.categoria).toLowerCase())}" class="border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition">
         <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(p.nombre)} ${p.esSistema ? '<span class="text-[10px] font-bold uppercase tracking-wide text-slate2 bg-gray-100 rounded-full px-2 py-0.5 ml-1.5">Sistema</span>' : ''}</td>
-        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(p.categoria)}</td>
+        <td class="py-3 px-4 text-sm"><span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${theme.badgeClass}">${escapeHtml(p.categoria)}</span></td>
         <td class="py-3 px-4 text-sm text-slate2">${conVer} / ${totalPaneles} paneles</td>
         <td class="py-3 px-4 text-sm text-slate2">${enUso} usuario${enUso === 1 ? '' : 's'}</td>
         <td class="py-3 px-4 text-right whitespace-nowrap">
-          <button onclick="abrirEditorPerfil('${p.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
-          ${p.esSistema ? '' : `<button onclick="askDelete('perfiles','${p.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>`}
+          <button onclick="abrirEditorPerfil('${p.id}')" class="text-xs font-semibold text-morado hover:underline mr-3 cursor-pointer">Editar</button>
+          ${p.esSistema ? '' : `<button onclick="askDelete('perfiles','${p.id}')" class="text-xs font-semibold text-coral hover:underline cursor-pointer">Eliminar</button>`}
         </td>
       </tr>`;
     }).join('');
@@ -4540,9 +5670,9 @@ Fundación A+`;
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-gray-100">
           <div>
             <h2 class="text-lg font-extrabold text-ink">Perfiles y permisos</h2>
-            <p class="text-sm text-slate2 mt-0.5">Cada perfil marca qué paneles puede Ver, Crear, Editar o Eliminar. Un usuario puede tener varios perfiles a la vez.</p>
+            <p class="text-sm text-slate2 mt-0.5">Cada perfil marca qué paneles puede Ver, Crear, Editar o Eliminar. Los administradores usan morado, los profesores su tono turquesa y los estudiantes su tono dorado.</p>
           </div>
-          <button onclick="abrirEditorPerfil()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-sm font-semibold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5 shadow-sm">
+          <button onclick="abrirEditorPerfil()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-sm font-semibold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5 shadow-sm cursor-pointer">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
             Nuevo perfil
           </button>
@@ -4568,27 +5698,32 @@ Fundación A+`;
     const esNuevo = !perfil;
     const categoria = perfil ? perfil.categoria : 'Administrativo';
     const permisos = perfil ? perfil.permisos : {};
+    const theme = THEME_CATEGORIA_PERFIL[categoria] || THEME_CATEGORIA_PERFIL['Administrativo'];
 
-    const filasPorCategoria = (cat) => CATALOGO_PANELES.filter(p => p.categoria === cat).map(p => {
-      const perm = permisos[p.codigo] || {};
-      return `
-        <tr class="border-b border-gray-50 last:border-0">
-          <td class="py-2 px-3 text-sm text-ink font-medium">${escapeHtml(p.etiqueta)}</td>
-          ${['ver', 'crear', 'editar', 'eliminar'].map(accion => `
-            <td class="py-2 px-3 text-center">
-              <input type="checkbox" data-panel-codigo="${p.codigo}" data-accion="${accion}"
-                class="perfil-permiso-checkbox w-4 h-4 rounded border-gray-300 text-morado focus:ring-morado/40"
-                ${perm[accion] ? 'checked' : ''} />
-            </td>`).join('')}
-        </tr>`;
-    }).join('');
+    const filasPorCategoria = (cat) => {
+      const th = THEME_CATEGORIA_PERFIL[cat] || THEME_CATEGORIA_PERFIL['Administrativo'];
+      return CATALOGO_PANELES.filter(p => p.categoria === cat).map(p => {
+        const perm = permisos[p.codigo] || {};
+        return `
+          <tr class="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
+            <td class="py-2 px-3 text-sm text-ink font-medium">${escapeHtml(p.etiqueta)}</td>
+            ${['ver', 'crear', 'editar', 'eliminar'].map(accion => `
+              <td class="py-2 px-3 text-center">
+                <input type="checkbox" data-panel-codigo="${p.codigo}" data-accion="${accion}"
+                  style="accent-color:${th.color};"
+                  class="perfil-permiso-checkbox w-4 h-4 rounded border-gray-300 cursor-pointer"
+                  ${perm[accion] ? 'checked' : ''} />
+              </td>`).join('')}
+          </tr>`;
+      }).join('');
+    };
 
     document.getElementById('perfilEditorWrap').innerHTML = `
       <div class="fixed inset-0 bg-ink/40 z-40 flex items-start sm:items-center justify-center p-4 overflow-y-auto" onclick="if(event.target===this) cerrarEditorPerfil()">
-        <div class="bg-white rounded-2xl shadow-softLg max-w-2xl w-full my-8">
-          <div class="p-6 border-b border-morado/10">
-            <p class="text-xs font-bold uppercase tracking-widest text-morado">${esNuevo ? 'Crear nuevo' : 'Editar'}</p>
-            <h3 class="text-lg font-extrabold text-ink mt-0.5">Perfil</h3>
+        <div class="bg-white rounded-3xl shadow-softLg max-w-2xl w-full my-8 overflow-hidden">
+          <div id="perfilEditorHeader" class="p-6 border-b ${theme.borderClass} ${theme.bgHeader} transition-colors">
+            <p id="perfilEditorEyebrow" class="text-xs font-bold uppercase tracking-widest ${theme.textClass}">${esNuevo ? 'Crear nuevo' : 'Editar'}</p>
+            <h3 class="text-lg font-extrabold text-ink mt-0.5">Perfil de ${escapeHtml(categoria)}</h3>
           </div>
           <div class="p-6 space-y-4 max-h-[65vh] overflow-y-auto">
             <div class="grid sm:grid-cols-2 gap-4">
@@ -4596,13 +5731,13 @@ Fundación A+`;
                 <label class="text-xs font-semibold text-slate2 block mb-1.5">Nombre del perfil</label>
                 <input id="perfil_nombre" type="text" value="${escapeHtml(perfil ? perfil.nombre : '')}" placeholder="Ej. Coordinador Académico"
                   ${perfil && perfil.esSistema ? 'disabled' : ''}
-                  class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado disabled:bg-gray-50 disabled:text-slate2" />
+                  class="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado disabled:bg-gray-50 disabled:text-slate2" />
               </div>
               <div>
-                <label class="text-xs font-semibold text-slate2 block mb-1.5">Categoría</label>
+                <label class="text-xs font-semibold text-slate2 block mb-1.5">Categoría de usuario</label>
                 <select id="perfil_categoria" onchange="abrirEditorPerfil_cambiarCategoria(this.value)"
                   ${perfil && perfil.esSistema ? 'disabled' : ''}
-                  class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado disabled:bg-gray-50 disabled:text-slate2">
+                  class="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado disabled:bg-gray-50 disabled:text-slate2">
                   ${['Administrativo', 'Docente', 'Estudiante'].map(c => `<option value="${c}" ${c === categoria ? 'selected' : ''}>${c}</option>`).join('')}
                 </select>
               </div>
@@ -4610,41 +5745,58 @@ Fundación A+`;
             <div>
               <label class="text-xs font-semibold text-slate2 block mb-1.5">Descripción (opcional)</label>
               <input id="perfil_descripcion" type="text" value="${escapeHtml(perfil ? (perfil.descripcion || '') : '')}" placeholder="Para qué sirve este perfil"
-                class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+                class="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
             </div>
             <div>
-              <p class="text-xs font-semibold text-slate2 mb-2">Permisos por panel — categoría ${escapeHtml(categoria)}</p>
-              <div class="overflow-x-auto border border-gray-100 rounded-xl">
+              <p id="perfilPermisosTitulo" class="text-xs font-semibold text-slate2 mb-2">Permisos por panel — categoría <strong class="text-ink">${escapeHtml(categoria)}</strong></p>
+              <div class="overflow-x-auto border border-gray-100 rounded-2xl">
                 <table id="perfilPermisosTabla" class="w-full">
                   <thead><tr class="text-left text-[11px] font-bold uppercase tracking-wide text-slate2 bg-gray-50 border-b border-gray-100">
-                    <th class="py-2 px-3">Panel</th><th class="py-2 px-3 text-center">Ver</th><th class="py-2 px-3 text-center">Crear</th><th class="py-2 px-3 text-center">Editar</th><th class="py-2 px-3 text-center">Eliminar</th>
+                    <th class="py-2.5 px-3">Panel</th><th class="py-2.5 px-3 text-center">Ver</th><th class="py-2.5 px-3 text-center">Crear</th><th class="py-2.5 px-3 text-center">Editar</th><th class="py-2.5 px-3 text-center">Eliminar</th>
                   </tr></thead>
                   <tbody id="perfilPermisosFilas">${filasPorCategoria(categoria)}</tbody>
                 </table>
               </div>
             </div>
           </div>
-          <div class="p-6 border-t border-morado/10 flex items-center justify-end gap-3">
-            <button onclick="cerrarEditorPerfil()" class="rounded-full border border-morado/25 text-slate2 hover:bg-morado/5 text-sm font-semibold px-4 py-2.5 transition">Cancelar</button>
-            <button onclick="withBotonCargando(this, guardarPerfil)" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-2.5 px-6 hover:opacity-90 transition">Guardar perfil</button>
+          <div class="p-6 border-t border-gray-100 flex items-center justify-end gap-3 bg-gray-50/50">
+            <button onclick="cerrarEditorPerfil()" class="rounded-full border border-gray-200 text-slate2 hover:bg-gray-100 text-sm font-semibold px-4 py-2.5 transition cursor-pointer">Cancelar</button>
+            <button id="perfilEditorBtnGuardar" onclick="withBotonCargando(this, guardarPerfil)" class="rounded-full bg-gradient-to-r ${theme.btnGradient} text-white font-semibold text-sm py-2.5 px-6 hover:opacity-95 shadow-sm transition cursor-pointer">Guardar perfil</button>
           </div>
         </div>
       </div>`;
   }
 
   // Al cambiar la categoría de un perfil NUEVO, se recalculan las filas de
-  // permisos para esa categoría (los checkboxes marcados se pierden, porque
-  // son paneles distintos). No aplica a perfiles ya guardados (esSistema o
-  // no) porque el <select> queda deshabilitado para perfiles de sistema, y
-  // cambiar la categoría de un perfil ya en uso sería confuso — si hace
-  // falta, se crea un perfil nuevo.
+  // permisos para esa categoría y se actualizan los colores temáticos
   function abrirEditorPerfil_cambiarCategoria(categoria) {
+    const theme = THEME_CATEGORIA_PERFIL[categoria] || THEME_CATEGORIA_PERFIL['Administrativo'];
+    const header = document.getElementById('perfilEditorHeader');
+    const eyebrow = document.getElementById('perfilEditorEyebrow');
+    const titulo = document.getElementById('perfilPermisosTitulo');
+    const btn = document.getElementById('perfilEditorBtnGuardar');
+
+    if (header) {
+      header.className = `p-6 border-b ${theme.borderClass} ${theme.bgHeader} transition-colors`;
+    }
+    if (eyebrow) {
+      eyebrow.className = `text-xs font-bold uppercase tracking-widest ${theme.textClass}`;
+    }
+    if (titulo) {
+      titulo.innerHTML = `Permisos por panel — categoría <strong class="text-ink">${escapeHtml(categoria)}</strong>`;
+    }
+    if (btn) {
+      btn.className = `rounded-full bg-gradient-to-r ${theme.btnGradient} text-white font-semibold text-sm py-2.5 px-6 hover:opacity-95 shadow-sm transition cursor-pointer`;
+    }
+
     document.getElementById('perfilPermisosFilas').innerHTML = CATALOGO_PANELES.filter(p => p.categoria === categoria).map(p => `
-      <tr class="border-b border-gray-50 last:border-0">
+      <tr class="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
         <td class="py-2 px-3 text-sm text-ink font-medium">${escapeHtml(p.etiqueta)}</td>
         ${['ver', 'crear', 'editar', 'eliminar'].map(accion => `
           <td class="py-2 px-3 text-center">
-            <input type="checkbox" data-panel-codigo="${p.codigo}" data-accion="${accion}" class="perfil-permiso-checkbox w-4 h-4 rounded border-gray-300 text-morado focus:ring-morado/40" />
+            <input type="checkbox" data-panel-codigo="${p.codigo}" data-accion="${accion}"
+              style="accent-color:${theme.color};"
+              class="perfil-permiso-checkbox w-4 h-4 rounded border-gray-300 cursor-pointer" />
           </td>`).join('')}
       </tr>`).join('');
   }
@@ -4723,8 +5875,8 @@ Fundación A+`;
           </div>
           <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <div class="relative">
-              <input data-table="table-administradores" oninput="filterTable('administradores', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-              <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5 sm:top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input data-table="table-administradores" oninput="filterTable('administradores', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/30 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition text-ink" />
+              <svg class="w-4 h-4 text-morado absolute left-3 top-2.5 sm:top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
             <button onclick="recargarPanelActual()" title="Actualizar datos en vivo" class="rounded-xl border border-gray-200 text-slate2 hover:text-morado hover:bg-morado/5 text-xs sm:text-sm font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-sm">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
@@ -4758,8 +5910,18 @@ Fundación A+`;
     if (!horarioState.cohorte && cohortes.length > 0) {
       horarioState.cohorte = cohortes[0].nombre;
     }
-    const inscritosPorCohorte = await Promise.all(cohortes.map(m => contarInscritos(m.nombre)));
-    const docentesPorCohorte = await Promise.all(cohortes.map(m => docentesDeCohorte(m.nombre)));
+    const [usuariosList, horariosList] = await Promise.all([
+      Store.list('usuarios'),
+      Store.list('horarios')
+    ]);
+    const inscritosPorCohorte = cohortes.map(m => usuariosList.filter(u => u.rol === 'Estudiante' && u.cohorte === m.nombre).length);
+    const docentesPorCohorte = cohortes.map(m => {
+      const nombres = new Set();
+      horariosList.filter(h => h.cohorte === m.nombre).forEach(h => {
+        franjasActivas(h).forEach(f => { if (f.docente) nombres.add(f.docente); });
+      });
+      return [...nombres];
+    });
 
     const rows = cohortes.map((m, i) => {
       const inscritos = inscritosPorCohorte[i];
@@ -4895,7 +6057,7 @@ Fundación A+`;
   const FRANJA_ESTADO_COLOR = { Activo: '#1FC8C0', Inactivo: '#5B6472' };
 
   // async: getHorario ahora es async.
-  async function renderHorarioGrid() {
+  async function renderHorarioGrid(preservarForm = false) {
     const wrap = document.getElementById('horarioGridWrap');
     if (!wrap) return;
     if (!horarioState.cohorte || !horarioState.mes) {
@@ -4908,114 +6070,241 @@ Fundación A+`;
     const totalHorasActivas = franjasActivas(existente).reduce((acc, f) => acc + horasFranja(f), 0);
 
     // Vista tipo agenda: una columna por día, franjas ordenadas por hora de
-    // inicio dentro de cada columna, como tarjetas compactas — mejor uso
-    // del espacio que una tabla con muchas celdas vacías (la mayoría de
-    // franjas no cubren todo el día ni todos los días).
+    // inicio dentro de cada columna, como tarjetas compactas con semejanza de color
+    // según el código de vestimenta de la cohorte.
+    const configCamisa = getColoresCamisaCohorte(horarioState.cohorte);
+
     const columnas = dias.map(dia => {
       const franjasDelDia = franjas
         .filter(f => f.dia === dia)
         .sort((a, b) => a.inicio.localeCompare(b.inicio));
+      const horasDelDia = franjasDelDia.filter(f => f.estado !== 'Inactivo').reduce((acc, f) => acc + horasFranja(f), 0);
+
+      const colorCamisa = configCamisa[dia] || COLORES_CAMISA_DEFAULT[dia] || 'Blanco';
+      const infoCamisa = COLORES_CAMISA_INFO[colorCamisa] || COLORES_CAMISA_INFO['Blanco'];
 
       const tarjetas = franjasDelDia.map(f => {
-        const color = FRANJA_ESTADO_COLOR[f.estado] || FRANJA_ESTADO_COLOR.Activo;
         const inactiva = f.estado === 'Inactivo';
         return `
-          <div class="horario-franja-card rounded-xl border border-gray-100 p-3 mb-2 ${inactiva ? 'opacity-55' : ''}" style="border-left:3px solid ${color}">
+          <div class="horario-franja-card rounded-2xl bg-white border border-gray-200/80 p-3.5 mb-2.5 shadow-2xs hover:shadow-sm transition ${inactiva ? 'opacity-55' : ''}" style="border-left:4px solid ${infoCamisa.franjaBorder};">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-bold text-ink leading-snug">${escapeHtml(f.curso || '(sin curso)')}</p>
-              <button onclick="eliminarFranjaHorario('${f.id}')" title="Eliminar franja" class="text-slate2 hover:text-coral transition shrink-0 -mt-0.5 -mr-0.5">
+              <button onclick="eliminarFranjaHorario('${f.id}')" title="Eliminar franja" class="text-slate2 hover:text-coral transition shrink-0 -mt-0.5 -mr-0.5 cursor-pointer">
                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <p class="text-[11px] text-slate2 mt-1">${f.inicio}–${f.fin} · ${horasFranja(f)} h</p>
-            <p class="text-[11px] text-slate2 mt-0.5">${f.docente ? escapeHtml(f.docente) : '<span class="italic">Sin trainer asignado</span>'}</p>
-            <button onclick="toggleEstadoFranjaHorario('${f.id}')" class="text-[10px] font-bold uppercase tracking-wide mt-2 inline-block px-2 py-0.5 rounded-full" style="background:${color}1A;color:${color}">${f.estado || 'Activo'}</button>
+            <div class="flex items-center gap-1.5 text-[11px] text-slate2 mt-1.5 font-medium">
+              <svg class="w-3 h-3 text-slate2/80 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/></svg>
+              <span>${f.inicio} – ${f.fin} · <strong class="text-ink font-semibold">${horasFranja(f)} h</strong></span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[11px] text-slate2 mt-1">
+              <svg class="w-3 h-3 text-slate2/80 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+              <span class="truncate">${f.docente ? escapeHtml(f.docente) : '<span class="italic text-slate2/70">Sin trainer asignado</span>'}</span>
+            </div>
+            <div class="flex items-center justify-between gap-1 mt-2.5 pt-2 border-t border-gray-100">
+              <button onclick="toggleEstadoFranjaHorario('${f.id}')" class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full cursor-pointer transition ${inactiva ? 'bg-gray-100 text-slate2' : 'bg-turquesa/10 text-turquesa border border-turquesa/20'}">
+                ${f.estado || 'Activo'}
+              </button>
+              <span class="text-[10px] font-semibold text-slate2 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full ${infoCamisa.swatchClass}"></span>
+                ${escapeHtml(infoCamisa.nombre)}
+              </span>
+            </div>
           </div>`;
       }).join('');
 
       return `
-        <div class="horario-dia-col">
-          <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2 px-0.5">${dia}</p>
-          ${tarjetas || '<p class="text-[11px] text-slate2/60 italic px-0.5">Sin franjas</p>'}
+        <div class="horario-dia-col rounded-2xl p-3 border border-gray-200/70 shadow-2xs flex flex-col" style="background:${infoCamisa.franjaBg};">
+          <div class="flex flex-col gap-1.5 mb-2.5 pb-2 border-b border-gray-200/60">
+            <div class="flex items-center justify-between gap-1">
+              <p class="text-xs font-extrabold uppercase tracking-wider text-ink">${dia}</p>
+              <span class="text-[10px] font-bold text-slate2 bg-white/85 px-2 py-0.5 rounded-full border border-gray-200/60 shadow-2xs">${horasDelDia} h</span>
+            </div>
+            <div class="w-full flex">
+              ${badgeCamisaDia(dia, horarioState.cohorte)}
+            </div>
+          </div>
+          <div class="flex-1">
+            ${tarjetas || '<div class="p-4 text-center rounded-xl bg-white/70 border border-dashed border-gray-200 text-[11px] text-slate2/70 italic">Sin clases</div>'}
+          </div>
         </div>`;
     }).join('');
 
+    // Si se pide preservar el formulario abierto y el contenedor de columnas ya existe en DOM,
+    // refrescamos solo los datos sin destruir ni parpadear el formulario abierto.
+    const gridColsContainer = document.getElementById('horarioGridColumnsContainer');
+    if (preservarForm && gridColsContainer) {
+      const statsText = document.getElementById('horarioStatsText');
+      if (statsText) {
+        statsText.innerHTML = `<span class="font-bold text-ink">${franjasActivas(existente).length}</span> franja${franjasActivas(existente).length === 1 ? '' : 's'} activa${franjasActivas(existente).length === 1 ? '' : 's'} · <span class="font-bold text-ink">${totalHorasActivas} horas</span> semanales`;
+      }
+      gridColsContainer.innerHTML = columnas;
+      return;
+    }
+
     wrap.innerHTML = `
-      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <p class="text-xs text-slate2">${franjasActivas(existente).length} franja${franjasActivas(existente).length === 1 ? '' : 's'} activa${franjasActivas(existente).length === 1 ? '' : 's'} · <span class="font-semibold text-ink">${totalHorasActivas} h</span> por semana</p>
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4 bg-gray-50/80 p-3 rounded-2xl border border-gray-200/70">
         <div class="flex items-center gap-2">
-          <button onclick="descargarPlantillaCSVHorario()" title="Descargar plantilla CSV" class="rounded-full border border-morado/25 text-slate2 hover:bg-morado/5 text-xs font-semibold px-3.5 py-2 transition flex items-center gap-1.5">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
-            Descargar plantilla
+          <span class="w-2.5 h-2.5 rounded-full bg-turquesa"></span>
+          <p id="horarioStatsText" class="text-xs text-slate2">
+            <span class="font-bold text-ink">${franjasActivas(existente).length}</span> franja${franjasActivas(existente).length === 1 ? '' : 's'} activa${franjasActivas(existente).length === 1 ? '' : 's'} · <span class="font-bold text-ink">${totalHorasActivas} horas</span> semanales
+          </p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="button" onclick="abrirModalColoresCamisa('${escapeHtml(horarioState.cohorte)}')" title="Configurar qué color de camisa corresponde a cada día para esta cohorte" class="rounded-full border border-morado/30 text-morado bg-morado/5 hover:bg-morado/15 text-xs font-bold px-3.5 py-2 transition flex items-center gap-1.5 cursor-pointer shadow-2xs">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5l2.5 2.5h2.5l2.5 4.5-2.5 2-1-1v8h-8v-8l-1 1-2.5-2 2.5-4.5h2.5L12 4.5z" />
+            </svg>
+            <span>Código de vestimenta</span>
           </button>
-          <button onclick="document.getElementById('horarioCsvInput').click()" title="Subir CSV de franjas" class="rounded-full border border-morado/25 text-slate2 hover:bg-morado/5 text-xs font-semibold px-3.5 py-2 transition flex items-center gap-1.5">
+          <button onclick="descargarPlantillaCSVHorario()" title="Descargar plantilla CSV" class="rounded-full border border-gray-200 bg-white text-slate2 hover:text-ink text-xs font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-2xs cursor-pointer">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+            <span>Plantilla</span>
+          </button>
+          <button onclick="document.getElementById('horarioCsvInput').click()" title="Subir CSV de franjas" class="rounded-full border border-gray-200 bg-white text-slate2 hover:text-ink text-xs font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-2xs cursor-pointer">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21V9m0 0l-4 4m4-4l4 4M4 7V5a2 2 0 012-2h12a2 2 0 012 2v2"/></svg>
-            Subir CSV
+            <span>Subir CSV</span>
           </button>
           <input id="horarioCsvInput" type="file" accept=".csv,text/csv" class="hidden" onchange="onSeleccionaCSVHorario(event)" />
-          <button onclick="abrirFormFranjaHorario()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-semibold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-            Añadir franja
+          <button onclick="abrirFormFranjaHorario()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-bold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5 shadow-sm cursor-pointer">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            <span>Añadir franja</span>
           </button>
         </div>
       </div>
       <div id="horarioFormFranjaWrap" class="mb-4"></div>
       <div id="horarioCsvResultWrap" class="mb-4"></div>
-      <div class="grid gap-3" style="grid-template-columns:repeat(${dias.length}, minmax(150px, 1fr))">
-        ${columnas}
+      <div class="overflow-x-auto pb-3 -mx-1 px-1">
+        <div id="horarioGridColumnsContainer" class="grid gap-3 min-w-[780px]" style="grid-template-columns:repeat(${dias.length}, minmax(180px, 1fr))">
+          ${columnas}
+        </div>
       </div>`;
   }
 
-  // Formulario inline para añadir una franja nueva — horas totalmente
-  // libres (el Superadmin escribe cualquier inicio/fin), Curso tomado del
-  // catálogo real de Store('cursos'), Trainer tomado de los Docentes reales.
-  // async: 'usuarios' y 'cursos' vía MySQL.
+  function setHorarioRapido(inicio, fin) {
+    const i = document.getElementById('ff_inicio');
+    const f = document.getElementById('ff_fin');
+    if (i) i.value = inicio;
+    if (f) f.value = fin;
+  }
+  window.setHorarioRapido = setHorarioRapido;
+
+  let horarioFormAbierto = false;
+
+  function cerrarFormFranjaHorario() {
+    horarioFormAbierto = false;
+    const wrap = document.getElementById('horarioFormFranjaWrap');
+    if (wrap) wrap.innerHTML = '';
+  }
+  window.cerrarFormFranjaHorario = cerrarFormFranjaHorario;
+
+  // Formulario inline para añadir una franja nueva — fácil, rápido y filtrado
+  // por los profesores asignados a la cohorte actual.
   async function abrirFormFranjaHorario() {
+    horarioFormAbierto = true;
+    const cohorteActual = horarioState.cohorte;
     const dias = horarioState.incluyeSabado ? DIAS_HORARIO : DIAS_HORARIO.slice(0, 5);
     const cursos = (await Store.list('cursos')).filter(c => c.estado === 'Activo');
-    const docentes = (await Store.list('usuarios')).filter(u => u.rol === 'Docente');
-    document.getElementById('horarioFormFranjaWrap').innerHTML = `
-      <div class="rounded-xl border border-gray-200 p-4 bg-gray-50/60">
-        <div class="grid sm:grid-cols-5 gap-2.5">
-          <select id="ff_dia" class="rounded-lg border border-morado/25 bg-morado/5 px-2.5 py-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
-            ${dias.map(d => `<option value="${d}">${d}</option>`).join('')}
-          </select>
-          <select id="ff_curso" class="rounded-lg border border-morado/25 bg-morado/5 px-2.5 py-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
-            <option value="">Curso...</option>
-            ${cursos.map(c => `<option value="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</option>`).join('')}
-            ${!cursos.length ? '' : ''}
-          </select>
-          <select id="ff_docente" class="rounded-lg border border-morado/25 bg-morado/5 px-2.5 py-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
-            <option value="">— Sin asignar —</option>
-            ${docentes.map(d => `<option value="${escapeHtml(d.nombre)}">${escapeHtml(d.nombre)}</option>`).join('')}
-          </select>
-          <input id="ff_inicio" type="time" value="08:00" class="rounded-lg border border-morado/25 bg-morado/5 px-2.5 py-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
-          <input id="ff_fin" type="time" value="10:00" class="rounded-lg border border-morado/25 bg-morado/5 px-2.5 py-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+    const todosDocentes = (await Store.list('usuarios')).filter(u => u.rol === 'Docente');
+
+    // FILTRO: Solo traer los profesores asignados a esa cohorte
+    const docentesDeCohorte = todosDocentes.filter(u => u.cohorte === cohorteActual);
+    const listaDocentes = docentesDeCohorte.length > 0 ? docentesDeCohorte : todosDocentes;
+
+    const badgeFiltroDocente = docentesDeCohorte.length > 0
+      ? `<span class="inline-flex items-center gap-1 text-[11px] font-bold text-turquesa bg-turquesa/10 border border-turquesa/20 px-2.5 py-0.5 rounded-full"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> ${docentesDeCohorte.length} profesor${docentesDeCohorte.length === 1 ? '' : 'es'} de ${escapeHtml(cohorteActual)}</span>`
+      : `<span class="inline-flex items-center gap-1 text-[11px] font-medium text-slate2 bg-gray-100 px-2 py-0.5 rounded-full">Sin profesores vinculados a esta cohorte (mostrando lista general)</span>`;
+
+    const wrapForm = document.getElementById('horarioFormFranjaWrap');
+    if (!wrapForm) return;
+
+    wrapForm.innerHTML = `
+      <div class="rounded-2xl border border-morado/20 p-5 bg-gradient-to-b from-white to-gray-50/70 shadow-soft animate-in fade-in duration-150">
+        <div class="flex items-center justify-between gap-3 mb-3 pb-2 border-b border-gray-100">
+          <div>
+            <h4 class="text-xs font-bold uppercase tracking-wider text-morado">Nueva Franja de Clase</h4>
+            <p class="text-[11px] text-slate2 mt-0.5">Asigna materia, docente y horario para <strong class="text-ink">${escapeHtml(cohorteActual)}</strong>. Se mantendrá abierto para agregar la siguiente fácilmente.</p>
+          </div>
+          ${badgeFiltroDocente}
         </div>
-        ${!cursos.length ? '<p class="text-[11px] text-coral mt-2">No hay cursos activos en el catálogo — ve al panel "Cursos" para crear uno primero.</p>' : ''}
-        <div class="flex justify-end gap-2 mt-3">
-          <button onclick="document.getElementById('horarioFormFranjaWrap').innerHTML=''" class="rounded-full border border-morado/25 text-slate2 hover:bg-morado/5 text-xs font-semibold px-3 py-2 transition">Cancelar</button>
-          <button onclick="guardarNuevaFranjaHorario()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-semibold px-4 py-2 hover:opacity-90 transition">Guardar franja</button>
+
+        <div class="grid sm:grid-cols-5 gap-3">
+          <div>
+            <label class="block text-[11px] font-bold text-slate2 mb-1">Día principal</label>
+            <select id="ff_dia" class="w-full rounded-xl border border-morado/25 bg-white px-3 py-2 text-xs text-ink font-semibold focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+              ${dias.map(d => `<option value="${d}">${d}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate2 mb-1">Curso / Materia</label>
+            <select id="ff_curso" class="w-full rounded-xl border border-morado/25 bg-white px-3 py-2 text-xs text-ink font-semibold focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+              <option value="">Selecciona curso...</option>
+              ${cursos.map(c => `<option value="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate2 mb-1">Profesor / Docente</label>
+            <select id="ff_docente" class="w-full rounded-xl border border-morado/25 bg-white px-3 py-2 text-xs text-ink font-semibold focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
+              <option value="">— Sin asignar —</option>
+              ${listaDocentes.map(d => `<option value="${escapeHtml(d.nombre)}">${escapeHtml(d.nombre)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate2 mb-1">Hora Inicio</label>
+            <input id="ff_inicio" type="time" value="08:00" class="w-full rounded-xl border border-morado/25 bg-white px-3 py-2 text-xs text-ink font-semibold focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate2 mb-1">Hora Fin</label>
+            <input id="ff_fin" type="time" value="10:00" class="w-full rounded-xl border border-morado/25 bg-white px-3 py-2 text-xs text-ink font-semibold focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
+          </div>
         </div>
+
+        <!-- Atajos de horas frecuentes para creación ultra-rápida -->
+        <div class="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-gray-100 flex-wrap">
+          <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate2 mr-1">Atajos de horario:</span>
+          <button type="button" onclick="setHorarioRapido('08:00','10:00')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-morado/10 text-morado hover:bg-morado hover:text-white transition cursor-pointer">08:00–10:00 (2h)</button>
+          <button type="button" onclick="setHorarioRapido('10:00','12:00')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-morado/10 text-morado hover:bg-morado hover:text-white transition cursor-pointer">10:00–12:00 (2h)</button>
+          <button type="button" onclick="setHorarioRapido('14:00','16:00')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-turquesa/15 text-turquesa hover:bg-turquesa hover:text-white transition cursor-pointer">14:00–16:00 (2h)</button>
+          <button type="button" onclick="setHorarioRapido('16:00','18:00')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-turquesa/15 text-turquesa hover:bg-turquesa hover:text-white transition cursor-pointer">16:00–18:00 (2h)</button>
+          <button type="button" onclick="setHorarioRapido('08:00','12:00')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer">08:00–12:00 (4h)</button>
+        </div>
+
+        <!-- Replicar en días adicionales para no repetir el proceso -->
+        <div class="flex items-center justify-between gap-3 mt-3 pt-2.5 border-t border-gray-100 flex-wrap">
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <span class="text-[11px] font-bold text-ink">Replicar también en:</span>
+            ${dias.map(d => `
+              <label class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate2 hover:text-ink cursor-pointer select-none">
+                <input type="checkbox" name="ff_dias_extra" value="${d}" class="w-3.5 h-3.5 rounded border-gray-300 text-morado focus:ring-morado/30">
+                <span>${d}</span>
+              </label>
+            `).join('')}
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="cerrarFormFranjaHorario()" class="rounded-full border border-gray-200 text-slate2 hover:bg-gray-100 text-xs font-semibold px-4 py-2 transition cursor-pointer">Listo / Cerrar</button>
+            <button type="button" onclick="guardarNuevaFranjaHorario()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-bold px-5 py-2 hover:opacity-90 shadow-sm transition cursor-pointer flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              <span>Guardar y continuar</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="ff_feedback" class="hidden"></div>
       </div>`;
   }
 
-  // Dos franjas de horario se solapan si una empieza antes de que la otra
-  // termine y termina después de que la otra empiece (comparación de
-  // rangos real, no coincidencia exacta de hora de inicio) — así se
-  // detecta también el caso "ya tiene clase 08:00–12:00, no puede
-  // agregarse otra 10:00–14:00" o "01:00pm–05:00pm" que sí se solapa con
-  // un fin de jornada distinto.
   function franjasSeSolapan(inicioA, finA, inicioB, finB) {
     const a1 = minutosDesdeHora(inicioA), a2 = minutosDesdeHora(finA);
     const b1 = minutosDesdeHora(inicioB), b2 = minutosDesdeHora(finB);
     return a1 < b2 && b1 < a2;
   }
 
-  // async: 'horarios' vía MySQL.
+  // async: 'horarios' vía MySQL. Guarda franja principal y opcionalmente días adicionales seleccionados.
+  // Mantiene el formulario abierto y avanza automáticamente las horas para que sea fácil agregar más franjas.
   async function guardarNuevaFranjaHorario() {
     if (!horarioState.cohorte || !horarioState.mes) { toast('Selecciona una cohorte y un mes primero', 'err'); return; }
-    const dia = document.getElementById('ff_dia').value;
+    const diaPrincipal = document.getElementById('ff_dia').value;
     const curso = document.getElementById('ff_curso').value;
     const docente = document.getElementById('ff_docente').value;
     const inicio = document.getElementById('ff_inicio').value;
@@ -5025,27 +6314,31 @@ Fundación A+`;
     if (!inicio || !fin) { toast('Completa hora de inicio y fin', 'err'); return; }
     if (minutosDesdeHora(fin) <= minutosDesdeHora(inicio)) { toast('La hora de fin debe ser después de la hora de inicio', 'err'); return; }
 
+    // Días a crear: el principal + los marcados en checkboxes adicionales
+    const diasSeleccionados = new Set([diaPrincipal]);
+    document.querySelectorAll('input[name="ff_dias_extra"]:checked').forEach(cb => {
+      if (cb.value) diasSeleccionados.add(cb.value);
+    });
+    const listaDias = Array.from(diasSeleccionados);
+
     const registros = await Store.list('horarios');
 
-    // ── Validación: el docente ya tiene una franja que se SOLAPA en ese
-    //    día dentro del mismo mes (mes = "YYYY-MM" o etiqueta que identifica
-    //    el período). Se compara: mismo docente (si se eligió uno) + mismo
-    //    día + rango de horas que se cruza, en CUALQUIER horario que
-    //    comparta el mismo mes, sin importar la cohorte, porque un docente
-    //    es una persona, no un recurso de una sola cohorte.
+    // Validación de solapamiento para cada día elegido
     if (docente) {
-      const conflicto = registros
-        .filter(h => h.mes === horarioState.mes)           // mismo mes/año
-        .flatMap(h => (h.franjas || []))
-        .filter(f => f.estado !== 'Inactivo')              // solo activas
-        .find(f =>
-          f.docente === docente &&
-          f.dia     === dia &&
-          franjasSeSolapan(inicio, fin, f.inicio, f.fin)   // rango de horas se cruza
-        );
-      if (conflicto) {
-        toast(`${docente} ya tiene una clase el ${dia} de ${conflicto.inicio} a ${conflicto.fin} en este mes, y se cruza con ese horario. Elige otro horario o día.`, 'err');
-        return;
+      for (const d of listaDias) {
+        const conflicto = registros
+          .filter(h => h.mes === horarioState.mes)
+          .flatMap(h => (h.franjas || []))
+          .filter(f => f.estado !== 'Inactivo')
+          .find(f =>
+            f.docente === docente &&
+            f.dia === d &&
+            franjasSeSolapan(inicio, fin, f.inicio, f.fin)
+          );
+        if (conflicto) {
+          toast(`${docente} ya tiene clase el ${d} de ${conflicto.inicio} a ${conflicto.fin} este mes. Elige otro horario o desmarca ese día.`, 'err');
+          return;
+        }
       }
     }
 
@@ -5054,22 +6347,57 @@ Fundación A+`;
       registros.push({ id: uid('ho'), cohorte: horarioState.cohorte, mes: horarioState.mes, incluyeSabado: horarioState.incluyeSabado, franjas: [] });
       idx = registros.length - 1;
     }
-    const nuevaFranja = { id: uid('fr'), dia, curso, docente, inicio, fin, estado: 'Activo' };
     registros[idx].franjas = registros[idx].franjas || [];
-    registros[idx].franjas.push(nuevaFranja);
+
+    for (const d of listaDias) {
+      const nuevaFranja = { id: uid('fr'), dia: d, curso, docente, inicio, fin, estado: 'Activo' };
+      registros[idx].franjas.push(nuevaFranja);
+      await registrarAuditoriaHorario(horarioState.cohorte, horarioState.mes, franjaLabel(nuevaFranja), 'Franja creada', '', curso + (docente ? ' · ' + docente : ''));
+    }
+
     registros[idx].incluyeSabado = horarioState.incluyeSabado;
     await Store.save('horarios', registros);
 
-    await registrarAuditoriaHorario(horarioState.cohorte, horarioState.mes, franjaLabel(nuevaFranja), 'Franja creada', '', curso + (docente ? ' · ' + docente : ''));
+    toast(`Se guardaron ${listaDias.length} franja${listaDias.length === 1 ? '' : 's'} en el horario`, 'ok');
 
-    toast('Franja añadida al horario', 'ok');
-    document.getElementById('horarioFormFranjaWrap').innerHTML = '';
-    renderHorarioGrid();
-    // Solo si el panel Usuarios es el que se está viendo ahora mismo:
-    // refresca la columna "materias · horas" de los docentes, que se
-    // calcula a partir del Horario. Si el admin está en otro panel (lo
-    // más común al editar el Horario), no tiene sentido gastar esa
-    // consulta extra en una tabla que ni siquiera se está mostrando.
+    // Auto-avanzar horario y limpiar materia para permitir ingresar la siguiente franja de inmediato
+    const duracionMin = Math.max(60, minutosDesdeHora(fin) - minutosDesdeHora(inicio));
+    const nuevoInicioMin = minutosDesdeHora(fin);
+    const nuevoFinMin = Math.min(22 * 60, nuevoInicioMin + duracionMin);
+
+    const pad = n => String(n).padStart(2, '0');
+    const proximoInicio = `${pad(Math.floor(nuevoInicioMin / 60))}:${pad(nuevoInicioMin % 60)}`;
+    const proximoFin = `${pad(Math.floor(nuevoFinMin / 60))}:${pad(nuevoFinMin % 60)}`;
+
+    const elInicio = document.getElementById('ff_inicio');
+    const elFin = document.getElementById('ff_fin');
+    const elCurso = document.getElementById('ff_curso');
+    const elFeedback = document.getElementById('ff_feedback');
+
+    if (elInicio && elFin && nuevoInicioMin < 22 * 60) {
+      elInicio.value = proximoInicio;
+      elFin.value = proximoFin;
+    }
+    if (elCurso) {
+      elCurso.value = '';
+      elCurso.focus();
+    }
+    document.querySelectorAll('input[name="ff_dias_extra"]:checked').forEach(cb => { cb.checked = false; });
+
+    if (elFeedback) {
+      elFeedback.className = 'mt-3 pt-2.5 border-t border-gray-100 animate-in fade-in duration-200 block';
+      elFeedback.innerHTML = `
+        <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/80 text-emerald-800 text-xs font-medium">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span>Franja <strong>${diaPrincipal} ${inicio}–${fin} (${escapeHtml(curso)})</strong> guardada. Horario sugerido avanzado a <strong>${proximoInicio}–${proximoFin}</strong>. Puedes ingresar la siguiente.</span>
+          </div>
+          <button type="button" onclick="cerrarFormFranjaHorario()" class="text-xs font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer shrink-0">Listo / Terminar</button>
+        </div>`;
+    }
+
+    // Refrescar grilla de franjas preservando el formulario abierto
+    await renderHorarioGrid(true);
     if (panelActivoAdmin === 'usuarios' && RENDERERS['usuarios']) RENDERERS['usuarios']();
   }
 
@@ -5087,12 +6415,8 @@ Fundación A+`;
     franja.estado = estadoAnterior === 'Activo' ? 'Inactivo' : 'Activo';
     await Store.save('horarios', registros);
     await registrarAuditoriaHorario(horarioState.cohorte, horarioState.mes, franjaLabel(franja), 'Estado', estadoAnterior, franja.estado);
-    renderHorarioGrid();
-    // Solo si el panel Usuarios es el que se está viendo ahora mismo:
-    // refresca la columna "materias · horas" de los docentes, que se
-    // calcula a partir del Horario. Si el admin está en otro panel (lo
-    // más común al editar el Horario), no tiene sentido gastar esa
-    // consulta extra en una tabla que ni siquiera se está mostrando.
+    const formAbierto = !!document.getElementById('horarioFormFranjaWrap')?.querySelector('#ff_dia');
+    await renderHorarioGrid(formAbierto);
     if (panelActivoAdmin === 'usuarios' && RENDERERS['usuarios']) RENDERERS['usuarios']();
   }
 
@@ -5106,7 +6430,8 @@ Fundación A+`;
     await Store.save('horarios', registros);
     if (franja) await registrarAuditoriaHorario(horarioState.cohorte, horarioState.mes, franjaLabel(franja), 'Franja eliminada', franja.curso, '');
     toast('Franja eliminada', 'ok');
-    renderHorarioGrid();
+    const formAbierto = !!document.getElementById('horarioFormFranjaWrap')?.querySelector('#ff_dia');
+    await renderHorarioGrid(formAbierto);
     // Solo si el panel Usuarios es el que se está viendo ahora mismo:
     // refresca la columna "materias · horas" de los docentes, que se
     // calcula a partir del Horario. Si el admin está en otro panel (lo
@@ -5456,15 +6781,28 @@ Fundación A+`;
     const usuarios = (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && (!cohorteFiltro || u.cohorte === cohorteFiltro));
     const asistenciaTodos = await Store.list('asistencia');
     const cfg = (await Store.get('configuracion')) || SEED.configuracion;
+
+    // Optimización: indexar asistencia por estudiante O(N) para evitar O(S x A)
+    const asistenciaMap = new Map();
+    for (const a of asistenciaTodos) {
+      if (!a.estudiante) continue;
+      let rec = asistenciaMap.get(a.estudiante);
+      if (!rec) {
+        rec = { total: 0, presentes: 0 };
+        asistenciaMap.set(a.estudiante, rec);
+      }
+      rec.total++;
+      if (a.estado === 'Presente') rec.presentes++;
+    }
+
     const resultadosPromedio = await Promise.all(usuarios.map(u => u.cohorte ? promedioGeneralEstudianteCohorte(u.nombre, u.cohorte, null) : null));
 
     return usuarios.map((u, i) => {
       const resultado = resultadosPromedio[i];
       const promedio = resultado ? resultado.promedio : null;
 
-      const registrosAsistencia = asistenciaTodos.filter(a => a.estudiante === u.nombre);
-      const presentes = registrosAsistencia.filter(a => a.estado === 'Presente').length;
-      const asistencia = registrosAsistencia.length ? Math.round((presentes / registrosAsistencia.length) * 100) : null;
+      const asoc = asistenciaMap.get(u.nombre);
+      const asistencia = (asoc && asoc.total > 0) ? Math.round((asoc.presentes / asoc.total) * 100) : null;
 
       let riesgo = 'Verde';
       const promedioBajo = promedio !== null && promedio < NOTA_MINIMA_APROBACION;
@@ -5485,12 +6823,19 @@ Fundación A+`;
   }
 
   let semaforoCohorteFiltro = '';
+  let semaforoRiesgoFiltro = 'todos'; // 'todos' | 'Rojo' | 'Amarillo' | 'Verde'
 
   async function cambiarFiltroSemaforoCohorte(cohorte) {
     semaforoCohorteFiltro = cohorte || '';
     await renderSemaforo();
   }
   window.cambiarFiltroSemaforoCohorte = cambiarFiltroSemaforoCohorte;
+
+  async function cambiarFiltroSemaforoRiesgo(riesgo) {
+    semaforoRiesgoFiltro = riesgo || 'todos';
+    await renderSemaforo();
+  }
+  window.cambiarFiltroSemaforoRiesgo = cambiarFiltroSemaforoRiesgo;
 
   async function renderSemaforo() {
     const [data, modulos] = await Promise.all([computeSemaforo(), Store.list('modulos')]);
@@ -5507,13 +6852,17 @@ Fundación A+`;
       semaforoCohorteFiltro = '';
     }
 
-    const dataFiltrada = semaforoCohorteFiltro
+    const dataFiltradaCohorte = semaforoCohorteFiltro
       ? data.filter(s => s.cohorte === semaforoCohorteFiltro)
       : data;
 
-    const enRiesgo = dataFiltrada.filter(s => s.riesgo === 'Rojo').length;
-    const enAlerta = dataFiltrada.filter(s => s.riesgo === 'Amarillo').length;
-    const enVerde = dataFiltrada.filter(s => s.riesgo === 'Verde').length;
+    const enRiesgo = dataFiltradaCohorte.filter(s => s.riesgo === 'Rojo').length;
+    const enAlerta = dataFiltradaCohorte.filter(s => s.riesgo === 'Amarillo').length;
+    const enVerde = dataFiltradaCohorte.filter(s => s.riesgo === 'Verde').length;
+
+    const dataFiltrada = semaforoRiesgoFiltro === 'todos'
+      ? dataFiltradaCohorte
+      : dataFiltradaCohorte.filter(s => s.riesgo === semaforoRiesgoFiltro);
 
     const rows = dataFiltrada.map(s => `
       <tr data-search="${escapeHtml((s.nombre + ' ' + (s.cohorte || '') + ' ' + s.riesgo + ' ' + (s.motivo || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
@@ -5535,23 +6884,26 @@ Fundación A+`;
           <div>
             <div class="flex items-center gap-2">
               <h2 class="text-lg font-extrabold text-ink">Semáforo de riesgo</h2>
-              <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-morado/10 text-morado">${dataFiltrada.length} estudiante${dataFiltrada.length === 1 ? '' : 's'}</span>
+              <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-morado/10 text-morado">${dataFiltradaCohorte.length} estudiante${dataFiltradaCohorte.length === 1 ? '' : 's'}</span>
               ${semaforoCohorteFiltro ? `<span class="text-xs font-semibold px-2 py-0.5 rounded-md bg-gray-100 text-slate2">Cohorte: ${escapeHtml(semaforoCohorteFiltro)}</span>` : ''}
             </div>
             <p class="text-sm text-slate2 mt-0.5">Calculado automáticamente con el promedio real de calificaciones y el % real de asistencia de cada estudiante.</p>
-            <div class="flex items-center gap-2 mt-2">
-              <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
-                <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>${enRiesgo} en riesgo
-              </span>
-              <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>${enAlerta} en alerta
-              </span>
-              <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
-                <span class="w-1.5 h-1.5 rounded-full bg-teal-500"></span>${enVerde} en orden
-              </span>
+            <div class="flex flex-wrap items-center gap-2 mt-3">
+              <button type="button" onclick="cambiarFiltroSemaforoRiesgo('todos')" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition cursor-pointer ${semaforoRiesgoFiltro === 'todos' ? 'bg-morado text-white shadow-sm ring-2 ring-morado/20' : 'bg-gray-100 text-slate2 hover:bg-gray-200'}">
+                Todos (${dataFiltradaCohorte.length})
+              </button>
+              <button type="button" onclick="cambiarFiltroSemaforoRiesgo('Rojo')" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition cursor-pointer ${semaforoRiesgoFiltro === 'Rojo' ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-200' : 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100'}">
+                <span class="w-1.5 h-1.5 rounded-full ${semaforoRiesgoFiltro === 'Rojo' ? 'bg-white' : 'bg-rose-500'}"></span>${enRiesgo} en riesgo
+              </button>
+              <button type="button" onclick="cambiarFiltroSemaforoRiesgo('Amarillo')" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition cursor-pointer ${semaforoRiesgoFiltro === 'Amarillo' ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-200' : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'}">
+                <span class="w-1.5 h-1.5 rounded-full ${semaforoRiesgoFiltro === 'Amarillo' ? 'bg-white' : 'bg-amber-500'}"></span>${enAlerta} en alerta
+              </button>
+              <button type="button" onclick="cambiarFiltroSemaforoRiesgo('Verde')" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition cursor-pointer ${semaforoRiesgoFiltro === 'Verde' ? 'bg-teal-600 text-white shadow-sm ring-2 ring-teal-200' : 'bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100'}">
+                <span class="w-1.5 h-1.5 rounded-full ${semaforoRiesgoFiltro === 'Verde' ? 'bg-white' : 'bg-teal-500'}"></span>${enVerde} en orden
+              </button>
             </div>
           </div>
-          <div class="flex flex-wrap items-center gap-2.5">
+          <div class="flex flex-wrap items-center gap-2.5 self-start lg:self-center">
             <div class="flex items-center gap-1.5">
               <label for="filtroSemaforoCohorte" class="text-xs font-semibold text-slate2 shrink-0">Cohorte:</label>
               <select id="filtroSemaforoCohorte" onchange="cambiarFiltroSemaforoCohorte(this.value)" class="rounded-xl border border-morado/25 bg-morado/5 px-3 py-2 text-xs sm:text-sm font-medium text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition">
@@ -5563,8 +6915,8 @@ Fundación A+`;
               </select>
             </div>
             <div class="relative">
-              <input data-table="table-semaforo" oninput="filterTable('semaforo', this.value)" type="text" placeholder="Buscar estudiante..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-44 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-              <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input data-table="table-semaforo" oninput="filterTable('semaforo', this.value)" type="text" placeholder="Buscar estudiante..." class="rounded-xl border border-morado/30 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition text-ink" />
+              <svg class="w-4 h-4 text-morado absolute left-3 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
             <button onclick="exportarSemaforoCSV()" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-xs sm:text-sm font-semibold px-3.5 py-2 transition">CSV</button>
           </div>
@@ -5587,9 +6939,12 @@ Fundación A+`;
   // desde computeSemaforo(), respetando el filtro de cohorte si está activo.
   async function exportarSemaforoCSV() {
     const data = await computeSemaforo();
-    const dataFiltrada = semaforoCohorteFiltro
+    let dataFiltrada = semaforoCohorteFiltro
       ? data.filter(s => s.cohorte === semaforoCohorteFiltro)
       : data;
+    if (semaforoRiesgoFiltro && semaforoRiesgoFiltro !== 'todos') {
+      dataFiltrada = dataFiltrada.filter(s => s.riesgo === semaforoRiesgoFiltro);
+    }
     if (!dataFiltrada.length) { toast('No hay datos para exportar', 'err'); return; }
     const keys = ['nombre', 'cohorte', 'promedio', 'asistencia', 'riesgo', 'motivo'];
     const rows = [keys.join(',')].concat(
@@ -5598,8 +6953,9 @@ Fundación A+`;
     const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const sufijo = semaforoCohorteFiltro ? '_' + semaforoCohorteFiltro.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
-    a.href = url; a.download = `semaforo_riesgo${sufijo}.csv`;
+    const sufijoCohorte = semaforoCohorteFiltro ? '_' + semaforoCohorteFiltro.replace(/[^a-zA-Z0-9_-]/g, '_') : '';
+    const sufijoRiesgo = semaforoRiesgoFiltro !== 'todos' ? '_' + semaforoRiesgoFiltro.toLowerCase() : '';
+    a.href = url; a.download = `semaforo_riesgo${sufijoCohorte}${sufijoRiesgo}.csv`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
     toast('Archivo CSV exportado', 'ok');
@@ -5956,8 +7312,8 @@ Fundación A+`;
           </div>
           <div class="flex items-center gap-2">
             <div class="relative">
-              <input data-table="table-pqr" oninput="filterTable('pqr', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-              <svg class="w-4 h-4 text-slate2 absolute left-3 top-2.5 sm:top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input data-table="table-pqr" oninput="filterTable('pqr', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/30 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition text-ink" />
+              <svg class="w-4 h-4 text-morado absolute left-3 top-2.5 sm:top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
             <button onclick="recargarPanelActual()" title="Actualizar datos en vivo" class="rounded-xl border border-gray-200 text-slate2 hover:text-morado hover:bg-morado/5 text-xs sm:text-sm font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-sm">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
@@ -6169,6 +7525,7 @@ Fundación A+`;
     const sel = document.getElementById('califAdminCohorteSelect');
     calificacionesAdminState.cohorte = sel.value || null;
     calificacionesAdminState.mes = null;
+    calificacionesAdminState.filtro = 'todos';
     const wrap = document.getElementById('califAdminResultado');
     if (wrap) {
       wrap.innerHTML = `<div class="admin-panel-card p-12 text-center flex flex-col items-center justify-center gap-3">
@@ -6183,8 +7540,49 @@ Fundación A+`;
   function onCambiaCalifAdminMes() {
     const sel = document.getElementById('califAdminMesSelect');
     calificacionesAdminState.mes = sel.value || null;
+    calificacionesAdminState.filtro = 'todos';
     renderCalifAdminResultado();
   }
+
+  function cambiarFiltroCalifAdmin(filtro) {
+    calificacionesAdminState.filtro = filtro || 'todos';
+    renderCalifAdminResultado();
+  }
+  window.cambiarFiltroCalifAdmin = cambiarFiltroCalifAdmin;
+
+  async function exportarCalificacionesCohorteCSV() {
+    if (!calificacionesAdminState.cohorte) { toast('Selecciona una cohorte', 'err'); return; }
+    const estudiantes = (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && u.cohorte === calificacionesAdminState.cohorte);
+    if (!estudiantes.length) { toast('No hay estudiantes en esta cohorte', 'err'); return; }
+    const resultadosPorEstudiante = await Promise.all(estudiantes.map(e => promedioGeneralEstudianteCohorte(e.nombre, calificacionesAdminState.cohorte, calificacionesAdminState.mes)));
+
+    const rows = [['Estudiante', 'Cohorte', 'Periodo', 'Promedio', 'Profesores Evaluadores', 'Estado']];
+    estudiantes.forEach((e, i) => {
+      const res = resultadosPorEstudiante[i];
+      const prom = res ? res.promedio.toFixed(1) : 'Sin notas';
+      const profs = res ? res.profesores : 0;
+      const estado = res ? (res.promedio >= NOTA_MINIMA_APROBACION ? 'Aprobado' : 'En riesgo') : 'Pendiente';
+      rows.push([
+        `"${e.nombre.replace(/"/g, '""')}"`,
+        `"${calificacionesAdminState.cohorte.replace(/"/g, '""')}"`,
+        `"${(calificacionesAdminState.mes ? mesLabel(calificacionesAdminState.mes) : 'General').replace(/"/g, '""')}"`,
+        `"${prom}"`,
+        `"${profs}"`,
+        `"${estado}"`
+      ]);
+    });
+
+    const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const sufijoCohorte = calificacionesAdminState.cohorte.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const sufijoMes = calificacionesAdminState.mes ? '_' + calificacionesAdminState.mes : '_general';
+    a.href = url; a.download = `calificaciones_${sufijoCohorte}${sufijoMes}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast('Calificaciones exportadas en CSV', 'ok');
+  }
+  window.exportarCalificacionesCohorteCSV = exportarCalificacionesCohorteCSV;
 
   // async: 'usuarios' vía MySQL.
   async function renderCalifAdminResultado() {
@@ -6198,7 +7596,34 @@ Fundación A+`;
     const docentesCohorte = await docentesDeCohorte(calificacionesAdminState.cohorte);
     const resultadosPorEstudiante = await Promise.all(estudiantes.map(e => promedioGeneralEstudianteCohorte(e.nombre, calificacionesAdminState.cohorte, calificacionesAdminState.mes)));
 
-    const filas = estudiantes.map((e, i) => {
+    // Estadísticas agregadas para stress-testing y grandes volúmenes de estudiantes
+    const conNotas = resultadosPorEstudiante.filter(r => r && r.promedio !== null && !isNaN(r.promedio));
+    const promedioGrupal = conNotas.length ? (conNotas.reduce((acc, r) => acc + r.promedio, 0) / conNotas.length).toFixed(1) : '—';
+    const aprobados = resultadosPorEstudiante.filter(r => r && r.promedio !== null && r.promedio >= NOTA_MINIMA_APROBACION);
+    const enRiesgo = resultadosPorEstudiante.filter(r => r && r.promedio !== null && r.promedio < NOTA_MINIMA_APROBACION);
+    const sinNotas = resultadosPorEstudiante.filter(r => !r || r.promedio === null);
+    const tasaAprobacion = conNotas.length ? Math.round((aprobados.length / conNotas.length) * 100) + '%' : '—';
+
+    let mejorEstudiante = '—';
+    if (conNotas.length) {
+      const maxVal = Math.max(...conNotas.map(r => r.promedio));
+      const idx = resultadosPorEstudiante.findIndex(r => r && r.promedio === maxVal);
+      if (idx !== -1) mejorEstudiante = estudiantes[idx].nombre + ` (${maxVal.toFixed(1)})`;
+    }
+
+    const filtroActivo = calificacionesAdminState.filtro || 'todos';
+
+    // Lista filtrada según pestaña
+    const indicesFiltrados = estudiantes.map((_, i) => i).filter(i => {
+      const res = resultadosPorEstudiante[i];
+      if (filtroActivo === 'aprobados') return res && res.promedio !== null && res.promedio >= NOTA_MINIMA_APROBACION;
+      if (filtroActivo === 'riesgo') return res && res.promedio !== null && res.promedio < NOTA_MINIMA_APROBACION;
+      if (filtroActivo === 'sin_notas') return !res || res.promedio === null;
+      return true;
+    });
+
+    const filas = indicesFiltrados.map(i => {
+      const e = estudiantes[i];
       const resultado = resultadosPorEstudiante[i];
       const promedioHtml = resultado
         ? `<span class="font-bold" style="color:${colorCualitativa(resultado.promedio)}">${resultado.promedio.toFixed(1)}</span>
@@ -6212,18 +7637,68 @@ Fundación A+`;
     }).join('');
 
     wrap.innerHTML = `
+      <!-- KPI Cards de rendimiento de la cohorte -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div class="admin-panel-card p-4 flex items-center gap-3.5 border-l-4 border-morado">
+          <div class="w-10 h-10 rounded-xl bg-morado/10 text-morado flex items-center justify-center shrink-0">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-slate2">Promedio general cohorte</p>
+            <p class="text-xl font-extrabold text-ink leading-tight mt-0.5">${promedioGrupal} <span class="text-xs font-normal text-slate2">/ 10</span></p>
+          </div>
+        </div>
+
+        <div class="admin-panel-card p-4 flex items-center gap-3.5 border-l-4 border-teal-500">
+          <div class="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-slate2">Tasa de aprobación</p>
+            <p class="text-xl font-extrabold text-teal-700 leading-tight mt-0.5">${tasaAprobacion} <span class="text-xs font-normal text-slate2">(${aprobados.length}/${conNotas.length})</span></p>
+          </div>
+        </div>
+
+        <div class="admin-panel-card p-4 flex items-center gap-3.5 border-l-4 border-amber-500">
+          <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-slate2">Destacado / Mejor nota</p>
+            <p class="text-sm font-bold text-ink truncate leading-tight mt-0.5" title="${escapeHtml(mejorEstudiante)}">${escapeHtml(mejorEstudiante)}</p>
+          </div>
+        </div>
+      </div>
+
       <div class="admin-panel-card p-6">
         <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <div>
             <p class="text-sm font-bold text-ink">${escapeHtml(calificacionesAdminState.cohorte)}</p>
             <p class="text-xs text-slate2">${calificacionesAdminState.mes ? escapeHtml(mesLabel(calificacionesAdminState.mes)) : 'General — promedio de todos los meses con notas'}</p>
-          </div>
-          <div class="flex items-center gap-3">
-            <span class="text-xs text-slate2">${docentesCohorte.length} profesor${docentesCohorte.length !== 1 ? 'es' : ''} · ${estudiantes.length} estudiante${estudiantes.length !== 1 ? 's' : ''}</span>
-            <div class="relative">
-              <input data-table="table-calificaciones-admin" oninput="TableManager.filter('table-calificaciones-admin', this.value)" type="text" placeholder="Buscar estudiante..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            
+            <!-- Quick Filter Tabs -->
+            <div class="flex flex-wrap items-center gap-2 mt-3">
+              <button type="button" onclick="cambiarFiltroCalifAdmin('todos')" class="text-xs font-semibold px-3 py-1 rounded-full transition cursor-pointer ${filtroActivo === 'todos' ? 'bg-morado text-white shadow-sm ring-2 ring-morado/20' : 'bg-gray-100 text-slate2 hover:bg-gray-200'}">
+                Todos (${estudiantes.length})
+              </button>
+              <button type="button" onclick="cambiarFiltroCalifAdmin('aprobados')" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition cursor-pointer ${filtroActivo === 'aprobados' ? 'bg-teal-600 text-white shadow-sm ring-2 ring-teal-200' : 'bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100'}">
+                <span class="w-1.5 h-1.5 rounded-full ${filtroActivo === 'aprobados' ? 'bg-white' : 'bg-teal-500'}"></span>Aprobados (${aprobados.length})
+              </button>
+              <button type="button" onclick="cambiarFiltroCalifAdmin('riesgo')" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition cursor-pointer ${filtroActivo === 'riesgo' ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-200' : 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100'}">
+                <span class="w-1.5 h-1.5 rounded-full ${filtroActivo === 'riesgo' ? 'bg-white' : 'bg-rose-500'}"></span>En riesgo (${enRiesgo.length})
+              </button>
+              <button type="button" onclick="cambiarFiltroCalifAdmin('sin_notas')" class="text-xs font-semibold px-3 py-1 rounded-full transition cursor-pointer ${filtroActivo === 'sin_notas' ? 'bg-slate-700 text-white shadow-sm' : 'bg-gray-50 text-slate2 border border-gray-200 hover:bg-gray-100'}">
+                Sin notas (${sinNotas.length})
+              </button>
             </div>
+          </div>
+          <div class="flex items-center gap-2.5 self-start sm:self-center">
+            <span class="text-xs text-slate2 shrink-0">${docentesCohorte.length} docente${docentesCohorte.length !== 1 ? 's' : ''}</span>
+            <div class="relative">
+              <input data-table="table-calificaciones-admin" oninput="TableManager.filter('table-calificaciones-admin', this.value)" type="text" placeholder="Buscar estudiante..." class="rounded-xl border border-morado/30 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition text-ink" />
+              <svg class="w-3.5 h-3.5 text-morado absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <button type="button" onclick="exportarCalificacionesCohorteCSV()" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-xs sm:text-sm font-semibold px-3 py-1.5 transition shadow-sm cursor-pointer">CSV</button>
           </div>
         </div>
         <div class="table-responsive-container">
@@ -6231,7 +7706,7 @@ Fundación A+`;
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
               <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Promedio${calificacionesAdminState.mes ? '' : ' general'}</th>
             </tr></thead>
-            <tbody>${filas || emptyRow(2)}</tbody>
+            <tbody>${filas || '<tr><td colspan="2" class="text-sm text-slate2 text-center py-6">No se encontraron estudiantes para este filtro.</td></tr>'}</tbody>
           </table>
         </div>
       </div>`;
@@ -6361,6 +7836,140 @@ Fundación A+`;
   }
   window.cursoDeDocenteEnCohorte = cursoDeDocenteEnCohorte;
 
+  // ---------- MODAL INTERACTIVO DE DETALLE COMPLETO DE INFORME ----------
+  async function abrirModalDetalleInforme(informeIdOData) {
+    let inf = null;
+    if (typeof informeIdOData === 'object' && informeIdOData !== null) {
+      inf = informeIdOData;
+    } else {
+      const informes = await Store.list('informes_docente');
+      inf = informes.find(i => String(i.id) === String(informeIdOData));
+    }
+    if (!inf) {
+      toast('No se encontró el detalle de este informe', 'err');
+      return;
+    }
+
+    const iniciales = (inf.estudiante || 'E').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'E';
+    const numPromedio = (inf.promedio !== null && inf.promedio !== undefined && !isNaN(Number(inf.promedio))) ? Number(inf.promedio) : null;
+    const colorNota = numPromedio !== null ? colorCualitativa(numPromedio) : '#8B5CF6';
+    const cualitativa = inf.cualitativa || (numPromedio !== null ? calificacionCualitativa(numPromedio) : 'Sin calificación');
+    const asistPct = (inf.asistenciaPct !== null && inf.asistenciaPct !== undefined) ? inf.asistenciaPct + '%' : 'Sin datos';
+    const notaCuant = numPromedio !== null ? numPromedio.toFixed(1) : 'Sin nota';
+
+    const modalHtml = `
+      <div id="modalDetalleInformeBackdrop" class="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-ink/75 backdrop-blur-sm animate-fadeIn" onclick="if(event.target===this) cerrarModalDetalleInforme()">
+        <div class="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col max-h-[90vh] animate-scaleUp">
+          
+          <!-- Encabezado con estilo membretado -->
+          <div class="px-6 py-4.5 text-white flex items-center justify-between gap-4 border-b border-white/10" style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #0f172a 100%);">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-white/10 text-white flex items-center justify-center font-bold text-sm shadow-inner border border-white/15">
+                <svg class="w-5 h-5 text-turquesa" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              </div>
+              <div>
+                <p class="text-[10px] uppercase font-bold tracking-widest text-turquesa">Informe Oficial de Desempeño</p>
+                <h3 class="text-base font-extrabold text-white leading-tight">${escapeHtml(inf.cohorte || 'Cohorte')} · ${escapeHtml(mesLabel(inf.mes || (inf.fecha || '').slice(0, 7)))}</h3>
+              </div>
+            </div>
+            <button type="button" onclick="cerrarModalDetalleInforme()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer" title="Cerrar">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          <!-- Cuerpo interactivo y estructurado -->
+          <div class="p-6 overflow-y-auto space-y-5">
+            
+            <!-- Ficha del Estudiante y Docente -->
+            <div class="bg-gray-50/80 rounded-2xl p-4 border border-gray-200/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div class="flex items-center gap-3.5">
+                <span class="w-12 h-12 rounded-2xl bg-gradient-to-br from-morado to-turquesa text-white font-black text-sm flex items-center justify-center shadow-md shrink-0">${escapeHtml(iniciales)}</span>
+                <div>
+                  <span class="text-[10px] font-bold uppercase tracking-wider text-morado bg-morado/10 px-2 py-0.5 rounded-md">Estudiante</span>
+                  <h4 class="text-base font-black text-ink leading-snug mt-0.5">${escapeHtml(inf.estudiante)}</h4>
+                  <p class="text-xs text-slate2">Materia: <strong class="text-ink">${escapeHtml(inf.materia || inf.curso || 'Curso')}</strong></p>
+                </div>
+              </div>
+              <div class="text-left sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-gray-200 w-full sm:w-auto">
+                <p class="text-[11px] text-slate2">Docente evaluador</p>
+                <p class="text-xs font-bold text-ink">${escapeHtml(inf.docente || 'Docente')}</p>
+                <p class="text-[10px] text-slate2/80 mt-0.5">Radicado el ${inf.fecha ? fmtDate(inf.fecha) : '—'}</p>
+              </div>
+            </div>
+
+            <!-- Métricas Clave (Asistencia, Nota y Cualitativa) -->
+            <div class="grid grid-cols-3 gap-3">
+              <div class="bg-white rounded-2xl p-3.5 text-center border border-gray-100 shadow-soft">
+                <p class="text-[10px] font-bold uppercase text-slate2 mb-1">Asistencia</p>
+                <p class="text-xl font-black text-ink">${asistPct}</p>
+                <span class="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${Number(inf.asistenciaPct) >= 80 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
+                  ${Number(inf.asistenciaPct) >= 80 ? 'Cumple meta' : 'Bajo revisión'}
+                </span>
+              </div>
+
+              <div class="bg-white rounded-2xl p-3.5 text-center border border-gray-100 shadow-soft">
+                <p class="text-[10px] font-bold uppercase text-slate2 mb-1">Nota Cuantitativa</p>
+                <p class="text-xl font-black" style="color:${colorNota}">${notaCuant}</p>
+                <span class="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate2">Escala 10.0</span>
+              </div>
+
+              <div class="bg-white rounded-2xl p-3.5 text-center border border-gray-100 shadow-soft">
+                <p class="text-[10px] font-bold uppercase text-slate2 mb-1">Desempeño</p>
+                <p class="text-sm font-extrabold truncate" style="color:${colorNota}">${escapeHtml(cualitativa)}</p>
+                <span class="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:${colorNota}1A; color:${colorNota}">Oficial</span>
+              </div>
+            </div>
+
+            <!-- Conclusión Automática de Rendimiento -->
+            <div class="bg-slate-50/90 rounded-2xl p-4 border border-gray-200/60">
+              <div class="flex items-center gap-2 mb-1.5">
+                <svg class="w-4 h-4 text-morado shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <h5 class="text-xs font-bold text-ink uppercase tracking-wider">Conclusión de Rendimiento</h5>
+              </div>
+              <p class="text-xs sm:text-sm text-ink leading-relaxed">${escapeHtml(inf.conclusion || 'Sin conclusión registrada.')}</p>
+            </div>
+
+            <!-- Observaciones Personales del Docente -->
+            <div class="bg-gradient-to-br from-morado/5 to-turquesa/5 rounded-2xl p-4 border border-morado/20">
+              <div class="flex items-center gap-2 mb-1.5">
+                <svg class="w-4 h-4 text-morado shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                <h5 class="text-xs font-bold text-morado uppercase tracking-wider">Observaciones del Docente</h5>
+              </div>
+              <p class="text-xs sm:text-sm font-medium text-ink leading-relaxed whitespace-pre-wrap">${escapeHtml(inf.observaciones || 'El docente no añadió observaciones cualitativas adicionales.')}</p>
+            </div>
+
+          </div>
+
+          <!-- Footer del modal -->
+          <div class="px-6 py-3.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
+            <span class="text-[11px] text-slate2 font-medium flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Informe radicado con éxito
+            </span>
+            <button type="button" onclick="cerrarModalDetalleInforme()" class="px-5 py-2 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition cursor-pointer">
+              Cerrar
+            </button>
+          </div>
+
+        </div>
+      </div>`;
+
+    let cont = document.getElementById('modalDetalleInformeContainer');
+    if (!cont) {
+      cont = document.createElement('div');
+      cont.id = 'modalDetalleInformeContainer';
+      document.body.appendChild(cont);
+    }
+    cont.innerHTML = modalHtml;
+  }
+  window.abrirModalDetalleInforme = abrirModalDetalleInforme;
+
+  function cerrarModalDetalleInforme() {
+    const cont = document.getElementById('modalDetalleInformeContainer');
+    if (cont) cont.innerHTML = '';
+  }
+  window.cerrarModalDetalleInforme = cerrarModalDetalleInforme;
+
   // async: 'informes_docente' vía MySQL.
   async function renderInfAdminResultado() {
     const wrap = document.getElementById('infAdminResultado');
@@ -6413,7 +8022,7 @@ Fundación A+`;
 
       return `
         <button type="button" onclick="seleccionarDocenteInfAdmin('${escapeHtml(docNombre)}')"
-          class="group text-left p-4 rounded-2xl border transition-all flex items-center justify-between gap-3 ${esActivo ? 'bg-morado/10 border-morado shadow-md ring-2 ring-morado/25 scale-[1.01]' : 'bg-white border-gray-200/80 hover:border-morado/40 hover:bg-gray-50/80'}">
+          class="group text-left p-4 rounded-2xl border transition-all flex items-center justify-between gap-3 cursor-pointer ${esActivo ? 'bg-morado/10 border-morado shadow-md ring-2 ring-morado/25 scale-[1.01]' : 'bg-white border-gray-200/80 hover:border-morado/40 hover:bg-gray-50/80'}">
           <div class="flex items-center gap-3 min-w-0">
             <div class="w-11 h-11 rounded-xl ${esActivo ? 'bg-gradient-to-br from-morado to-indigo-600 text-white shadow-sm shadow-morado/30' : 'bg-morado/10 text-morado'} font-extrabold grid place-items-center text-sm shrink-0 transition-transform group-hover:scale-105">
               ${inicial}
@@ -6434,7 +8043,7 @@ Fundación A+`;
         </button>`;
     }))).join('');
 
-    // 2. Detalle de estudiantes del docente seleccionado
+    // 2. Detalle de estudiantes del docente seleccionado en tabla limpia y compacta
     const listaSeleccionada = porDocente[informesAdminState.docenteSeleccionado] || [];
     const listaOrdenada = listaSeleccionada.slice().sort((a, b) => (a.estudiante || '').localeCompare(b.estudiante || ''));
 
@@ -6448,33 +8057,35 @@ Fundación A+`;
     const filasEstudiantes = listaOrdenada.map(i => {
       let cursoEst = (i.curso || (i.materia && i.materia !== 'Formacion' && i.materia !== 'Formación' ? i.materia : null)) || cursoDocenteSeleccionado;
       return `
-      <tr class="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
-        <td class="py-3.5 px-4 text-sm font-semibold text-ink">
+      <tr onclick="abrirModalDetalleInforme('${escapeHtml(i.id)}')" class="border-b border-gray-50 last:border-0 hover:bg-morado/5 transition cursor-pointer group" title="Clic para ver reporte completo de ${escapeHtml(i.estudiante)}">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">
           <div class="flex items-center gap-2.5">
-            <span class="w-8 h-8 rounded-full bg-turquesa/15 text-turquesa font-bold text-xs grid place-items-center shrink-0">
+            <span class="w-8 h-8 rounded-xl bg-turquesa/15 text-turquesa font-bold text-xs grid place-items-center shrink-0 group-hover:scale-105 transition-transform">
               ${(i.estudiante || 'E').charAt(0).toUpperCase()}
             </span>
             <div class="min-w-0">
-              <p class="font-bold text-ink leading-tight">${nombrePersonaClicable(i.estudiante, 'Estudiante')}</p>
+              <p class="font-bold text-ink leading-tight">${escapeHtml(i.estudiante)}</p>
             </div>
           </div>
         </td>
-        <td class="py-3.5 px-4 text-sm text-slate2">${escapeHtml(cursoEst || '—')}</td>
-        <td class="py-3.5 px-4 text-sm text-slate2 whitespace-nowrap">${i.fecha ? fmtDate(i.fecha) : '—'}</td>
-        <td class="py-3.5 px-4 text-sm">
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(cursoEst || '—')}</td>
+        <td class="py-3 px-4 text-sm text-slate2 whitespace-nowrap">${i.fecha ? fmtDate(i.fecha) : '—'}</td>
+        <td class="py-3 px-4 text-sm whitespace-nowrap">
           ${i.asistenciaPct !== null && i.asistenciaPct !== undefined
             ? `<span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${Number(i.asistenciaPct) >= 80 ? 'bg-turquesa/10 text-turquesa' : 'bg-coral/10 text-coral'}">${i.asistenciaPct}%</span>`
             : '<span class="text-slate2 text-xs">Sin datos</span>'}
         </td>
-        <td class="py-3.5 px-4 text-sm whitespace-nowrap">
+        <td class="py-3 px-4 text-sm whitespace-nowrap">
           ${i.promedio !== null && i.promedio !== undefined
             ? `<span class="font-extrabold text-sm" style="color:${colorCualitativa(i.promedio)}">${Number(i.promedio).toFixed(1)}</span>
-               <span class="text-[11px] font-semibold text-slate2 block">${escapeHtml(i.cualitativa || '')}</span>`
+               <span class="text-[11px] font-semibold text-slate2 ml-1">(${escapeHtml(i.cualitativa || '')})</span>`
             : '<span class="text-slate2 text-xs">Sin datos</span>'}
         </td>
-        <td class="py-3.5 px-4 text-sm text-ink max-w-sm leading-relaxed">
-          ${i.observaciones ? `<p class="font-medium text-ink">${escapeHtml(i.observaciones)}</p>` : '<span class="text-slate2 italic text-xs">Sin observaciones personales</span>'}
-          ${i.conclusion ? `<p class="text-[11px] text-slate2 mt-1 leading-normal border-t border-gray-100 pt-1">${escapeHtml(i.conclusion)}</p>` : ''}
+        <td class="py-3 px-4 text-right whitespace-nowrap">
+          <button type="button" onclick="event.stopPropagation(); abrirModalDetalleInforme('${escapeHtml(i.id)}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-morado/10 text-morado hover:bg-morado hover:text-white transition shadow-xs cursor-pointer">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            <span>Ver reporte</span>
+          </button>
         </td>
       </tr>`;
     }).join('');
@@ -6530,7 +8141,7 @@ Fundación A+`;
                 <th class="py-3 px-4">Fecha</th>
                 <th class="py-3 px-4">Asistencia</th>
                 <th class="py-3 px-4">Nota</th>
-                <th class="py-3 px-4">Observaciones y Conclusión</th>
+                <th class="py-3 px-4 text-right">Reporte Detallado</th>
               </tr>
             </thead>
             <tbody>
@@ -6582,12 +8193,27 @@ Fundación A+`;
   // acciones dentro del sistema, y cambios de Materia/Docente en el
   // Horario (quién, cuándo, antes→ahora). Las tres ya viven en MySQL.
   // async: 'auditoria_login'/'auditoria_acciones'/'auditoria_horario' vía MySQL.
+  let auditoriaLoginFiltro = 'todos'; // 'todos' | 'Fallido' | 'Exitoso'
+
+  function cambiarFiltroAuditoriaLogin(filtro) {
+    auditoriaLoginFiltro = filtro || 'todos';
+    renderAuditoria();
+  }
+  window.cambiarFiltroAuditoriaLogin = cambiarFiltroAuditoriaLogin;
+
   async function renderAuditoria() {
     const logins = await Store.list('auditoria_login');
     const cambios = await Store.list('auditoria_horario');
     const acciones = await Store.list('auditoria_acciones');
 
-    const filasLogin = logins.map(l => `
+    const fallidosCount = logins.filter(l => l.resultado === 'Fallido').length;
+    const exitososCount = logins.filter(l => l.resultado === 'Exitoso').length;
+
+    const loginsFiltrados = auditoriaLoginFiltro === 'todos'
+      ? logins
+      : logins.filter(l => l.resultado === auditoriaLoginFiltro);
+
+    const filasLogin = loginsFiltrados.map(l => `
       <tr data-search="${escapeHtml((l.fecha + ' ' + l.hora + ' ' + (l.rol || '') + ' ' + l.email + ' ' + l.resultado).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(l.fecha)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(l.hora)}</td>
@@ -6625,11 +8251,24 @@ Fundación A+`;
           <div>
             <h2 class="text-lg font-extrabold text-ink tracking-tight">Auditoría de accesos</h2>
             <p class="text-xs text-slate2 mt-0.5">${logins.length} intento${logins.length === 1 ? '' : 's'} de inicio de sesión registrado${logins.length === 1 ? '' : 's'} (Superadmin, Coordinador, Docente y Estudiante).</p>
+            <div class="flex flex-wrap items-center gap-2 mt-2.5">
+              <button type="button" onclick="cambiarFiltroAuditoriaLogin('todos')" class="text-xs font-semibold px-2.5 py-1 rounded-full transition cursor-pointer ${auditoriaLoginFiltro === 'todos' ? 'bg-morado text-white shadow-xs' : 'bg-gray-100 text-slate2 hover:bg-gray-200'}">
+                Todos (${logins.length})
+              </button>
+              <button type="button" onclick="cambiarFiltroAuditoriaLogin('Fallido')" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full transition cursor-pointer ${auditoriaLoginFiltro === 'Fallido' ? 'bg-rose-600 text-white shadow-xs' : 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100'}">
+                <span class="w-1.5 h-1.5 rounded-full ${auditoriaLoginFiltro === 'Fallido' ? 'bg-white' : 'bg-rose-500'}"></span>
+                Fallidos (${fallidosCount})
+              </button>
+              <button type="button" onclick="cambiarFiltroAuditoriaLogin('Exitoso')" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full transition cursor-pointer ${auditoriaLoginFiltro === 'Exitoso' ? 'bg-teal-600 text-white shadow-xs' : 'bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100'}">
+                <span class="w-1.5 h-1.5 rounded-full ${auditoriaLoginFiltro === 'Exitoso' ? 'bg-white' : 'bg-teal-500'}"></span>
+                Exitosos (${exitososCount})
+              </button>
+            </div>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 self-start sm:self-center">
             <div class="relative">
-              <input data-table="table-auditoria-login" oninput="TableManager.filter('table-auditoria-login', this.value)" type="text" placeholder="Buscar acceso..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input data-table="table-auditoria-login" oninput="TableManager.filter('table-auditoria-login', this.value)" type="text" placeholder="Buscar acceso..." class="rounded-xl border border-morado/30 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition text-ink" />
+              <svg class="w-3.5 h-3.5 text-morado absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
             <button onclick="exportCSV('auditoria_login')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-xs sm:text-sm font-semibold px-3 py-1.5 transition shadow-sm">CSV</button>
           </div>
@@ -6652,8 +8291,8 @@ Fundación A+`;
           </div>
           <div class="flex items-center gap-2">
             <div class="relative">
-              <input data-table="table-auditoria-acciones" oninput="TableManager.filter('table-auditoria-acciones', this.value)" type="text" placeholder="Buscar acción..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input data-table="table-auditoria-acciones" oninput="TableManager.filter('table-auditoria-acciones', this.value)" type="text" placeholder="Buscar acción..." class="rounded-xl border border-morado/30 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition text-ink" />
+              <svg class="w-3.5 h-3.5 text-morado absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
             <button onclick="exportCSV('auditoria_acciones')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-xs sm:text-sm font-semibold px-3 py-1.5 transition shadow-sm">CSV</button>
           </div>
@@ -6676,8 +8315,8 @@ Fundación A+`;
           </div>
           <div class="flex items-center gap-2">
             <div class="relative">
-              <input data-table="table-auditoria-horario" oninput="TableManager.filter('table-auditoria-horario', this.value)" type="text" placeholder="Buscar cambio..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input data-table="table-auditoria-horario" oninput="TableManager.filter('table-auditoria-horario', this.value)" type="text" placeholder="Buscar cambio..." class="rounded-xl border border-morado/30 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition text-ink" />
+              <svg class="w-3.5 h-3.5 text-morado absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
             <button onclick="exportCSV('auditoria_horario')" class="rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 text-xs sm:text-sm font-semibold px-3 py-1.5 transition shadow-sm">CSV</button>
           </div>
@@ -7065,6 +8704,42 @@ Fundación A+`;
     return (await Store.list('usuarios')).filter(u => u.rol === 'Estudiante' && u.cohorte === cohorteNombre);
   }
 
+  // ---------- VISOR DE FOTOS DE PERFIL (LIGHTBOX) ----------
+  function expandirFotoPerfil(url, nombre = 'Foto de perfil', rol = '') {
+    if (!url) return;
+    const modal = document.getElementById('lightboxFotoModal');
+    const img = document.getElementById('lightboxFotoImg');
+    const nombreEl = document.getElementById('lightboxFotoNombre');
+    const rolEl = document.getElementById('lightboxFotoRol');
+    const downloadBtn = document.getElementById('lightboxFotoDownload');
+    if (!modal || !img) return;
+
+    img.src = url;
+    if (nombreEl) nombreEl.textContent = nombre || 'Foto de perfil';
+    if (rolEl) rolEl.textContent = rol ? `Fundación A+ · ${rol}` : 'Fundación A+';
+    if (downloadBtn) {
+      downloadBtn.href = url;
+      const safeName = (nombre || 'perfil').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+      downloadBtn.download = `foto_${safeName}.jpg`;
+    }
+    modal.classList.remove('hidden');
+  }
+  window.expandirFotoPerfil = expandirFotoPerfil;
+
+  function cerrarLightboxFoto() {
+    const modal = document.getElementById('lightboxFotoModal');
+    if (modal) modal.classList.add('hidden');
+    const img = document.getElementById('lightboxFotoImg');
+    if (img) img.src = '';
+  }
+  window.cerrarLightboxFoto = cerrarLightboxFoto;
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      cerrarLightboxFoto();
+    }
+  });
+
   // ---------- RENDER: Resumen (docente) ----------
   // ---------- PERFIL (docente) ----------
   // Foto de perfil y descripción breve, ambas opcionales. Ambas viven en
@@ -7074,7 +8749,7 @@ Fundación A+`;
     const doc = currentDocente || {};
     const iniciales = escapeHtml((doc.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
     const avatarHtml = doc.fotoUrl
-      ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100" />`
+      ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" onclick="expandirFotoPerfil('${escapeHtml(doc.fotoUrl)}', '${escapeHtml(doc.nombre || '')}', 'Docente')" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100 cursor-pointer hover:scale-105 transition hover:ring-2 hover:ring-turquesa/40 shadow-sm" title="Clic para ampliar foto" />`
       : `<div class="w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>`;
 
     document.getElementById('mount-t-perfil').innerHTML = `
@@ -7220,12 +8895,16 @@ Fundación A+`;
     renderPerfilDocente();
   }
 
-  // async: contarInscritos() ahora es async.
+  // async: Store.list() vía MySQL.
   async function renderResumenDocente() {
     const doc = currentDocente || {};
-    const modulos = await docenteModulosActivos();
-    const pensumItems = (await Store.list('pensum')).filter(p => p.docente === doc.nombre);
-    const inscritosPorModulo = await Promise.all(modulos.map(m => contarInscritos(m.nombre)));
+    const [modulos, usuariosList, pensumList] = await Promise.all([
+      docenteModulosActivos(),
+      Store.list('usuarios'),
+      Store.list('pensum')
+    ]);
+    const pensumItems = pensumList.filter(p => p.docente === doc.nombre);
+    const inscritosPorModulo = modulos.map(m => usuariosList.filter(u => u.rol === 'Estudiante' && u.cohorte === m.nombre).length);
     const totalEstudiantes = inscritosPorModulo.reduce((a, b) => a + b, 0);
     const enCurso = modulos.filter(m => m.estado === 'En curso').length;
 
@@ -7247,7 +8926,7 @@ Fundación A+`;
 
     const iniciales = escapeHtml((doc.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
     const avatarHtml = doc.fotoUrl
-      ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" class="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-white/30" />`
+      ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" onclick="expandirFotoPerfil('${escapeHtml(doc.fotoUrl)}', '${escapeHtml(doc.nombre || '')}', 'Docente')" class="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-white/30 cursor-pointer hover:scale-105 transition hover:ring-2 hover:ring-white/50" title="Clic para ampliar foto" />`
       : `<div class="w-14 h-14 rounded-full grid place-items-center text-lg font-bold text-white shrink-0 bg-white/15 border-2 border-white/30">${iniciales}</div>`;
 
     document.getElementById('mount-t-resumen').innerHTML = `
@@ -7300,13 +8979,100 @@ Fundación A+`;
   }
 
   // ---------- RENDER: Mi horario (docente) ----------
+  let docenteHorarioVista = 'agenda'; // 'agenda' | 'tabla'
+  function setDocenteHorarioVista(v) {
+    docenteHorarioVista = v;
+    renderHorarioDocente();
+  }
+  window.setDocenteHorarioVista = setDocenteHorarioVista;
+
   // async: getSlotsDocente() ahora es async.
   async function renderHorarioDocente() {
     const doc = currentDocente || {};
     const slots = await getSlotsDocente(doc.nombre);
     const totalHoras = slots.reduce((acc, s) => acc + s.horas, 0);
 
-    // Agrupar por Cohorte + Mes para mostrar mini-tablas separadas
+    const diasSemanaNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const hoyFecha = new Date();
+    const diaHoy = diasSemanaNombres[hoyFecha.getDay()];
+    const mesActual = hoyFecha.getFullYear() + '-' + String(hoyFecha.getMonth() + 1).padStart(2, '0');
+
+    // Clases programadas específicamente para el día de hoy
+    const slotsHoy = slots.filter(s => s.dia === diaHoy);
+    const cohorteRef = slotsHoy.length > 0 ? slotsHoy[0].cohorte : (slots.length > 0 ? slots[0].cohorte : null);
+    const infoCamisaHoy = getInfoCamisaDia(diaHoy, cohorteRef);
+    const badgeHoy = badgeCamisaDia(diaHoy, cohorteRef);
+    const cohortesUnicas = [...new Set(slots.map(s => s.cohorte))];
+
+    // Banner: Tu jornada de hoy y código de vestimenta
+    let hoyBannerHtml = '';
+    if (diaHoy === 'Domingo') {
+      hoyBannerHtml = `
+        <div class="rounded-3xl border border-gray-200/80 bg-gradient-to-r from-slate-50 to-white p-5 shadow-soft mb-6">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-gray-100 text-slate2 flex items-center justify-center">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              </div>
+              <div>
+                <p class="text-xs font-bold uppercase tracking-wider text-slate2">Jornada de descanso</p>
+                <h3 class="text-base font-extrabold text-ink">Hoy es Domingo</h3>
+              </div>
+            </div>
+            <span class="text-xs font-medium text-slate2">No hay sesiones académicas regulares programadas hoy.</span>
+          </div>
+        </div>`;
+    } else {
+      const clasesHoyCards = slotsHoy.length > 0 ? slotsHoy.map(s => {
+        const info = getInfoCamisaDia(s.dia, s.cohorte);
+        return `
+          <div class="p-3.5 rounded-2xl bg-white border border-gray-100 shadow-2xs transition hover:shadow-soft" style="border-left: 4px solid ${info.franjaBorder};">
+            <div class="flex items-center justify-between gap-1 mb-1.5">
+              <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-turquesa/10 text-turquesa border border-turquesa/20">${escapeHtml(s.cohorte)}</span>
+              <span class="text-[11px] font-bold text-slate2">${s.horas} h</span>
+            </div>
+            <p class="text-xs font-bold text-ink truncate" title="${escapeHtml(s.materia)}">${escapeHtml(s.materia)}</p>
+            <div class="flex items-center gap-1.5 text-[11px] text-slate2 mt-2 font-medium">
+              <svg class="w-3.5 h-3.5 text-turquesa shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span>${s.inicio} – ${s.fin}</span>
+            </div>
+          </div>`;
+      }).join('') : `
+        <div class="col-span-full p-4 rounded-2xl bg-white/80 border border-dashed border-gray-200 flex items-center justify-between flex-wrap gap-2 text-xs text-slate2">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-turquesa shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span>Hoy no tienes clases programadas en tu horario.</span>
+          </div>
+          <span class="text-[11px] text-slate2">Si visitas la sede, el código de hoy es <strong class="text-ink">Camisa ${escapeHtml(infoCamisaHoy.nombre)}</strong>.</span>
+        </div>`;
+
+      hoyBannerHtml = `
+        <div class="rounded-3xl border border-turquesa/25 p-5 sm:p-6 shadow-soft mb-6 transition" style="background: linear-gradient(135deg, ${infoCamisaHoy.franjaBg}, #ffffff 80%);">
+          <div class="flex items-center justify-between gap-3 flex-wrap pb-3 mb-3 border-b border-gray-100">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-turquesa/10 text-turquesa flex items-center justify-center shrink-0 border border-turquesa/20">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-base font-extrabold text-ink">Tu jornada de hoy · ${diaHoy}</h3>
+                  <span class="w-2 h-2 rounded-full bg-turquesa animate-pulse"></span>
+                </div>
+                <p class="text-xs text-slate2 mt-0.5">${slotsHoy.length} sesión${slotsHoy.length === 1 ? '' : 'es'} asignada${slotsHoy.length === 1 ? '' : 's'} para hoy</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] font-semibold text-slate2 hidden sm:inline">Código de vestimenta:</span>
+              ${badgeHoy}
+            </div>
+          </div>
+          <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+            ${clasesHoyCards}
+          </div>
+        </div>`;
+    }
+
+    // Agrupar por Cohorte + Mes
     const grupos = {};
     slots.forEach(s => {
       const k = s.cohorte + '|' + s.mes;
@@ -7315,38 +9081,140 @@ Fundación A+`;
 
     const gruposHtml = Object.keys(grupos).length ? Object.keys(grupos).map(k => {
       const g = grupos[k];
-      return `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden mb-5">
-        <div class="px-6 pt-5 pb-3 flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <p class="text-sm font-bold text-ink">${escapeHtml(g.cohorte)}</p>
-            <p class="text-xs text-slate2">${escapeHtml(mesLabel(g.mes))}</p>
+      const horasGrupo = g.items.reduce((acc, it) => acc + it.horas, 0);
+
+      // Render según vista activa
+      let cuerpoHtml = '';
+      if (docenteHorarioVista === 'agenda') {
+        const columnasDias = DIAS_HORARIO.map(dia => {
+          const infoCamisa = getInfoCamisaDia(dia, g.cohorte);
+          const slotsDia = g.items.filter(s => s.dia === dia).sort((a, b) => a.inicio.localeCompare(b.inicio));
+          const tarjetas = slotsDia.map(s => `
+            <div class="p-3 mb-2 rounded-xl bg-white border border-gray-100 shadow-2xs transition hover:shadow-soft" style="border-left: 4px solid ${infoCamisa.franjaBorder};">
+              <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="text-xs font-bold text-ink leading-snug line-clamp-2">${escapeHtml(s.materia)}</span>
+                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-50 border border-gray-200 text-slate2">${s.horas}h</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-[11px] text-slate2 mt-1.5 font-medium">
+                <svg class="w-3 h-3 text-turquesa shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>${s.inicio}–${s.fin}</span>
+              </div>
+            </div>`).join('');
+
+          return `
+            <div class="rounded-2xl p-3 border border-gray-200/70 shadow-2xs flex flex-col" style="background:${infoCamisa.franjaBg};">
+              <div class="flex flex-col gap-1.5 mb-2.5 pb-2 border-b border-gray-200/60">
+                <div class="flex items-center justify-between gap-1">
+                  <p class="text-xs font-extrabold uppercase tracking-wider text-ink">${dia}</p>
+                  <span class="text-[10px] font-bold text-slate2 bg-white/85 px-2 py-0.5 rounded-full border border-gray-200/60 shadow-2xs">${slotsDia.length} sesión${slotsDia.length === 1 ? '' : 'es'}</span>
+                </div>
+                <div class="w-full flex">
+                  ${badgeCamisaDia(dia, g.cohorte)}
+                </div>
+              </div>
+              <div class="flex-1">
+                ${tarjetas || '<div class="p-3 text-center rounded-xl bg-white/70 border border-dashed border-gray-200 text-[11px] text-slate2/70 italic">Sin clases</div>'}
+              </div>
+            </div>`;
+        }).join('');
+
+        cuerpoHtml = `
+          <div class="p-4 sm:p-6 overflow-x-auto">
+            <div class="grid gap-3 min-w-[780px]" style="grid-template-columns:repeat(6, minmax(160px, 1fr))">
+              ${columnasDias}
+            </div>
+          </div>`;
+      } else {
+        // Vista Tabla Detallada
+        cuerpoHtml = `
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100 bg-gray-50/50">
+                <th class="py-3 px-6">Día</th>
+                <th class="py-3 px-4">Código de vestimenta</th>
+                <th class="py-3 px-4">Horario</th>
+                <th class="py-3 px-4">Materia</th>
+                <th class="py-3 px-4 text-right">Horas</th>
+              </tr></thead>
+              <tbody>${g.items.map(s => {
+                const infoCamisa = getInfoCamisaDia(s.dia, g.cohorte);
+                const esHoy = s.dia === diaHoy;
+                return `
+                  <tr class="border-b border-gray-50 last:border-0 hover:bg-gray-50/70 transition ${esHoy ? 'bg-turquesa/5 font-medium' : ''}">
+                    <td class="py-3 px-6 text-sm font-semibold text-ink flex items-center gap-2">
+                      ${esHoy ? '<span class="w-2 h-2 rounded-full bg-turquesa animate-pulse"></span>' : ''}
+                      ${escapeHtml(s.dia)}
+                    </td>
+                    <td class="py-3 px-4">${badgeCamisaDia(s.dia, g.cohorte)}</td>
+                    <td class="py-3 px-4 text-sm text-slate2 whitespace-nowrap font-medium">${s.inicio} – ${s.fin}</td>
+                    <td class="py-3 px-4 text-sm text-ink font-semibold">${escapeHtml(s.materia)}</td>
+                    <td class="py-3 px-4 text-sm text-slate2 text-right">${s.horas} h</td>
+                  </tr>`;
+              }).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      }
+
+      return `
+        <div class="bg-white rounded-3xl border border-gray-100 shadow-soft overflow-hidden mb-6">
+          <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3 bg-gray-50/40">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-turquesa"></span>
+                <h4 class="text-sm font-extrabold text-ink">${escapeHtml(g.cohorte)}</h4>
+              </div>
+              <p class="text-xs text-slate2 mt-0.5">${escapeHtml(mesLabel(g.mes))} · ${horasGrupo} horas programadas</p>
+            </div>
+            <button onclick="abrirModalColoresCamisa('${escapeHtml(g.cohorte)}')" title="Ver o ajustar colores de camisa para esta cohorte" class="rounded-full border border-morado/20 bg-morado/5 hover:bg-morado/15 text-morado text-xs font-bold px-3 py-1.5 transition flex items-center gap-1.5 cursor-pointer shadow-2xs">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5l2.5 2.5h2.5l2.5 4.5-2.5 2-1-1v8h-8v-8l-1 1-2.5-2 2.5-4.5h2.5L12 4.5z" />
+              </svg>
+              <span>Código de vestimenta</span>
+            </button>
           </div>
+          ${cuerpoHtml}
+        </div>`;
+    }).join('') : `
+      <div class="bg-white rounded-3xl border border-gray-100 shadow-soft p-10 text-center">
+        <div class="w-12 h-12 rounded-2xl bg-turquesa/10 text-turquesa flex items-center justify-center mx-auto mb-3">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-6">Día</th><th class="py-2.5 px-4">Horario</th><th class="py-2.5 px-4">Materia</th><th class="py-2.5 px-4">Horas</th>
-            </tr></thead>
-            <tbody>${g.items.map(s => `
-              <tr class="border-b border-gray-50 last:border-0">
-                <td class="py-2.5 px-6 text-sm font-semibold text-ink">${escapeHtml(s.dia)}</td>
-                <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${s.inicio}–${s.fin}</td>
-                <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(s.materia)}</td>
-                <td class="py-2.5 px-4 text-sm text-slate2">${s.horas} h</td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>`;
-    }).join('') : `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
-        <p class="text-sm text-slate2">Aún no apareces en ningún horario. El administrador te asignará materias y horas desde el panel "Horario".</p>
+        <h3 class="text-base font-extrabold text-ink">Sin horarios asignados</h3>
+        <p class="text-xs text-slate2 mt-1 max-w-md mx-auto">Aún no apareces en ningún horario. El administrador te asignará materias y horas desde el panel de Horario.</p>
       </div>`;
 
     document.getElementById('mount-t-modulos').innerHTML = `
-      ${slots.length ? `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5 flex items-center justify-between flex-wrap gap-3">
-        <p class="text-sm text-slate2">Total de horas semanales asignadas</p>
-        <p class="text-2xl font-extrabold text-ink">${totalHoras} h</p>
-      </div>` : ''}
+      ${hoyBannerHtml}
+      ${slots.length ? `
+        <div class="bg-white rounded-3xl border border-gray-100 shadow-soft p-5 mb-6 flex items-center justify-between flex-wrap gap-4">
+          <div class="flex items-center gap-6 flex-wrap">
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">Carga Semanal</p>
+              <p class="text-2xl font-extrabold text-ink">${totalHoras} <span class="text-sm font-semibold text-slate2">horas</span></p>
+            </div>
+            <div class="h-8 w-px bg-gray-100 hidden sm:block"></div>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">Cohortes</p>
+              <p class="text-xl font-bold text-ink">${cohortesUnicas.length}</p>
+            </div>
+            <div class="h-8 w-px bg-gray-100 hidden sm:block"></div>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">Sesiones</p>
+              <p class="text-xl font-bold text-ink">${slots.length}</p>
+            </div>
+          </div>
+          <div class="flex items-center bg-gray-100/80 p-1 rounded-2xl border border-gray-200/50">
+            <button onclick="setDocenteHorarioVista('agenda')" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${docenteHorarioVista === 'agenda' ? 'bg-white text-ink shadow-2xs' : 'text-slate2 hover:text-ink'}">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/></svg>
+              <span>Agenda semanal</span>
+            </button>
+            <button onclick="setDocenteHorarioVista('tabla')" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${docenteHorarioVista === 'tabla' ? 'bg-white text-ink shadow-2xs' : 'text-slate2 hover:text-ink'}">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              <span>Tabla</span>
+            </button>
+          </div>
+        </div>` : ''}
       ${gruposHtml}`;
   }
 
@@ -7554,10 +9422,10 @@ Fundación A+`;
   // async: 'asistencia' vía MySQL.
   async function sincronizarAusentesSesion(sesion, estudiantesCohorte) {
     if (!sesion || !estudiantesCohorte || !estudiantesCohorte.length) return;
-    const registros = await Store.list('asistencia');
+    const registros = await Store.list('asistencia', { forceRefresh: true });
     let cambiado = false;
     estudiantesCohorte.forEach(e => {
-      const yaTiene = registros.some(r => r.estudiante === e.nombre && r.sesionId === sesion.id);
+      const yaTiene = registros.some(r => r.estudiante === e.nombre && (r.sesionId === sesion.id || (r.fecha === sesion.fecha && (r.materia === sesion.materia || r.modulo === sesion.modulo))));
       if (!yaTiene) {
         registros.push({
           id: uid('as'),
@@ -7584,16 +9452,114 @@ Fundación A+`;
   }
 
   // async: 'asistencia' vía MySQL.
-  async function estadoActualEstudianteSesion(sesion, estudianteNombreVal) {
+  async function estadoActualEstudianteSesion(sesion, estudianteNombreVal, asistListPreloaded = null) {
     if (!sesion) return { estado: 'Sin sesión', automatico: false };
-    const registro = (await Store.list('asistencia')).find(r => r.estudiante === estudianteNombreVal && r.sesionId === sesion.id);
-    if (registro) return { estado: registro.estado, automatico: !!registro.automatico };
-    return { estado: 'Falla', automatico: true };
+    const list = asistListPreloaded || (await Store.list('asistencia'));
+    const todos = list.filter(r => r.estudiante === estudianteNombreVal && (r.sesionId === sesion.id || (r.fecha === sesion.fecha && (r.materia === sesion.materia || r.modulo === sesion.modulo))));
+    if (!todos.length) return { estado: 'Falla', automatico: true };
+    const prioridad = { Presente: 1, Tarde: 2, Justificada: 3, Falla: 4 };
+    todos.sort((a, b) => (prioridad[a.estado] || 99) - (prioridad[b.estado] || 99));
+    return { estado: todos[0].estado, automatico: !!todos[0].automatico };
   }
 
   // ---------- RENDER: Asistencia (QR automático) — docente ----------
   let docenteAsistCohorte = null;
   let asistenciaDocenteTimer = null;
+  let docenteAsistFiltroTexto = '';
+  let docenteAsistFiltroEstado = 'TODOS';
+  let docenteAsistHistFiltroTexto = '';
+  let docenteAsistHistFiltroEstado = 'TODOS';
+
+  function filtrarAsistenciaDocenteLive(texto) {
+    docenteAsistFiltroTexto = (texto || '').toLowerCase().trim();
+    aplicarFiltrosTablaDocente();
+  }
+  window.filtrarAsistenciaDocenteLive = filtrarAsistenciaDocenteLive;
+
+  function setFiltroEstadoDocente(estado) {
+    docenteAsistFiltroEstado = estado;
+    document.querySelectorAll('.btn-filtro-asist-doc').forEach(btn => {
+      const e = btn.getAttribute('data-filtro-estado');
+      if (e === estado) {
+        btn.className = btn.getAttribute('data-class-active');
+      } else {
+        btn.className = btn.getAttribute('data-class-inactive');
+      }
+    });
+    aplicarFiltrosTablaDocente();
+  }
+  window.setFiltroEstadoDocente = setFiltroEstadoDocente;
+
+  function aplicarFiltrosTablaDocente() {
+    const tbody = document.getElementById('tbody-asist-hoy');
+    if (!tbody) return;
+    const rows = tbody.querySelectorAll('tr[data-estudiante]');
+    let visibles = 0;
+    rows.forEach(r => {
+      const nombre = (r.getAttribute('data-nombre') || '').toLowerCase();
+      const estado = r.getAttribute('data-estado') || '';
+      const coincideTexto = !docenteAsistFiltroTexto || nombre.includes(docenteAsistFiltroTexto);
+      const coincideEstado = docenteAsistFiltroEstado === 'TODOS' || estado === docenteAsistFiltroEstado;
+      if (coincideTexto && coincideEstado) {
+        r.classList.remove('hidden');
+        visibles++;
+      } else {
+        r.classList.add('hidden');
+      }
+    });
+    const filaVacia = document.getElementById('fila-asist-vacia');
+    if (filaVacia) filaVacia.classList.toggle('hidden', visibles > 0);
+    const contadorVisibles = document.getElementById('contador-asist-visibles');
+    if (contadorVisibles) contadorVisibles.textContent = `${visibles} estudiante${visibles === 1 ? '' : 's'}`;
+  }
+  window.aplicarFiltrosTablaDocente = aplicarFiltrosTablaDocente;
+
+  function filtrarHistorialDocenteLive(texto) {
+    docenteAsistHistFiltroTexto = (texto || '').toLowerCase().trim();
+    aplicarFiltrosHistorialDocente();
+  }
+  window.filtrarHistorialDocenteLive = filtrarHistorialDocenteLive;
+
+  function setFiltroEstadoHistorialDocente(filtro) {
+    docenteAsistHistFiltroEstado = filtro;
+    document.querySelectorAll('.btn-filtro-hist-doc').forEach(btn => {
+      const f = btn.getAttribute('data-filtro-hist');
+      if (f === filtro) {
+        btn.className = btn.getAttribute('data-class-active');
+      } else {
+        btn.className = btn.getAttribute('data-class-inactive');
+      }
+    });
+    aplicarFiltrosHistorialDocente();
+  }
+  window.setFiltroEstadoHistorialDocente = setFiltroEstadoHistorialDocente;
+
+  function aplicarFiltrosHistorialDocente() {
+    const tbody = document.getElementById('tbody-historial-doc');
+    if (!tbody) return;
+    const rows = tbody.querySelectorAll('tr[data-estudiante]');
+    let visibles = 0;
+    rows.forEach(r => {
+      const nombre = (r.getAttribute('data-nombre') || '').toLowerCase();
+      const pct = parseFloat(r.getAttribute('data-pct') || '-1');
+      const coincideTexto = !docenteAsistHistFiltroTexto || nombre.includes(docenteAsistHistFiltroTexto);
+      let coincideEstado = true;
+      if (docenteAsistHistFiltroEstado === 'AL_DIA') {
+        coincideEstado = pct >= 80;
+      } else if (docenteAsistHistFiltroEstado === 'EN_RIESGO') {
+        coincideEstado = pct >= 0 && pct < 80;
+      }
+      if (coincideTexto && coincideEstado) {
+        r.classList.remove('hidden');
+        visibles++;
+      } else {
+        r.classList.add('hidden');
+      }
+    });
+    const filaVacia = document.getElementById('fila-hist-vacia');
+    if (filaVacia) filaVacia.classList.toggle('hidden', visibles > 0);
+  }
+  window.aplicarFiltrosHistorialDocente = aplicarFiltrosHistorialDocente;
 
   // async: docenteEstudiantesDeCohorte ahora es async (usa 'usuarios' vía
   // MySQL). El setInterval de más abajo sigue funcionando igual con un
@@ -7717,25 +9683,71 @@ Fundación A+`;
         </div>`;
     }
 
-    const infoPorEstudiante = await Promise.all(estudiantes.map(e => estadoActualEstudianteSesion(sesion, e.nombre)));
+    const asistenciaTodos = await Store.list('asistencia');
+    const infoPorEstudiante = await Promise.all(estudiantes.map(e => estadoActualEstudianteSesion(sesion, e.nombre, asistenciaTodos)));
+    let countPresentes = 0;
+    let countTardes = 0;
+    let countFallas = 0;
+
     const filasHoy = estudiantes.length ? estudiantes.map((e, i) => {
       const info = infoPorEstudiante[i];
-      return `<tr class="border-b border-gray-50 last:border-0">
-        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(e.nombre)}</td>
-        <td class="py-3 px-4">${statusPill(info.estado === 'Falla' ? 'Falla' : info.estado, pillMap)}${info.automatico && info.estado === 'Falla' ? '<span class="text-[10px] text-coral font-medium ml-2 bg-coral/10 px-2 py-0.5 rounded-full border border-coral/20">por defecto (pérdida)</span>' : ''}</td>
-      </tr>`;
-    }).join('') : `<tr><td colspan="2" class="text-sm text-slate2 text-center py-6">Esta cohorte aún no tiene estudiantes matriculados.</td></tr>`;
+      if (info.estado === 'Presente') countPresentes++;
+      else if (info.estado === 'Tarde') countTardes++;
+      else countFallas++;
 
-    const asistenciaTodos = await Store.list('asistencia');
+      const iniciales = (e.nombre || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'E';
+
+      return `<tr data-estudiante="1" data-nombre="${escapeHtml(e.nombre.toLowerCase())}" data-estado="${escapeHtml(info.estado)}" class="border-b border-gray-50 last:border-0 hover:bg-slate-50/80 transition-colors">
+        <td class="py-2.5 px-4 text-sm font-semibold text-ink">
+          <div class="flex items-center gap-2.5">
+            <span class="w-7 h-7 rounded-full bg-morado/10 text-morado text-[11px] font-bold flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
+            <span class="truncate">${escapeHtml(e.nombre)}</span>
+          </div>
+        </td>
+        <td class="py-2.5 px-4 text-right sm:text-left">
+          <div class="flex items-center justify-end sm:justify-start gap-1.5 flex-wrap">
+            ${statusPill(info.estado === 'Falla' ? 'Falla' : info.estado, pillMap)}
+            ${info.automatico && info.estado === 'Falla' ? '<span class="hidden sm:inline-block text-[10px] text-coral font-medium bg-coral/10 px-2 py-0.5 rounded-full border border-coral/20">por defecto</span>' : ''}
+          </div>
+        </td>
+      </tr>`;
+    }).join('') : '';
+    let countHistAlDia = 0;
+    let countHistEnRiesgo = 0;
+
     const historial = estudiantes.map(e => {
-      const regs = asistenciaTodos.filter(a => a.estudiante === e.nombre && a.modulo === moduloSel.modulo && a.docente === doc.nombre);
+      const rawRegs = asistenciaTodos.filter(a =>
+        a.estudiante === e.nombre &&
+        (a.docente === doc.nombre || a.modulo === moduloSel.modulo || a.modulo === moduloSel.nombre || a.materia === materiaDoc || a.materia === moduloSel.modulo)
+      );
+      const porClase = new Map();
+      rawRegs.forEach(r => {
+        const k = r.sesionId ? ('ses_' + r.sesionId) : ('date_' + r.fecha);
+        if (!porClase.has(k) || (r.estado === 'Presente' || r.estado === 'Tarde')) {
+          porClase.set(k, r);
+        }
+      });
+      const regs = Array.from(porClase.values());
       const presentes = regs.filter(r => r.estado === 'Presente').length;
       const pct = regs.length ? Math.round((presentes / regs.length) * 100) : null;
-      const color = pct === null ? '#5B6472' : pct >= 80 ? '#0f8f89' : pct >= 60 ? '#b5790f' : '#F0455C';
-      return `<tr class="border-b border-gray-50 last:border-0">
-        <td class="py-2.5 px-4 text-sm font-semibold text-ink">${escapeHtml(e.nombre)}</td>
-        <td class="py-2.5 px-4 text-sm text-slate2">${regs.length} sesión${regs.length === 1 ? '' : 'es'} registrada${regs.length === 1 ? '' : 's'}</td>
-        <td class="py-2.5 px-4 text-sm font-bold" style="color:${color}">${pct === null ? '—' : pct + '%'}</td>
+      if (pct !== null) {
+        if (pct >= 80) countHistAlDia++;
+        else countHistEnRiesgo++;
+      }
+      const badgeBg = pct === null ? 'bg-slate-100 text-slate-700' : pct >= 80 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60' : pct >= 60 ? 'bg-amber-50 text-amber-800 border border-amber-200/60' : 'bg-coral/10 text-coral border border-coral/20';
+      const iniciales = (e.nombre || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'E';
+
+      return `<tr data-estudiante="1" data-nombre="${escapeHtml(e.nombre.toLowerCase())}" data-pct="${pct !== null ? pct : -1}" class="border-b border-gray-50 last:border-0 hover:bg-slate-50/80 transition-colors">
+        <td class="py-2.5 px-4 text-sm font-semibold text-ink">
+          <div class="flex items-center gap-2.5">
+            <span class="w-7 h-7 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
+            <span class="truncate">${escapeHtml(e.nombre)}</span>
+          </div>
+        </td>
+        <td class="py-2.5 px-4 text-sm text-slate2">${regs.length} sesión${regs.length === 1 ? '' : 'es'}</td>
+        <td class="py-2.5 px-4 text-right sm:text-left">
+          <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${badgeBg}">${pct === null ? '—' : pct + '%'}</span>
+        </td>
       </tr>`;
     }).join('');
 
@@ -7751,20 +9763,120 @@ Fundación A+`;
       </div>
       ${tarjetaSesion}
       ${tarjetasQr}
+
+      <!-- Control de Asistencia de Hoy: Compacto, con buscador y filtros para cohortes grandes -->
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden mb-6">
-        <div class="overflow-x-auto">
-          <table class="w-full">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Estudiante</th><th class="py-3 px-4">Estado hoy</th></tr></thead>
-            <tbody>${filasHoy}</tbody>
+        <!-- Encabezado con métricas y buscador -->
+        <div class="p-4 sm:p-5 border-b border-gray-100 bg-linear-to-r from-slate-50/60 to-white">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3.5">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full ${sesion ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}"></span>
+                <h3 class="text-sm font-bold text-ink">Estudiantes de la cohorte</h3>
+                <span id="contador-asist-visibles" class="text-xs font-semibold text-morado bg-morado/10 px-2 py-0.5 rounded-full">${estudiantes.length} estudiantes</span>
+              </div>
+              <p class="text-xs text-slate2 mt-0.5">Control optimizado: busca por nombre o filtra por estado sin desplazarte interminablemente.</p>
+            </div>
+            <!-- Mini KPIs de la sesión -->
+            <div class="flex items-center gap-2 flex-wrap text-xs">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200/60">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>${countPresentes} Presente${countPresentes === 1 ? '' : 's'}
+              </span>
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 font-semibold border border-amber-200/60">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>${countTardes} Tarde${countTardes === 1 ? '' : 's'}
+              </span>
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-coral/10 text-coral font-semibold border border-coral/20">
+                <span class="w-1.5 h-1.5 rounded-full bg-coral"></span>${countFallas} Falla${countFallas === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
+
+          <!-- Buscador y botones de filtro rápido -->
+          <div class="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+            <div class="relative flex-1 max-w-sm">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-turquesa">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              </span>
+              <input type="text" id="filtroDocenteNombre" value="${escapeHtml(docenteAsistFiltroTexto)}" oninput="filtrarAsistenciaDocenteLive(this.value)" placeholder="Buscar estudiante por nombre..." class="w-full pl-9 pr-3.5 py-1.5 text-xs sm:text-sm bg-turquesa/5 border border-turquesa/30 rounded-xl text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-turquesa/30 focus:border-turquesa transition-all">
+            </div>
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+              <button type="button" onclick="setFiltroEstadoDocente('TODOS')" data-filtro-estado="TODOS" data-class-active="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-turquesa text-white shadow-xs" data-class-inactive="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-white text-slate2 border border-gray-200 hover:bg-gray-50" class="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${docenteAsistFiltroEstado === 'TODOS' ? 'bg-turquesa text-white shadow-xs' : 'bg-white text-slate2 border border-gray-200 hover:bg-gray-50'}">Todos (${estudiantes.length})</button>
+              <button type="button" onclick="setFiltroEstadoDocente('Presente')" data-filtro-estado="Presente" data-class-active="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-emerald-600 text-white shadow-xs" data-class-inactive="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100" class="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${docenteAsistFiltroEstado === 'Presente' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}">Presentes (${countPresentes})</button>
+              <button type="button" onclick="setFiltroEstadoDocente('Tarde')" data-filtro-estado="Tarde" data-class-active="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-amber-600 text-white shadow-xs" data-class-inactive="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100" class="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${docenteAsistFiltroEstado === 'Tarde' ? 'bg-amber-600 text-white shadow-xs' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'}">Tardes (${countTardes})</button>
+              <button type="button" onclick="setFiltroEstadoDocente('Falla')" data-filtro-estado="Falla" data-class-active="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-coral text-white shadow-xs" data-class-inactive="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-coral/10 text-coral border border-coral/20 hover:bg-coral/20" class="btn-filtro-asist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${docenteAsistFiltroEstado === 'Falla' ? 'bg-coral text-white shadow-xs' : 'bg-coral/10 text-coral border border-coral/20 hover:bg-coral/20'}">Fallas (${countFallas})</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla con scroll vertical compacto (max-h-96) y encabezado sticky -->
+        <div class="max-h-[380px] overflow-y-auto divide-y divide-gray-100 relative">
+          <table class="w-full text-left border-collapse">
+            <thead class="sticky top-0 bg-white/95 backdrop-blur-xs z-10 shadow-xs border-b border-gray-100 text-[11px] font-bold uppercase tracking-wider text-slate2">
+              <tr>
+                <th class="py-2.5 px-4 bg-white/95">Estudiante</th>
+                <th class="py-2.5 px-4 text-right sm:text-left bg-white/95">Estado hoy</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-asist-hoy">
+              ${filasHoy || '<tr><td colspan="2" class="text-sm text-slate2 text-center py-6">Esta cohorte aún no tiene estudiantes matriculados.</td></tr>'}
+              <tr id="fila-asist-vacia" class="hidden">
+                <td colspan="2" class="text-sm text-slate2 text-center py-8">
+                  <div class="flex flex-col items-center justify-center gap-1">
+                    <svg class="w-6 h-6 text-slate2/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>No se encontraron estudiantes con ese criterio de búsqueda.</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
           </table>
         </div>
       </div>
+
+      <!-- Historial de Asistencia: Compacto con sticky header y búsqueda -->
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-        <p class="text-xs font-bold uppercase tracking-wide text-slate2 px-6 pt-5 pb-2">Historial de asistencia — ${escapeHtml(moduloSel.modulo)}</p>
-        <div class="overflow-x-auto">
-          <table class="w-full">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Sesiones</th><th class="py-2.5 px-4">% Asistencia</th></tr></thead>
-            <tbody>${historial || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Sin registros todavía.</td></tr>'}</tbody>
+        <div class="p-4 sm:p-5 border-b border-gray-100 bg-linear-to-r from-slate-50/60 to-white">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3.5">
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-bold text-ink">Historial acumulado — ${escapeHtml(moduloSel.modulo)}</h3>
+                <span class="text-xs text-slate2 bg-slate-100 px-2 py-0.5 rounded-md font-medium">${estudiantes.length} estudiantes</span>
+              </div>
+              <p class="text-xs text-slate2 mt-0.5">Porcentaje global de asistencia de cada estudiante en este módulo.</p>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="setFiltroEstadoHistorialDocente('TODOS')" data-filtro-hist="TODOS" data-class-active="btn-filtro-hist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-turquesa text-white shadow-xs" data-class-inactive="btn-filtro-hist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-white text-slate2 border border-gray-200 hover:bg-gray-50" class="btn-filtro-hist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${docenteAsistHistFiltroEstado === 'TODOS' ? 'bg-turquesa text-white shadow-xs' : 'bg-white text-slate2 border border-gray-200 hover:bg-gray-50'}">Todos</button>
+              <button type="button" onclick="setFiltroEstadoHistorialDocente('AL_DIA')" data-filtro-hist="AL_DIA" data-class-active="btn-filtro-hist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-emerald-600 text-white shadow-xs" data-class-inactive="btn-filtro-hist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100" class="btn-filtro-hist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${docenteAsistHistFiltroEstado === 'AL_DIA' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}">Al día (≥80%)</button>
+              <button type="button" onclick="setFiltroEstadoHistorialDocente('EN_RIESGO')" data-filtro-hist="EN_RIESGO" data-class-active="btn-filtro-hist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-coral text-white shadow-xs" data-class-inactive="btn-filtro-hist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition bg-coral/10 text-coral border border-coral/20 hover:bg-coral/20" class="btn-filtro-hist-doc px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${docenteAsistHistFiltroEstado === 'EN_RIESGO' ? 'bg-coral text-white shadow-xs' : 'bg-coral/10 text-coral border border-coral/20 hover:bg-coral/20'}">En riesgo (&lt;80%)</button>
+            </div>
+          </div>
+          <div class="relative max-w-sm">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-turquesa">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </span>
+            <input type="text" id="filtroHistDocenteNombre" value="${escapeHtml(docenteAsistHistFiltroTexto)}" oninput="filtrarHistorialDocenteLive(this.value)" placeholder="Buscar en historial por nombre..." class="w-full pl-9 pr-3.5 py-1.5 text-xs sm:text-sm bg-turquesa/5 border border-turquesa/30 rounded-xl text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-turquesa/30 focus:border-turquesa transition-all">
+          </div>
+        </div>
+
+        <div class="max-h-[320px] overflow-y-auto divide-y divide-gray-100 relative">
+          <table class="w-full text-left border-collapse">
+            <thead class="sticky top-0 bg-white/95 backdrop-blur-xs z-10 shadow-xs border-b border-gray-100 text-[11px] font-bold uppercase tracking-wider text-slate2">
+              <tr>
+                <th class="py-2.5 px-4 bg-white/95">Estudiante</th>
+                <th class="py-2.5 px-4 bg-white/95">Sesiones</th>
+                <th class="py-2.5 px-4 text-right sm:text-left bg-white/95">% Asistencia</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-historial-doc">
+              ${historial || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Sin registros todavía.</td></tr>'}
+              <tr id="fila-hist-vacia" class="hidden">
+                <td colspan="3" class="text-sm text-slate2 text-center py-8">
+                  <div class="flex flex-col items-center justify-center gap-1">
+                    <svg class="w-6 h-6 text-slate2/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>No se encontraron estudiantes en el historial con ese criterio.</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
           </table>
         </div>
       </div>`;
@@ -7773,10 +9885,18 @@ Fundación A+`;
     pintarQrImprimible('qrDocenteImg', urlQr('docente', tokenDocente));
     pintarQrImprimible('qrEstudianteImg', urlQr('estudiante', tokenEstudiante));
 
+    // Aplicar filtros activos previamente
+    aplicarFiltrosTablaDocente();
+    aplicarFiltrosHistorialDocente();
+
     asistenciaDocenteTimer = setInterval(() => {
       const panel = document.getElementById('panel-t-asistencia');
-      if (panel && !panel.classList.contains('hidden')) renderAsistenciaDocente();
-      else clearInterval(asistenciaDocenteTimer);
+      const inputActivo = document.activeElement && (document.activeElement.id === 'filtroDocenteNombre' || document.activeElement.id === 'filtroHistDocenteNombre');
+      if (panel && !panel.classList.contains('hidden')) {
+        if (!inputActivo) renderAsistenciaDocente();
+      } else {
+        clearInterval(asistenciaDocenteTimer);
+      }
     }, 15000);
   }
 
@@ -7803,6 +9923,14 @@ Fundación A+`;
     return combos;
   }
 
+  let filtroQrCohorte = '';
+
+  function cambiarFiltroQrCohorte(cohorte) {
+    filtroQrCohorte = cohorte || '';
+    renderCodigosQr();
+  }
+  window.cambiarFiltroQrCohorte = cambiarFiltroQrCohorte;
+
   // async: 'modulos'/'horarios'/'qr_tokens' vía MySQL.
   async function renderCodigosQr() {
     const combos = await combosDocenteCohorte();
@@ -7817,10 +9945,19 @@ Fundación A+`;
       return;
     }
 
-    const tokensDoc = await Promise.all(combos.map(c => getOrCrearTokenQR('docente', c.cohorte, c.docente)));
-    const tokensEst = await Promise.all(combos.map(c => getOrCrearTokenQR('estudiante', c.cohorte, c.docente)));
+    const cohortesUnicas = Array.from(new Set(combos.map(c => c.cohorte))).sort();
+    if (filtroQrCohorte && !cohortesUnicas.includes(filtroQrCohorte)) {
+      filtroQrCohorte = '';
+    }
 
-    const tarjetas = combos.map((combo, i) => {
+    const combosFiltrados = filtroQrCohorte
+      ? combos.filter(c => c.cohorte === filtroQrCohorte)
+      : combos;
+
+    const tokensDoc = await Promise.all(combosFiltrados.map(c => getOrCrearTokenQR('docente', c.cohorte, c.docente)));
+    const tokensEst = await Promise.all(combosFiltrados.map(c => getOrCrearTokenQR('estudiante', c.cohorte, c.docente)));
+
+    const tarjetas = combosFiltrados.map((combo, i) => {
       const modulo = cohortes.find(c => c.nombre === combo.cohorte);
       const tokenDoc = tokensDoc[i];
       const tokenEst = tokensEst[i];
@@ -7899,8 +10036,21 @@ Fundación A+`;
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
           <span>Códigos activos generados para hoy: <strong>${fechaHoyStr}</strong></span>
         </div>
+        <div class="mt-4 pt-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <label for="filtroQrCohorteSelect" class="text-xs font-semibold text-slate2">Filtrar por cohorte:</label>
+            <select id="filtroQrCohorteSelect" onchange="cambiarFiltroQrCohorte(this.value)" class="rounded-xl border border-morado/25 bg-morado/5 px-3 py-1.5 text-xs font-medium text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition">
+              <option value="">Todas las cohortes (${combos.length} combinaciones)</option>
+              ${cohortesUnicas.map(c => {
+                const cant = combos.filter(x => x.cohorte === c).length;
+                return `<option value="${escapeHtml(c)}" ${filtroQrCohorte === c ? 'selected' : ''}>${escapeHtml(c)} (${cant})</option>`;
+              }).join('')}
+            </select>
+          </div>
+          <span class="text-xs font-medium text-slate2">Mostrando ${combosFiltrados.length} de ${combos.length} materias</span>
+        </div>
       </div>
-      <div class="grid lg:grid-cols-2 gap-5">${tarjetas.map(t => t.html).join('')}</div>`;
+      <div class="grid lg:grid-cols-2 gap-5">${tarjetas.map(t => t.html).join('') || '<div class="col-span-full admin-panel-card p-10 text-center"><p class="text-sm text-slate2">No hay materias registradas para la cohorte seleccionada.</p></div>'}</div>`;
 
     // El QR se dibuja DESPUÉS de insertar el HTML (necesita el contenedor ya en el DOM).
     tarjetas.forEach(t => {
@@ -7911,6 +10061,10 @@ Fundación A+`;
 
   function cambiarCohorteAsistDocente(value) {
     docenteAsistCohorte = value;
+    docenteAsistFiltroTexto = '';
+    docenteAsistFiltroEstado = 'TODOS';
+    docenteAsistHistFiltroTexto = '';
+    docenteAsistHistFiltroEstado = 'TODOS';
     renderAsistenciaDocente();
   }
 
@@ -7933,10 +10087,10 @@ Fundación A+`;
 
     // Pre-poblar asistencia con 'Falla' (por defecto pérdida) para todos los estudiantes de la cohorte
     const estudiantes = await docenteEstudiantesDeCohorte(moduloSel.nombre);
-    const registros = await Store.list('asistencia');
+    const registros = await Store.list('asistencia', { forceRefresh: true });
     let cambiado = false;
     estudiantes.forEach(e => {
-      const yaTiene = registros.some(r => r.estudiante === e.nombre && r.sesionId === nuevaSesId);
+      const yaTiene = registros.some(r => r.estudiante === e.nombre && (r.sesionId === nuevaSesId || (r.fecha === hoy && (r.materia === cursoNombre || r.modulo === cursoNombre))));
       if (!yaTiene) {
         registros.push({
           id: uid('as'),
@@ -8554,8 +10708,8 @@ Fundación A+`;
           <div class="flex flex-wrap items-center gap-2.5">
             ${filtroCohorteHtml}
             <div class="relative">
-              <input data-table="table-docente-riesgo" oninput="TableManager.filter('table-docente-riesgo', this.value)" type="text" placeholder="Buscar estudiante..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input data-table="table-docente-riesgo" oninput="TableManager.filter('table-docente-riesgo', this.value)" type="text" placeholder="Buscar estudiante..." class="rounded-xl border border-turquesa/30 bg-turquesa/5 pl-9 pr-3 py-1.5 text-xs sm:text-sm w-40 sm:w-48 text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-turquesa/30 focus:border-turquesa transition" />
+              <svg class="w-3.5 h-3.5 text-turquesa absolute left-3 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
           </div>
         </div>
@@ -8904,8 +11058,8 @@ Fundación A+`;
   let docenteInformesSeleccion = null; // "cohorte__mes"
 
   // async: 'asistencia' y 'notas_modulos' vía MySQL.
-  async function generarDatosInformeEstudiante(estudianteNombre, cohorteNombre, cursoNombre, mes, docenteNombre) {
-    const asistList = await Store.list('asistencia');
+  async function generarDatosInformeEstudiante(estudianteNombre, cohorteNombre, cursoNombre, mes, docenteNombre, preloaded = null) {
+    const asistList = (preloaded && preloaded.asistList) ? preloaded.asistList : await Store.list('asistencia');
     const asistReg = asistList.filter(a => {
       if (a.estudiante !== estudianteNombre) return false;
       if (docenteNombre && a.docente && a.docente === docenteNombre) {
@@ -8921,12 +11075,10 @@ Fundación A+`;
     const presentes = asistReg.filter(a => a.estado === 'Presente').length;
     const pctAsistencia = asistReg.length ? Math.round((presentes / asistReg.length) * 100) : null;
 
-    // CORREGIDO: llamaba a getNotasModuloRecord(cohorteNombre, false) —
-    // el segundo parámetro de esa función es "mes", no "crear" (el
-    // tercer parámetro, que aquí faltaba, es el que significa "crear").
-    // Con 'false' como mes nunca existía un registro con ese mes, así
-    // que la nota cuantitativa del informe siempre salía "Sin datos".
-    const rec = await getNotasModuloRecord(cohorteNombre, mes, false);
+    // Si se pasa recNotas en preloaded (incluso si es null), se aprovecha directamente
+    const rec = (preloaded && preloaded.recNotas !== undefined)
+      ? preloaded.recNotas
+      : await getNotasModuloRecord(cohorteNombre, mes, false);
     const resultado = rec ? calcularNotaFinal(rec, estudianteNombre) : null;
     const nota = resultado && !resultado.pendiente ? resultado.valor : null;
 
@@ -8985,6 +11137,21 @@ Fundación A+`;
   }
   window.cambiarMesInformesDocente = cambiarMesInformesDocente;
 
+  // Estado para desplegar informes ya radicados
+  let docenteInformesVerEnviados = false;
+  function toggleVerInformesEnviadosDocente() {
+    docenteInformesVerEnviados = !docenteInformesVerEnviados;
+    const sec = document.getElementById('seccion-informes-enviados');
+    const btn = document.getElementById('btn-toggle-informes-enviados');
+    if (sec) sec.classList.toggle('hidden', !docenteInformesVerEnviados);
+    if (btn) {
+      btn.innerHTML = docenteInformesVerEnviados
+        ? `<span>Ocultar informes enviados</span> <svg class="w-3.5 h-3.5 rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>`
+        : `<span>Ver detalles de informes enviados</span> <svg class="w-3.5 h-3.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>`;
+    }
+  }
+  window.toggleVerInformesEnviadosDocente = toggleVerInformesEnviadosDocente;
+
   // async: docenteEstudiantesDeCohorte y docenteModulosActivos son async.
   async function renderInformesDocente() {
     const doc = currentDocente || {};
@@ -9030,17 +11197,34 @@ Fundación A+`;
     const esPeriodoEditable = esMesActivo;
 
     const estudiantes = await docenteEstudiantesDeCohorte(docenteInformesCohorte);
-    const guardados = (await Store.list('informes_docente')).filter(i => 
+    const guardados = (await Store.list('informes_docente', {
+      params: { docente: doc.nombre, cohorte: docenteInformesCohorte, mes: docenteInformesMes },
+      forceRefresh: true
+    })).filter(i => 
       i.docente === doc.nombre && 
       i.cohorte === docenteInformesCohorte && 
       (i.mes === docenteInformesMes || (i.fecha && i.fecha.slice(0, 7) === docenteInformesMes))
     );
 
     const cursoSel = await cursoDeDocenteEnCohorte(doc.nombre, docenteInformesCohorte, docenteInformesMes);
-    const datosPorEstudiante = await Promise.all(estudiantes.map(e => generarDatosInformeEstudiante(e.nombre, docenteInformesCohorte, cursoSel, docenteInformesMes, doc.nombre)));
+    const [asistList, recNotas] = await Promise.all([
+      Store.list('asistencia'),
+      getNotasModuloRecord(docenteInformesCohorte, docenteInformesMes, false)
+    ]);
+    const preloadedInf = { asistList, recNotas };
+    const datosPorEstudiante = await Promise.all(estudiantes.map(e => generarDatosInformeEstudiante(e.nombre, docenteInformesCohorte, cursoSel, docenteInformesMes, doc.nombre, preloadedInf)));
 
-    const enviadosCount = guardados.filter(g => g.estado === 'Enviado').length;
-    const todosEnviados = estudiantes.length > 0 && enviadosCount === estudiantes.length;
+    const listaCompleta = estudiantes.map((e, i) => {
+      const datos = datosPorEstudiante[i];
+      const guardado = guardados.find(g => g.estudiante === e.nombre);
+      const enviado = !!(guardado && guardado.estado === 'Enviado');
+      return { e, datos, guardado, enviado };
+    });
+
+    const pendientes = listaCompleta.filter(item => !item.enviado);
+    const enviados = listaCompleta.filter(item => item.enviado);
+    const enviadosCount = enviados.length;
+    const todosEnviados = estudiantes.length > 0 && pendientes.length === 0;
 
     let avisoPeriodoHtml = '';
     if (esFuturo) {
@@ -9090,38 +11274,145 @@ Fundación A+`;
         </select>
       </div>`;
 
-    const tarjetas = estudiantes.length ? estudiantes.map((e, i) => {
-      const datos = datosPorEstudiante[i];
-      const guardado = guardados.find(g => g.estudiante === e.nombre);
-      const enviado = guardado && guardado.estado === 'Enviado';
-      return `
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4">
-        <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <p class="text-sm font-bold text-ink">${escapeHtml(e.nombre)}</p>
-          <div class="flex items-center gap-2">
-            ${enviado ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-turquesa/10 text-turquesa">Enviado</span>` : ''}
-            ${datos.nota !== null ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${colorCualitativa(datos.nota)}1A;color:${colorCualitativa(datos.nota)}">${datos.cualitativa}</span>` : ''}
+    let cuerpoInformesHtml = '';
+
+    if (!estudiantes.length) {
+      cuerpoInformesHtml = '<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 text-center text-sm text-slate2">Esta cohorte aún no tiene estudiantes matriculados.</div>';
+    } else if (esFuturo) {
+      cuerpoInformesHtml = '';
+    } else if (!esMesActivo) {
+      // Historial de meses cerrados: vista limpia y compacta con apertura de modal
+      cuerpoInformesHtml = `
+        <div class="space-y-3">
+          ${listaCompleta.map(item => {
+            const { e, datos, guardado, enviado } = item;
+            const iniciales = (e.nombre || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'E';
+            return `
+            <div onclick="abrirModalDetalleInforme('${escapeHtml((guardado && guardado.id) || '')}')" class="bg-white rounded-2xl border border-gray-100 shadow-soft p-4 flex items-center justify-between gap-3 hover:border-morado/30 hover:bg-morado/5 transition cursor-pointer group" title="Clic para ver reporte completo">
+              <div class="flex items-center gap-3 min-w-0">
+                <span class="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">${escapeHtml(iniciales)}</span>
+                <div class="min-w-0">
+                  <p class="text-sm font-bold text-ink truncate">${escapeHtml(e.nombre)}</p>
+                  <p class="text-xs text-slate2 truncate">Curso: <strong class="text-ink">${escapeHtml(cursoSel)}</strong> · Asist: <strong class="text-ink">${datos.pctAsistencia !== null ? datos.pctAsistencia + '%' : '—'}</strong> · Nota: <strong class="text-ink">${datos.nota !== null ? datos.nota.toFixed(1) : '—'}</strong></p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                ${enviado ? `<span class="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-turquesa/10 text-turquesa"><svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Enviado</span>` : `<span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">No radicado</span>`}
+                ${datos.nota !== null ? `<span class="hidden sm:inline-block text-xs font-bold px-2.5 py-1 rounded-full" style="background:${colorCualitativa(datos.nota)}1A;color:${colorCualitativa(datos.nota)}">${datos.cualitativa}</span>` : ''}
+                <button type="button" onclick="event.stopPropagation(); abrirModalDetalleInforme('${escapeHtml((guardado && guardado.id) || '')}')" class="px-3 py-1 rounded-full text-xs font-bold bg-morado/10 text-morado hover:bg-morado hover:text-white transition cursor-pointer">
+                  Ver reporte
+                </button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`;
+    } else if (todosEnviados) {
+      // Periodo activo: TODOS los informes de los estudiantes ya fueron enviados
+      cuerpoInformesHtml = `
+        <div class="bg-white rounded-2xl border border-emerald-200/90 shadow-soft p-8 sm:p-12 text-center flex flex-col items-center justify-center gap-4 mb-6">
+          <div class="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center ring-8 ring-emerald-50/60 shadow-inner">
+            <svg class="w-9 h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+            </svg>
           </div>
+          <div>
+            <h3 class="text-base sm:text-lg font-bold text-ink mb-1.5">Todos los informes enviados correctamente este mes</h3>
+            <p class="text-xs sm:text-sm text-slate2 max-w-lg mx-auto">
+              Has completado y enviado con éxito todos los informes de los estudiantes (${enviados.length} en total) para el periodo de <strong class="text-emerald-700">${escapeHtml(mesLabel(docenteInformesMes))}</strong> en la cohorte <strong class="text-ink">${escapeHtml(docenteInformesCohorte)}</strong>.
+            </p>
+          </div>
+          <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-100/70 text-emerald-800 text-xs font-semibold border border-emerald-200">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span>${enviados.length} de ${estudiantes.length} informes radicados en la administración</span>
+          </div>
+        </div>`;
+    } else {
+      // Periodo activo: Aún quedan estudiantes pendientes por informe
+      cuerpoInformesHtml = `
+        <div class="flex items-center justify-between gap-3 mb-5 flex-wrap bg-linear-to-r from-morado/5 to-turquesa/5 p-4 rounded-2xl border border-morado/15">
+          <div class="flex items-center gap-2.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+            <p class="text-xs sm:text-sm font-bold text-ink">
+              Informes pendientes por diligenciar: <span class="text-morado font-extrabold">${pendientes.length}</span> de ${estudiantes.length}
+            </p>
+          </div>
+          <span class="text-xs text-slate2">Al enviar el informe de un estudiante, su tarjeta se radicará y desaparecerá de esta lista.</span>
         </div>
-        <p class="text-xs text-slate2 mb-1">Curso: <strong class="text-ink">${escapeHtml(cursoSel)}</strong> · Asistencia: <strong class="text-ink">${datos.pctAsistencia !== null ? datos.pctAsistencia + '%' : 'Sin datos'}</strong> · Nota cuantitativa: <strong class="text-ink">${datos.nota !== null ? datos.nota.toFixed(1) : 'Sin datos'}</strong></p>
-        <p class="text-sm text-ink mb-3">${escapeHtml(datos.conclusion)}</p>
-        <label class="block text-xs font-semibold text-slate2 mb-1.5">Observaciones personales del docente</label>
-        <textarea id="obs_${e.id}" rows="2" placeholder="${esFuturo ? 'No disponible hasta que inicie el mes correspondiente.' : 'Ej. Durante las clases mostró mayor liderazgo y compromiso.'}" ${(!esPeriodoEditable || enviado) ? 'disabled' : `oninput="autoguardarBorradorInforme('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')"`} class="w-full rounded-xl border border-morado/25 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado ${(!esPeriodoEditable || enviado) ? 'bg-gray-50 text-slate2 cursor-not-allowed' : 'bg-morado/5'}">${escapeHtml(guardado ? guardado.observaciones : '')}</textarea>
-        <div class="flex items-center gap-3 mt-3">
-          ${enviado
-            ? `<span class="text-xs text-slate2">Informe enviado el ${fmtDate(guardado.fecha)} · ya no se puede editar</span>`
-            : (esFuturo
-                ? `<span class="text-xs text-amber-700 font-medium inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> No disponible para enviar hasta que inicie ${escapeHtml(mesLabel(docenteInformesMes))}</span>`
-                : (!esMesActivo
-                    ? `<span class="text-xs text-slate2 italic">Periodo anterior cerrado (historial)</span>`
-                    : `<button onclick="enviarInformeDocente('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-xs py-2.5 px-5 hover:bg-morado transition shadow-sm">Enviar informe</button>
-                       <span id="autoguardado_${e.id}" class="text-xs text-slate2"></span>`
-                  )
-              )
-          }
-        </div>
-      </div>`;
-    }).join('') : '<p class="text-sm text-slate2 text-center py-8">Esta cohorte aún no tiene estudiantes matriculados.</p>';
+
+        <div class="space-y-4">
+          ${pendientes.map(item => {
+            const { e, datos, guardado } = item;
+            const iniciales = (e.nombre || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'E';
+            return `
+            <div id="card_informe_${e.id}" class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 transition-all duration-300">
+              <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                <div class="flex items-center gap-2.5">
+                  <span class="w-8 h-8 rounded-full bg-morado/10 text-morado text-xs font-bold flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
+                  <p class="text-sm font-bold text-ink">${escapeHtml(e.nombre)}</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200/60">Pendiente de envío</span>
+                  ${datos.nota !== null ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${colorCualitativa(datos.nota)}1A;color:${colorCualitativa(datos.nota)}">${datos.cualitativa}</span>` : ''}
+                </div>
+              </div>
+              <p class="text-xs text-slate2 mb-2">Curso: <strong class="text-ink">${escapeHtml(cursoSel)}</strong> · Asistencia: <strong class="text-ink">${datos.pctAsistencia !== null ? datos.pctAsistencia + '%' : 'Sin datos'}</strong> · Nota cuantitativa: <strong class="text-ink">${datos.nota !== null ? datos.nota.toFixed(1) : 'Sin datos'}</strong></p>
+              <p class="text-sm text-ink mb-3 bg-slate-50/70 rounded-xl p-3 border border-gray-100">${escapeHtml(datos.conclusion)}</p>
+              <label class="block text-xs font-semibold text-slate2 mb-1.5" for="obs_${e.id}">Observaciones personales del docente</label>
+              <textarea id="obs_${e.id}" rows="2" placeholder="Ej. Durante las clases mostró mayor liderazgo y compromiso." oninput="autoguardarBorradorInforme('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')" class="w-full rounded-xl border border-morado/25 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado bg-morado/5">${escapeHtml(guardado ? guardado.observaciones : '')}</textarea>
+              <div class="flex items-center justify-between gap-3 mt-3 flex-wrap">
+                <div class="flex items-center gap-3">
+                  <button type="button" id="btn_enviar_${e.id}" onclick="enviarInformeDocente('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')" style="background: linear-gradient(135deg, #8B5CF6 0%, #1FC8C0 100%) !important; color: #ffffff !important;" class="cursor-pointer rounded-full px-5 py-2.5 text-xs font-bold text-white shadow-md hover:shadow-lg transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]">
+                    <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                    <span>Enviar informe</span>
+                  </button>
+                  <span id="autoguardado_${e.id}" class="text-xs text-slate2"></span>
+                </div>
+                <span class="text-[11px] text-slate2">Una vez enviado se archivará definitivamente</span>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    // Sección desplegable de informes ya enviados (disponible cuando hay enviados en periodo activo)
+    let seccionEnviadosHtml = '';
+    if (esMesActivo && enviados.length > 0) {
+      seccionEnviadosHtml = `
+        <div class="mt-8 pt-6 border-t border-gray-200">
+          <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-slate2">Informes ya enviados este mes (${enviados.length})</h4>
+            </div>
+            <button type="button" id="btn-toggle-informes-enviados" onclick="toggleVerInformesEnviadosDocente()" class="inline-flex items-center gap-1.5 text-xs font-semibold text-morado hover:text-morado/80 transition cursor-pointer">
+              <span>${docenteInformesVerEnviados ? 'Ocultar informes enviados' : 'Ver detalles de informes enviados'}</span>
+              <svg class="w-3.5 h-3.5 ${docenteInformesVerEnviados ? 'rotate-180' : ''} transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+          </div>
+          <div id="seccion-informes-enviados" class="${docenteInformesVerEnviados ? '' : 'hidden'} space-y-3">
+            ${enviados.map(item => {
+              const { e, datos, guardado } = item;
+              const iniciales = (e.nombre || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'E';
+              return `
+              <div onclick="abrirModalDetalleInforme('${escapeHtml((guardado && guardado.id) || '')}')" class="bg-gray-50/80 rounded-2xl border border-gray-200/80 p-3.5 sm:p-4 flex items-center justify-between gap-3 hover:border-morado/30 hover:bg-morado/5 transition cursor-pointer group" title="Clic para ver reporte">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <span class="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">${escapeHtml(iniciales)}</span>
+                  <div class="min-w-0">
+                    <p class="text-sm font-bold text-ink truncate">${escapeHtml(e.nombre)}</p>
+                    <p class="text-[11px] text-slate2 truncate">Asistencia: <strong class="text-ink">${datos.pctAsistencia !== null ? datos.pctAsistencia + '%' : '—'}</strong> · Nota: <strong class="text-ink">${datos.nota !== null ? datos.nota.toFixed(1) : '—'}</strong> · Radicado ${fmtDate(guardado ? guardado.fecha : '')}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Enviado</span>
+                  <button type="button" onclick="event.stopPropagation(); abrirModalDetalleInforme('${escapeHtml((guardado && guardado.id) || '')}')" class="px-3 py-1 rounded-full text-xs font-bold bg-morado/10 text-morado hover:bg-morado hover:text-white transition cursor-pointer">
+                    Ver reporte
+                  </button>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }
 
     document.getElementById('mount-t-informes').innerHTML = `
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
@@ -9142,7 +11433,8 @@ Fundación A+`;
         </div>
       </div>
       ${avisoPeriodoHtml}
-      ${tarjetas}`;
+      ${cuerpoInformesHtml}
+      ${seccionEnviadosHtml}`;
   }
 
   // async: 'usuarios' vía MySQL.
@@ -9167,8 +11459,8 @@ Fundación A+`;
 
     const curso = await cursoDeDocenteEnCohorte(doc.nombre, cohorteNombre, mes);
 
-    const datos = await generarDatosInformeEstudiante(est.nombre, cohorteNombre, curso, mes, doc.nombre);
-    const registros = await Store.list('informes_docente');
+    const datos = await generarDatosInformeEstudiante(est.nombre, cohorteNombre, curso, mesComparar, doc.nombre);
+    const registros = await Store.list('informes_docente', { forceRefresh: true });
 
     const idx = registros.findIndex(r => 
       r.docente === doc.nombre && 
@@ -9177,7 +11469,7 @@ Fundación A+`;
       (r.mes === mesComparar || (r.fecha && r.fecha.slice(0, 7) === mesComparar))
     );
 
-    if (idx >= 0 && registros[idx].estado === 'Enviado') return registros[idx];
+    if (idx >= 0 && registros[idx].estado === 'Enviado' && estadoFinal === 'Borrador') return registros[idx];
 
     const hoyStr = fechaHoyLocal();
     const fechaInforme = (mesComparar && mesComparar !== hoyStr.slice(0, 7)) ? `${mesComparar}-01` : hoyStr;
@@ -9241,6 +11533,17 @@ Fundación A+`;
     const est = (await Store.list('usuarios')).find(u => u.id === estudianteId);
     const confirmado = confirm(`¿Enviar el informe de ${est ? est.nombre : 'este estudiante'}?\n\nUna vez enviado quedará definitivo y no se podrá editar.`);
     if (!confirmado) return;
+
+    // Animación inmediata de salida de la tarjeta para una respuesta visual instantánea
+    const card = document.getElementById('card_informe_' + estudianteId);
+    if (card) {
+      card.style.transition = 'all 0.35s ease-out';
+      card.style.opacity = '0';
+      card.style.transform = 'translateY(-12px) scale(0.96)';
+      card.style.pointerEvents = 'none';
+      setTimeout(() => { try { card.remove(); } catch(e) {} }, 350);
+    }
+
     const registro = await guardarInformeDocenteInterno(estudianteId, cohorteNombre, mes, 'Enviado');
     if (registro) {
       if (typeof toast === 'function') toast('Informe enviado con éxito: ' + registro.estudiante, 'ok');
@@ -9270,8 +11573,8 @@ Fundación A+`;
         </div>
         <div class="flex items-center gap-3 flex-wrap">
           <div class="relative">
-            <input data-table="table-docente-pensum" oninput="TableManager.filter('table-docente-pensum', this.value)" type="text" placeholder="Buscar tema..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs sm:text-sm w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input data-table="table-docente-pensum" oninput="TableManager.filter('table-docente-pensum', this.value)" type="text" placeholder="Buscar tema..." class="rounded-xl border border-turquesa/30 bg-turquesa/5 pl-9 pr-3 py-1.5 text-xs sm:text-sm w-36 sm:w-44 text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-turquesa/30 focus:border-turquesa transition" />
+            <svg class="w-3.5 h-3.5 text-turquesa absolute left-3 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           </div>
           <button onclick="descargarPensumDocente()" ${items.length ? '' : 'disabled'} class="rounded-xl ${items.length ? 'bg-gradient-to-r from-morado to-turquesa text-white hover:opacity-95 shadow-sm' : 'bg-gray-100 text-slate2 cursor-not-allowed'} font-semibold text-xs sm:text-sm py-2 px-4 transition">Descargar PDF</button>
         </div>
@@ -9412,8 +11715,8 @@ Fundación A+`;
         <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <p class="text-xs font-bold uppercase tracking-wide text-slate2">Mis solicitudes</p>
           <div class="relative">
-            <input data-table="table-docente-pqr" oninput="TableManager.filter('table-docente-pqr', this.value)" type="text" placeholder="Buscar solicitud..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input data-table="table-docente-pqr" oninput="TableManager.filter('table-docente-pqr', this.value)" type="text" placeholder="Buscar solicitud..." class="rounded-xl border border-turquesa/30 bg-turquesa/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-turquesa/30 focus:border-turquesa transition" />
+            <svg class="w-3.5 h-3.5 text-turquesa absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           </div>
         </div>
         <div class="table-responsive-container">
@@ -9439,7 +11742,7 @@ Fundación A+`;
    * Panel Estudiante — módulos y seguimiento académico.
    */
 
-  const PANEL_COLOR_ESTUDIANTE = '#F5A623';
+  const PANEL_COLOR_ESTUDIANTE = '#D4AF37';
 
   const MENSAJES_MOTIVACIONALES = [
     'Cada tema que dominas hoy es un paso más cerca de tu meta. ¡Vas muy bien!',
@@ -9502,34 +11805,48 @@ Fundación A+`;
     });
     document.querySelectorAll('.panel-tab-s').forEach(t => {
       if (t.dataset.spanel !== panel) {
-        t.classList.remove('font-semibold');
-        t.style.borderLeftColor = 'transparent';
+        t.classList.remove('font-semibold', 'is-active');
+        t.style.borderLeftColor = '';
         t.style.background = '';
-        t.style.color = '#5B6472';
+        t.style.color = '';
       }
     });
 
     const content = document.getElementById('panel-s-' + panel);
     if (content) content.classList.remove('hidden');
     if (tab) {
-      tab.classList.add('font-semibold');
-      tab.style.borderLeftColor = PANEL_COLOR_ESTUDIANTE;
-      tab.style.background = PANEL_COLOR_ESTUDIANTE + '0D';
-      tab.style.color = '#14181F';
+      tab.classList.add('font-semibold', 'is-active');
+      tab.style.borderLeftColor = '';
+      tab.style.background = '';
+      tab.style.color = '';
     }
     panelActivoEstudiante = panel;
 
     const mount = document.getElementById('mount-s-' + panel);
-    if (mount && !mount.innerHTML.trim()) {
+    if (mount && (!mount.innerHTML.trim() || mount.innerHTML.includes('No se pudo cargar el módulo'))) {
       mount.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-12 text-center flex flex-col items-center justify-center gap-3">
-        <div class="w-8 h-8 border-3 border-morado/20 border-t-morado rounded-full animate-spin"></div>
+        <div class="w-8 h-8 border-3 border-[#F5A623]/25 border-t-[#F5A623] rounded-full animate-spin"></div>
         <p class="text-xs font-semibold text-slate2">Cargando...</p>
       </div>`;
     }
 
     if (RENDERERS_ESTUDIANTE[panel]) {
-      await RENDERERS_ESTUDIANTE[panel]();
-      initTablesEnPanel('panel-s-' + panel);
+      try {
+        await RENDERERS_ESTUDIANTE[panel]();
+        initTablesEnPanel('panel-s-' + panel);
+      } catch (err) {
+        console.error('[showPanelEstudiante] Error al cargar panel "' + panel + '":', err);
+        if (mount) {
+          mount.innerHTML = `<div class="bg-white rounded-2xl border border-coral/20 shadow-soft p-10 text-center flex flex-col items-center justify-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-coral/10 text-coral flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            </div>
+            <p class="text-sm font-bold text-ink">No se pudo cargar el módulo</p>
+            <p class="text-xs text-slate2 max-w-sm">${escapeHtml(err.message || 'Error inesperado al renderizar')}</p>
+            <button onclick="showPanelEstudiante('${panel}')" class="mt-2 px-4 py-1.5 rounded-full bg-morado text-white text-xs font-semibold hover:opacity-90 transition cursor-pointer">Reintentar</button>
+          </div>`;
+        }
+      }
     }
   }
 
@@ -9560,7 +11877,7 @@ Fundación A+`;
 
     const iniciales = escapeHtml((nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
     const avatarHtml = est.fotoUrl
-      ? `<img src="${escapeHtml(est.fotoUrl)}" alt="Foto de perfil" class="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-white/30" />`
+      ? `<img src="${escapeHtml(est.fotoUrl)}" alt="Foto de perfil" onclick="expandirFotoPerfil('${escapeHtml(est.fotoUrl)}', '${escapeHtml(nombre || '')}', 'Estudiante')" class="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-white/30 cursor-pointer hover:scale-105 transition hover:ring-2 hover:ring-white/50" title="Clic para ampliar foto" />`
       : `<div class="w-14 h-14 rounded-full grid place-items-center text-lg font-bold text-white shrink-0 bg-white/15 border-2 border-white/30">${iniciales}</div>`;
 
     document.getElementById('mount-s-resumen').innerHTML = `
@@ -9626,7 +11943,7 @@ Fundación A+`;
     const doc = currentEstudiante || {};
     const iniciales = escapeHtml((doc.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
     const avatarHtml = doc.fotoUrl
-      ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100" />`
+      ? `<img src="${escapeHtml(doc.fotoUrl)}" alt="Foto de perfil" onclick="expandirFotoPerfil('${escapeHtml(doc.fotoUrl)}', '${escapeHtml(doc.nombre || '')}', 'Estudiante')" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100 cursor-pointer hover:scale-105 transition hover:ring-2 hover:ring-amber-400/50 shadow-sm" title="Clic para ampliar foto" />`
       : `<div class="w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>`;
 
     document.getElementById('mount-s-perfil').innerHTML = `
@@ -9790,7 +12107,7 @@ Fundación A+`;
 
     const iniciales = escapeHtml((usuario.nombre || '?').split(' ').slice(0, 2).map(w => w[0]).join(''));
     const avatarHtml = usuario.fotoUrl
-      ? `<img src="${escapeHtml(usuario.fotoUrl)}" alt="Foto de perfil" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100" />`
+      ? `<img src="${escapeHtml(usuario.fotoUrl)}" alt="Foto de perfil" onclick="expandirFotoPerfil('${escapeHtml(usuario.fotoUrl)}', '${escapeHtml(usuario.nombre || '')}', '${escapeHtml(usuario.rol || '')}')" class="w-20 h-20 rounded-full object-cover shrink-0 border border-gray-100 cursor-pointer hover:scale-105 transition hover:ring-2 hover:ring-morado/40 shadow-sm" title="Clic para ampliar foto" />`
       : `<div class="w-20 h-20 rounded-full grid place-items-center text-2xl font-extrabold text-white shrink-0" style="background:linear-gradient(135deg,#1FC8C0,#8B5CF6)">${iniciales}</div>`;
 
     const esDocente = usuario.rol === 'Docente';
@@ -9857,8 +12174,21 @@ Fundación A+`;
 
     const nombre = estudianteNombre();
     const mod = await estudianteModulo();
-    const registros = [...(await Store.list('asistencia'))].filter(a => a.estudiante === nombre)
-      .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const rawRegistros = [...(await Store.list('asistencia', { forceRefresh: true }))].filter(a => a.estudiante === nombre);
+    const prioridad = { Presente: 1, Tarde: 2, Justificada: 3, Falla: 4 };
+    const porSesion = new Map();
+    rawRegistros.forEach(r => {
+      const key = r.sesionId ? ('ses_' + r.sesionId) : ('date_' + r.fecha + '_' + (r.materia || r.modulo));
+      if (!porSesion.has(key)) {
+        porSesion.set(key, r);
+      } else {
+        const actual = porSesion.get(key);
+        if ((prioridad[r.estado] || 99) < (prioridad[actual.estado] || 99)) {
+          porSesion.set(key, r);
+        }
+      }
+    });
+    const registros = Array.from(porSesion.values()).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
     const totales = { Presente: 0, Tarde: 0, Falla: 0 };
     registros.forEach(r => { if (totales[r.estado] !== undefined) totales[r.estado]++; });
     const pct = registros.length ? Math.round((totales.Presente / registros.length) * 100) : 100;
@@ -9900,7 +12230,6 @@ Fundación A+`;
         const estudiantesCohorte = await docenteEstudiantesDeCohorte(mod.nombre);
         sesionesHoy.forEach(sesion => sincronizarAusentesSesion(sesion, estudiantesCohorte));
         tarjetasSesiones = sesionesHoy.map(sesion => {
-          const info = estadoActualEstudianteSesion(sesion, nombre);
           const materiaLabel = sesion.materia || sesion.modulo;
           const yaReg = registros.find(r => r.sesionId === sesion.id);
           const mins = minutosTranscurridos(sesion.horaInicio);
@@ -9982,8 +12311,8 @@ Fundación A+`;
         <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <p class="text-xs font-bold uppercase tracking-wide text-slate2">Historial de asistencia</p>
           <div class="relative">
-            <input data-table="table-estudiante-asistencia" oninput="TableManager.filter('table-estudiante-asistencia', this.value)" type="text" placeholder="Buscar fecha o materia..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input data-table="table-estudiante-asistencia" oninput="TableManager.filter('table-estudiante-asistencia', this.value)" type="text" placeholder="Buscar fecha o materia..." class="rounded-xl border border-amber-400/40 bg-amber-50/60 pl-9 pr-3 py-1.5 text-xs w-44 text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-500 transition" />
+            <svg class="w-3.5 h-3.5 text-amber-500 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           </div>
         </div>
         <div class="table-responsive-container">
@@ -10186,8 +12515,8 @@ Fundación A+`;
         <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <p class="text-xs font-bold uppercase tracking-wide text-slate2">Temas / horario de tu módulo</p>
           <div class="relative">
-            <input data-table="table-estudiante-academico" oninput="TableManager.filter('table-estudiante-academico', this.value)" type="text" placeholder="Buscar tema o docente..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input data-table="table-estudiante-academico" oninput="TableManager.filter('table-estudiante-academico', this.value)" type="text" placeholder="Buscar tema o docente..." class="rounded-xl border border-amber-400/40 bg-amber-50/60 pl-9 pr-3 py-1.5 text-xs w-44 text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-500 transition" />
+            <svg class="w-3.5 h-3.5 text-amber-500 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           </div>
         </div>
         <div class="table-responsive-container">
@@ -10213,9 +12542,12 @@ Fundación A+`;
     if (!mod) return '';
     const registros = (await Store.list('horarios')).filter(h => h.cohorte === mod.nombre);
     if (!registros.length) {
-      return `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mt-6">
-        <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">Mi horario de clases</p>
-        <p class="text-sm text-slate2">Tu cohorte aún no tiene un horario publicado por el administrador.</p>
+      return `<div class="bg-white rounded-3xl border border-gray-100 shadow-soft p-8 mt-6 text-center">
+        <div class="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-2 border border-amber-200/60">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </div>
+        <p class="text-xs font-bold uppercase tracking-wider text-amber-600 mb-1">Mi horario de clases</p>
+        <p class="text-sm text-slate2">Tu cohorte aún no tiene un horario publicado por la administración.</p>
       </div>`;
     }
     const meses = registros.map(r => r.mes).sort();
@@ -10228,33 +12560,75 @@ Fundación A+`;
     const dias = registro.incluyeSabado ? DIAS_HORARIO : DIAS_HORARIO.slice(0, 5);
     const franjas = franjasActivas(registro);
 
+    const diasSemanaNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const diaHoy = diasSemanaNombres[(new Date()).getDay()];
+
     const columnas = dias.map(dia => {
+      const infoCamisa = getInfoCamisaDia(dia, mod.nombre);
       const franjasDelDia = franjas.filter(f => f.dia === dia).sort((a, b) => a.inicio.localeCompare(b.inicio));
+      const esHoy = dia === diaHoy;
+
       const tarjetas = franjasDelDia.map(f => `
-        <div class="rounded-xl border border-gray-100 p-3 mb-2" style="border-left:3px solid #1FC8C0">
-          <p class="text-xs font-bold text-ink leading-snug">${escapeHtml(f.curso || '—')}</p>
-          <p class="text-[11px] text-slate2 mt-1">${f.inicio}–${f.fin}</p>
-          <p class="text-[11px] text-slate2 mt-0.5">${nombrePersonaClicable(f.docente, 'Docente')}</p>
+        <div class="rounded-xl border border-gray-100 p-3 mb-2 shadow-2xs transition hover:shadow-soft" style="border-left: 4px solid ${infoCamisa.franjaBorder}; background: #ffffff;">
+          <div class="flex items-center justify-between gap-1 mb-1">
+            <p class="text-xs font-bold text-ink leading-snug">${escapeHtml(f.curso || '—')}</p>
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-50 border border-gray-200 text-slate2">${horasFranja(f)}h</span>
+          </div>
+          <p class="text-[11px] text-slate2 mt-1.5 font-medium flex items-center gap-1">
+            <svg class="w-3 h-3 text-slate2 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span>${f.inicio}–${f.fin}</span>
+          </p>
+          <div class="flex items-center gap-1 text-[11px] text-slate2 mt-1">
+            <svg class="w-3 h-3 text-slate2/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+            <span class="truncate">${nombrePersonaClicable(f.docente, 'Docente')}</span>
+          </div>
         </div>`).join('');
-      return `<div>
-        <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">${dia}</p>
-        ${tarjetas || '<p class="text-[11px] text-slate2/60 italic">Sin clases</p>'}
-      </div>`;
+
+      return `
+        <div class="rounded-2xl p-3 border border-gray-200/70 shadow-2xs flex flex-col ${esHoy ? 'ring-2 ring-amber-400/40' : ''}" style="background:${infoCamisa.franjaBg};">
+          <div class="flex flex-col gap-1.5 mb-2.5 pb-2 border-b border-gray-200/60">
+            <div class="flex items-center justify-between gap-1">
+              <div class="flex items-center gap-1.5">
+                ${esHoy ? '<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>' : ''}
+                <p class="text-xs font-extrabold uppercase tracking-wider text-ink">${dia}</p>
+              </div>
+              <span class="text-[10px] font-bold text-slate2 bg-white/85 px-2 py-0.5 rounded-full border border-gray-200/60 shadow-2xs">${franjasDelDia.length} clase${franjasDelDia.length === 1 ? '' : 'es'}</span>
+            </div>
+            <div class="w-full flex">
+              ${badgeCamisaDia(dia, mod.nombre)}
+            </div>
+          </div>
+          <div class="flex-1">
+            ${tarjetas || '<div class="p-3 text-center rounded-xl bg-white/70 border border-dashed border-gray-200 text-[11px] text-slate2/70 italic">Sin clases</div>'}
+          </div>
+        </div>`;
     }).join('');
 
-    return `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden mt-6">
-      <div class="px-6 pt-5 pb-3 flex items-center justify-between flex-wrap gap-3">
-        <p class="text-xs font-bold uppercase tracking-wide text-slate2">Mi horario de clases</p>
-        <select onchange="onCambiaMesEstudianteHorario(this.value)" class="rounded-xl border border-gray-200 px-3 py-1.5 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-oro/30">
-          ${meses.map(m => `<option value="${m}" ${m === estudianteHorarioMes ? 'selected' : ''}>${mesLabel(m)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="px-6 pb-6">
-        <div class="grid gap-3" style="grid-template-columns:repeat(${dias.length}, minmax(140px, 1fr))">
-          ${columnas}
+    return `
+      <div class="bg-white rounded-3xl border border-gray-100 shadow-soft overflow-hidden mt-6">
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3 bg-amber-50/20">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+              <p class="text-xs font-bold uppercase tracking-wider text-amber-600">Mi horario de clases</p>
+            </div>
+            <h3 class="text-sm font-extrabold text-ink mt-0.5">${escapeHtml(mod.nombre)} · ${franjas.length} franja${franjas.length === 1 ? '' : 's'}</h3>
+          </div>
+          <div class="flex items-center gap-3 flex-wrap">
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-slate2 font-semibold">Mes:</label>
+              <select onchange="onCambiaMesEstudianteHorario(this.value)" class="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs text-ink font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400/30">
+                ${meses.map(m => `<option value="${m}" ${m === estudianteHorarioMes ? 'selected' : ''}>${mesLabel(m)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>`;
+        <div class="p-4 sm:p-6 overflow-x-auto">
+          <div class="grid gap-3 min-w-[780px]" style="grid-template-columns:repeat(${dias.length}, minmax(160px, 1fr))">
+            ${columnas}
+          </div>
+        </div>
+      </div>`;
   }
 
   function onCambiaMesEstudianteHorario(mes) {
@@ -10276,8 +12650,8 @@ Fundación A+`;
           </div>
           <div class="flex items-center gap-3">
             <div class="relative">
-              <input data-table="table-estudiante-pensum" oninput="TableManager.filter('table-estudiante-pensum', this.value)" type="text" placeholder="Buscar tema..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input data-table="table-estudiante-pensum" oninput="TableManager.filter('table-estudiante-pensum', this.value)" type="text" placeholder="Buscar tema..." class="rounded-xl border border-amber-400/40 bg-amber-50/60 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-500 transition" />
+              <svg class="w-3.5 h-3.5 text-amber-500 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
             <button onclick="descargarPensumEstudiante()" class="text-xs font-semibold text-white bg-ink hover:bg-morado transition rounded-full px-4 py-2">Descargar PDF</button>
           </div>
@@ -10499,8 +12873,8 @@ Fundación A+`;
         <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <p class="text-xs font-bold uppercase tracking-wide text-slate2">Mis solicitudes</p>
           <div class="relative">
-            <input data-table="table-estudiante-pqr" oninput="TableManager.filter('table-estudiante-pqr', this.value)" type="text" placeholder="Buscar solicitud..." class="rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-            <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input data-table="table-estudiante-pqr" oninput="TableManager.filter('table-estudiante-pqr', this.value)" type="text" placeholder="Buscar solicitud..." class="rounded-xl border border-amber-400/40 bg-amber-50/60 pl-9 pr-3 py-1.5 text-xs w-36 sm:w-44 text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-500 transition" />
+            <svg class="w-3.5 h-3.5 text-amber-500 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           </div>
         </div>
         <div class="table-responsive-container">
@@ -10631,7 +13005,7 @@ Fundación A+`;
           renderContactoPublico(info.configuracion);
           actualizarBotonesPostular(info.configuracion);
         }
-        renderConstellation(info ? info.totalEstudiantes : 0);
+        renderConstellation(info ? info.totalEstudiantes : 0, info ? info.estudiantes : null);
         return;
       }
     } catch (e) {
@@ -10642,6 +13016,8 @@ Fundación A+`;
     actualizarBotonesPostular();
     renderConstellation();
   }
+  // Renderizado estelar inmediato sin esperar la red
+  renderConstellation();
   cargarInfoPublica();
 
   // Arranca el widget de chat (público + dentro de cualquier login), ver

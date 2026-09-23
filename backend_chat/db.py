@@ -29,6 +29,7 @@ import os
 import re
 import queue
 import threading
+import unicodedata
 from contextlib import contextmanager
 from typing import Optional
 
@@ -36,6 +37,15 @@ import bcrypt
 import pymysql
 import pymysql.cursors
 from dotenv import load_dotenv
+
+def _normalizar_texto(texto: str) -> str:
+    """Normaliza texto removiendo acentos/diacríticos y unificando 'cohorte'/'corte'."""
+    if not texto:
+        return ""
+    nfkd = unicodedata.normalize("NFKD", str(texto).lower())
+    sin_tildes = "".join(c for c in nfkd if not unicodedata.combining(c))
+    t_clean = re.sub(r"[^\w\s@.]", " ", sin_tildes)
+    return re.sub(r"\bcohortes?\b", "corte", t_clean).strip()
 
 # Se carga aquí también (además de en chat_backend.py) para que este
 # módulo lea las variables correctas sin importar desde dónde se importe
@@ -523,7 +533,7 @@ def calcular_semaforo(cur) -> list:
 # necesario para reconocer si mencionan a alguien de la fundación por
 # nombre, sin exponer ningún dato interno/privado.
 
-def contexto_publico_persona_mencionada(texto_ultimo_mensaje: str) -> str:
+def contexto_publico_persona_mencionada(texto_ultimo_mensaje: str = "", historial: Optional[list] = None) -> str:
     """Contexto en vivo para un visitante SIN sesión: siempre incluye el
     estado real del botón "Postular" (ver contexto_postulacion), que es
     la pregunta más común de un visitante externo (candidato) y antes NO
@@ -534,7 +544,7 @@ def contexto_publico_persona_mencionada(texto_ultimo_mensaje: str) -> str:
     IA le responda con un mensaje cálido — nunca datos privados."""
     with get_connection() as conn, conn.cursor() as cur:
         partes = [contexto_postulacion(cur)]
-        persona = detectar_persona_mencionada(cur, texto_ultimo_mensaje)
+        persona = detectar_persona_mencionada(cur, texto_ultimo_mensaje, historial=historial)
         if persona:
             partes.append(_bloque_perfil_persona_publico(persona))
         return "\n".join(p for p in partes if p)
@@ -654,7 +664,7 @@ def contexto_estudiante(email: str, nombre: str, cohorte: Optional[str] = None) 
         return " ".join(partes)
 
 
-def contexto_docente(email: str, nombre: str) -> str:
+def contexto_docente(email: str, nombre: str, texto_ultimo_mensaje: str = "", historial: Optional[list] = None) -> str:
     with get_connection() as conn, conn.cursor() as cur:
         partes = [f"El usuario es el docente {nombre}.", contexto_postulacion(cur)]
         cfg = obtener_configuracion(cur)
@@ -766,6 +776,47 @@ def contexto_docente(email: str, nombre: str) -> str:
             no_leidos = sum(1 for m in memos if not m["leido"])
             partes.append(f"Tiene {len(memos)} memorando(s) reciente(s), {no_leidos} sin leer.")
 
+        if texto_ultimo_mensaje or historial:
+            estudiante_mencionado = detectar_persona_mencionada(cur, texto_ultimo_mensaje, roles=("Estudiante",), historial=historial)
+            if estudiante_mencionado:
+                est_nom = estudiante_mencionado["nombre"]
+                est_coh = estudiante_mencionado.get("cohorte") or ""
+                desglose = desglose_notas_estudiante_cohorte(cur, est_nom, est_coh) if est_coh else []
+                prom = promedio_general_estudiante_cohorte(cur, est_nom, est_coh) if est_coh else None
+                cur.execute("SELECT estado, COUNT(*) AS n FROM asistencia WHERE estudiante = %s GROUP BY estado", (est_nom,))
+                asist_map = {r["estado"]: r["n"] for r in cur.fetchall()}
+                asist_tot = sum(asist_map.values())
+                asist_pct = round(asist_map.get("Presente", 0) / asist_tot * 100) if asist_tot else None
+
+                cur.execute(
+                    "SELECT materia, fecha, observaciones, cualitativa, conclusion FROM informes_docente WHERE estudiante = %s ORDER BY fecha DESC LIMIT 1",
+                    (est_nom,)
+                )
+                inf_prev = cur.fetchone()
+
+                partes.append(f"\n[ESTUDIANTE CONSULTADO: {est_nom}]")
+                partes.append(f"Cohorte: {est_coh}. Estado de matrícula: {estudiante_mencionado.get('estado', 'Activo')}.")
+                if prom is not None:
+                    partes.append(f"Promedio general en la cohorte: {prom:.1f}/10.0.")
+                if desglose:
+                    notas_str = "; ".join(f"{d['materia']}: {d['nota']}" for d in desglose if d.get('nota') is not None)
+                    if notas_str:
+                        partes.append(f"Calificaciones: {notas_str}.")
+                if asist_pct is not None:
+                    partes.append(f"Porcentaje de asistencia: {asist_pct}% ({asist_map.get('Presente', 0)} presentes de {asist_tot} sesiones).")
+                else:
+                    partes.append("Asistencia: Sin asistencias registradas aún.")
+                if inf_prev and inf_prev.get('observaciones'):
+                    partes.append(f"Observaciones registradas previamente: \"{inf_prev['observaciones']}\".")
+
+                partes.append(
+                    f"\n[INSTRUCCIÓN CRÍTICA DE APOYO AL DOCENTE PARA INFORME]:\n"
+                    f"El docente {nombre} te está preguntando o pidiendo sugerencias/redacción para el informe del estudiante {est_nom}. "
+                    f"Genera directamente una redacción de observaciones pedagógica, profesional, constructiva y motivadora, lista para que el docente la copie y pegue en la casilla 'Observaciones personales del docente' del informe mensual. "
+                    f"Básate en sus datos reales (Asistencia: {asist_pct if asist_pct is not None else '0'}%, Calificación: {prom if prom is not None else 'en proceso'}). "
+                    f"NUNCA digas que no dispones de información sobre {est_nom}, ya que tienes todos sus datos reales aquí."
+                )
+
         partes.append(
             "Trátalo como docente y responde solo sobre sus propias cohortes, materias, "
             "estudiantes, notas, asistencia, riesgo, PQR, agenda, pensum e informes a cargo "
@@ -829,20 +880,36 @@ def _nombres_cohortes(cur) -> list:
     return [r["nombre"] for r in cur.fetchall() if r.get("nombre")]
 
 
-def detectar_cohorte_mencionada(cur, texto: str) -> Optional[str]:
-    """Si el texto del último mensaje del usuario menciona el nombre de
-    alguna cohorte real (coincidencia de subcadena, sin distinguir
-    mayúsculas/acentos exactos), devuelve ese nombre tal como está guardado
-    en la base de datos. None si no menciona ninguna. Se usa para decidir
-    si vale la pena traer el detalle completo de informes de esa cohorte
-    (no se puede mandar el de TODAS las cohortes en cada mensaje, sería
-    carísimo en tokens y ruidoso para el modelo)."""
-    if not texto:
+def detectar_cohorte_mencionada(cur, texto: str, historial: Optional[list] = None) -> Optional[str]:
+    """Si el texto menciona alguna cohorte real (normalizando acentos y
+    variaciones 'cohorte'/'corte'), devuelve ese nombre tal como está guardado
+    en la BD. Si no, y se provee historial reciente, busca en mensajes anteriores
+    para resolver preguntas de seguimiento."""
+    cohortes = _nombres_cohortes(cur)
+    if not cohortes:
         return None
-    texto_norm = texto.lower()
-    for nombre in _nombres_cohortes(cur):
-        if nombre and nombre.lower() in texto_norm:
-            return nombre
+
+    def _buscar_en(txt: str) -> Optional[str]:
+        if not txt:
+            return None
+        tn = " " + _normalizar_texto(txt) + " "
+        for nombre in cohortes:
+            if not nombre:
+                continue
+            cn = _normalizar_texto(nombre)
+            if re.search(r"\b" + re.escape(cn) + r"\b", tn) or (cn in tn):
+                return nombre
+        return None
+
+    c = _buscar_en(texto)
+    if c:
+        return c
+
+    if historial:
+        for msg in reversed(historial):
+            c = _buscar_en(msg)
+            if c:
+                return c
     return None
 
 
@@ -850,47 +917,12 @@ _EMAIL_REGEX = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
 
 
 def detectar_persona_mencionada(
-    cur, texto: str, roles: tuple = ("Estudiante", "Docente"), permitir_email: bool = False
+    cur, texto: str, roles: tuple = ("Estudiante", "Docente"), permitir_email: bool = False, historial: Optional[list] = None
 ) -> Optional[dict]:
-    """Busca si el texto del último mensaje menciona a un Estudiante o
-    Docente real por nombre. Basta con que el texto contenga al menos las
-    dos primeras palabras del nombre completo (nombre + primer apellido) —
-    así funciona tanto si preguntan el nombre completo como si solo dan
-    "nombre y primer apellido" (el caso típico de un visitante externo).
-    Si varias personas coinciden con las mismas dos primeras palabras
-    (nombres repetidos), devuelve None en vez de arriesgarse a traer o
-    mostrar el perfil de la persona equivocada — es preferible que el chat
-    pida un dato adicional para desambiguar.
-
-    permitir_email=True (SOLO lo activan los contextos autenticados de
-    Superadmin/Coordinador — nunca el de visitante público) hace que
-    primero se intente reconocer un correo electrónico exacto en el texto
-    y buscar a la persona por ese correo. Una coincidencia por correo es
-    inequívoca por definición (es único en la tabla usuarios), así que no
-    aplica la regla de ambigüedad por nombre repetido. Si el texto trae un
-    correo pero no pertenece a nadie de los roles permitidos, se sigue
-    intentando por nombre más abajo (por si el mensaje también menciona un
-    nombre real en la misma frase).
-
-    Devuelve {"nombre": ..., "rol": ..., "cohorte": ..., "estado": ...} o
-    None si no hay una coincidencia única."""
-    if not texto:
-        return None
-    texto_norm = texto.lower()
-
-    if permitir_email:
-        coincidencia_email = _EMAIL_REGEX.search(texto)
-        if coincidencia_email:
-            placeholders_email = ",".join(["%s"] * len(roles))
-            cur.execute(
-                f"SELECT nombre, rol, cohorte, estado FROM usuarios "
-                f"WHERE LOWER(email) = %s AND rol IN ({placeholders_email})",
-                (coincidencia_email.group(0).lower(), *roles),
-            )
-            fila = cur.fetchone()
-            if fila:
-                return fila
-
+    """Busca si el texto (o el historial reciente si es una pregunta de seguimiento)
+    menciona a un Estudiante o Docente real por nombre o correo.
+    Soporta nombres completos, combinaciones de nombre+apellido, nombres únicos (como 'Freddy' o 'Jhonatan')
+    y normalización insensible a acentos/tildes."""
     placeholders = ",".join(["%s"] * len(roles))
     cur.execute(
         f"SELECT nombre, rol, cohorte, estado FROM usuarios WHERE rol IN ({placeholders})",
@@ -898,17 +930,82 @@ def detectar_persona_mencionada(
     )
     personas = cur.fetchall()
 
-    coincidencias = []
-    for p in personas:
-        palabras = (p["nombre"] or "").strip().split()
-        if len(palabras) < 2:
-            continue  # no hay "nombre y primer apellido" que exigir — se ignora para evitar falsos positivos de una sola palabra común
-        clave = " ".join(palabras[:2]).lower()
-        if clave in texto_norm:
-            coincidencias.append(p)
+    def _buscar_en(txt: str) -> Optional[dict]:
+        if not txt:
+            return None
+        if permitir_email:
+            coincidencia_email = _EMAIL_REGEX.search(txt)
+            if coincidencia_email:
+                em = coincidencia_email.group(0).lower()
+                for p in personas:
+                    cur.execute(
+                        f"SELECT nombre, rol, cohorte, estado FROM usuarios WHERE LOWER(email) = %s AND rol IN ({placeholders})",
+                        (em, *roles),
+                    )
+                    fila = cur.fetchone()
+                    if fila:
+                        return fila
 
-    if len(coincidencias) == 1:
-        return coincidencias[0]
+        tn = " " + _normalizar_texto(txt) + " "
+        matches = []
+        for p in personas:
+            p_nombre_norm = _normalizar_texto(p["nombre"] or "")
+            palabras = p_nombre_norm.split()
+            if not palabras:
+                continue
+            score = 0
+            # 1. Coincidencia completa
+            if re.search(r"\b" + re.escape(p_nombre_norm) + r"\b", tn) or (p_nombre_norm in tn):
+                score = 100
+            else:
+                # 2. Parejas de palabras (ej. 'Yohan Prado', 'Andres Cuesta', etc.)
+                for i in range(len(palabras)):
+                    for j in range(i + 1, len(palabras)):
+                        pareja = f"{palabras[i]} {palabras[j]}"
+                        if re.search(r"\b" + re.escape(pareja) + r"\b", tn):
+                            score = max(score, 80)
+                # 3. Palabra única si tiene al menos 4 letras
+                if score == 0:
+                    for w in palabras:
+                        if len(w) >= 4 and re.search(r"\b" + re.escape(w) + r"\b", tn):
+                            score = max(score, 40)
+            if score > 0:
+                matches.append((score, p))
+
+        matches.sort(key=lambda x: x[0], reverse=True)
+        if matches:
+            top_score = matches[0][0]
+            top = [m[1] for m in matches if m[0] == top_score]
+            if len(top) == 1:
+                return top[0]
+            exactos = [c for c in top if _normalizar_texto(c["nombre"]) in tn]
+            if len(exactos) == 1:
+                return exactos[0]
+            return top[0]
+        return None
+
+    # Primero buscar en el mensaje actual
+    p = _buscar_en(texto)
+    if p:
+        return p
+
+    # Si el mensaje actual explícitamente pregunta por una persona desconocida (ej. "sobre Kelly", "quién es Pedro"),
+    # no caer erróneamente en la persona del turno anterior
+    tn_actual = _normalizar_texto(texto)
+    preguntando_nueva_persona = bool(
+        re.search(r"\b(sobre|quien es|quién es|y de|conoces a|sabes de|que sabes de|qué sabes de)\s+[a-z]{3,}", tn_actual)
+    )
+    if preguntando_nueva_persona:
+        return None
+
+    # Si es pregunta de seguimiento ("¿cuáles son sus notas?", "¿cómo va?", "¿y qué materias?"),
+    # buscar en el historial de mensajes recientes hacia atrás
+    if historial:
+        for msg in reversed(historial):
+            p = _buscar_en(msg)
+            if p:
+                return p
+
     return None
 
 
@@ -1250,7 +1347,7 @@ def _bloque_modulo(cur, codigo: str, cohorte_mencionada: Optional[str] = None) -
     return ""
 
 
-def contexto_administracion(email: str, nombre: str, usuario_id: Optional[str], texto_ultimo_mensaje: str = "") -> str:
+def contexto_administracion(email: str, nombre: str, usuario_id: Optional[str], texto_ultimo_mensaje: str = "", historial: Optional[list] = None) -> str:
     """Coordinador/Administrador: SOLO ve los módulos que su perfil tiene
     habilitados con 'ver' (igual que el sidebar y que
     construirResumenModulosParaChat(currentAdminUser) en app.js)."""
@@ -1261,7 +1358,7 @@ def contexto_administracion(email: str, nombre: str, usuario_id: Optional[str], 
         total_cohortes = cur.fetchone()["n"]
 
         permisos = _perfiles_de_usuario(cur, usuario_id) if usuario_id else {}
-        cohorte_mencionada = detectar_cohorte_mencionada(cur, texto_ultimo_mensaje)
+        cohorte_mencionada = detectar_cohorte_mencionada(cur, texto_ultimo_mensaje, historial=historial)
         partes_modulos = [
             _bloque_modulo(cur, codigo, cohorte_mencionada if codigo in _CODIGOS_CON_DETALLE_COHORTE else None)
             for codigo in _PANEL_A_ETIQUETA
@@ -1281,7 +1378,7 @@ def contexto_administracion(email: str, nombre: str, usuario_id: Optional[str], 
         # Superadmin, ya que consultar personas no está gobernado por los
         # permisos de panel de arriba (es una consulta transversal, como el
         # buscador de usuarios que ya tiene en su propio panel de Usuarios).
-        persona = detectar_persona_mencionada(cur, texto_ultimo_mensaje, permitir_email=True)
+        persona = detectar_persona_mencionada(cur, texto_ultimo_mensaje, permitir_email=True, historial=historial)
         bloque_persona = _bloque_perfil_persona_administracion(cur, persona) if persona else ""
 
         postulacion = contexto_postulacion(cur)
@@ -1302,7 +1399,7 @@ def contexto_administracion(email: str, nombre: str, usuario_id: Optional[str], 
     )
 
 
-def contexto_superadmin(texto_ultimo_mensaje: str = "") -> str:
+def contexto_superadmin(texto_ultimo_mensaje: str = "", historial: Optional[list] = None) -> str:
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("SELECT rol, COUNT(*) AS n FROM usuarios GROUP BY rol")
         conteos = {r["rol"]: r["n"] for r in cur.fetchall()}
@@ -1310,13 +1407,13 @@ def contexto_superadmin(texto_ultimo_mensaje: str = "") -> str:
         cur.execute("SELECT COUNT(*) AS n FROM modulos")
         total_cohortes = cur.fetchone()["n"]
 
-        cohorte_mencionada = detectar_cohorte_mencionada(cur, texto_ultimo_mensaje)
+        cohorte_mencionada = detectar_cohorte_mencionada(cur, texto_ultimo_mensaje, historial=historial)
         bloques_modulos = "\n".join(
             _bloque_modulo(cur, codigo, cohorte_mencionada if codigo in _CODIGOS_CON_DETALLE_COHORTE else None)
             for codigo in _PANEL_A_ETIQUETA
         )
 
-        persona = detectar_persona_mencionada(cur, texto_ultimo_mensaje, permitir_email=True)
+        persona = detectar_persona_mencionada(cur, texto_ultimo_mensaje, permitir_email=True, historial=historial)
         bloque_persona = _bloque_perfil_persona_administracion(cur, persona) if persona else ""
 
         postulacion = contexto_postulacion(cur)

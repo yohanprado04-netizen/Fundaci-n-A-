@@ -79,56 +79,147 @@ body {
     html { scroll-behavior: auto; }
   }
 
-  /* --- Mensajes por nodo (tooltip propio, más legible que el title nativo) ---
-     El punto visual mide 4–14px y además se mueve por el drift; para que el
-     hover sea usable, el propio .node--msg agranda su área real de hit con
-     un pseudo-elemento invisible (::before) más grande que el punto, sin
-     cambiar el tamaño visual (el color/tamaño visual sigue en el div real).
-     ::after sigue siendo la burbuja del mensaje. */
-  .node--msg { cursor: pointer; outline: none; }
-  .node--msg::before {
+  /* --- Nodos interactivos y constelación de experiencias múltiples --- */
+  .constellation { position: relative; width: 100%; height: 100%; }
+  .constellation-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .constellation-line {
+    stroke-linecap: round;
+    transition: stroke-opacity 0.5s ease;
+  }
+
+  .node {
+    position: absolute;
+    border-radius: 9999px;
+    opacity: 0;
+    transform: scale(0);
+    animation: nodeIn 0.6s cubic-bezier(.2,.8,.2,1) forwards;
+    z-index: 2;
+    transition: transform 0.35s cubic-bezier(.34,1.56,.64,1), box-shadow 0.35s ease;
+  }
+
+  .node--student {
+    cursor: pointer;
+    z-index: 6;
+  }
+  .node--student::before {
     content: '';
     position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 28px;
-    height: 28px;
-    transform: translate(-50%, -50%);
+    inset: -10px;
     border-radius: 9999px;
     background: transparent;
   }
-  .node--msg::after {
-    content: attr(data-msg);
+  /* Anillo de pulsación continua para nodos con estudiantes */
+  .node--student .node-pulse-ring {
     position: absolute;
-    left: 50%;
-    bottom: calc(100% + 10px);
-    transform: translateX(-50%) translateY(4px);
-    width: max-content;
-    max-width: 220px;
-    background: #14181F;
-    color: #fff;
-    font-size: 11px;
-    line-height: 1.4;
-    font-family: 'Inter', sans-serif;
-    padding: 8px 10px;
-    border-radius: 8px;
-    box-shadow: 0 6px 18px rgba(20,24,31,0.25);
+    inset: -4px;
+    border-radius: 9999px;
+    border: 1.5px solid currentColor;
     opacity: 0;
     pointer-events: none;
-    transition: opacity .18s ease, transform .18s ease;
+    animation: studentPulse 3.5s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+  }
+  @keyframes studentPulse {
+    0% { transform: scale(0.85); opacity: 0.85; }
+    50% { transform: scale(2.2); opacity: 0; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+  .node--student:hover,
+  .node--student.is-active {
+    transform: scale(1.65) !important;
+    box-shadow: 0 0 16px 2px currentColor;
+    z-index: 20;
+  }
+
+  /* Tarjetas flotantes simultáneas de experiencias (Glassmorphism) */
+  /* Tarjetas flotantes simultáneas de experiencias (Glassmorphism) */
+  .constellation-card {
+    position: absolute;
     z-index: 30;
-    text-align: left;
+    width: 215px;
+    max-width: calc(100% - 16px);
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    border-radius: 1.15rem;
+    padding: 0.75rem 0.85rem;
+    box-shadow: 0 12px 26px -6px rgba(20, 24, 31, 0.16), 0 4px 10px -2px rgba(20, 24, 31, 0.08);
+    pointer-events: auto;
+    cursor: pointer;
+    user-select: none;
+    transition: opacity 0.35s cubic-bezier(.2,.8,.2,1), transform 0.35s cubic-bezier(.2,.8,.2,1), width 0.3s cubic-bezier(.2,.8,.2,1), box-shadow 0.3s ease;
+    animation: expCardIn 0.4s cubic-bezier(.34, 1.56, .64, 1) forwards;
   }
-  .node--msg:hover::after, .node--msg:focus-visible::after {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
+  .constellation-card:hover {
+    box-shadow: 0 16px 32px -6px rgba(20, 24, 31, 0.22), 0 0 0 1.5px rgba(139, 92, 246, 0.35);
   }
-  /* Móvil sin hover: tap mantiene el foco y muestra el tooltip */
-  @media (hover: none) {
-    .node--msg:active::after {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
+  .constellation-card.is-leaving {
+    opacity: 0;
+    transform: scale(0.82) translateY(5px);
+    pointer-events: none;
+  }
+  /* Modo expandido para leer el mensaje completo sin cortes */
+  .constellation-card.is-expanded {
+    width: 275px;
+    max-width: calc(100% - 20px);
+    z-index: 60 !important;
+    cursor: default;
+    box-shadow: 0 20px 42px -8px rgba(20, 24, 31, 0.28), 0 0 0 2px rgba(31, 200, 192, 0.6);
+    transform: scale(1.03) !important;
+  }
+  .constellation-card.is-expanded .card-message-text {
+    -webkit-line-clamp: unset !important;
+    display: block !important;
+    max-height: 160px;
+    overflow-y: auto;
+    padding-right: 4px;
+    user-select: text;
+  }
+  .constellation-card.is-expanded .card-hint-read {
+    display: none !important;
+  }
+  .constellation-card .card-close-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+  }
+  .constellation-card:hover .card-close-btn,
+  .constellation-card.is-expanded .card-close-btn {
+    display: flex !important;
+  }
+  /* Custom thin scrollbar for long messages */
+  .card-message-text::-webkit-scrollbar {
+    width: 4px;
+  }
+  .card-message-text::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.03);
+    border-radius: 4px;
+  }
+  .card-message-text::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.4);
+    border-radius: 4px;
+  }
+  @keyframes expCardIn {
+    0% { opacity: 0; transform: scale(0.7) translateY(8px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .constellation-card-arrow {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    transform: rotate(45deg);
+    pointer-events: none;
   }
 
   .nav-link { position: relative; }
@@ -177,36 +268,151 @@ body {
     color: rgba(255,255,255,0.35);
     letter-spacing: 0.08em;
   }
-  .superadmin-tab {
-    border: none !important;
-    font-weight: 500;
-    color: rgba(255,255,255,0.62);
+  /* ==========================================================================
+     SISTEMA DE SIDEBAR DINÁMICO POR ROL — FUNDACIÓN A+
+     (Administradores: Morado #6A1B9A | Docentes: Verde Turquesa #008080 | Estudiantes: Dorado Ámbar #D4AF37)
+     ========================================================================== */
+
+  /* 1. Administradores / Superadmin — Morado */
+  .sidebar-role-admin {
+    --role-primary: #6A1B9A;
+    --role-primary-hover: #54147B;
+    --role-primary-subtle: rgba(106, 27, 154, 0.07);
+    --role-primary-active: rgba(106, 27, 154, 0.12);
+    --role-primary-border: rgba(106, 27, 154, 0.28);
+    --role-primary-text: #4A148C;
+    --role-primary-dot: #8B5CF6;
+    --role-badge-bg: rgba(106, 27, 154, 0.08);
+    --role-badge-border: rgba(106, 27, 154, 0.22);
+    --role-badge-text: #6A1B9A;
+  }
+
+  /* 2. Docentes — Verde Turquesa */
+  .sidebar-role-docente {
+    --role-primary: #008080;
+    --role-primary-hover: #006666;
+    --role-primary-subtle: rgba(0, 128, 128, 0.07);
+    --role-primary-active: rgba(0, 128, 128, 0.12);
+    --role-primary-border: rgba(0, 128, 128, 0.28);
+    --role-primary-text: #004D40;
+    --role-primary-dot: #00A896;
+    --role-badge-bg: rgba(0, 128, 128, 0.08);
+    --role-badge-border: rgba(0, 128, 128, 0.22);
+    --role-badge-text: #008080;
+  }
+
+  /* 3. Estudiantes — Dorado Ámbar */
+  .sidebar-role-estudiante {
+    --role-primary: #D4AF37;
+    --role-primary-hover: #B8860B;
+    --role-primary-subtle: rgba(212, 175, 55, 0.08);
+    --role-primary-active: rgba(212, 175, 55, 0.14);
+    --role-primary-border: rgba(212, 175, 55, 0.32);
+    --role-primary-text: #8C6207;
+    --role-primary-dot: #FFBF00;
+    --role-badge-bg: rgba(212, 175, 55, 0.09);
+    --role-badge-border: rgba(212, 175, 55, 0.25);
+    --role-badge-text: #996515;
+  }
+
+  /* Badge de identidad en el encabezado del Sidebar */
+  .role-sidebar .role-sidebar-badge {
+    background: var(--role-badge-bg);
+    border: 1px solid var(--role-badge-border);
+    color: var(--role-badge-text);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    transition: all 0.25s ease;
+  }
+  .role-sidebar .role-sidebar-badge .role-dot {
+    background: var(--role-primary-dot);
+  }
+
+  /* Títulos de sección */
+  .role-sidebar .role-sidebar-section-title {
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #717D90;
+    padding: 0 1rem;
+    margin-bottom: 0.625rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .role-sidebar .role-sidebar-section-title.is-highlight {
+    color: var(--role-primary);
+  }
+  .role-sidebar .role-sidebar-section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  /* Botones / Pestañas de navegación del Sidebar */
+  .role-sidebar .panel-tab,
+  .role-sidebar .panel-tab-t,
+  .role-sidebar .panel-tab-s {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 0.7rem;
-    position: relative;
+    width: 100%;
+    text-align: left;
+    border-radius: 0.875rem;
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #5B6472;
+    border-left: 3.5px solid transparent;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+    user-select: none;
   }
-  .superadmin-tab svg { flex-shrink: 0; opacity: 0.85; }
-  .superadmin-tab:hover:not(.superadmin-tab-active) {
-    background: rgba(255,255,255,0.06);
-    color: #fff;
+
+  .role-sidebar .panel-tab svg,
+  .role-sidebar .panel-tab-t svg,
+  .role-sidebar .panel-tab-s svg {
+    flex-shrink: 0;
+    color: #717D90;
+    transition: all 0.2s ease;
   }
+
+  /* Hover */
+  .role-sidebar .panel-tab:hover,
+  .role-sidebar .panel-tab-t:hover,
+  .role-sidebar .panel-tab-s:hover {
+    background: var(--role-primary-subtle) !important;
+    color: var(--role-primary-text) !important;
+  }
+  .role-sidebar .panel-tab:hover svg,
+  .role-sidebar .panel-tab-t:hover svg,
+  .role-sidebar .panel-tab-s:hover svg {
+    color: var(--role-primary) !important;
+    transform: translateX(1.5px);
+  }
+
+  /* Estado Activo */
+  .role-sidebar .panel-tab.is-active,
+  .role-sidebar .panel-tab-t.is-active,
+  .role-sidebar .panel-tab-s.is-active,
+  .role-sidebar .panel-tab.superadmin-tab-active,
   .superadmin-tab-active {
-    background: rgba(139, 92, 246, 0.18) !important;
-    color: #fff !important;
-    font-weight: 600 !important;
+    background: var(--role-primary-active, rgba(106, 27, 154, 0.12)) !important;
+    color: var(--role-primary-text, #4A148C) !important;
+    font-weight: 700 !important;
+    border-left-color: var(--role-primary, #6A1B9A) !important;
+    box-shadow: 0 1px 4px -1px rgba(0, 0, 0, 0.04);
   }
-  .superadmin-tab-active::before {
-    content: '';
-    position: absolute;
-    left: -0.5rem; top: 50%; transform: translateY(-50%);
-    width: 3px; height: 60%;
-    border-radius: 9999px;
-    background: linear-gradient(180deg, #1FC8C0, #8B5CF6);
-  }
-  .admin-sidebar-footer {
-    border-top: 1px solid rgba(255,255,255,0.08);
-    color: rgba(255,255,255,0.4);
+
+  .role-sidebar .panel-tab.is-active svg,
+  .role-sidebar .panel-tab-t.is-active svg,
+  .role-sidebar .panel-tab-s.is-active svg,
+  .role-sidebar .panel-tab.superadmin-tab-active svg,
+  .superadmin-tab-active svg {
+    color: var(--role-primary, #6A1B9A) !important;
+    opacity: 1 !important;
   }
 
   /* ---------- Topbar ---------- */
