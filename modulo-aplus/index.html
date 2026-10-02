@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Portafolio de proyectos y oportunidades de negocio, con las iniciativas A+ de alto impacto financiero y prioridad estratégica destacadas." />
+  <meta name="theme-color" content="#F8FAFC" />
+  <title>Proyectos y Oportunidades A+</title>
+  <!-- Favicon inline (sin peticiones de red adicionales). -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23D4A017' d='M12 2.5l2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.5l-5.9 3.2 1.2-6.6-4.8-4.6 6.6-.9z'/%3E%3C/svg%3E" />
+
+  <link rel="stylesheet" href="css/aplus-module.css" />
+
+  <!-- Solo para la página independiente: el módulo no estiliza nada fuera de #aplus-module-root. -->
+  <style>
+    html, body { margin: 0; min-height: 100%; background: #F8FAFC; }
+  </style>
+</head>
+<body>
+  <main>
+    <!-- =====================================================================
+         Raíz del módulo. Para incrustarlo en la plataforma principal, copia
+         este bloque completo (desde #aplus-module-root hasta su cierre).
+         ===================================================================== -->
+    <div id="aplus-module-root">
+      <section class="aplus-module" aria-labelledby="aplus-title">
+
+        <header class="aplus-header">
+          <p class="aplus-header__eyebrow">Portafolio estratégico</p>
+          <h1 class="aplus-header__title" id="aplus-title">Proyectos y Oportunidades A+</h1>
+          <p class="aplus-header__subtitle">
+            Explora las iniciativas de la compañía y descubre las oportunidades
+            <strong>A+</strong>: proyectos de alto impacto financiero y retorno de inversión
+            con prioridad estratégica inmediata.
+          </p>
+          <ul class="aplus-metrics" aria-label="Resumen del portafolio" data-aplus-metrics></ul>
+        </header>
+
+        <noscript>
+          <p class="aplus-noscript">
+            Este módulo necesita JavaScript para mostrar los proyectos y oportunidades.
+            Actívalo en tu navegador y recarga la página.
+          </p>
+        </noscript>
+
+        <div data-aplus-filters></div>
+        <div data-aplus-list></div>
+      </section>
+
+      <!-- Contenedor del modal de detalle (se monta dentro del root para heredar los estilos). -->
+      <div data-aplus-modal-host></div>
+    </div>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
