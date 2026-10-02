@@ -1,64 +1,98 @@
-# Reescribe /api/<entidad> hacia api/index.php/<entidad>, y /api/auth/login
-# hacia api/auth.php — así el frontend llama a rutas limpias en vez de
-# api/index.php?entidad=usuarios.
-#
-# CORREGIDO: auth.php e index.php ahora viven en la subcarpeta api/, no
-# sueltos en esta misma carpeta — por eso las reglas de abajo apuntan a
-# api/auth.php y api/index.php (con el prefijo api/ delante), no a
-# auth.php/index.php a secas. Este .htaccess va en la RAÍZ del proyecto
-# (fundacion-api/), al mismo nivel que index.html, app.js y la carpeta api/.
+# ==============================================================================
+# .htaccess - Fundación A+ (https://fundacionamas.org.co/)
+# Optimización de Rendimiento, Seguridad, SEO Técnico y Enrutamiento API
+# ==============================================================================
 
-RewriteEngine On
+# Codificación predeterminada para evitar problemas de caracteres en crawlers
+AddDefaultCharset UTF-8
 
-# /api/auth/login -> api/auth.php (login)
-RewriteRule ^api/auth/login/?$ api/auth.php [L,QSA]
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest .manifest .json
+  AddType image/svg+xml .svg .svgz
+</IfModule>
 
-# /api/<entidad> -> api/index.php?entidad=<entidad>
-# Se pasa por query string (?entidad=...), no por PATH_INFO: PATH_INFO
-# depende de que el hosting tenga AcceptPathInfo activado, lo cual no
-# todos los shared hosting garantizan — el query string funciona en
-# cualquier servidor Apache con mod_rewrite, sin configuración adicional.
-RewriteRule ^api/([a-zA-Z_]+)/?$ api/index.php?entidad=$1 [L,QSA]
+# ------------------------------------------------------------------------------
+# 1. Enrutamiento y Reescritura de API (PHP)
+# ------------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
 
-# Nunca servir el certificado SSL de la base de datos por HTTP directo —
-# solo lo necesita PHP internamente (ver api/config.php), un visitante no
-# debería poder descargarlo abriendo la URL a mano.
-<FilesMatch "\.pem$">
-    Require all denied
-</FilesMatch>
+  # /api/auth/login -> api/auth.php (login)
+  RewriteRule ^api/auth/login/?$ api/auth.php [L,QSA]
 
-# Igual con el log de diagnóstico temporal (ver reemplazarTablaUsuarios en
-# api/index.php) — nunca debe poder abrirse desde el navegador, aunque de
-# todas formas se borra en cuanto se resuelva el bug que está investigando.
-<FilesMatch "\.log$">
-    Require all denied
-</FilesMatch>
+  # /api/auth/logout -> api/auth.php?action=logout (logout)
+  RewriteRule ^api/auth/logout/?$ api/auth.php?action=logout [L,QSA]
 
-# ── Optimización de red: compresión GZIP/Deflate ──────────────────────
+  # /api/<entidad> -> api/index.php?entidad=<entidad>
+  RewriteRule ^api/([a-zA-Z0-9_]+)/?$ api/index.php?entidad=$1 [L,QSA]
+</IfModule>
+
+# ------------------------------------------------------------------------------
+# 2. Compresión GZIP / Deflate (Acelera carga para Google PageSpeed & Core Web Vitals)
+# ------------------------------------------------------------------------------
 <IfModule mod_deflate.c>
-    AddOutputFilterByType DEFLATE text/html
-    AddOutputFilterByType DEFLATE text/plain
-    AddOutputFilterByType DEFLATE text/xml
-    AddOutputFilterByType DEFLATE text/css
-    AddOutputFilterByType DEFLATE text/javascript
-    AddOutputFilterByType DEFLATE application/javascript
-    AddOutputFilterByType DEFLATE application/x-javascript
-    AddOutputFilterByType DEFLATE application/json
-    AddOutputFilterByType DEFLATE application/xml
-    AddOutputFilterByType DEFLATE application/rss+xml
-    AddOutputFilterByType DEFLATE font/ttf
-    AddOutputFilterByType DEFLATE font/otf
-    AddOutputFilterByType DEFLATE image/svg+xml
+  AddOutputFilterByType DEFLATE text/html
+  AddOutputFilterByType DEFLATE text/plain
+  AddOutputFilterByType DEFLATE text/css
+  AddOutputFilterByType DEFLATE text/javascript
+  AddOutputFilterByType DEFLATE application/javascript
+  AddOutputFilterByType DEFLATE application/x-javascript
+  AddOutputFilterByType DEFLATE application/json
+  AddOutputFilterByType DEFLATE application/xml
+  AddOutputFilterByType DEFLATE text/xml
+  AddOutputFilterByType DEFLATE application/rss+xml
+  AddOutputFilterByType DEFLATE font/ttf
+  AddOutputFilterByType DEFLATE font/otf
+  AddOutputFilterByType DEFLATE image/svg+xml
 </IfModule>
 
-# ── Caché estática para activos invariables (imágenes/fuentes) ────────
+# ------------------------------------------------------------------------------
+# 3. Caché del Navegador (Expires Headers - Core Web Vitals Optimization)
+# ------------------------------------------------------------------------------
 <IfModule mod_expires.c>
-    ExpiresActive On
-    ExpiresByType image/jpeg "access plus 1 month"
-    ExpiresByType image/png "access plus 1 month"
-    ExpiresByType image/gif "access plus 1 month"
-    ExpiresByType image/svg+xml "access plus 1 month"
-    ExpiresByType image/webp "access plus 1 month"
-    ExpiresByType image/x-icon "access plus 1 year"
+  ExpiresActive On
+  ExpiresDefault "access plus 1 month"
+
+  # HTML: revalidar rápido
+  ExpiresByType text/html "access plus 1 hour"
+
+  # Hojas de estilo y scripts
+  ExpiresByType text/css "access plus 1 week"
+  ExpiresByType application/javascript "access plus 1 week"
+  ExpiresByType text/javascript "access plus 1 week"
+
+  # Imágenes e Iconos
+  ExpiresByType image/jpeg "access plus 1 month"
+  ExpiresByType image/png "access plus 1 month"
+  ExpiresByType image/webp "access plus 1 month"
+  ExpiresByType image/gif "access plus 1 month"
+  ExpiresByType image/svg+xml "access plus 1 month"
+  ExpiresByType image/x-icon "access plus 1 year"
+
+  # Manifiesto y Fuentes
+  ExpiresByType application/manifest+json "access plus 1 week"
+  ExpiresByType font/woff2 "access plus 1 year"
 </IfModule>
 
+# ------------------------------------------------------------------------------
+# 4. Encabezados de Seguridad y Protección (Seguridad valorada por Google Search)
+# ------------------------------------------------------------------------------
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# ------------------------------------------------------------------------------
+# 5. Bloqueo de Archivos Sensibles y Privados para Crawlers y Visitantes
+# ------------------------------------------------------------------------------
+<FilesMatch "^\.env|^\.git|composer\.(json|lock)|package(-lock)?\.json|\.pem$|\.log$|\.sql$|\.bat$|\.ps1$|\.py$">
+  Require all denied
+  Order allow,deny
+  Deny from all
+</FilesMatch>
+
+# Bloquear acceso web directo a carpetas internas de scripts y temporales
+<IfModule mod_rewrite.c>
+  RewriteRule ^(scratch|backend_chat)(/|$) - [F,L]
+</IfModule>

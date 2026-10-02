@@ -4,13 +4,25 @@
  * Sin dependencias externas ni Composer — usa sockets nativos con OpenSSL.
  */
 
+/**
+ * Sanea cabeceras de correo contra inyección de comandos CRLF (CWE-93 / CWE-113).
+ */
+function sanitizarCabeceraMail(string $valor): string {
+    return str_replace(["\r", "\n"], '', trim($valor));
+}
+
 function enviarCorreoSmtp(array $config, string $destinatarioEmail, string $destinatarioNombre, string $asunto, string $cuerpoTexto, string $cuerpoHtml = ''): array {
+    // Saneamiento estricto contra CRLF / SMTP Command Injection
+    $destinatarioEmail = sanitizarCabeceraMail($destinatarioEmail);
+    $destinatarioNombre = sanitizarCabeceraMail($destinatarioNombre);
+    $asunto = sanitizarCabeceraMail($asunto);
+
     $host = trim($config['smtp_host'] ?? 'smtp.gmail.com');
     $port = (int)($config['smtp_port'] ?? 465);
     $user = trim($config['smtp_user'] ?? '');
     $pass = trim($config['smtp_pass'] ?? '');
-    $from = trim($config['smtp_from'] ?? ($user ?: 'info@fundacionamas.org.co'));
-    $fromName = trim($config['smtp_from_name'] ?? 'Fundación A+');
+    $from = str_replace(["\r", "\n"], '', trim($config['smtp_from'] ?? ($user ?: 'info@fundacionamas.org.co')));
+    $fromName = str_replace(["\r", "\n"], '', trim($config['smtp_from_name'] ?? 'Fundación A+'));
     $secure = strtolower(trim($config['smtp_secure'] ?? 'ssl'));
 
     if (!$host || !$user || !$pass) {

@@ -105,11 +105,14 @@ import db
 
 app = FastAPI(title="Chat Backend Fundación A+ (Groq & Gemini + MySQL)")
 
-# CORS: orígenes permitidos
+# CORS: orígenes autorizados con soporte para credenciales seguras
+ALLOWED_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|([a-zA-Z0-9-]+\.)*fundacionamas\.org\.co)(:\d+)?$"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -233,7 +236,7 @@ def construir_system_prompt(hay_sesion: bool) -> str:
         "REGLAS FUNDAMENTALES DE RESPUESTA Y COMPORTAMIENTO:\n"
         "- RESPONDE DIRECTO Y SIN DESVÍOS: Si te preguntan por una persona, habla exclusivamente de esa persona. "
         "Si te preguntan por notas, habla de las notas. NUNCA agregues párrafos promocionales no pedidos sobre "
-        "aliados estratégicos (como Blend360), programas formativos o voluntariado si el usuario no los solicitó.\n"
+        "aliados estratégicos, programas formativos o voluntariado si el usuario no los solicitó.\n"
         "- PERSONAS NO REGISTRADAS O DESCONOCIDAS: Si la persona consultada (o el nombre mencionado) NO figura en el "
         "CONTEXTO EN VIVO de la fundación ni en la información oficial, responde con sencillez, amabilidad y brevedad "
         "indicando que dicha persona no figura en los registros de la Fundación A+. NUNCA inventes con quién se relaciona, su rol "
@@ -317,18 +320,19 @@ def construir_system_prompt(hay_sesion: bool) -> str:
         "  * FASE 1 — FUNDAMENTACIÓN: la formación de base, a cargo de la propia Fundación A+. Se "
         "selecciona y capacita intensivamente a un primer grupo de líderes comunitarios en habilidades "
         "técnicas y de facilitación.\n"
-        "  * FASE 2 — PROFUNDIZACIÓN: la etapa avanzada, que la fundación desarrolla junto a BLEND360. "
-        "Lleva la formación a un nivel más profundo y conectado con la industria tecnológica.\n"
-        "- Si preguntan por la Fase 1, explica que es la fundamentación y que la hace la Fundación A+.\n"
-        "- Si preguntan por la Fase 2, explica que es la profundización y que se hace con Blend360.\n"
+        "  * FASE 2 — PROFUNDIZACIÓN: la etapa avanzada, que la fundación desarrolla junto a su red de aliados "
+        "estratégicos y empresas del sector tecnológico internacional. Lleva la formación a un nivel más profundo "
+        "y conectado con los estándares y oportunidades de la industria.\n"
+        "- Si preguntan por la Fase 1, explica que es la fundamentación y que la realiza la Fundación A+.\n"
+        "- Si preguntan por la Fase 2, explica que es la profundización avanzada y que se desarrolla con aliados estratégicos de la industria tecnológica.\n"
         "- No inventes duraciones, fechas, cupos, contenidos específicos ni requisitos de ninguna de las "
         "dos fases: si te preguntan un detalle así y no lo tienes, dilo con honestidad y remite al "
         "WhatsApp o al correo de la fundación.\n\n"
 
-        "ALIADO PRINCIPAL — BLEND360:\n"
-        "- ÚNICAMENTE si preguntan explícitamente por el aliado principal, el aliado estratégico o con quién trabaja la fundación, "
-        "la respuesta es BLEND360 (firma tecnológica especializada en datos e inteligencia artificial, aliada de la Fase 2 del TrAIning). "
-        "NO menciones a Blend360 de forma espontánea en respuestas sobre personas, notas, saludos ni otros temas no relacionados.\n"
+        "ALIADOS ESTRATÉGICOS:\n"
+        "- Si preguntan por los aliados o con quiénes colabora la fundación, explica que cuenta con una red abierta de aliados estratégicos, organizaciones y empresas de la industria tecnológica internacional que aportan mentoría, profundización y empleabilidad. "
+        "NUNCA presentes a una sola empresa como el 'aliado principal' exclusivo. Puedes señalar que diversas firmas y entidades (entre ellas Blend360 y otros colaboradores del ecosistema digital) forman parte de los aliados que suman capacidades al programa.\n"
+        "- NO menciones aliados de forma espontánea en respuestas sobre personas, notas, saludos ni otros temas no relacionados.\n"
     )
 
     if not hay_sesion:

@@ -1,0 +1,44 @@
+# ==============================================================================
+# Robots.txt - Fundación A+ (https://fundacionamas.org.co/)
+# Plataforma y Portal de Aprendizaje - TrAIning de 100 a 1000+
+# ==============================================================================
+
+User-agent: *
+Allow: /
+Allow: /index.html
+Allow: /logo.jpg
+Allow: /style.css
+Allow: /app.js
+Allow: /manifest.json
+
+# Proteger directorios de lógica privada, APIs de servidor y configuraciones
+Disallow: /api/
+Disallow: /backend_chat/
+Disallow: /tests/
+Disallow: /.git/
+Disallow: /.env
+
+# Rastrear explícitamente para motores de búsqueda principales
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /logo.jpg
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: Yandex
+Allow: /
+
+# Declaración oficial del mapa del sitio XML
+Sitemap: https://fundacionamas.org.co/sitemap.xml

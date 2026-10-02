@@ -35,24 +35,51 @@ if (!ob_get_level()) {
     }
 }
 
-// CORS: mientras desarrollas en local (ej. Live Server en 127.0.0.1:5500
-// hablando con este backend en otro puerto), el navegador exige estos
-// headers para permitir la petición cruzada. En producción, si sirves
-// app.js y este backend desde el MISMO dominio, esto sigue funcionando
-// sin problema (los headers de más no estorban).
-header('Access-Control-Allow-Origin: *');
+// ── CORS y Cabeceras de Seguridad ────────────────────────────────────
+$origen = $_SERVER['HTTP_ORIGIN'] ?? '';
+$origenPermitido = false;
+
+if ($origen) {
+    $parsed = parse_url($origen);
+    $host = $parsed['host'] ?? '';
+
+    // Validar si el host está en la lista blanca (localhost, IPs privadas LAN o dominios institucionales)
+    if (
+        $host === 'localhost' ||
+        $host === '127.0.0.1' ||
+        preg_match('/^192\.168\.\d{1,3}\.\d{1,3}$/', $host) ||
+        preg_match('/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/', $host) ||
+        preg_match('/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/', $host) ||
+        preg_match('/(^|\.)fundacionamas\.org\.co$/i', $host) ||
+        (isset($_SERVER['HTTP_HOST']) && $host === parse_url('http://' . $_SERVER['HTTP_HOST'], PHP_URL_HOST))
+    ) {
+        $origenPermitido = true;
+    }
+}
+
+if ($origenPermitido) {
+    header("Access-Control-Allow-Origin: {$origen}");
+    header('Access-Control-Allow-Credentials: true');
+    header('Vary: Origin');
+}
+
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, Cache-Control, Pragma');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, Cache-Control, Pragma, X-Requested-With');
+header('Access-Control-Max-Age: 86400');
+
+// Cabeceras de endurecimiento de seguridad HTTP (Hardening)
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Permissions-Policy: camera=(self), microphone=(), geolocation=()');
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 date_default_timezone_set('America/Bogota');
 
-// Una petición OPTIONS es el "preflight" que manda el navegador antes de
-// la petición real (POST/PUT/DELETE) para confirmar que el CORS de arriba
-// la permite — no lleva datos, solo se responde 200 y se corta aquí.
+// Responder de inmediato a peticiones preflight (OPTIONS)
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
-    http_response_code(200);
+    http_response_code(204);
     exit;
 }
 
@@ -101,6 +128,15 @@ function responderJson($datos, int $codigoHttp = 200): void {
  */
 function responderError(string $mensaje, int $codigoHttp = 400): void {
     responderJson(['error' => $mensaje], $codigoHttp);
+}
+
+/**
+ * Responde un error seguro al cliente y registra los detalles reales en el log interno
+ * del servidor, evitando la fuga de nombres de tablas, columnas y rutas (CWE-209).
+ */
+function responderErrorDb(Exception $e, string $accion = 'procesar la solicitud'): void {
+    error_log("[DB_ERROR] " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+    responderError("No se pudo $accion. Intenta nuevamente o contacta al administrador.", 500);
 }
 
 /**

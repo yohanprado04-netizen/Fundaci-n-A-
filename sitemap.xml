@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+
+  <!-- Página principal / Inicio -->
+  <url>
+    <loc>https://fundacionamas.org.co/</loc>
+    <lastmod>2026-09-24</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://fundacionamas.org.co/logo.jpg</image:loc>
+      <image:title>Fundación A+ - Training de 100 a 1000+</image:title>
+      <image:caption>Plataforma y Portal de Formación en Inteligencia Artificial y Programación en Quibdó, Chocó</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Sección: Programa TrAIning de 100 a 1000+ -->
+  <url>
+    <loc>https://fundacionamas.org.co/#programa</loc>
+    <lastmod>2026-09-24</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Sección: Portal de Aprendizaje y Gestión -->
+  <url>
+    <loc>https://fundacionamas.org.co/#calificaciones</loc>
+    <lastmod>2026-09-24</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Sección: Convocatoria y Postulaciones -->
+  <url>
+    <loc>https://fundacionamas.org.co/#inicio</loc>
+    <lastmod>2026-09-24</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+</urlset>

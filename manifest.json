@@ -1,0 +1,25 @@
+{
+  "name": "Fundación A+ | TrAIning de 100 a 1000+",
+  "short_name": "Fundación A+",
+  "description": "Portal y Plataforma de Aprendizaje y Gestión en Inteligencia Artificial y Programación de la Fundación A+ en Quibdó, Chocó.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1FC8C0",
+  "lang": "es",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

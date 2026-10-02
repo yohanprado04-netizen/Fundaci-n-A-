@@ -85,6 +85,7 @@ async function apiLogin(email, password) {
   try {
     const resp = await fetch(API_BASE_URL + '/api/auth/login', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
@@ -103,9 +104,26 @@ async function apiLogin(email, password) {
 }
 
 /**
+ * Cierra la sesión en el servidor (elimina la cookie HttpOnly de sesión)
+ * y limpia el token en memoria y en localStorage.
+ */
+async function apiLogout() {
+  try {
+    await fetch(API_BASE_URL + '/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: authToken ? { Authorization: 'Bearer ' + authToken } : {}
+    });
+  } catch (e) {
+    // Si falla la red, de todos modos purgamos el token en el cliente
+  }
+  setAuthToken(null);
+}
+
+/**
  * Petición autenticada genérica hacia /api/<entidad> — agrega el header
- * Authorization con el token guardado. Si el backend responde 401
- * (sesión inválida/expirada), limpia el token local.
+ * Authorization con el token guardado y envía la cookie HttpOnly de sesión.
+ * Si el backend responde 401 (sesión inválida/expirada), limpia el token local.
  */
 async function apiFetch(entidad, opciones = {}) {
   const headers = Object.assign(
@@ -122,7 +140,7 @@ async function apiFetch(entidad, opciones = {}) {
   if (metodo === 'GET') {
     url += (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
   }
-  const resp = await fetch(url, Object.assign({ cache: 'no-store' }, opciones, { headers }));
+  const resp = await fetch(url, Object.assign({ cache: 'no-store', credentials: 'include' }, opciones, { headers }));
   if (resp.status === 401) setAuthToken(null);
   const datos = await resp.json().catch(() => ({}));
   if (!resp.ok) {

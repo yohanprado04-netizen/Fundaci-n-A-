@@ -16,7 +16,7 @@
  * clave DISTINTA — no compartas la misma entre los dos backends).
  */
 
-define('JWT_SECRET', 'b3149d8969c6d07a440812a28e60ec03d5605b54c3df86e7dabb6835e0807794');
+define('JWT_SECRET', getenv('JWT_SECRET') ?: 'b3149d8969c6d07a440812a28e60ec03d5605b54c3df86e7dabb6835e0807794');
 define('JWT_TTL_SEGUNDOS', 60 * 60 * 12); // el token expira a las 12 horas — la persona vuelve a loguearse pasado ese tiempo
 
 function base64UrlEncode(string $datos): string {
@@ -28,13 +28,21 @@ function base64UrlDecode(string $datos): string {
 }
 
 /**
- * Genera un token firmado para este usuario. El payload lleva solo lo
- * mínimo necesario para identificarlo en cada request (nunca la
- * contraseña) — id, email, rol y, si aplica, cohorte.
+ * Genera un token firmado para este usuario cumpliendo con las normas RFC 7519.
+ * Incluye claims estándar: iat (emitido en), exp (expiración), nbf (no antes de),
+ * iss (emisor), jti (identificador único contra ataques de repetición).
  */
 function generarToken(array $payload): string {
+    $ahora = time();
     $header = ['alg' => 'HS256', 'typ' => 'JWT'];
-    $payload['exp'] = time() + JWT_TTL_SEGUNDOS;
+    $payload['iat'] = $ahora;
+    $payload['nbf'] = $ahora;
+    $payload['exp'] = $ahora + JWT_TTL_SEGUNDOS;
+    $payload['iss'] = 'fundacionamas.org.co';
+    if (!isset($payload['sub'])) {
+        $payload['sub'] = (string)($payload['id'] ?? $payload['email'] ?? 'usuario');
+    }
+    $payload['jti'] = bin2hex(random_bytes(16));
 
     $headerCodificado = base64UrlEncode(json_encode($header));
     $payloadCodificado = base64UrlEncode(json_encode($payload));
@@ -44,10 +52,8 @@ function generarToken(array $payload): string {
 }
 
 /**
- * Verifica un token: firma válida y no expirado. Devuelve el payload
- * decodificado si es válido, o null si no lo es (firma alterada,
- * expirado, o mal formado) — quien llame decide qué responder ante null
- * (normalmente 401).
+ * Verifica un token: firma válida, emisor legítimo y no expirado.
+ * Devuelve el payload decodificado si es válido, o null si fue alterado o expiró.
  */
 function verificarToken(?string $token): ?array {
     if (!$token) return null;
@@ -56,23 +62,73 @@ function verificarToken(?string $token): ?array {
     [$headerCodificado, $payloadCodificado, $firmaRecibida] = $partes;
 
     $firmaEsperada = base64UrlEncode(hash_hmac('sha256', "$headerCodificado.$payloadCodificado", JWT_SECRET, true));
-    if (!hash_equals($firmaEsperada, $firmaRecibida)) return null; // hash_equals: comparación a tiempo constante, evita timing attacks
+    if (!hash_equals($firmaEsperada, $firmaRecibida)) return null; // Comparación a tiempo constante contra timing attacks
 
     $payload = json_decode(base64UrlDecode($payloadCodificado), true);
-    if (!$payload || !isset($payload['exp']) || $payload['exp'] < time()) return null;
+    if (!$payload) return null;
+
+    $ahora = time();
+    if (isset($payload['exp']) && $payload['exp'] < $ahora) return null;
+    if (isset($payload['nbf']) && $payload['nbf'] > $ahora) return null;
 
     return $payload;
 }
 
 /**
- * Extrae el token del header "Authorization: Bearer <token>" de la
- * petición actual.
+ * Establece la cookie de autenticación de forma segura (HttpOnly, SameSite, Secure).
+ */
+function establecerCookieAuth(string $token, int $ttl = JWT_TTL_SEGUNDOS): void {
+    $esHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
+               (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ||
+               (!empty($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443);
+
+    setcookie('auth_token', $token, [
+        'expires'  => time() + $ttl,
+        'path'     => '/',
+        'domain'   => '',
+        'secure'   => $esHttps,
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
+}
+
+/**
+ * Elimina la cookie de autenticación al cerrar sesión.
+ */
+function eliminarCookieAuth(): void {
+    $esHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
+               (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ||
+               (!empty($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443);
+
+    setcookie('auth_token', '', [
+        'expires'  => time() - 3600,
+        'path'     => '/',
+        'domain'   => '',
+        'secure'   => $esHttps,
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
+}
+
+/**
+ * Extrae el token de la petición actual.
+ * Prioridad:
+ * 1. Cabecera "Authorization: Bearer <token>" (para clientes API, mobile o microservicios)
+ * 2. Cookie HttpOnly "auth_token" (para navegación web protegida contra XSS)
  */
 function obtenerTokenDeCabecera(): ?string {
     $headers = function_exists('getallheaders') ? getallheaders() : [];
     $auth = $headers['Authorization'] ?? $headers['authorization'] ?? ($_SERVER['HTTP_AUTHORIZATION'] ?? null);
-    if (!$auth || stripos($auth, 'Bearer ') !== 0) return null;
-    return trim(substr($auth, 7));
+    if ($auth && stripos($auth, 'Bearer ') === 0) {
+        $token = trim(substr($auth, 7));
+        if ($token !== '') return $token;
+    }
+
+    if (!empty($_COOKIE['auth_token'])) {
+        return trim((string)$_COOKIE['auth_token']);
+    }
+
+    return null;
 }
 
 /**

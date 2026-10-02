@@ -23,6 +23,14 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/middleware.php';
 
+// ── Soporte de Logout (cierre de sesión seguro y eliminación de cookie) ──
+$accion = $_GET['action'] ?? '';
+$uri = $_SERVER['REQUEST_URI'] ?? '';
+if ($accion === 'logout' || stripos($uri, '/logout') !== false) {
+    eliminarCookieAuth();
+    responderJson(['ok' => true, 'mensaje' => 'Sesión cerrada correctamente.']);
+}
+
 $metodo = $_SERVER['REQUEST_METHOD'];
 if ($metodo !== 'POST') {
     responderError('Método no permitido. Usa POST.', 405);
@@ -62,6 +70,70 @@ function passwordValidaConMigracion(PDO $pdo, string $password, string $hashGuar
     return false;
 }
 
+// ── Rate Limiting contra ataques de fuerza bruta ──────────────────────
+function inicializarTablaRateLimit(PDO $pdo): void {
+    static $hecho = false;
+    if ($hecho) return;
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS rate_limits (
+            clave VARCHAR(128) PRIMARY KEY,
+            intentos INT NOT NULL DEFAULT 1,
+            bloqueado_hasta INT NOT NULL DEFAULT 0,
+            ultimo_intento INT NOT NULL DEFAULT 0
+        ) ENGINE=InnoDB");
+        $hecho = true;
+    } catch (Exception $e) {}
+}
+
+function verificarRateLimit(PDO $pdo, string $clave, int $maxIntentos = 5, int $segundosVentana = 300): void {
+    inicializarTablaRateLimit($pdo);
+    $ahora = time();
+    try {
+        $stmt = $pdo->prepare("SELECT intentos, bloqueado_hasta, ultimo_intento FROM rate_limits WHERE clave = ? LIMIT 1");
+        $stmt->execute([$clave]);
+        $row = $stmt->fetch();
+        if ($row) {
+            if ($row['bloqueado_hasta'] > $ahora) {
+                $minutos = ceil(($row['bloqueado_hasta'] - $ahora) / 60);
+                responderError("Demasiados intentos fallidos. Tu acceso está temporalmente bloqueado por $minutos minuto(s).", 429);
+            }
+            if (($ahora - $row['ultimo_intento']) > $segundosVentana) {
+                $stmtReset = $pdo->prepare("UPDATE rate_limits SET intentos = 0, bloqueado_hasta = 0, ultimo_intento = ? WHERE clave = ?");
+                $stmtReset->execute([$ahora, $clave]);
+            }
+        }
+    } catch (Exception $e) {}
+}
+
+function registrarIntentoFallido(PDO $pdo, string $clave, int $maxIntentos = 5, int $segundosBloqueo = 600): void {
+    inicializarTablaRateLimit($pdo);
+    $ahora = time();
+    try {
+        $stmt = $pdo->prepare("INSERT INTO rate_limits (clave, intentos, bloqueado_hasta, ultimo_intento)
+            VALUES (?, 1, 0, ?)
+            ON DUPLICATE KEY UPDATE
+                intentos = intentos + 1,
+                bloqueado_hasta = IF(intentos >= ?, ? + ?, bloqueado_hasta),
+                ultimo_intento = ?");
+        $stmt->execute([$clave, $ahora, $maxIntentos, $ahora, $segundosBloqueo, $ahora]);
+    } catch (Exception $e) {}
+}
+
+function limpiarRateLimit(PDO $pdo, string $clave): void {
+    try {
+        $stmt = $pdo->prepare("DELETE FROM rate_limits WHERE clave = ?");
+        $stmt->execute([$clave]);
+    } catch (Exception $e) {}
+}
+
+$ipCliente = obtenerIpCliente();
+$claveIp = 'ip:' . $ipCliente;
+$claveEmail = 'email:' . $email;
+
+// Verificar bloqueos activos por IP o cuenta
+verificarRateLimit($pdo, $claveIp);
+verificarRateLimit($pdo, $claveEmail);
+
 // ── 1) Superadmin (tabla de una sola fila, sin relación con `usuarios`) ──
 $stmt = $pdo->prepare('SELECT id, email, password FROM superadmin_credentials WHERE LOWER(email) = ? LIMIT 1');
 $stmt->execute([$email]);
@@ -69,10 +141,15 @@ $superadmin = $stmt->fetch();
 
 if ($superadmin) {
     if (passwordValidaConMigracion($pdo, $password, $superadmin['password'], 'superadmin_credentials', 'id', $superadmin['id'])) {
+        limpiarRateLimit($pdo, $claveIp);
+        limpiarRateLimit($pdo, $claveEmail);
         $token = generarToken(['email' => $superadmin['email'], 'rol' => 'Superadmin']);
+        establecerCookieAuth($token);
         registrarAuditoriaLogin($pdo, 'Exitoso', $email, 'Superadmin');
         responderJson(['token' => $token, 'usuario' => ['email' => $superadmin['email'], 'nombre' => 'Superadmin', 'rol' => 'Superadmin']]);
     }
+    registrarIntentoFallido($pdo, $claveIp);
+    registrarIntentoFallido($pdo, $claveEmail);
     registrarAuditoriaLogin($pdo, 'Fallido', $email, 'Superadmin');
     responderError('Credenciales incorrectas.', 401);
 }
@@ -89,6 +166,8 @@ $stmt->execute([$email]);
 $usuario = $stmt->fetch();
 
 if (!$usuario) {
+    registrarIntentoFallido($pdo, $claveIp);
+    registrarIntentoFallido($pdo, $claveEmail);
     responderError('Credenciales incorrectas.', 401);
 }
 
@@ -96,15 +175,20 @@ if ($usuario['estado_registro'] === 'Pendiente') {
     responderError('Tu registro está pendiente de aprobación por el Superadmin. Te avisaremos cuando puedas ingresar.', 403);
 }
 
-if ($usuario['estado'] !== 'Activo') {
+$estado = strtolower(trim((string)($usuario['estado'] ?? '')));
+if ($estado !== 'activo') {
     responderError('Tu cuenta está inactiva. Contacta al Superadmin.', 403);
 }
 
 if (!passwordValidaConMigracion($pdo, $password, $usuario['password'], 'usuarios', 'id', $usuario['id'])) {
+    registrarIntentoFallido($pdo, $claveIp);
+    registrarIntentoFallido($pdo, $claveEmail);
     registrarAuditoriaLogin($pdo, 'Fallido', $email, $usuario['rol']);
     responderError('Credenciales incorrectas.', 401);
 }
 
+limpiarRateLimit($pdo, $claveIp);
+limpiarRateLimit($pdo, $claveEmail);
 registrarAuditoriaLogin($pdo, 'Exitoso', $email, $usuario['rol']);
 
 // Los perfiles asignados (usuario_perfiles) NO estaban en el objeto que
@@ -122,6 +206,7 @@ $token = generarToken([
     'id' => $usuario['id'], 'email' => $usuario['email'], 'rol' => $usuario['rol'],
     'cohorte' => $usuario['cohorte'],
 ]);
+establecerCookieAuth($token);
 responderJson([
     'token' => $token,
     'usuario' => [

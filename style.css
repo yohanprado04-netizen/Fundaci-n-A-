@@ -1,9 +1,61 @@
-html { scroll-behavior: smooth; }
+:root {
+  /* Shadcn Clinical Blueprint / Frosted Paper Monochromatic Tokens */
+  --color-canvas: #f5f5f5;
+  --color-paper: #ffffff;
+  --color-surface-alt: #fafafa;
+  --color-ink: #0a0a0a;
+  --color-mid-gray: #737373;
+  --color-hairline: #e5e5e5;
+  --color-ember: #e7000b;
+
+  /* Fundación brand colors as refined accents */
+  --brand-morado: #8B5CF6;
+  --brand-turquesa: #1FC8C0;
+  --brand-oro: #F5A623;
+  --brand-coral: #EF4444;
+
+  /* Normalized Radii */
+  --radius-card: 24px;
+  --radius-interactive: 18px;
+  --radius-nested: 10px;
+  --radius-sm: 6px;
+
+  /* Quiet hairline card shadows */
+  --shadow-hairline-card: 0 0 0 1px rgba(23, 23, 23, 0.05), 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+  --shadow-hairline-elevated: 0 0 0 1px rgba(23, 23, 23, 0.08), 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --shadow-hairline-popover: 0 0 0 1px rgba(23, 23, 23, 0.08), 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+}
+
+html { 
+  scroll-behavior: smooth; 
+  -webkit-text-size-adjust: 100%;
+}
 body { 
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; 
+  font-family: 'Geist', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; 
   -webkit-font-smoothing: antialiased; 
   -moz-osx-font-smoothing: grayscale;
-  color: #14181F;
+  color: var(--color-ink, #0a0a0a);
+  overscroll-behavior-y: none;
+}
+
+/* Headings with tight engineered tracking */
+h1, h2, h3, h4, .module-section-header h2, .module-section-header h3 {
+  letter-spacing: -0.025em;
+  font-family: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+}
+h1 { letter-spacing: -0.035em; }
+
+/* Frosted paper canvas for role dashboard views */
+#dashboardView,
+#teacherView,
+#studentView {
+  background-color: var(--color-canvas, #f5f5f5) !important;
+}
+
+/* Optimización táctil Mobile-First: elimina el retraso de 300ms en pantallas táctiles */
+button, a, input, select, textarea, [role="button"], label {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
@@ -228,7 +280,7 @@ body {
     position: absolute;
     left: 0; bottom: -6px;
     height: 2px; width: 0%;
-    background: linear-gradient(90deg, #1FC8C0, #8B5CF6, #F0455C);
+    background: linear-gradient(90deg, #1FC8C0, #8B5CF6, #EC4899);
     transition: width .25s ease;
   }
   .nav-link:hover::after, .nav-link.active::after { width: 100%; }
@@ -243,12 +295,48 @@ body {
     position: absolute; inset: 0;
     padding: 1.5px;
     border-radius: inherit;
-    background: linear-gradient(135deg, #1FC8C0, #8B5CF6 35%, #F5A623 70%, #F0455C);
+    background: linear-gradient(135deg, #1FC8C0, #8B5CF6 35%, #F5A623 70%, #EC4899);
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     pointer-events: none;
   }
+
+  /* =========================================================================
+     ESTILOS INSTITUCIONALES PÚBLICOS - FUNDACIÓN A+
+     Garantizan degradados vivos, botones y acentos de marca siempre nítidos
+     ========================================================================= */
+  .hero-gradient-headline {
+    background: linear-gradient(90deg, #1FC8C0 0%, #8B5CF6 55%, #F0455C 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+    color: transparent !important;
+    display: inline !important;
+  }
+
+  .hero-btn-gradient {
+    background: linear-gradient(90deg, #8B5CF6 0%, #7C3AED 50%, #1FC8C0 100%) !important;
+    color: #FFFFFF !important;
+  }
+
+  .header-btn-join {
+    background: #14181F !important;
+    color: #FFFFFF !important;
+  }
+  .header-btn-join:hover {
+    background: linear-gradient(90deg, #8B5CF6 0%, #1FC8C0 100%) !important;
+    color: #FFFFFF !important;
+  }
+
+  .bg-turquesa { background-color: #1FC8C0 !important; }
+  .text-turquesa { color: #1FC8C0 !important; }
+  .bg-morado { background-color: #8B5CF6 !important; }
+  .text-morado { color: #8B5CF6 !important; }
+  .bg-coral { background-color: #F0455C !important; }
+  .text-coral { color: #F0455C !important; }
+  .bg-oro { background-color: #F5A623 !important; }
+  .text-oro { color: #F5A623 !important; }
 
   /* =====================================================================
      ADMIN SHELL — panel de administración (diseño corporativo moderno)
@@ -315,6 +403,54 @@ body {
     --role-badge-text: #996515;
   }
 
+  /* Encabezado fijo estático en todos los roles */
+  .role-header,
+  .admin-topbar {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 40 !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border-bottom: 1px solid var(--color-hairline, #e5e5e5) !important;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03) !important;
+  }
+
+  /* Barra de navegación lateral fija e independiente en escritorio (>=1024px) */
+  .role-sidebar {
+    align-self: start;
+    background: var(--color-surface-alt, #fafafa);
+    border: 1px solid var(--color-hairline, #e5e5e5);
+    border-radius: var(--radius-card, 24px);
+    box-shadow: var(--shadow-hairline-card);
+    padding: 1.25rem 0.875rem;
+  }
+  @media (min-width: 1024px) {
+    .role-sidebar {
+      position: sticky !important;
+      top: 5.75rem !important;
+      max-height: calc(100vh - 6.5rem) !important;
+      overflow-y: auto !important;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(91, 100, 114, 0.22) transparent;
+      padding-right: 0.5rem;
+    }
+    .role-sidebar::-webkit-scrollbar {
+      width: 5px;
+    }
+    .role-sidebar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .role-sidebar::-webkit-scrollbar-thumb {
+      background: rgba(91, 100, 114, 0.22);
+      border-radius: 9999px;
+    }
+    .role-sidebar::-webkit-scrollbar-thumb:hover {
+      background: rgba(139, 92, 246, 0.5);
+    }
+  }
+
   /* Badge de identidad en el encabezado del Sidebar */
   .role-sidebar .role-sidebar-badge {
     background: var(--role-badge-bg);
@@ -360,13 +496,13 @@ body {
     gap: 0.7rem;
     width: 100%;
     text-align: left;
-    border-radius: 0.875rem;
+    border-radius: var(--radius-interactive, 18px);
     padding: 0.625rem 1rem;
     font-size: 0.875rem;
     font-weight: 500;
     color: #5B6472;
     border-left: 3.5px solid transparent;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.18s ease;
     cursor: pointer;
     user-select: none;
   }
@@ -478,17 +614,32 @@ body {
     .superadmin-cards { grid-template-columns: repeat(4, 1fr); }
   }
   .superadmin-card {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(12px);
-    border-radius: 20px;
-    border: 1px solid rgba(238, 240, 243, 0.9);
+    position: relative;
+    background: var(--color-paper, #ffffff);
+    border-radius: var(--radius-card, 24px);
+    border: 1px solid var(--color-hairline, #e5e5e5);
     padding: 1.5rem;
-    box-shadow: 0 2px 8px rgba(20,24,31,0.03), 0 12px 24px -6px rgba(20,24,31,0.03);
-    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease, border-color .22s ease;
+    box-shadow: var(--shadow-hairline-card);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .superadmin-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 1.5rem;
+    right: 1.5rem;
+    height: 2px;
+    border-radius: 0 0 4px 4px;
+    background: var(--card-accent, linear-gradient(90deg, #8B5CF6, #1FC8C0));
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  .superadmin-card:hover::after {
+    opacity: 1;
   }
   .superadmin-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 14px 32px -4px rgba(20,24,31,0.08);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hairline-elevated);
     border-color: rgba(139, 92, 246, 0.25);
   }
   .superadmin-card-icon {
@@ -589,34 +740,99 @@ body {
     transition: width .6s ease;
   }
 
+  /* ---------- Componentes reusables (secciones, pills) ---------- */
+  .module-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .module-section-header h2,
+  .module-section-header h3 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #14181F;
+    letter-spacing: -0.01em;
+  }
+  .module-section-header .section-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: var(--radius-interactive, 18px);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+  }
+  .status-pill--green { background: rgba(16,185,129,0.1); color: #059669; }
+  .status-pill--red { background: rgba(239,68,68,0.1); color: #DC2626; }
+  .status-pill--amber { background: rgba(245,158,11,0.1); color: #D97706; }
+  .status-pill--purple { background: rgba(139,92,246,0.1); color: #7C3AED; }
+  .status-pill--blue { background: rgba(59,130,246,0.1); color: #2563EB; }
+  .status-pill--gray { background: rgba(107,114,128,0.08); color: #6B7280; }
+  .status-pill::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
   /* ---------- Paneles de contenido (tablas, formularios) ---------- */
   .admin-panel-card {
-    background: rgba(255, 255, 255, 0.98);
-    backdrop-filter: blur(12px);
-    border-radius: 20px;
-    border: 1px solid rgba(238, 240, 243, 0.9);
-    box-shadow: 0 2px 10px rgba(20,24,31,0.03);
+    background: var(--color-paper, #ffffff);
+    border-radius: var(--radius-card, 24px);
+    border: 1px solid var(--color-hairline, #e5e5e5);
+    box-shadow: var(--shadow-hairline-card);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .admin-panel-card:hover {
+    border-color: rgba(139, 92, 246, 0.25);
+    box-shadow: var(--shadow-hairline-elevated);
   }
   .admin-table thead th,
   .sticky-table thead th {
-    background: #F8FAFC !important;
-    color: #475569;
-    font-weight: 700;
+    background: var(--color-surface-alt, #fafafa) !important;
+    color: var(--color-mid-gray, #737373);
+    font-weight: 600;
     font-size: 0.6875rem;
     letter-spacing: 0.05em;
     text-transform: uppercase;
     position: sticky;
     top: 0;
     z-index: 10;
-    box-shadow: 0 1px 0 rgba(226, 232, 240, 0.9);
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--color-hairline, #e5e5e5);
+    box-shadow: none;
     user-select: none;
   }
   .admin-table tbody tr {
-    transition: background-color .15s ease;
+    transition: background-color 0.15s ease;
+    border-bottom: 1px solid var(--color-hairline, #e5e5e5);
+  }
+  .admin-table tbody tr:nth-child(even) {
+    background: rgba(250, 250, 250, 0.6);
   }
   .admin-table tbody tr:hover {
-    background-color: #F8F7FF;
+    background-color: #fafafa !important;
   }
+  .admin-table tbody td:first-child { border-top-left-radius: 10px; border-bottom-left-radius: 10px; }
+  .admin-table tbody td:last-child { border-top-right-radius: 10px; border-bottom-right-radius: 10px; }
 
   /* Cabeceras ordenables */
   .th-sortable {
@@ -718,22 +934,57 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.75rem;
-    padding: 3rem 1rem;
+    gap: 1rem;
+    padding: 4rem 1.5rem;
     color: #5B6472;
+    text-align: center;
+  }
+  .admin-empty-state::before {
+    content: '';
+    display: block;
+    width: 80px;
+    height: 80px;
+    border-radius: 24px;
+    background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(31,200,192,0.08));
+    margin-bottom: 0.5rem;
+  }
+
+  .skeleton-pulse {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.5s ease-in-out infinite;
+    border-radius: 8px;
+  }
+  @keyframes skeletonShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
   }
 
   /* ---------- Tarjetas de dashboard (Resumen: Superadmin/Docente/Estudiante) ---------- */
   .dash-stat-card {
     position: relative;
-    background: rgba(255, 255, 255, 0.98);
-    backdrop-filter: blur(12px);
-    border-radius: 20px;
-    border: 1px solid rgba(238, 240, 243, 0.9);
+    background: var(--color-paper, #ffffff);
+    border-radius: var(--radius-card, 24px);
+    border: 1px solid var(--color-hairline, #e5e5e5);
     padding: 1.375rem 1.5rem;
     overflow: hidden;
-    box-shadow: 0 2px 8px rgba(20,24,31,0.03);
-    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease, border-color 0.22s ease;
+    box-shadow: var(--shadow-hairline-card);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .dash-stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 1.5rem;
+    right: 1.5rem;
+    height: 2px;
+    border-radius: 0 0 4px 4px;
+    background: linear-gradient(90deg, var(--brand, #8B5CF6), var(--brand-end, #1FC8C0));
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  .dash-stat-card:hover::after {
+    opacity: 1;
   }
   .dash-stat-card::before {
     content: '';
@@ -787,10 +1038,20 @@ body {
      Las clases de Tailwind bg-morado/5 pueden resultar casi transparentes
      en ciertos contextos; esta regla los ancla a blanco sólido.
      ===================================================================== */
-  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]),
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="button"]):not([type="submit"]),
   select,
   textarea {
     background-color: #ffffff !important;
+    border: 1px solid var(--color-hairline, #e5e5e5);
+    border-radius: var(--radius-interactive, 18px);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="button"]):not([type="submit"]):focus,
+  select:focus,
+  textarea:focus {
+    border-color: var(--brand-morado, #8B5CF6) !important;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12) !important;
+    outline: none !important;
   }
 
   /* Campos deshabilitados: gris muy suave para indicar solo-lectura */
@@ -800,6 +1061,19 @@ body {
     background-color: #F3F4F6 !important;
     color: #6B7280 !important;
     cursor: not-allowed;
+  }
+
+  /* Modales con tarjeta frosted paper de 24px y sombra apilada */
+  .modal-card,
+  [id^="modal"] .bg-white,
+  [id$="Modal"] .bg-white,
+  #modalConfirm .bg-white,
+  #modalJustificacionDocente .bg-white,
+  #modalJustificacionAdmin .bg-white,
+  #modalJustificacionEstudiante .bg-white {
+    border-radius: var(--radius-card, 24px) !important;
+    border: 1px solid var(--color-hairline, #e5e5e5) !important;
+    box-shadow: var(--shadow-hairline-popover) !important;
   }
 
 /* ============================================================================
@@ -812,7 +1086,7 @@ body {
   --a-teal: #1FC8C0;
   --a-purple: #8B5CF6;
   --a-purple-deep: #5B21B6;
-  --a-coral: #F0455C;
+  --a-coral: #EC4899;
   --a-amber: #F5A623;
   --a-ink: #14181F;
   --a-gray: #5B6472;
@@ -938,6 +1212,22 @@ body {
 }
 .aplus-chat-clear:hover { background: rgba(255,255,255,0.18); color: #fff; }
 .aplus-chat-clear svg { width: 15px; height: 15px; }
+
+/* Botón "Cerrar chat" en el header */
+.aplus-chat-close {
+  flex-shrink: 0;
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  display: grid; place-items: center;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, transform .15s ease;
+  position: relative; z-index: 2;
+}
+.aplus-chat-close:hover { background: rgba(255,255,255,0.3); color: #fff; transform: scale(1.05); }
+.aplus-chat-close svg { width: 18px; height: 18px; stroke: #fff !important; stroke-width: 2.5; display: block; }
 
 /* Chips de preguntas frecuentes (sugeridas según el rol de quien esté
    usando el chat — ver getSuggestedChips() en app.js). Se muestran solo
@@ -1137,19 +1427,20 @@ body {
     border-radius: 0;
     border: none;
   }
-  /* En pantalla completa el FAB queda flotando sobre el propio panel de
-     chat, para seguir sirviendo como botón de cerrar (ver toggleChat en
-     app.js, que alterna su ícono entre chat/cerrar). */
+  /* En pantalla completa el botón de cerrar ("X") está en el header superior (.aplus-chat-close).
+     El FAB flotante se oculta completamente para que NO tape ni opaque el botón de enviar mensajes. */
   .aplus-chat-fab {
     position: relative;
     z-index: 1;
   }
   .aplus-chat.is-open-mobile .aplus-chat-fab {
-    position: fixed;
-    right: 1.1rem;
-    bottom: 1.1rem;
-    z-index: 10000;
-    box-shadow: 0 6px 18px rgba(20,24,31,0.3);
+    display: none !important;
+  }
+  .aplus-chat-header {
+    padding-top: max(1.1rem, env(safe-area-inset-top));
+  }
+  .aplus-chat-close {
+    width: 38px; height: 38px;
   }
   .aplus-chat-inputbar {
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
@@ -1170,4 +1461,890 @@ body {
 
 .animate-fadeIn {
   animation: fadeInScale 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ==========================================================================
+   MENÚ MÓVIL — HAMBURGUESA Y SIDEBAR DESLIZANTE (< 1024px)
+   Cubre dashboardView, teacherView y studentView con un solo bloque de CSS.
+   ========================================================================== */
+
+/* Botón hamburguesa: solo visible en móvil */
+.mob-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background: #F3F4F6;
+  border: 1px solid #E5E7EB;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+  flex-shrink: 0;
+}
+.mob-menu-btn:hover {
+  background: #EDE9FE;
+  border-color: rgba(139,92,246,0.35);
+}
+.mob-menu-btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: #5B6472;
+  transition: transform 0.25s ease;
+}
+
+/* Botón hamburguesa móvil de cabecera (solo visible en pantallas móviles) */
+.mob-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 12px;
+  color: #5B6472;
+  background: transparent;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.mob-menu-btn:hover {
+  background: #F1F5F9;
+  color: #14181F;
+}
+@media (min-width: 1024px) {
+  .mob-menu-btn { display: none !important; }
+}
+
+/* Círculo de avatar / foto en el encabezado — NUNCA transparente */
+.header-avatar-circle {
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  border-radius: 9999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-weight: 800 !important;
+  font-size: 0.8125rem !important;
+  color: #FFFFFF !important;
+  border: 2px solid #FFFFFF !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14) !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+}
+.header-avatar-circle.role-admin {
+  background: linear-gradient(135deg, #8B5CF6 0%, #1FC8C0 100%) !important;
+}
+.header-avatar-circle.role-docente {
+  background: linear-gradient(135deg, #1FC8C0 0%, #8B5CF6 100%) !important;
+}
+.header-avatar-circle.role-estudiante {
+  background: linear-gradient(135deg, #F5A623 0%, #EC4899 100%) !important;
+}
+.header-avatar-circle img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+.header-avatar-circle span {
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+  font-size: 0.8125rem !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* Overlay oscuro de fondo cuando el sidebar móvil está abierto */
+#mobSidebarOverlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  background: rgba(15, 18, 24, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: overlayFadeIn 0.22s ease forwards;
+}
+#mobSidebarOverlay.is-open { display: block; }
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* En móvil (< 1024px), queda oculto a la izquierda como drawer deslizante */
+@media (max-width: 1023px) {
+  .role-sidebar:not(.mob-open) {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100dvh !important;
+    width: 280px !important;
+    max-width: 85vw !important;
+    z-index: 200;
+    background: #ffffff;
+    border-right: 1px solid #E5E7EB;
+    box-shadow: 4px 0 24px -4px rgba(20,24,31,0.18);
+    transform: translateX(-110%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow-y: auto;
+    padding: 1.25rem 0.75rem 6rem 0.75rem;
+    will-change: transform;
+  }
+}
+
+/* Drawer deslizante cuando tiene .mob-open (en móvil) */
+.role-sidebar.mob-open {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  height: 100dvh !important;
+  width: 290px !important;
+  max-width: 88vw !important;
+  z-index: 200 !important;
+  background: #ffffff !important;
+  border-right: 1px solid #E5E7EB !important;
+  box-shadow: 6px 0 32px -4px rgba(20, 24, 31, 0.22) !important;
+  transform: translateX(0) !important;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  overflow-y: auto !important;
+  padding: 1.25rem 0.75rem 6rem 0.75rem !important;
+}
+
+/* =========================================================================
+   MENÚ DE PERFIL EN CABECERA Y SWITCH DE TEMA
+   ========================================================================= */
+
+.header-user-menu {
+  position: relative;
+  user-select: none;
+}
+
+.header-user-menu .animate-fadeIn {
+  animation: dropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.theme-toggle-switch {
+  transition: background-color 0.25s ease;
+}
+
+.theme-toggle-thumb {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s ease;
+}
+
+/* =========================================================================
+   MODO OSCURO: EXCLUSIVO PARA LA PERSONA QUE HAGA LOGIN
+   Los paneles privados aplican modo oscuro cuando tienen .dark.
+   El sitio público (#siteView) NUNCA se ve afectado.
+   ========================================================================= */
+
+/* Aislamiento estricto del portal público */
+#siteView {
+  color-scheme: light !important;
+}
+
+/* Reglas de modo oscuro limitadas ÚNICAMENTE a los paneles con sesión iniciada */
+#dashboardView.dark,
+#teacherView.dark,
+#studentView.dark,
+html.dark #dashboardView,
+html.dark #teacherView,
+html.dark #studentView {
+  background-color: #0D1117 !important;
+  color: #F1F5F9 !important;
+}
+
+/* Cabeceras de rol */
+#dashboardView.dark .role-header,
+#teacherView.dark .role-header,
+#studentView.dark .role-header,
+html.dark #dashboardView .role-header,
+html.dark #teacherView .role-header,
+html.dark #studentView .role-header {
+  background-color: rgba(22, 27, 38, 0.96) !important;
+  border-bottom: 1px solid #232B3B !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Sidebars de rol */
+#dashboardView.dark .role-sidebar,
+#teacherView.dark .role-sidebar,
+#studentView.dark .role-sidebar,
+html.dark #dashboardView .role-sidebar,
+html.dark #teacherView .role-sidebar,
+html.dark #studentView .role-sidebar {
+  background-color: #161B26 !important;
+  border-color: #232B3B !important;
+  color: #F1F5F9 !important;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+#dashboardView.dark .role-sidebar::-webkit-scrollbar-thumb,
+#teacherView.dark .role-sidebar::-webkit-scrollbar-thumb,
+#studentView.dark .role-sidebar::-webkit-scrollbar-thumb,
+html.dark #dashboardView .role-sidebar::-webkit-scrollbar-thumb,
+html.dark #teacherView .role-sidebar::-webkit-scrollbar-thumb,
+html.dark #studentView .role-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Pestañas del sidebar */
+#dashboardView.dark .panel-tab,
+#teacherView.dark .panel-tab-t,
+#studentView.dark .panel-tab-s,
+html.dark #dashboardView .panel-tab,
+html.dark #teacherView .panel-tab-t,
+html.dark #studentView .panel-tab-s {
+  color: #94A3B8 !important;
+}
+
+#dashboardView.dark .panel-tab:hover,
+#teacherView.dark .panel-tab-t:hover,
+#studentView.dark .panel-tab-s:hover,
+html.dark #dashboardView .panel-tab:hover,
+html.dark #teacherView .panel-tab-t:hover,
+html.dark #studentView .panel-tab-s:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  color: #F1F5F9 !important;
+}
+
+#dashboardView.dark .panel-tab.font-semibold,
+#teacherView.dark .panel-tab-t.font-semibold,
+#studentView.dark .panel-tab-s.font-semibold,
+html.dark #dashboardView .panel-tab.font-semibold,
+html.dark #teacherView .panel-tab-t.font-semibold,
+html.dark #studentView .panel-tab-s.font-semibold {
+  color: #FFFFFF !important;
+}
+
+/* Menú dropdown de perfil en header */
+#dashboardView.dark #headerProfileDropdown-admin,
+#teacherView.dark #headerProfileDropdown-docente,
+#studentView.dark #headerProfileDropdown-estudiante,
+html.dark #headerProfileDropdown-admin,
+html.dark #headerProfileDropdown-docente,
+html.dark #headerProfileDropdown-estudiante {
+  background-color: #181E2A !important;
+  border-color: #2E384D !important;
+  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.6) !important;
+  color: #F1F5F9 !important;
+}
+
+#dashboardView.dark #headerProfileDropdown-admin > div,
+#teacherView.dark #headerProfileDropdown-docente > div,
+#studentView.dark #headerProfileDropdown-estudiante > div,
+html.dark #headerProfileDropdown-admin > div,
+html.dark #headerProfileDropdown-docente > div,
+html.dark #headerProfileDropdown-estudiante > div {
+  border-color: #232B3B !important;
+}
+
+#dashboardView.dark #headerProfileDropdown-admin button:hover,
+#teacherView.dark #headerProfileDropdown-docente button:hover,
+#studentView.dark #headerProfileDropdown-estudiante button:hover,
+html.dark #headerProfileDropdown-admin button:hover,
+html.dark #headerProfileDropdown-docente button:hover,
+html.dark #headerProfileDropdown-estudiante button:hover {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Tarjetas y superficies dentro del panel logueado */
+#dashboardView.dark .bg-white,
+#teacherView.dark .bg-white,
+#studentView.dark .bg-white,
+html.dark #dashboardView .bg-white,
+html.dark #teacherView .bg-white,
+html.dark #studentView .bg-white {
+  background-color: #181E2A !important;
+}
+
+#dashboardView.dark .bg-slate-50,
+#dashboardView.dark .bg-slate-50\/70,
+#dashboardView.dark .bg-gray-50,
+#teacherView.dark .bg-slate-50,
+#teacherView.dark .bg-slate-50\/70,
+#teacherView.dark .bg-gray-50,
+#studentView.dark .bg-slate-50,
+#studentView.dark .bg-slate-50\/70,
+#studentView.dark .bg-gray-50,
+html.dark #dashboardView .bg-slate-50,
+html.dark #dashboardView .bg-slate-50\/70,
+html.dark #dashboardView .bg-gray-50,
+html.dark #teacherView .bg-slate-50,
+html.dark #teacherView .bg-slate-50\/70,
+html.dark #teacherView .bg-gray-50,
+html.dark #studentView .bg-slate-50,
+html.dark #studentView .bg-slate-50\/70,
+html.dark #studentView .bg-gray-50 {
+  background-color: #0D1117 !important;
+}
+
+#dashboardView.dark .bg-gray-100,
+#teacherView.dark .bg-gray-100,
+#studentView.dark .bg-gray-100,
+html.dark #dashboardView .bg-gray-100,
+html.dark #teacherView .bg-gray-100,
+html.dark #studentView .bg-gray-100 {
+  background-color: #1E2536 !important;
+}
+
+#dashboardView.dark .admin-panel-card,
+#teacherView.dark .admin-panel-card,
+#studentView.dark .admin-panel-card,
+#dashboardView.dark .dash-stat-card,
+#teacherView.dark .dash-stat-card,
+#studentView.dark .dash-stat-card,
+#dashboardView.dark .dash-card,
+#teacherView.dark .dash-card,
+#studentView.dark .dash-card,
+#dashboardView.dark .modern-hover-card,
+#teacherView.dark .modern-hover-card,
+#studentView.dark .modern-hover-card,
+html.dark #dashboardView .admin-panel-card,
+html.dark #teacherView .admin-panel-card,
+html.dark #studentView .admin-panel-card,
+html.dark #dashboardView .dash-stat-card,
+html.dark #teacherView .dash-stat-card,
+html.dark #studentView .dash-stat-card,
+html.dark #dashboardView .dash-card,
+html.dark #teacherView .dash-card,
+html.dark #studentView .dash-card,
+html.dark #dashboardView .modern-hover-card,
+html.dark #teacherView .modern-hover-card,
+html.dark #studentView .modern-hover-card {
+  background-color: #181E2A !important;
+  border-color: #232B3B !important;
+}
+
+/* Bordes en general dentro del panel */
+#dashboardView.dark .border-gray-100,
+#teacherView.dark .border-gray-100,
+#studentView.dark .border-gray-100,
+#dashboardView.dark .border-gray-200,
+#teacherView.dark .border-gray-200,
+#studentView.dark .border-gray-200,
+#dashboardView.dark .border-slate-100,
+#teacherView.dark .border-slate-100,
+#studentView.dark .border-slate-100,
+html.dark #dashboardView .border-gray-100,
+html.dark #teacherView .border-gray-100,
+html.dark #studentView .border-gray-100,
+html.dark #dashboardView .border-gray-200,
+html.dark #teacherView .border-gray-200,
+html.dark #studentView .border-gray-200,
+html.dark #dashboardView .border-slate-100,
+html.dark #teacherView .border-slate-100,
+html.dark #studentView .border-slate-100 {
+  border-color: #232B3B !important;
+}
+
+/* Textos dentro del panel logueado */
+#dashboardView.dark .text-ink,
+#teacherView.dark .text-ink,
+#studentView.dark .text-ink,
+#dashboardView.dark .text-gray-900,
+#teacherView.dark .text-gray-900,
+#studentView.dark .text-gray-900,
+#dashboardView.dark .text-gray-800,
+#teacherView.dark .text-gray-800,
+#studentView.dark .text-gray-800,
+#dashboardView.dark .text-gray-700,
+#teacherView.dark .text-gray-700,
+#studentView.dark .text-gray-700,
+html.dark #dashboardView .text-ink,
+html.dark #teacherView .text-ink,
+html.dark #studentView .text-ink,
+html.dark #dashboardView .text-gray-900,
+html.dark #teacherView .text-gray-900,
+html.dark #studentView .text-gray-900,
+html.dark #dashboardView .text-gray-800,
+html.dark #teacherView .text-gray-800,
+html.dark #studentView .text-gray-800,
+html.dark #dashboardView .text-gray-700,
+html.dark #teacherView .text-gray-700,
+html.dark #studentView .text-gray-700 {
+  color: #F1F5F9 !important;
+}
+
+#dashboardView.dark .text-slate2,
+#teacherView.dark .text-slate2,
+#studentView.dark .text-slate2,
+#dashboardView.dark .text-gray-600,
+#teacherView.dark .text-gray-600,
+#studentView.dark .text-gray-600,
+#dashboardView.dark .text-gray-500,
+#teacherView.dark .text-gray-500,
+#studentView.dark .text-gray-500,
+html.dark #dashboardView .text-slate2,
+html.dark #teacherView .text-slate2,
+html.dark #studentView .text-slate2,
+html.dark #dashboardView .text-gray-600,
+html.dark #teacherView .text-gray-600,
+html.dark #studentView .text-gray-600,
+html.dark #dashboardView .text-gray-500,
+html.dark #teacherView .text-gray-500,
+html.dark #studentView .text-gray-500 {
+  color: #94A3B8 !important;
+}
+
+/* Inputs, selects y campos de formulario dentro del panel */
+#dashboardView.dark input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]),
+#teacherView.dark input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]),
+#studentView.dark input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]),
+#dashboardView.dark select,
+#teacherView.dark select,
+#studentView.dark select,
+#dashboardView.dark textarea,
+#teacherView.dark textarea,
+#studentView.dark textarea,
+html.dark #dashboardView input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]),
+html.dark #teacherView input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]),
+html.dark #studentView input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]),
+html.dark #dashboardView select,
+html.dark #teacherView select,
+html.dark #studentView select,
+html.dark #dashboardView textarea,
+html.dark #teacherView textarea,
+html.dark #studentView textarea {
+  background-color: #121620 !important;
+  color: #F1F5F9 !important;
+  border-color: #2E384D !important;
+}
+
+#dashboardView.dark input::placeholder,
+#teacherView.dark input::placeholder,
+#studentView.dark input::placeholder,
+#dashboardView.dark textarea::placeholder,
+#teacherView.dark textarea::placeholder,
+#studentView.dark textarea::placeholder,
+html.dark #dashboardView input::placeholder,
+html.dark #teacherView input::placeholder,
+html.dark #studentView input::placeholder,
+html.dark #dashboardView textarea::placeholder,
+html.dark #teacherView textarea::placeholder,
+html.dark #studentView textarea::placeholder {
+  color: #64748B !important;
+}
+
+#dashboardView.dark input:focus,
+#teacherView.dark input:focus,
+#studentView.dark input:focus,
+#dashboardView.dark select:focus,
+#teacherView.dark select:focus,
+#studentView.dark select:focus,
+#dashboardView.dark textarea:focus,
+#teacherView.dark textarea:focus,
+#studentView.dark textarea:focus,
+html.dark #dashboardView input:focus,
+html.dark #teacherView input:focus,
+html.dark #studentView input:focus,
+html.dark #dashboardView select:focus,
+html.dark #teacherView select:focus,
+html.dark #studentView select:focus,
+html.dark #dashboardView textarea:focus,
+html.dark #teacherView textarea:focus,
+html.dark #studentView textarea:focus {
+  border-color: #8B5CF6 !important;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25) !important;
+}
+
+/* Tablas dentro del panel */
+#dashboardView.dark table.admin-table,
+#teacherView.dark table.admin-table,
+#studentView.dark table.admin-table,
+#dashboardView.dark .overflow-x-auto table,
+#teacherView.dark .overflow-x-auto table,
+#studentView.dark .overflow-x-auto table,
+html.dark #dashboardView table.admin-table,
+html.dark #teacherView table.admin-table,
+html.dark #studentView table.admin-table,
+html.dark #dashboardView .overflow-x-auto table,
+html.dark #teacherView .overflow-x-auto table,
+html.dark #studentView .overflow-x-auto table {
+  background-color: #181E2A !important;
+}
+
+#dashboardView.dark table.admin-table th,
+#teacherView.dark table.admin-table th,
+#studentView.dark table.admin-table th,
+#dashboardView.dark .overflow-x-auto th,
+#teacherView.dark .overflow-x-auto th,
+#studentView.dark .overflow-x-auto th,
+html.dark #dashboardView table.admin-table th,
+html.dark #teacherView table.admin-table th,
+html.dark #studentView table.admin-table th,
+html.dark #dashboardView .overflow-x-auto th,
+html.dark #teacherView .overflow-x-auto th,
+html.dark #studentView .overflow-x-auto th {
+  background-color: #121620 !important;
+  color: #94A3B8 !important;
+  border-color: #232B3B !important;
+}
+
+#dashboardView.dark table.admin-table td,
+#teacherView.dark table.admin-table td,
+#studentView.dark table.admin-table td,
+#dashboardView.dark .overflow-x-auto td,
+#teacherView.dark .overflow-x-auto td,
+#studentView.dark .overflow-x-auto td,
+html.dark #dashboardView table.admin-table td,
+html.dark #teacherView table.admin-table td,
+html.dark #studentView table.admin-table td,
+html.dark #dashboardView .overflow-x-auto td,
+html.dark #teacherView .overflow-x-auto td,
+html.dark #studentView .overflow-x-auto td {
+  border-color: #232B3B !important;
+  color: #E2E8F0 !important;
+}
+
+#dashboardView.dark table.admin-table tr:hover td,
+#teacherView.dark table.admin-table tr:hover td,
+#studentView.dark table.admin-table tr:hover td,
+#dashboardView.dark .overflow-x-auto tr:hover td,
+#teacherView.dark .overflow-x-auto tr:hover td,
+#studentView.dark .overflow-x-auto tr:hover td,
+html.dark #dashboardView table.admin-table tr:hover td,
+html.dark #teacherView table.admin-table tr:hover td,
+html.dark #studentView table.admin-table tr:hover td,
+html.dark #dashboardView .overflow-x-auto tr:hover td,
+html.dark #teacherView .overflow-x-auto tr:hover td,
+html.dark #studentView .overflow-x-auto tr:hover td {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* Modales dentro de paneles autenticados */
+#dashboardView.dark .modal-content,
+#teacherView.dark .modal-content,
+#studentView.dark .modal-content,
+#dashboardView.dark .fixed.inset-0 .bg-white,
+#teacherView.dark .fixed.inset-0 .bg-white,
+#studentView.dark .fixed.inset-0 .bg-white,
+html.dark #dashboardView .modal-content,
+html.dark #teacherView .modal-content,
+html.dark #studentView .modal-content,
+html.dark #dashboardView .fixed.inset-0 .bg-white,
+html.dark #teacherView .fixed.inset-0 .bg-white,
+html.dark #studentView .fixed.inset-0 .bg-white {
+  background-color: #181E2A !important;
+  border-color: #2E384D !important;
+  color: #F1F5F9 !important;
+}
+
+/* Dark mode for new utility classes */
+#dashboardView.dark .admin-empty-state::before,
+#teacherView.dark .admin-empty-state::before,
+#studentView.dark .admin-empty-state::before {
+  background: linear-gradient(135deg, rgba(139,92,246,0.15), rgba(31,200,192,0.15));
+}
+
+#dashboardView.dark .skeleton-pulse,
+#teacherView.dark .skeleton-pulse,
+#studentView.dark .skeleton-pulse {
+  background: linear-gradient(90deg, #1E2536 25%, #232B3B 50%, #1E2536 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s ease-in-out infinite;
+}
+
+#dashboardView.dark .status-pill--green { background: rgba(16,185,129,0.15); color: #34D399; }
+#dashboardView.dark .status-pill--red { background: rgba(239,68,68,0.15); color: #F87171; }
+#dashboardView.dark .status-pill--amber { background: rgba(245,158,11,0.15); color: #FBBF24; }
+#dashboardView.dark .status-pill--purple { background: rgba(139,92,246,0.15); color: #A78BFA; }
+#dashboardView.dark .status-pill--blue { background: rgba(59,130,246,0.15); color: #60A5FA; }
+#dashboardView.dark .status-pill--gray { background: rgba(148,163,184,0.12); color: #94A3B8; }
+
+#teacherView.dark .status-pill--green { background: rgba(16,185,129,0.15); color: #34D399; }
+#teacherView.dark .status-pill--red { background: rgba(239,68,68,0.15); color: #F87171; }
+#teacherView.dark .status-pill--amber { background: rgba(245,158,11,0.15); color: #FBBF24; }
+#teacherView.dark .status-pill--purple { background: rgba(139,92,246,0.15); color: #A78BFA; }
+#teacherView.dark .status-pill--blue { background: rgba(59,130,246,0.15); color: #60A5FA; }
+#teacherView.dark .status-pill--gray { background: rgba(148,163,184,0.12); color: #94A3B8; }
+
+#studentView.dark .status-pill--green { background: rgba(16,185,129,0.15); color: #34D399; }
+#studentView.dark .status-pill--red { background: rgba(239,68,68,0.15); color: #F87171; }
+#studentView.dark .status-pill--amber { background: rgba(245,158,11,0.15); color: #FBBF24; }
+#studentView.dark .status-pill--purple { background: rgba(139,92,246,0.15); color: #A78BFA; }
+#studentView.dark .status-pill--blue { background: rgba(59,130,246,0.15); color: #60A5FA; }
+#studentView.dark .status-pill--gray { background: rgba(148,163,184,0.12); color: #94A3B8; }
+
+#dashboardView.dark .module-section-header h2,
+#dashboardView.dark .module-section-header h3,
+#teacherView.dark .module-section-header h2,
+#teacherView.dark .module-section-header h3,
+#studentView.dark .module-section-header h2,
+#studentView.dark .module-section-header h3 {
+  color: #F1F5F9;
+}
+
+#dashboardView.dark .admin-table tbody tr:nth-child(even),
+#teacherView.dark .admin-table tbody tr:nth-child(even),
+#studentView.dark .admin-table tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.02);
+}
+#dashboardView.dark .admin-table tbody tr:hover,
+#teacherView.dark .admin-table tbody tr:hover,
+#studentView.dark .admin-table tbody tr:hover {
+  background-color: rgba(139,92,246,0.06) !important;
+}
+
+/* ============================================================================
+   USUARIOS (panel admin) — rediseño. Todo prefijado con .usr- para no afectar
+   otras pantallas. Solo colores de la Fundación: turquesa, morado, oro,
+   coral y marrón (+ neutros).
+   ============================================================================ */
+.usr-panel {
+  --u-bg: #ffffff; --u-line: #ebe8f1; --u-ink: #0a0a0a; --u-mute: #737373;
+  --u-head: #faf9fc; --u-row: #ffffff; --u-row-hover: #f8f5ff;
+  position: relative;
+  background: var(--u-bg);
+  border: 1px solid var(--u-line);
+  border-radius: 24px;
+  box-shadow: 0 1px 2px rgba(20, 10, 40, .04), 0 12px 32px -16px rgba(91, 33, 182, .18);
+  padding: 0 1.5rem 1.25rem;
+  overflow: hidden;
+  color: var(--u-ink);
+}
+:is(html.dark, #dashboardView.dark) .usr-panel {
+  --u-bg: #181E2A; --u-line: #232B3B; --u-ink: #E2E8F0; --u-mute: #94A3B8;
+  --u-head: #121620; --u-row: #1c2331; --u-row-hover: #222a3d;
+}
+
+/* Tonos de la fundación */
+.usr-tone-teal   { --tone: #1FC8C0; --tone-ink: #0f8f89; --tone-soft: rgba(31, 200, 192, .14); }
+.usr-tone-purple { --tone: #8B5CF6; --tone-ink: #5B21B6; --tone-soft: rgba(139, 92, 246, .12); }
+.usr-tone-gold   { --tone: #F5A623; --tone-ink: #8f5a05; --tone-soft: rgba(245, 166, 35, .18); }
+.usr-tone-coral  { --tone: #F0455C; --tone-ink: #c22b41; --tone-soft: rgba(240, 69, 92, .12); }
+.usr-tone-brown  { --tone: #9A5B3F; --tone-ink: #7a4630; --tone-soft: rgba(154, 91, 63, .13); }
+.usr-tone-ink    { --tone: #0a0a0a; --tone-ink: #0a0a0a; --tone-soft: rgba(115, 115, 115, .14); }
+:is(html.dark, #dashboardView.dark) .usr-panel [class*="usr-tone-"] { --tone-ink: var(--tone); }
+:is(html.dark, #dashboardView.dark) .usr-panel .usr-tone-ink { --tone: #E2E8F0; }
+
+/* Firma de marca: franja con los 4 colores del logo */
+.usr-brandbar {
+  height: 5px; margin: 0 -1.5rem 1.1rem;
+  background: linear-gradient(90deg, #8B5CF6 0 34%, #1FC8C0 34% 64%, #F5A623 64% 84%, #F0455C 84% 100%);
+}
+
+/* Barra superior */
+.usr-toolbar {
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+  gap: 1rem; border-bottom: 1px solid var(--u-line); margin-bottom: .5rem;
+}
+.usr-tabs { display: flex; gap: .25rem; overflow-x: auto; margin-bottom: -1px; }
+.usr-tab {
+  position: relative; display: flex; align-items: center; gap: .45rem; white-space: nowrap;
+  padding: .7rem .9rem; font-size: .8rem; font-weight: 700; color: var(--u-mute);
+  background: none; border: 0; cursor: pointer; transition: color .15s ease;
+}
+.usr-tab::after {
+  content: ""; position: absolute; left: .6rem; right: .6rem; bottom: 0; height: 3px;
+  border-radius: 3px 3px 0 0; background: var(--tone);
+  transform: scaleX(0); transform-origin: left; transition: transform .25s cubic-bezier(.16, 1, .3, 1);
+}
+.usr-tab:hover { color: var(--u-ink); }
+.usr-tab.is-active { color: var(--u-ink); }
+.usr-tab.is-active::after { transform: scaleX(1); }
+.usr-tab-ico { width: 1rem; height: 1rem; flex-shrink: 0; transition: color .15s ease; }
+.usr-tab.is-active .usr-tab-ico { color: var(--tone); }
+.usr-count {
+  min-width: 1.35rem; text-align: center; padding: .1rem .45rem; border-radius: 999px;
+  font-size: .65rem; font-weight: 800; background: rgba(115, 115, 115, .13); color: var(--u-mute);
+}
+.usr-tab.is-active .usr-count { background: var(--tone-soft); color: var(--tone-ink); }
+.usr-count--alert { background: #F5A623 !important; color: #2b1a00 !important; animation: usrPulse 1.8s ease-in-out infinite; }
+
+/* Buscador y botón principal */
+.usr-tools { display: flex; align-items: center; gap: .75rem; padding-bottom: .6rem; }
+.usr-search { position: relative; }
+.usr-search input {
+  width: 16rem; max-width: 100%; padding: .55rem .85rem .55rem 2.2rem; font-size: .78rem;
+  color: var(--u-ink); background: var(--u-head); border: 1px solid var(--u-line); border-radius: 12px;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.usr-search input:focus { outline: none; background: var(--u-bg); border-color: #8B5CF6; box-shadow: 0 0 0 3px rgba(139, 92, 246, .22); }
+.usr-search-ico { position: absolute; left: .75rem; top: 50%; transform: translateY(-50%); width: .9rem; height: .9rem; color: var(--u-mute); pointer-events: none; }
+.usr-new {
+  display: inline-flex; align-items: center; gap: .45rem; padding: .58rem 1rem; border: 0; border-radius: 12px;
+  font-size: .78rem; font-weight: 700; color: #fff; cursor: pointer; white-space: nowrap;
+  background: linear-gradient(120deg, #8B5CF6, #1FC8C0);
+  box-shadow: 0 6px 16px -6px rgba(139, 92, 246, .55);
+  transition: transform .2s cubic-bezier(.16, 1, .3, 1), box-shadow .2s ease;
+}
+.usr-new:hover { transform: translateY(-1px); box-shadow: 0 10px 22px -6px rgba(139, 92, 246, .6); }
+
+/* Tabla: filas como tarjetas con acento de color a la izquierda */
+.usr-tablewrap { overflow-x: auto; }
+.usr-table { width: 100%; border-collapse: separate; border-spacing: 0 7px; }
+.usr-table thead th {
+  padding: .4rem 1rem; text-align: left; font-size: .66rem; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--u-mute); user-select: none; white-space: nowrap;
+}
+.usr-table thead th.usr-th-right { text-align: right; }
+.usr-row td {
+  padding: .8rem 1rem; background: var(--u-row); vertical-align: middle;
+  border-top: 1px solid var(--u-line); border-bottom: 1px solid var(--u-line);
+  transition: background-color .15s ease, box-shadow .2s ease;
+}
+.usr-row td:first-child {
+  border-left: 1px solid var(--u-line); border-radius: 14px 0 0 14px;
+  box-shadow: inset 4px 0 0 var(--tone);
+}
+.usr-row td:last-child { border-right: 1px solid var(--u-line); border-radius: 0 14px 14px 0; }
+.usr-row:hover td { background: var(--u-row-hover); }
+.usr-row:hover td:first-child { box-shadow: inset 6px 0 0 var(--tone); }
+.usr-row--dim .usr-person, .usr-row--dim .usr-phone { opacity: .72; }
+
+.usr-person { display: flex; align-items: center; gap: .8rem; }
+.usr-avatar {
+  width: 2.4rem; height: 2.4rem; border-radius: 999px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .78rem; font-weight: 800; letter-spacing: .02em;
+  background: var(--tone-soft); color: var(--tone-ink);
+  box-shadow: 0 0 0 2px var(--u-row), 0 0 0 3.5px var(--tone);
+}
+.usr-name-line { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.usr-name { font-size: .88rem; font-weight: 700; line-height: 1.2; color: var(--u-ink); }
+.usr-mail { font-size: .74rem; color: var(--u-mute); margin-top: .1rem; }
+.usr-phone { font-size: .84rem; color: var(--u-mute); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.usr-muted { font-size: .76rem; color: var(--u-mute); }
+
+.usr-type { display: flex; flex-direction: column; align-items: flex-start; gap: .25rem; }
+.usr-role { font-size: .62rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--u-mute); }
+.usr-chip {
+  display: inline-flex; align-items: center; padding: .25rem .65rem; border-radius: 8px;
+  font-size: .72rem; font-weight: 700; white-space: nowrap; background: var(--tone-soft); color: var(--tone-ink);
+}
+.usr-tag {
+  padding: .1rem .5rem; border-radius: 6px; border: 0; font-size: .6rem; font-weight: 800;
+  letter-spacing: .06em; text-transform: uppercase; background: var(--tone-soft); color: var(--tone-ink);
+}
+.usr-tag--btn { cursor: pointer; transition: background-color .15s ease, color .15s ease; }
+.usr-tag--btn:hover { background: var(--tone); color: #fff; }
+
+.usr-status {
+  display: inline-flex; align-items: center; gap: .4rem; padding: .28rem .7rem; border-radius: 999px;
+  font-size: .72rem; font-weight: 700; background: var(--tone-soft); color: var(--tone-ink);
+}
+.usr-status i { width: .4rem; height: .4rem; border-radius: 999px; background: var(--tone); }
+.usr-pulse i { animation: usrPulse 1.6s ease-in-out infinite; }
+
+/* Acciones */
+.usr-actions { text-align: right; white-space: nowrap; }
+.usr-actions-in { display: inline-flex; align-items: center; gap: .35rem; }
+.usr-btn {
+  padding: .38rem .75rem; border-radius: 10px; border: 1px solid transparent; cursor: pointer;
+  font-size: .72rem; font-weight: 700; transition: background-color .15s ease, color .15s ease, transform .15s ease;
+}
+.usr-btn:active { transform: scale(.97); }
+.usr-btn--edit { background: rgba(139, 92, 246, .1); color: #5B21B6; }
+.usr-btn--edit:hover { background: #8B5CF6; color: #fff; }
+.usr-btn--del { background: rgba(240, 69, 92, .09); color: #c22b41; }
+.usr-btn--del:hover { background: #F0455C; color: #fff; }
+.usr-btn--ok { background: #1FC8C0; color: #04332f; }
+.usr-btn--ok:hover { background: #17b3ab; }
+:is(html.dark, #dashboardView.dark) .usr-btn--edit { color: #c4b0ff; }
+:is(html.dark, #dashboardView.dark) .usr-btn--del { color: #ff8a9b; }
+
+/* Aviso de solicitudes pendientes */
+.usr-alert {
+  display: flex; align-items: center; gap: .9rem; margin-bottom: 1.1rem; padding: .9rem 1.1rem; cursor: pointer;
+  border-radius: 16px; background: var(--tone-soft); border: 1px solid rgba(245, 166, 35, .35);
+  box-shadow: inset 4px 0 0 var(--tone); transition: background-color .15s ease;
+}
+.usr-alert:hover { background: rgba(245, 166, 35, .26); }
+.usr-alert-dot { position: relative; width: .75rem; height: .75rem; flex-shrink: 0; }
+.usr-alert-dot i { position: absolute; inset: 0; border-radius: 999px; background: var(--tone); animation: usrPulse 1.6s ease-in-out infinite; }
+.usr-alert-txt { flex: 1; min-width: 0; }
+.usr-alert-t { font-size: .8rem; font-weight: 800; color: var(--u-ink, #0a0a0a); }
+.usr-alert-s { font-size: .72rem; color: #737373; margin-top: .1rem; }
+.usr-alert-cta { flex-shrink: 0; padding: .4rem .8rem; border-radius: 10px; font-size: .74rem; font-weight: 800; background: #F5A623; color: #2b1a00; }
+
+/* Estado vacío */
+.usr-empty { padding: 2.5rem 1rem; text-align: center; color: var(--u-mute); }
+.usr-empty svg { margin: 0 auto .5rem; opacity: .45; }
+.usr-empty-t { font-size: .88rem; font-weight: 700; color: var(--u-ink); }
+.usr-empty-s { font-size: .74rem; margin-top: .25rem; }
+
+@keyframes usrPulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+  .usr-count--alert, .usr-pulse i, .usr-alert-dot i { animation: none; }
+  .usr-tab::after, .usr-new, .usr-btn { transition: none; }
+}
+@media (max-width: 640px) {
+  .usr-panel { padding: 0 1rem 1rem; }
+  .usr-brandbar { margin: 0 -1rem 1rem; }
+  .usr-tools { width: 100%; }
+  .usr-search { flex: 1; }
+  .usr-search input { width: 100%; }
+}
+
+.forms-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+}
+.forms-toolbar button {
+  width: 1.85rem;
+  height: 1.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #14181f;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+.forms-toolbar button:hover {
+  border-color: #8B5CF6;
+  color: #6A1B9A;
+  background: rgba(139, 92, 246, 0.06);
+}
+.forms-rich {
+  outline: none;
+}
+.forms-rich:focus {
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.28);
+  border-color: #8B5CF6;
+}
+.forms-rich a {
+  color: #6A1B9A;
+  text-decoration: underline;
+}
+.forms-seccion-bloque {
+  margin: 1.75rem 0 1rem;
+  padding: 1.25rem 1.1rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(139, 92, 246, 0.22);
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.08) 0%, #fff 42%);
+}
+.forms-respuestas-scroll {
+  max-width: 100%;
+  min-width: 0;
+}
+.forms-respuestas-table {
+  width: max-content;
+  min-width: 100%;
+}
+.forms-respuestas-table th,
+.forms-respuestas-table td {
+  white-space: nowrap;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
 }

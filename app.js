@@ -42,7 +42,7 @@
   // NOTA: no se implementan aún los tooltips/mensajes por nodo (queda para
   // una fase posterior) — por ahora cada nodo sigue siendo decorativo,
   // solo que la CANTIDAD ya es real.
-  const CONSTELLATION_COLORS = ['#1FC8C0', '#8B5CF6', '#F5A623', '#9A5B3F', '#EC4899', '#F0455C'];
+  const CONSTELLATION_COLORS = ['#1FC8C0', '#8B5CF6', '#F5A623', '#9A5B3F', '#EC4899'];
   const CONSTELLATION_MIN_NODOS = 60;
   const constellationReduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const ICON_CLIP_SVG = '<svg class="w-3.5 h-3.5 inline-block shrink-0 align-middle mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>';
@@ -808,6 +808,8 @@
       document.getElementById('siteView').classList.add('hidden');
       document.getElementById('dashboardView').classList.remove('hidden');
       applyAdminRoleUI();
+      actualizarHeaderUsuario('admin');
+      initTema();
       await initAdmin();
       showPanel('resumen');
       await registrarExito();
@@ -820,6 +822,8 @@
       document.getElementById('siteView').classList.add('hidden');
       document.getElementById('dashboardView').classList.remove('hidden');
       applyAdminRoleUI(usuario);
+      actualizarHeaderUsuario('admin');
+      initTema();
       await initAdmin();
       await abrirPrimerPanelSegunPermisos('admin', usuario, '.panel-tab', '.panel-content', showPanel, 'resumen');
       await registrarExito();
@@ -830,6 +834,8 @@
       currentDocente = usuario;
       document.getElementById('siteView').classList.add('hidden');
       document.getElementById('teacherView').classList.remove('hidden');
+      actualizarHeaderUsuario('docente');
+      initTema();
       await abrirPrimerPanelSegunPermisos('docente', usuario, '.panel-tab-t', '.panel-content-t', showPanelDocente, 'resumen');
       await updateMemorandosBadge();
       await registrarExito();
@@ -841,6 +847,8 @@
       try { localStorage.setItem('aplus_estudiante_email', usuario.email || usuario.nombre); } catch (e) {}
       document.getElementById('siteView').classList.add('hidden');
       document.getElementById('studentView').classList.remove('hidden');
+      actualizarHeaderUsuario('estudiante');
+      initTema();
       await initEstudiante();
       await abrirPrimerPanelSegunPermisos('estudiante', usuario, '.panel-tab-s', '.panel-content-s', showPanelEstudiante, 'resumen');
       await registrarExito();
@@ -1002,34 +1010,34 @@
     if (restrictedNote) restrictedNote.classList.toggle('hidden', isSuper);
     const roleChip = document.getElementById('adminRoleChip');
     if (roleChip) roleChip.textContent = isSuper ? 'Superadmin' : 'Administración';
+    actualizarHeaderUsuario('admin');
   }
 
   // async (fire-and-forget desde showPanel, ver más abajo): Store('usuarios')
   // ahora habla con MySQL. 'modulos' sigue síncrono (localStorage, Fase 2
   // pendiente) — Promise.all solo espera lo que de verdad es asíncrono.
   async function renderAdminBannerStats() {
+    // Las estadísticas (Usuarios, Cohortes en curso, Cohortes totales) se
+    // ocultaron del banner por solicitud del usuario — el contenedor queda
+    // vacío intencionalmente.
     const el = document.getElementById('adminBannerStats');
-    if (!el) return;
-    const [usuarios, modulos] = await Promise.all([Store.list('usuarios'), Store.list('modulos')]);
-    const enCurso = modulos.filter(m => m.estado === 'En curso').length;
-    const stats = [
-      { label: 'Usuarios', value: usuarios.length },
-      { label: 'Cohortes en curso', value: enCurso },
-      { label: 'Cohortes totales', value: modulos.length },
-    ];
-    el.innerHTML = stats.map(s => `
-      <div class="superadmin-banner-stat px-4 py-2.5">
-        <p class="text-[11px] font-semibold text-white/60 uppercase tracking-wide">${s.label}</p>
-        <p class="text-lg font-extrabold text-white leading-tight mt-0.5">${s.value}</p>
-      </div>`).join('');
+    if (el) el.innerHTML = '';
   }
 
   function logout() {
+    cerrarTodosDropdownsPerfil();
     detenerControlInactividad();
     currentAdminRole = null;
     currentAdminUser = null;
     panelActivoAdmin = null;
     semaforoCohorteFiltro = '';
+    aplicarTema('light', false);
+    document.documentElement.classList.remove('dark');
+    if (document.body) document.body.classList.remove('dark', 'dark-mode');
+    ['dashboardView', 'teacherView', 'studentView'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('dark');
+    });
     document.getElementById('dashboardView').classList.add('hidden');
     document.getElementById('siteView').classList.remove('hidden');
     document.getElementById('loginEmail').value = '';
@@ -1037,17 +1045,26 @@
     quitarAvisoSinAcceso('.panel-content');
     window.scrollTo(0, 0);
     cerrarSesionChat();
-    if (typeof setAuthToken === 'function') setAuthToken(null);
+    if (typeof apiLogout === 'function') apiLogout();
+    else if (typeof setAuthToken === 'function') setAuthToken(null);
     localStorage.removeItem(DB_PREFIX_TOKEN + 'authToken');
     localStorage.removeItem('aplus_chat_token');
     if (window.aplusChatResetSession) window.aplusChatResetSession();
   }
 
   function logoutDocente() {
+    cerrarTodosDropdownsPerfil();
     detenerControlInactividad();
     currentDocente = null;
     panelActivoDocente = null;
     docenteRiesgoCohorte = '';
+    aplicarTema('light', false);
+    document.documentElement.classList.remove('dark');
+    if (document.body) document.body.classList.remove('dark', 'dark-mode');
+    ['dashboardView', 'teacherView', 'studentView'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('dark');
+    });
     document.getElementById('teacherView').classList.add('hidden');
     document.getElementById('siteView').classList.remove('hidden');
     document.getElementById('loginEmail').value = '';
@@ -1056,16 +1073,25 @@
     document.querySelectorAll('#teacherView .mb-6').forEach(seccion => seccion.classList.remove('hidden'));
     window.scrollTo(0, 0);
     cerrarSesionChat();
-    if (typeof setAuthToken === 'function') setAuthToken(null);
+    if (typeof apiLogout === 'function') apiLogout();
+    else if (typeof setAuthToken === 'function') setAuthToken(null);
     localStorage.removeItem(DB_PREFIX_TOKEN + 'authToken');
     localStorage.removeItem('aplus_chat_token');
     if (window.aplusChatResetSession) window.aplusChatResetSession();
   }
 
   function logoutEstudiante() {
+    cerrarTodosDropdownsPerfil();
     detenerControlInactividad();
     currentEstudiante = null;
     panelActivoEstudiante = null;
+    aplicarTema('light', false);
+    document.documentElement.classList.remove('dark');
+    if (document.body) document.body.classList.remove('dark', 'dark-mode');
+    ['dashboardView', 'teacherView', 'studentView'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('dark');
+    });
     document.getElementById('studentView').classList.add('hidden');
     document.getElementById('siteView').classList.remove('hidden');
     document.getElementById('loginEmail').value = '';
@@ -1074,11 +1100,264 @@
     document.querySelectorAll('#studentView .mb-6').forEach(seccion => seccion.classList.remove('hidden'));
     window.scrollTo(0, 0);
     cerrarSesionChat();
-    if (typeof setAuthToken === 'function') setAuthToken(null);
+    if (typeof apiLogout === 'function') apiLogout();
+    else if (typeof setAuthToken === 'function') setAuthToken(null);
     localStorage.removeItem(DB_PREFIX_TOKEN + 'authToken');
     localStorage.removeItem('aplus_chat_token');
     if (window.aplusChatResetSession) window.aplusChatResetSession();
   }
+
+  // =========================================================================
+  // SISTEMA DE MENÚ DE PERFIL EN CABECERA Y MODO OSCURO GLOBAL
+  // =========================================================================
+
+  function toggleHeaderProfileMenu(role) {
+    const dropdown = document.getElementById('headerProfileDropdown-' + role);
+    const btn = document.getElementById('headerAvatarBtn-' + role);
+    const chevron = document.getElementById('headerAvatarChevron-' + role);
+    if (!dropdown) return;
+
+    const estabaOculto = dropdown.classList.contains('hidden');
+
+    cerrarTodosDropdownsPerfil();
+
+    if (estabaOculto) {
+      dropdown.classList.remove('hidden');
+      if (btn) btn.setAttribute('aria-expanded', 'true');
+      if (chevron) chevron.classList.add('rotate-180');
+    }
+  }
+
+  function cerrarTodosDropdownsPerfil() {
+    ['admin', 'docente', 'estudiante'].forEach(function(r) {
+      const d = document.getElementById('headerProfileDropdown-' + r);
+      const b = document.getElementById('headerAvatarBtn-' + r);
+      const c = document.getElementById('headerAvatarChevron-' + r);
+      if (d) d.classList.add('hidden');
+      if (b) b.setAttribute('aria-expanded', 'false');
+      if (c) c.classList.remove('rotate-180');
+    });
+  }
+
+  function irAMiPerfil(role) {
+    cerrarTodosDropdownsPerfil();
+    if (role === 'admin') {
+      showPanel('configuracion');
+    } else if (role === 'docente') {
+      showPanelDocente('perfil');
+    } else if (role === 'estudiante') {
+      showPanelEstudiante('perfil');
+    }
+  }
+
+  function ejecutarLogoutRol(role) {
+    cerrarTodosDropdownsPerfil();
+    if (role === 'admin') {
+      logout();
+    } else if (role === 'docente') {
+      logoutDocente();
+    } else if (role === 'estudiante') {
+      logoutEstudiante();
+    }
+  }
+
+  function actualizarHeaderUsuario(role) {
+    if (role === 'admin') {
+      const isSuper = currentAdminRole === 'superadmin';
+      const user = currentAdminUser || {};
+      const nombre = isSuper ? 'Superadministrador' : (user.nombre || 'Administración');
+      const email = isSuper ? (user.email || 'admin@fundacionamas.org.co') : (user.email || 'coordinacion@fundacionamas.org.co');
+      const rol = isSuper ? 'Superadmin' : (user.rol || 'Administración');
+      const fotoUrl = user.fotoUrl || '';
+      const iniciales = isSuper ? 'SA' : (nombre.split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || 'AD');
+
+      const headerName = document.getElementById('headerUserName-admin');
+      if (headerName) headerName.textContent = isSuper ? 'Superadmin' : (nombre.split(' ')[0] || 'Admin');
+      const dropName = document.getElementById('dropdownUserName-admin');
+      if (dropName) dropName.textContent = nombre;
+      const dropEmail = document.getElementById('dropdownUserEmail-admin');
+      if (dropEmail) dropEmail.textContent = email;
+      const dropRole = document.getElementById('dropdownUserRole-admin');
+      if (dropRole) dropRole.textContent = rol;
+
+      const avatarCont = document.getElementById('headerAvatarImg-admin');
+      if (avatarCont) {
+        avatarCont.style.background = 'linear-gradient(135deg, #8B5CF6 0%, #1FC8C0 100%)';
+        avatarCont.style.color = '#FFFFFF';
+        if (fotoUrl) {
+          avatarCont.innerHTML = `<img src="${fotoUrl}" alt="${escapeHtml(nombre)}" class="w-full h-full object-cover">`;
+        } else {
+          avatarCont.innerHTML = `<span style="color:#ffffff !important;font-weight:800 !important;font-size:13px !important;line-height:1 !important;letter-spacing:0.02em !important;display:flex !important;align-items:center !important;justify-content:center !important;width:100% !important;height:100% !important;user-select:none !important;">${iniciales}</span>`;
+        }
+      }
+    } else if (role === 'docente') {
+      const user = currentDocente || {};
+      const nombre = user.nombre || 'Docente';
+      const email = user.email || 'docente@aplus.org';
+      const rol = user.rol || 'Docente';
+      const fotoUrl = user.fotoUrl || '';
+      const iniciales = (nombre.split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || 'DOC');
+
+      const headerName = document.getElementById('headerUserName-docente');
+      if (headerName) headerName.textContent = nombre.split(' ')[0] || 'Docente';
+      const dropName = document.getElementById('dropdownUserName-docente');
+      if (dropName) dropName.textContent = nombre;
+      const dropEmail = document.getElementById('dropdownUserEmail-docente');
+      if (dropEmail) dropEmail.textContent = email;
+      const dropRole = document.getElementById('dropdownUserRole-docente');
+      if (dropRole) dropRole.textContent = rol;
+
+      const avatarCont = document.getElementById('headerAvatarImg-docente');
+      if (avatarCont) {
+        avatarCont.style.background = 'linear-gradient(135deg, #1FC8C0 0%, #8B5CF6 100%)';
+        avatarCont.style.color = '#FFFFFF';
+        if (fotoUrl) {
+          avatarCont.innerHTML = `<img src="${fotoUrl}" alt="${escapeHtml(nombre)}" class="w-full h-full object-cover">`;
+        } else {
+          avatarCont.innerHTML = `<span style="color:#ffffff !important;font-weight:800 !important;font-size:13px !important;line-height:1 !important;letter-spacing:0.02em !important;display:flex !important;align-items:center !important;justify-content:center !important;width:100% !important;height:100% !important;user-select:none !important;">${iniciales}</span>`;
+        }
+      }
+    } else if (role === 'estudiante') {
+      const user = currentEstudiante || {};
+      const nombre = user.nombre || 'Estudiante';
+      const email = user.email || 'estudiante@aplus.org';
+      const rol = user.cohorte ? user.cohorte : (user.rol || 'Estudiante');
+      const fotoUrl = user.fotoUrl || '';
+      const iniciales = (nombre.split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || 'EST');
+
+      const headerName = document.getElementById('headerUserName-estudiante');
+      if (headerName) headerName.textContent = nombre.split(' ')[0] || 'Estudiante';
+      const dropName = document.getElementById('dropdownUserName-estudiante');
+      if (dropName) dropName.textContent = nombre;
+      const dropEmail = document.getElementById('dropdownUserEmail-estudiante');
+      if (dropEmail) dropEmail.textContent = email;
+      const dropRole = document.getElementById('dropdownUserRole-estudiante');
+      if (dropRole) dropRole.textContent = rol;
+
+      const avatarCont = document.getElementById('headerAvatarImg-estudiante');
+      if (avatarCont) {
+        avatarCont.style.background = 'linear-gradient(135deg, #F5A623 0%, #EC4899 100%)';
+        avatarCont.style.color = '#FFFFFF';
+        if (fotoUrl) {
+          avatarCont.innerHTML = `<img src="${fotoUrl}" alt="${escapeHtml(nombre)}" class="w-full h-full object-cover">`;
+        } else {
+          avatarCont.innerHTML = `<span style="color:#ffffff !important;font-weight:800 !important;font-size:13px !important;line-height:1 !important;letter-spacing:0.02em !important;display:flex !important;align-items:center !important;justify-content:center !important;width:100% !important;height:100% !important;user-select:none !important;">${iniciales}</span>`;
+        }
+      }
+    }
+  }
+
+  // Valida si existe una sesión activa real en la interfaz de la aplicación
+  function haySesionActivaApp() {
+    if (typeof currentAdminRole !== 'undefined' && currentAdminRole) return true;
+    if (typeof currentDocente !== 'undefined' && currentDocente) return true;
+    if (typeof currentEstudiante !== 'undefined' && currentEstudiante) return true;
+    if (typeof currentAdminUser !== 'undefined' && currentAdminUser) return true;
+    const db = document.getElementById('dashboardView');
+    const tc = document.getElementById('teacherView');
+    const st = document.getElementById('studentView');
+    if (db && !db.classList.contains('hidden')) return true;
+    if (tc && !tc.classList.contains('hidden')) return true;
+    if (st && !st.classList.contains('hidden')) return true;
+    return false;
+  }
+
+  function aplicarTema(tema, guardar = true) {
+    const sesionActiva = haySesionActivaApp();
+    const esOscuro = sesionActiva && (tema === 'dark');
+
+    // NUNCA aplicar .dark a html ni body si el portal público (#siteView) está visible
+    const siteViewEl = document.getElementById('siteView');
+    const enSiteView = !siteViewEl || !siteViewEl.classList.contains('hidden');
+
+    document.documentElement.classList.toggle('dark', esOscuro && !enSiteView);
+    if (document.body) {
+      document.body.classList.toggle('dark', esOscuro && !enSiteView);
+      document.body.classList.toggle('dark-mode', esOscuro && !enSiteView);
+    }
+
+    // El modo oscuro se aplica directamente a los paneles autenticados
+    ['dashboardView', 'teacherView', 'studentView'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('dark', esOscuro);
+    });
+
+    if (guardar) {
+      try {
+        localStorage.setItem('aplus_theme', (tema === 'dark') ? 'dark' : 'light');
+      } catch (e) {}
+    }
+
+    document.querySelectorAll('.theme-toggle-switch').forEach(sw => {
+      sw.classList.toggle('bg-turquesa', esOscuro);
+      sw.classList.toggle('bg-gray-200', !esOscuro);
+      const thumb = sw.querySelector('.theme-toggle-thumb');
+      if (thumb) {
+        thumb.classList.toggle('translate-x-5', esOscuro);
+        thumb.classList.toggle('translate-x-0', !esOscuro);
+      }
+    });
+
+    document.querySelectorAll('.theme-icon-sun').forEach(el => {
+      el.classList.toggle('hidden', esOscuro);
+    });
+    document.querySelectorAll('.theme-icon-moon').forEach(el => {
+      el.classList.toggle('hidden', !esOscuro);
+    });
+    document.querySelectorAll('.theme-mode-label').forEach(el => {
+      el.textContent = esOscuro ? 'Modo claro' : 'Modo oscuro';
+    });
+  }
+
+  function toggleModoOscuro() {
+    if (!haySesionActivaApp()) return;
+    const actual = (document.documentElement.classList.contains('dark') || (document.body && document.body.classList.contains('dark'))) ? 'dark' : 'light';
+    aplicarTema(actual === 'dark' ? 'light' : 'dark', true);
+  }
+
+  function initTema() {
+    if (!haySesionActivaApp()) {
+      aplicarTema('light', false);
+      return;
+    }
+    let temaGuardado = null;
+    try {
+      temaGuardado = localStorage.getItem('aplus_theme');
+    } catch (e) {}
+
+    // El modo blanco ('light') es por defecto.
+    // Si el usuario guardó 'dark' previamente, se respeta y restaura al volver a entrar.
+    const temaAEjecutar = (temaGuardado === 'dark') ? 'dark' : 'light';
+    aplicarTema(temaAEjecutar, false);
+  }
+
+  // Escuchador global de clics para cerrar el dropdown al pulsar fuera
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.header-user-menu')) {
+      cerrarTodosDropdownsPerfil();
+    }
+  });
+
+  // Exponer al objeto window para llamadas desde atributos onclick del HTML
+  window.toggleHeaderProfileMenu = toggleHeaderProfileMenu;
+  window.cerrarTodosDropdownsPerfil = cerrarTodosDropdownsPerfil;
+  window.irAMiPerfil = irAMiPerfil;
+  window.ejecutarLogoutRol = ejecutarLogoutRol;
+  window.actualizarHeaderUsuario = actualizarHeaderUsuario;
+  window.toggleModoOscuro = toggleModoOscuro;
+  window.aplicarTema = aplicarTema;
+  window.initTema = initTema;
+  window.closePromoModal = function() {
+    const m = document.getElementById('promoModal');
+    if (m) m.classList.add('hidden');
+  };
+  window.agregarPromoGraduado = function() {};
+  window.guardarPromoModal = function() {
+    window.closePromoModal();
+  };
+
+  // Ejecución inmediata de tema
+  initTema();
 
   // ---------- Navegación del panel Docente ----------
   const PANEL_COLOR_DOCENTE = '#008080';
@@ -1087,6 +1366,8 @@
     const tab = document.querySelector('.panel-tab-t[data-tpanel="' + panel + '"]');
     if (tab && tab.classList.contains('hidden')) return;
     if (!(await permisoUsuarioSobrePanel(currentDocente, 'docente.' + panel)).ver) return;
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // Ocultar todos los demás paneles y desactivar tabs docentes de forma sincronizada e instantánea
     document.querySelectorAll('.panel-content-t').forEach(p => {
@@ -1113,9 +1394,23 @@
 
     const mount = document.getElementById('mount-t-' + panel);
     if (mount && (!mount.innerHTML.trim() || mount.innerHTML.includes('No se pudo cargar el módulo'))) {
-      mount.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-12 text-center flex flex-col items-center justify-center gap-3">
-        <div class="w-8 h-8 border-3 border-turquesa/20 border-t-turquesa rounded-full animate-spin"></div>
-        <p class="text-xs font-semibold text-slate2">Cargando módulo...</p>
+      mount.innerHTML = `<div class="admin-panel-card p-8">
+        <div class="animate-pulse space-y-5">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl skeleton-pulse"></div>
+            <div class="flex-1 space-y-2">
+              <div class="h-4 skeleton-pulse w-1/3"></div>
+              <div class="h-3 skeleton-pulse w-1/2"></div>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="h-20 skeleton-pulse rounded-xl"></div>
+            <div class="h-20 skeleton-pulse rounded-xl"></div>
+            <div class="h-20 skeleton-pulse rounded-xl"></div>
+            <div class="h-20 skeleton-pulse rounded-xl"></div>
+          </div>
+          <div class="h-48 skeleton-pulse rounded-xl"></div>
+        </div>
       </div>`;
     }
 
@@ -1126,13 +1421,15 @@
       } catch (err) {
         console.error('[showPanelDocente] Error al cargar panel "' + panel + '":', err);
         if (mount) {
-          mount.innerHTML = `<div class="bg-white rounded-2xl border border-coral/20 shadow-soft p-10 text-center flex flex-col items-center justify-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-coral/10 text-coral flex items-center justify-center">
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          mount.innerHTML = `<div class="admin-panel-card p-10 text-center flex flex-col items-center justify-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-coral/10 to-coral/5 text-coral flex items-center justify-center shadow-sm">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
             </div>
-            <p class="text-sm font-bold text-ink">No se pudo cargar el módulo</p>
-            <p class="text-xs text-slate2 max-w-sm">${escapeHtml(err.message || 'Error inesperado al renderizar')}</p>
-            <button onclick="showPanelDocente('${panel}')" class="mt-2 px-4 py-1.5 rounded-full bg-turquesa text-white text-xs font-semibold hover:opacity-90 transition cursor-pointer">Reintentar</button>
+            <div>
+              <p class="text-sm font-bold text-ink">No se pudo cargar el módulo</p>
+              <p class="text-xs text-slate2 mt-1 max-w-sm">${escapeHtml(err.message || 'Error inesperado al renderizar')}</p>
+            </div>
+            <button onclick="showPanelDocente('${panel}')" class="mt-1 px-5 py-2 rounded-full bg-gradient-to-r from-turquesa to-teal-500 text-white text-xs font-bold hover:shadow-lg hover:shadow-turquesa/25 hover:-translate-y-0.5 active:translate-y-0 transition-all cursor-pointer">Reintentar</button>
           </div>`;
         }
       }
@@ -1148,6 +1445,8 @@
       if (tabDelPanel && (tabDelPanel.dataset.superOnly === 'true' || tabDelPanel.classList.contains('hidden'))) return;
       if (!(await permisoUsuarioSobrePanel(currentAdminUser, 'admin.' + panel)).ver) return;
     }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // Ocultar de inmediato TODOS los demás paneles administrativos para evitar solapamientos
     document.querySelectorAll('.panel-content').forEach(p => {
@@ -1167,9 +1466,23 @@
     const mountId = 'mount-' + (panel === 'informesAdmin' ? 'informes-admin' : panel);
     const mount = document.getElementById(mountId);
     if (mount && (!mount.innerHTML.trim() || mount.innerHTML.includes('No se pudo cargar el módulo'))) {
-      mount.innerHTML = `<div class="admin-panel-card p-12 text-center flex flex-col items-center justify-center gap-3">
-        <div class="w-8 h-8 border-3 border-morado/20 border-t-morado rounded-full animate-spin"></div>
-        <p class="text-xs font-semibold text-slate2">Cargando módulo...</p>
+      mount.innerHTML = `<div class="admin-panel-card p-8">
+        <div class="animate-pulse space-y-5">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl skeleton-pulse"></div>
+            <div class="flex-1 space-y-2">
+              <div class="h-4 skeleton-pulse w-1/3"></div>
+              <div class="h-3 skeleton-pulse w-1/2"></div>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="h-20 skeleton-pulse rounded-xl"></div>
+            <div class="h-20 skeleton-pulse rounded-xl"></div>
+            <div class="h-20 skeleton-pulse rounded-xl"></div>
+            <div class="h-20 skeleton-pulse rounded-xl"></div>
+          </div>
+          <div class="h-48 skeleton-pulse rounded-xl"></div>
+        </div>
       </div>`;
     }
 
@@ -1183,16 +1496,19 @@
         initTablesEnPanel('panel-' + panel);
       }
       actualizarBadgePqrAdmin();
+      actualizarBadgesNotificacionesAdmin();
     } catch (err) {
       console.error('[showPanel] Error al cargar panel "' + panel + '":', err);
       if (mount) {
-        mount.innerHTML = `<div class="admin-panel-card p-10 text-center flex flex-col items-center justify-center gap-3">
-          <div class="w-10 h-10 rounded-full bg-coral/10 text-coral flex items-center justify-center">
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        mount.innerHTML = `<div class="admin-panel-card p-10 text-center flex flex-col items-center justify-center gap-4">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-coral/10 to-coral/5 text-coral flex items-center justify-center shadow-sm">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
           </div>
-          <p class="text-sm font-bold text-ink">No se pudo cargar el módulo</p>
-          <p class="text-xs text-slate2 max-w-sm">${escapeHtml(err.message || 'Error inesperado al renderizar')}</p>
-          <button onclick="showPanel('${panel}')" class="mt-2 px-4 py-1.5 rounded-full bg-morado text-white text-xs font-semibold hover:opacity-90 transition cursor-pointer">Reintentar</button>
+          <div>
+            <p class="text-sm font-bold text-ink">No se pudo cargar el módulo</p>
+            <p class="text-xs text-slate2 mt-1 max-w-sm">${escapeHtml(err.message || 'Error inesperado al renderizar')}</p>
+          </div>
+          <button onclick="showPanel('${panel}')" class="mt-1 px-5 py-2 rounded-full bg-gradient-to-r from-morado to-indigo-600 text-white text-xs font-bold shadow-lg shadow-morado/20 hover:shadow-xl hover:shadow-morado/30 hover:-translate-y-0.5 active:translate-y-0 transition-all cursor-pointer">Reintentar</button>
         </div>`;
       }
     }
@@ -1771,6 +2087,7 @@
   // (ej. "pqr") que son datos y vistas distintas según el contexto.
   const CATALOGO_PANELES = [
     { codigo: 'admin.resumen', categoria: 'Administrativo', etiqueta: 'Resumen' },
+    { codigo: 'admin.notificaciones', categoria: 'Administrativo', etiqueta: 'Notificaciones y Alertas' },
     { codigo: 'admin.usuarios', categoria: 'Administrativo', etiqueta: 'Usuarios' },
     { codigo: 'admin.perfiles', categoria: 'Administrativo', etiqueta: 'Perfiles y permisos' },
     { codigo: 'admin.modulos', categoria: 'Administrativo', etiqueta: 'Cohortes' },
@@ -1784,6 +2101,7 @@
     { codigo: 'admin.calificaciones', categoria: 'Administrativo', etiqueta: 'Calificaciones' },
     { codigo: 'admin.informesAdmin', categoria: 'Administrativo', etiqueta: 'Informes' },
     { codigo: 'admin.encuestas', categoria: 'Administrativo', etiqueta: 'Encuestas de satisfacción' },
+    { codigo: 'admin.forms', categoria: 'Administrativo', etiqueta: 'Forms' },
     { codigo: 'admin.trainee', categoria: 'Administrativo', etiqueta: 'Historial Trainee' },
     { codigo: 'admin.auditoria', categoria: 'Administrativo', etiqueta: 'Auditoría' },
     { codigo: 'admin.chatvoz', categoria: 'Administrativo', etiqueta: 'Chat conocimiento — Base de conocimiento' },
@@ -1812,24 +2130,24 @@
   ];
 
   // Nombres de los 2 perfiles "de sistema" que dan acceso completo a su
-  // categoría — se auto-crean si no existen, para que Docente/Estudiante
+  // Nombres de los perfiles "de sistema" que dan acceso completo a su
+  // categoría — se auto-crean si no existen, para que Administrador/Docente/Estudiante
   // sigan viendo todo lo que veían antes de activar este sistema.
   const PERFIL_SISTEMA_DOCENTE = 'Docente Estándar';
   const PERFIL_SISTEMA_ESTUDIANTE = 'Estudiante Estándar';
+  const PERFIL_SISTEMA_ADMINISTRACION = 'Administración Estándar';
 
   // Crea (si no existen) los perfiles de sistema con acceso total a su
-  // categoría, y asigna ese perfil a cualquier Docente/Estudiante que
-  // todavía no tenga ningún perfil — así nadie pierde acceso el día que
-  // se activa este sistema sobre datos ya existentes.
-  // async: toca tanto 'perfiles' (localStorage, Fase 4) como 'usuarios'
-  // (MySQL desde la Fase 1) — ver comentario de seedIfEmpty(), que ahora
-  // hace await de esta función.
+  // categoría, y asigna ese perfil a cualquier usuario que
+  // todavía no tenga ningún perfil — así nadie pierde acceso.
+  // async: toca tanto 'perfiles' como 'usuarios' vía MySQL.
   async function asegurarPerfilesDeSistema() {
     let perfiles = await Store.list('perfiles');
     let cambiosPerfiles = false;
 
     [{ nombre: PERFIL_SISTEMA_DOCENTE, categoria: 'Docente' },
-     { nombre: PERFIL_SISTEMA_ESTUDIANTE, categoria: 'Estudiante' }].forEach(base => {
+     { nombre: PERFIL_SISTEMA_ESTUDIANTE, categoria: 'Estudiante' },
+     { nombre: PERFIL_SISTEMA_ADMINISTRACION, categoria: 'Administrativo' }].forEach(base => {
       let p = perfiles.find(x => x.nombre === base.nombre);
       if (!p) {
         p = {
@@ -1844,11 +2162,20 @@
       // Se re-normaliza siempre (no solo al crear) para que un panel nuevo
       // agregado en el futuro a CATALOGO_PANELES quede también cubierto.
       CATALOGO_PANELES.filter(pan => pan.categoria === base.categoria).forEach(pan => {
+        const esSuperOnly = pan.codigo === 'admin.auditoria' || pan.codigo === 'admin.chatvoz';
         if (!p.permisos[pan.codigo] || !p.permisos[pan.codigo].ver) {
-          p.permisos[pan.codigo] = { ver: true, crear: true, editar: true, eliminar: true };
+          p.permisos[pan.codigo] = { ver: !esSuperOnly, crear: !esSuperOnly, editar: !esSuperOnly, eliminar: !esSuperOnly };
           cambiosPerfiles = true;
         }
       });
+    });
+
+    perfiles.forEach(p => {
+      if (!p.permisos) p.permisos = {};
+      if (!p.permisos['admin.forms'] && p.permisos['admin.encuestas']) {
+        p.permisos['admin.forms'] = { ...p.permisos['admin.encuestas'] };
+        cambiosPerfiles = true;
+      }
     });
 
     if (cambiosPerfiles) await Store.set('perfiles', perfiles);
@@ -1856,9 +2183,9 @@
     const usuarios = await Store.list('usuarios');
     let cambiosUsuarios = false;
     usuarios.forEach(u => {
-      if ((u.rol === 'Docente' || u.rol === 'Estudiante') && (!u.perfiles || !u.perfiles.length)) {
-        const nombreBuscado = u.rol === 'Docente' ? PERFIL_SISTEMA_DOCENTE : PERFIL_SISTEMA_ESTUDIANTE;
-        const perfilSistema = perfiles.find(p => p.nombre === nombreBuscado); // reutiliza 'perfiles' ya cargado arriba, en vez de otra llamada a Store
+      if ((u.rol === 'Docente' || u.rol === 'Estudiante' || u.rol === 'Administrador' || u.rol === 'Coordinador') && (!u.perfiles || !u.perfiles.length)) {
+        const nombreBuscado = u.rol === 'Docente' ? PERFIL_SISTEMA_DOCENTE : (u.rol === 'Estudiante' ? PERFIL_SISTEMA_ESTUDIANTE : PERFIL_SISTEMA_ADMINISTRACION);
+        const perfilSistema = perfiles.find(p => p.nombre === nombreBuscado);
         if (perfilSistema) { u.perfiles = [perfilSistema.id]; cambiosUsuarios = true; }
       }
     });
@@ -1875,10 +2202,16 @@
   async function permisoUsuarioSobrePanel(usuario, panelCodigo) {
     const vacio = { ver: false, crear: false, editar: false, eliminar: false };
     if (!usuario) return vacio;
-    // El Superadmin (currentAdminRole === 'superadmin') no pasa por esta
-    // función: se resuelve aparte en applyPermisosPanelesAdmin() con
-    // acceso total, para que nunca dependa de datos editables.
+    // El Superadmin siempre tiene acceso completo a todos los paneles
+    if (usuario.rol === 'Superadmin' || currentAdminRole === 'superadmin') {
+      return { ver: true, crear: true, editar: true, eliminar: true };
+    }
     const idsPerfiles = usuario.perfiles || [];
+    // Si es Administrador o Coordinador y no tiene perfil restringido, otorgar acceso administrativo
+    if (!idsPerfiles.length && (usuario.rol === 'Administrador' || usuario.rol === 'Coordinador')) {
+      const esSuperOnly = panelCodigo === 'admin.auditoria' || panelCodigo === 'admin.chatvoz';
+      return { ver: !esSuperOnly, crear: !esSuperOnly, editar: !esSuperOnly, eliminar: !esSuperOnly };
+    }
     if (!idsPerfiles.length) return vacio;
     if (!_perfilesMemoryCache || (Date.now() - _perfilesMemoryCacheTime > 45000)) {
       _perfilesMemoryCache = await Store.list('perfiles');
@@ -3259,19 +3592,27 @@
   }
 
   function statusPill(value, map) {
-    const c = (map && map[value]) || { bg: '#5B647214', text: '#5B6472' };
-    return `<span class="text-xs font-semibold px-2.5 py-1 rounded-full" style="background:${c.bg};color:${c.text}">${escapeHtml(value)}</span>`;
+    let c = (map && map[value]) || (ESTADO_COLORS && ESTADO_COLORS[value]) || { bg: '#5B647214', text: '#5B6472' };
+    if (typeof c === 'string') {
+      c = { bg: c + '1A', text: c };
+    }
+    return `<span class="text-xs font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1" style="background:${c.bg};color:${c.text}">${escapeHtml(value)}</span>`;
   }
 
   const ESTADO_COLORS = {
     'Activo': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Inactivo': { bg: '#5B647214', text: '#5B6472' },
     'En curso': { bg: '#8B5CF61A', text: '#8B5CF6' }, 'Planeada': { bg: '#F5A6231A', text: '#b5790f' }, 'Finalizada': { bg: '#5B647214', text: '#5B6472' },
     'Enviado': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Borrador': { bg: '#5B647214', text: '#5B6472' },
-    'Abierto': { bg: '#F0455C1A', text: '#F0455C' }, 'En proceso': { bg: '#F5A6231A', text: '#b5790f' }, 'Cerrado': { bg: '#1FC8C01A', text: '#0f8f89' },
+    'Abierto': { bg: '#EC48991A', text: '#EC4899' }, 'En proceso': { bg: '#F5A6231A', text: '#b5790f' }, 'Cerrado': { bg: '#1FC8C01A', text: '#0f8f89' },
     'Pendiente': { bg: '#F5A6231A', text: '#b5790f' },
-    'Programada': { bg: '#8B5CF61A', text: '#8B5CF6' }, 'Realizada': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Cancelada': { bg: '#F0455C1A', text: '#F0455C' },
+    'Programada': { bg: '#8B5CF61A', text: '#8B5CF6' }, 'Realizada': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Cancelada': { bg: '#EC48991A', text: '#EC4899' },
     'Abierta': { bg: '#8B5CF61A', text: '#8B5CF6' },
     'Publicada': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Oculta': { bg: '#5B647214', text: '#5B6472' },
+    'Presente': { bg: '#10B9811A', text: '#059669' },
+    'Tarde': { bg: '#F59E0B1A', text: '#D97706' },
+    'Justificada': { bg: '#10B9811A', text: '#059669' },
+    'Asistencia Parcial': { bg: '#F59E0B1A', text: '#D97706' },
+    'Falla': { bg: '#EF44441A', text: '#DC2626' }
   };
 
   // ---------- Superadmin — vista Resumen (diseño corporativo) ----------
@@ -3538,7 +3879,7 @@
       <div class="grid lg:grid-cols-[1.4fr_1fr] gap-5 mb-5">
         <div class="dashboard-hero-banner p-7 sm:p-8 flex items-center justify-between gap-6">
           <div>
-            <h3 class="text-lg sm:text-xl font-extrabold text-white">Fundación A<span class="text-coral">+</span></h3>
+            <h3 class="text-lg sm:text-xl font-extrabold text-white">Fundación A+</h3>
             <p class="text-sm text-white/75 mt-1.5 max-w-sm leading-relaxed">Panel administrativo institucional, ahora con vista de solo lectura.</p>
           </div>
           <svg class="w-14 h-14 text-white/85 shrink-0 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M4 21V9l8-6 8 6v12M9 21v-6h6v6M4 9h16"/></svg>
@@ -5028,7 +5369,7 @@
     return puntuados.map(x => ({ pregunta: x.r.pregunta, respuesta: x.r.respuesta, categoria: x.r.categoria || '' }));
   }
 
-  let tabUsuariosActivo = 'todos'; // 'todos' | 'profesores' | 'estudiantes' | 'registrados'
+  let tabUsuariosActivo = 'todos'; // 'todos' | 'profesores' | 'estudiantes' | 'registrados' | 'inactivos'
   async function cambiarTabUsuarios(tab) {
     tabUsuariosActivo = tab;
     if (typeof TableManager !== 'undefined' && TableManager.clearFilter) {
@@ -5099,20 +5440,62 @@
     const docentes = records.filter(u => u.rol === 'Docente');
     const estudiantes = records.filter(u => u.rol === 'Estudiante');
 
-    // Banner de alerta superior cuando hay solicitudes pendientes y no estamos en la pestaña 'registrados'
+    // ---- Helpers visuales (solo diseño; no tocan datos ni lógica) ----
+    const usrP = d => `<path stroke-linecap="round" stroke-linejoin="round" d="${d}"/>`;
+    const usrIni = (n, f) => String(n || f).split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+    const usrTonoCohorte = (c) => {
+      const s = String(c || '').toLowerCase();
+      if (s.includes('primer')) return 'teal';
+      if (s.includes('segund')) return 'purple';
+      if (s.includes('tercer')) return 'gold';
+      let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 3;
+      return ['teal', 'purple', 'gold'][h];
+    };
+    const usrEstadoPill = (estado) => {
+      const e = String(estado || '').toLowerCase();
+      const tono = e === 'activo' ? 'teal' : (e === 'inactivo' ? 'brown' : 'gold');
+      return `<span class="usr-status usr-tone-${tono}"><i></i>${escapeHtml(estado || '—')}</span>`;
+    };
+    const usrPillPendiente = '<span class="usr-status usr-tone-gold usr-pulse"><i></i>Pendiente</span>';
+    const usrBtnEditar = (id, txt = 'Editar') => `<button onclick="openModal('usuarios','${id}')" class="usr-btn usr-btn--edit">${txt}</button>`;
+    const usrBtnEliminar = id => `<button onclick="askDelete('usuarios','${id}')" class="usr-btn usr-btn--del">Eliminar</button>`;
+    const usrBtnsPendiente = id => `<button onclick="aprobarRegistroPendiente('${id}')" class="usr-btn usr-btn--ok">Aprobar</button><button onclick="rechazarRegistroPendiente('${id}')" class="usr-btn usr-btn--del">Rechazar</button>${usrBtnEditar(id, 'Detalles')}`;
+    const usrTipoEstudiante = (u, conRol) => {
+      const chip = u.cohorte
+        ? `<span class="usr-chip usr-tone-${usrTonoCohorte(u.cohorte)}">${escapeHtml(u.cohorte)}</span>`
+        : '<span class="usr-muted">Sin cohorte</span>';
+      return conRol ? `<div class="usr-type"><span class="usr-role">Estudiante</span>${chip}</div>` : chip;
+    };
+    const usrHead = cols => `<thead><tr>${cols.map((c, i) => `<th${i === cols.length - 1 ? ' class="usr-th-right"' : ''}>${c}</th>`).join('')}</tr></thead>`;
+    const usrFila = ({ u, tono, search, extraNombre = '', tipo, estado, acciones, dim = false }) => `
+        <tr data-search="${escapeHtml(String(search).toLowerCase())}" class="usr-row usr-tone-${tono}${dim ? ' usr-row--dim' : ''}">
+          <td>
+            <div class="usr-person">
+              <span class="usr-avatar">${escapeHtml(usrIni(u.nombre, 'U'))}</span>
+              <div class="usr-person-txt">
+                <div class="usr-name-line"><p class="usr-name">${escapeHtml(u.nombre)}</p>${extraNombre}</div>
+                <p class="usr-mail">${escapeHtml(u.email)}</p>
+              </div>
+            </div>
+          </td>
+          <td class="usr-phone">${escapeHtml(u.telefono || '—')}</td>
+          <td>${tipo}</td>
+          <td>${estado}</td>
+          <td class="usr-actions"><div class="usr-actions-in">${acciones}</div></td>
+        </tr>`;
+    const usrVacio = (titulo, texto) => `<tr class="usr-empty-row"><td colspan="5"><div class="usr-empty">
+        <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <p class="usr-empty-t">${titulo}</p><p class="usr-empty-s">${texto}</p></div></td></tr>`;
+
+    // Banner de alerta cuando hay solicitudes pendientes y no estamos en la pestaña 'registrados'
     const alertaPendientes = (pendientes.length && tabUsuariosActivo !== 'registrados') ? `
-      <div onclick="cambiarTabUsuarios('registrados')" class="admin-panel-card p-4 mb-5 border-l-4 border-amber-400 bg-amber-50/60 hover:bg-amber-100/70 cursor-pointer transition flex items-center justify-between shadow-xs">
-        <div class="flex items-center gap-3">
-          <span class="relative flex h-3 w-3 shrink-0">
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
-          </span>
-          <div>
-            <p class="text-xs font-bold text-ink">¡Hay ${pendientes.length} solicitud${pendientes.length === 1 ? '' : 'es'} de registro pendiente${pendientes.length === 1 ? '' : 's'} de revisión!</p>
-            <p class="text-[11px] text-slate2">Haz clic aquí o en la pestaña "Solicitudes" para filtrar y aprobarla(s) de inmediato.</p>
-          </div>
+      <div onclick="cambiarTabUsuarios('registrados')" class="usr-alert usr-tone-gold">
+        <span class="usr-alert-dot"><i></i></span>
+        <div class="usr-alert-txt">
+          <p class="usr-alert-t">¡Hay ${pendientes.length} solicitud${pendientes.length === 1 ? '' : 'es'} de registro pendiente${pendientes.length === 1 ? '' : 's'} de revisión!</p>
+          <p class="usr-alert-s">Haz clic aquí o en la pestaña "Solicitudes" para filtrar y aprobarla(s) de inmediato.</p>
         </div>
-        <span class="text-xs font-bold text-amber-900 bg-amber-200/90 hover:bg-amber-300 px-3 py-1.5 rounded-xl transition shrink-0 shadow-xs">Filtrar solicitudes (${pendientes.length}) ›</span>
+        <span class="usr-alert-cta">Filtrar solicitudes (${pendientes.length}) ›</span>
       </div>` : '';
 
     let cuerpoTablaHtml = '';
@@ -5122,218 +5505,126 @@
       const listaCombinada = [...pendientes, ...records];
       const allRows = listaCombinada.map(u => {
         const esPend = esSolicitudPendienteUsuario(u);
-        const iniciales = (u.nombre || 'U').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-        return `
-        <tr data-search="${escapeHtml(((u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + (u.rol || '') + ' ' + (u.cohorte || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0 ${esPend ? 'bg-amber-50/50 hover:bg-amber-100/60' : 'hover:bg-gray-50/70'} transition">
-          <td class="py-3 px-4 text-sm font-semibold text-ink">
-            <div class="flex items-center gap-2.5">
-              <span class="w-8 h-8 rounded-xl ${esPend ? 'bg-amber-100 text-amber-800 border border-amber-300' : (u.rol === 'Docente' ? 'bg-morado/10 text-morado' : 'bg-turquesa/15 text-turquesa')} font-bold text-xs flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
-              <div>
-                <div class="flex items-center gap-1.5">
-                  <p class="font-bold text-ink leading-tight">${escapeHtml(u.nombre)}</p>
-                  ${esPend ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white animate-pulse">Solicitud</span>' : ''}
-                </div>
-                <p class="text-xs text-slate2">${escapeHtml(u.email)}</p>
-              </div>
-            </div>
-          </td>
-          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.telefono || '—')}</td>
-          <td class="py-3 px-4 text-sm">
-            ${esPend ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">Autorregistro web</span>' : (u.rol === 'Docente' ? '<span class="text-xs font-bold text-morado">Profesor</span>' : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-turquesa/10 text-turquesa border border-turquesa/20">Estudiante · ${escapeHtml(u.cohorte || 'Sin cohorte')}</span>`)}
-          </td>
-          <td class="py-3 px-4">${esPend ? '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Pendiente</span>' : statusPill(u.estado, ESTADO_COLORS)}</td>
-          <td class="py-3 px-4 text-right whitespace-nowrap">
-            ${esPend ? `
-              <button onclick="aprobarRegistroPendiente('${u.id}')" class="text-xs font-bold text-white bg-turquesa hover:opacity-90 px-3 py-1.5 rounded-xl shadow-sm mr-2 transition cursor-pointer">Aprobar</button>
-              <button onclick="rechazarRegistroPendiente('${u.id}')" class="text-xs font-semibold text-coral hover:bg-coral/10 px-2.5 py-1.5 rounded-xl transition cursor-pointer mr-2">Rechazar</button>
-              <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline cursor-pointer">Detalles</button>
-            ` : `
-              <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline mr-3 cursor-pointer">Editar</button>
-              <button onclick="askDelete('usuarios','${u.id}')" class="text-xs font-semibold text-coral hover:underline cursor-pointer">Eliminar</button>
-            `}
-          </td>
-        </tr>`;
+        const esInact = String(u.estado || '').toLowerCase() === 'inactivo';
+        return usrFila({
+          u,
+          tono: esPend ? 'gold' : (esInact ? 'brown' : (u.rol === 'Docente' ? 'purple' : 'teal')),
+          search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + (u.rol || '') + ' ' + (u.cohorte || ''),
+          extraNombre: esPend ? '<span class="usr-tag usr-tone-gold">Solicitud</span>' : '',
+          tipo: esPend ? '<span class="usr-chip usr-tone-gold">Autorregistro web</span>' : (u.rol === 'Docente' ? '<span class="usr-chip usr-tone-purple">Profesor</span>' : usrTipoEstudiante(u, true)),
+          estado: esPend ? usrPillPendiente : usrEstadoPill(u.estado),
+          acciones: esPend ? usrBtnsPendiente(u.id) : usrBtnEditar(u.id) + usrBtnEliminar(u.id)
+        });
       }).join('');
-
-      tablaHeaderHtml = `
-        <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-          <th class="py-2.5 px-4">Usuario / Solicitante</th><th class="py-2.5 px-4">Teléfono</th><th class="py-2.5 px-4">Tipo / Cohorte</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4 text-right">Acciones</th>
-        </tr></thead>`;
+      tablaHeaderHtml = usrHead(['Usuario / Solicitante', 'Teléfono', 'Tipo / Cohorte', 'Estado', 'Acciones']);
       cuerpoTablaHtml = allRows || emptyRow(5);
 
     } else if (tabUsuariosActivo === 'profesores') {
       const resumenesMaterias = await Promise.all(docentes.map(u => getDocenteResumenMaterias(u.nombre)));
       const rowsDocentes = docentes.map((u, i) => {
         const resumen = resumenesMaterias[i];
-        const iniciales = (u.nombre || 'D').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
         const materiasTexto = (resumen && Array.isArray(resumen.materias)) ? resumen.materias.join(' ') : (resumen ? (resumen.count + ' materias') : '');
-        return `
-        <tr data-search="${escapeHtml(((u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + materiasTexto).toLowerCase())}" class="border-b border-gray-50 last:border-0 hover:bg-morado/5 transition">
-          <td class="py-3 px-4 text-sm font-semibold text-ink">
-            <div class="flex items-center gap-2.5">
-              <span class="w-8 h-8 rounded-xl bg-morado/10 text-morado font-bold text-xs flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
-              <div>
-                <p class="font-bold text-ink leading-tight">${escapeHtml(u.nombre)}</p>
-                <p class="text-xs text-slate2">${escapeHtml(u.email)}</p>
-              </div>
-            </div>
-          </td>
-          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.telefono || '—')}</td>
-          <td class="py-3 px-4 text-sm">
-            ${resumen && resumen.count > 0
-              ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-morado/10 text-morado border border-morado/20">${resumen.count} materia${resumen.count === 1 ? '' : 's'} · ${resumen.totalHoras} h/sem</span>`
-              : '<span class="text-slate2 text-xs">Sin materias en horario</span>'}
-          </td>
-          <td class="py-3 px-4">${statusPill(u.estado, ESTADO_COLORS)}</td>
-          <td class="py-3 px-4 text-right whitespace-nowrap">
-            <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline mr-3 cursor-pointer">Editar</button>
-            <button onclick="askDelete('usuarios','${u.id}')" class="text-xs font-semibold text-coral hover:underline cursor-pointer">Eliminar</button>
-          </td>
-        </tr>`;
+        return usrFila({
+          u, tono: 'purple',
+          search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + materiasTexto,
+          tipo: resumen && resumen.count > 0
+            ? `<span class="usr-chip usr-tone-purple">${resumen.count} materia${resumen.count === 1 ? '' : 's'} · ${resumen.totalHoras} h/sem</span>`
+            : '<span class="usr-muted">Sin materias en horario</span>',
+          estado: usrEstadoPill(u.estado),
+          acciones: usrBtnEditar(u.id) + usrBtnEliminar(u.id)
+        });
       }).join('');
-
-      tablaHeaderHtml = `
-        <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-          <th class="py-2.5 px-4">Profesor / Docente</th><th class="py-2.5 px-4">Teléfono</th><th class="py-2.5 px-4">Materias Asignadas</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4 text-right">Acciones</th>
-        </tr></thead>`;
+      tablaHeaderHtml = usrHead(['Profesor / Docente', 'Teléfono', 'Materias Asignadas', 'Estado', 'Acciones']);
       cuerpoTablaHtml = rowsDocentes || emptyRow(5);
 
     } else if (tabUsuariosActivo === 'estudiantes') {
-      const rowsEstudiantes = estudiantes.map(u => {
-        const iniciales = (u.nombre || 'E').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-        return `
-        <tr data-search="${escapeHtml((u.nombre + ' ' + u.email + ' ' + (u.telefono || '') + ' ' + (u.cohorte || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0 hover:bg-turquesa/5 transition">
-          <td class="py-3 px-4 text-sm font-semibold text-ink">
-            <div class="flex items-center gap-2.5">
-              <span class="w-8 h-8 rounded-xl bg-turquesa/15 text-turquesa font-bold text-xs flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
-              <div>
-                <div class="flex items-center gap-1.5">
-                  <p class="font-bold text-ink leading-tight">${escapeHtml(u.nombre)}</p>
-                  ${u.fueEstudiante ? `<button onclick="abrirHistorialTrainee('${u.id}')" title="Fue estudiante — ver su historial" class="text-[10px] font-bold uppercase tracking-wide text-morado bg-morado/10 hover:bg-morado/20 rounded-full px-2 py-0.5 transition cursor-pointer">Historial</button>` : ''}
-                </div>
-                <p class="text-xs text-slate2">${escapeHtml(u.email)}</p>
-              </div>
-            </div>
-          </td>
-          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.telefono || '—')}</td>
-          <td class="py-3 px-4 text-sm">
-            ${u.cohorte
-              ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-turquesa/10 text-turquesa border border-turquesa/20">${escapeHtml(u.cohorte)}</span>`
-              : '<span class="text-slate2 text-xs">Sin cohorte</span>'}
-          </td>
-          <td class="py-3 px-4">${statusPill(u.estado, ESTADO_COLORS)}</td>
-          <td class="py-3 px-4 text-right whitespace-nowrap">
-            <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline mr-3 cursor-pointer">Editar</button>
-            <button onclick="askDelete('usuarios','${u.id}')" class="text-xs font-semibold text-coral hover:underline cursor-pointer">Eliminar</button>
-          </td>
-        </tr>`;
-      }).join('');
-
-      tablaHeaderHtml = `
-        <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-          <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Teléfono</th><th class="py-2.5 px-4">Cohorte Asignada</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4 text-right">Acciones</th>
-        </tr></thead>`;
+      const rowsEstudiantes = estudiantes.map(u => usrFila({
+        u, tono: 'teal',
+        search: u.nombre + ' ' + u.email + ' ' + (u.telefono || '') + ' ' + (u.cohorte || ''),
+        extraNombre: u.fueEstudiante ? `<button onclick="abrirHistorialTrainee('${u.id}')" title="Fue estudiante — ver su historial" class="usr-tag usr-tone-purple usr-tag--btn">Historial</button>` : '',
+        tipo: usrTipoEstudiante(u, false),
+        estado: usrEstadoPill(u.estado),
+        acciones: usrBtnEditar(u.id) + usrBtnEliminar(u.id)
+      })).join('');
+      tablaHeaderHtml = usrHead(['Estudiante', 'Teléfono', 'Cohorte Asignada', 'Estado', 'Acciones']);
       cuerpoTablaHtml = rowsEstudiantes || emptyRow(5);
 
     } else if (tabUsuariosActivo === 'registrados') {
       const rowsRegistrados = pendientes.map(u => {
-        const iniciales = (u.nombre || 'R').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
         const fechaTxt = u.creadoEn ? new Date(u.creadoEn).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Reciente';
-        return `
-        <tr data-search="${escapeHtml(((u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0 hover:bg-amber-50/40 transition">
-          <td class="py-3 px-4 text-sm font-semibold text-ink">
-            <div class="flex items-center gap-2.5">
-              <span class="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 font-bold text-xs flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
-              <div>
-                <p class="font-bold text-ink leading-tight">${escapeHtml(u.nombre)}</p>
-                <p class="text-xs text-slate2">${escapeHtml(u.email)}</p>
-              </div>
-            </div>
-          </td>
-          <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.telefono || '—')}</td>
-          <td class="py-3 px-4 text-xs text-slate2">${escapeHtml(fechaTxt)}</td>
-          <td class="py-3 px-4 text-sm">
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-              Pendiente
-            </span>
-          </td>
-          <td class="py-3 px-4 text-right whitespace-nowrap">
-            <button onclick="aprobarRegistroPendiente('${u.id}')" class="text-xs font-bold text-white bg-turquesa hover:opacity-90 px-3 py-1.5 rounded-xl shadow-sm mr-2 transition cursor-pointer">Aprobar</button>
-            <button onclick="rechazarRegistroPendiente('${u.id}')" class="text-xs font-semibold text-coral hover:bg-coral/10 px-2.5 py-1.5 rounded-xl transition cursor-pointer mr-2">Rechazar</button>
-            <button onclick="openModal('usuarios','${u.id}')" class="text-xs font-semibold text-morado hover:underline cursor-pointer">Detalles</button>
-          </td>
-        </tr>`;
+        return usrFila({
+          u, tono: 'gold',
+          search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || ''),
+          tipo: `<span class="usr-muted">${escapeHtml(fechaTxt)}</span>`,
+          estado: usrPillPendiente,
+          acciones: usrBtnsPendiente(u.id)
+        });
       }).join('');
+      tablaHeaderHtml = usrHead(['Solicitante', 'Teléfono', 'Fecha', 'Estado', 'Acciones']);
+      cuerpoTablaHtml = rowsRegistrados || usrVacio('No hay solicitudes de registro pendientes', 'Los nuevos estudiantes que se registren desde el portal público aparecerán aquí para tu aprobación.');
 
-      tablaHeaderHtml = `
-        <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-          <th class="py-2.5 px-4">Solicitante</th><th class="py-2.5 px-4">Teléfono</th><th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4 text-right">Acciones</th>
-        </tr></thead>`;
-      cuerpoTablaHtml = rowsRegistrados || `<tr><td colspan="5" class="py-12 text-center text-slate2 text-sm">
-        <svg class="w-10 h-10 mx-auto mb-2 text-slate2/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <p class="font-semibold text-ink">No hay solicitudes de registro pendientes</p>
-        <p class="text-xs text-slate2 mt-1">Los nuevos estudiantes que se registren desde el portal público aparecerán aquí para tu aprobación.</p>
-      </td></tr>`;
+    } else if (tabUsuariosActivo === 'inactivos') {
+      const inactivos = records.filter(u => (u.estado || '').toLowerCase() === 'inactivo');
+      const rowsInactivos = inactivos.map(u => usrFila({
+        u, tono: 'brown', dim: true,
+        search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + (u.rol || '') + ' ' + (u.cohorte || ''),
+        tipo: `<span class="usr-muted">${escapeHtml(u.rol || 'Usuario')} ${u.cohorte ? '· ' + escapeHtml(u.cohorte) : ''}</span>`,
+        estado: usrEstadoPill(u.estado),
+        acciones: usrBtnEditar(u.id) + usrBtnEliminar(u.id)
+      })).join('');
+      tablaHeaderHtml = usrHead(['Usuario Inactivo', 'Teléfono', 'Rol / Cohorte', 'Estado', 'Acciones']);
+      cuerpoTablaHtml = rowsInactivos || usrVacio('No hay usuarios inactivos', 'Todos los usuarios del sistema se encuentran actualmente activos.');
     }
 
     const rolParaModal = tabUsuariosActivo === 'profesores' ? 'Docente' : 'Estudiante';
     const labelNuevoBtn = tabUsuariosActivo === 'profesores' ? 'Nuevo profesor' : 'Nuevo estudiante';
 
+    const usrTabs = [
+      { id: 'todos', label: 'Todos', tono: 'ink', n: records.length + pendientes.length,
+        icon: usrP('M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z') },
+      { id: 'profesores', label: 'Profesores', tono: 'purple', n: docentes.length,
+        icon: usrP('M12 14l9-5-9-5-9 5 9 5z') + usrP('M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z') + usrP('M12 14v6m-4-2.5v2.5m8-2.5v2.5') },
+      { id: 'estudiantes', label: 'Estudiantes', tono: 'teal', n: estudiantes.length,
+        icon: usrP('M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z') },
+      { id: 'registrados', label: 'Solicitudes', tono: 'gold', n: pendientes.length, alerta: pendientes.length > 0,
+        icon: usrP('M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z') },
+      { id: 'inactivos', label: 'Inactivos', tono: 'brown', n: records.filter(u => (u.estado || '').toLowerCase() === 'inactivo').length,
+        icon: usrP('M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636') }
+    ];
+    const tabsHtml = usrTabs.map(t => `
+            <button type="button" onclick="cambiarTabUsuarios('${t.id}')" class="usr-tab usr-tone-${t.tono}${tabUsuariosActivo === t.id ? ' is-active' : ''}">
+              <svg class="usr-tab-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">${t.icon}</svg>
+              <span>${t.label}</span>
+              <span class="usr-count${t.alerta ? ' usr-count--alert' : ''}">${t.n}</span>
+            </button>`).join('');
+
+    const placeholderBusqueda = tabUsuariosActivo === 'profesores' ? 'profesores' : (tabUsuariosActivo === 'estudiantes' ? 'estudiantes' : (tabUsuariosActivo === 'registrados' ? 'solicitudes' : (tabUsuariosActivo === 'inactivos' ? 'inactivos' : 'usuarios')));
+
     document.getElementById('mount-usuarios').innerHTML = `
       ${alertaPendientes}
-      <div class="admin-panel-card p-6">
-        
-        <!-- Pestañas de separación Todos / Profesores / Estudiantes / Solicitudes -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4 mb-4">
-          <div class="flex items-center gap-1.5 p-1 bg-gray-100/90 rounded-2xl shrink-0 overflow-x-auto">
-            <button type="button" onclick="cambiarTabUsuarios('todos')" class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${tabUsuariosActivo === 'todos' ? 'bg-white text-ink shadow-sm' : 'text-slate2 hover:text-ink'}">
-              <svg class="w-4 h-4 shrink-0 ${tabUsuariosActivo === 'todos' ? 'text-ink' : 'text-slate2'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-              </svg>
-              <span>Todos</span>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold ${tabUsuariosActivo === 'todos' ? 'bg-gray-200 text-ink' : 'bg-gray-200/80 text-slate2'}">${records.length + pendientes.length}</span>
-            </button>
-            <button type="button" onclick="cambiarTabUsuarios('profesores')" class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${tabUsuariosActivo === 'profesores' ? 'bg-white text-ink shadow-sm' : 'text-slate2 hover:text-ink'}">
-              <svg class="w-4 h-4 shrink-0 ${tabUsuariosActivo === 'profesores' ? 'text-morado' : 'text-slate2'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5z"/>
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/>
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 14v6m-4-2.5v2.5m8-2.5v2.5"/>
-              </svg>
-              <span>Profesores</span>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold ${tabUsuariosActivo === 'profesores' ? 'bg-morado/10 text-morado' : 'bg-gray-200 text-slate2'}">${docentes.length}</span>
-            </button>
-            <button type="button" onclick="cambiarTabUsuarios('estudiantes')" class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${tabUsuariosActivo === 'estudiantes' ? 'bg-white text-ink shadow-sm' : 'text-slate2 hover:text-ink'}">
-              <svg class="w-4 h-4 shrink-0 ${tabUsuariosActivo === 'estudiantes' ? 'text-turquesa' : 'text-slate2'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-              </svg>
-              <span>Estudiantes</span>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold ${tabUsuariosActivo === 'estudiantes' ? 'bg-turquesa/10 text-turquesa' : 'bg-gray-200 text-slate2'}">${estudiantes.length}</span>
-            </button>
-            <button type="button" onclick="cambiarTabUsuarios('registrados')" class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${tabUsuariosActivo === 'registrados' ? 'bg-white text-ink shadow-sm' : 'text-slate2 hover:text-ink'}">
-              <svg class="w-4 h-4 shrink-0 ${tabUsuariosActivo === 'registrados' ? 'text-amber-500' : 'text-slate2'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-              </svg>
-              <span>Solicitudes</span>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold ${pendientes.length ? 'bg-amber-500 text-white animate-pulse' : (tabUsuariosActivo === 'registrados' ? 'bg-amber-100 text-amber-800' : 'bg-gray-200 text-slate2')}">${pendientes.length}</span>
-            </button>
+      <div class="usr-panel">
+        <div class="usr-brandbar"></div>
+
+        <!-- Pestañas Todos / Profesores / Estudiantes / Solicitudes / Inactivos -->
+        <div class="usr-toolbar">
+          <div class="usr-tabs">${tabsHtml}
           </div>
 
-          <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
-            <div class="relative flex-1 sm:w-64">
-              <input type="text" data-table="table-usuarios" oninput="filtrarTablaLive(this.value, 'table-usuarios')" placeholder="Buscar en ${tabUsuariosActivo === 'profesores' ? 'profesores' : (tabUsuariosActivo === 'estudiantes' ? 'estudiantes' : (tabUsuariosActivo === 'registrados' ? 'solicitudes' : 'usuarios'))}..." class="w-full rounded-full border border-gray-200 pl-9 pr-3 py-1.5 text-xs text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-              <svg class="w-3.5 h-3.5 text-slate2 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <div class="usr-tools">
+            <div class="usr-search">
+              <svg class="usr-search-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input type="text" data-table="table-usuarios" oninput="filtrarTablaLive(this.value, 'table-usuarios')" placeholder="Buscar en ${placeholderBusqueda}..." />
             </div>
-            ${tabUsuariosActivo === 'registrados' ? '' : `
-            <button onclick="openModal('usuarios', null, '${rolParaModal}')" class="shrink-0 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-xs py-2 px-4 hover:opacity-90 transition flex items-center gap-1.5 shadow-sm cursor-pointer">
+            ${(tabUsuariosActivo === 'registrados' || tabUsuariosActivo === 'inactivos') ? '' : `
+            <button onclick="openModal('usuarios', null, '${rolParaModal}')" class="usr-new">
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
               <span>${tabUsuariosActivo === 'todos' ? 'Nuevo usuario' : labelNuevoBtn}</span>
             </button>`}
           </div>
         </div>
 
-        <div class="overflow-x-auto">
-          <table id="table-usuarios" class="w-full admin-table">
+        <div class="usr-tablewrap">
+          <table id="table-usuarios" class="usr-table">
             ${tablaHeaderHtml}
             <tbody>${cuerpoTablaHtml}</tbody>
           </table>
@@ -6782,10 +7073,21 @@ Fundación A+`;
     const asistenciaTodos = await Store.list('asistencia');
     const cfg = (await Store.get('configuracion')) || SEED.configuracion;
 
+    const fechaRegMap = new Map();
+    usuarios.forEach(u => {
+      const f = (u.creadoEn || u.creado_en || '').trim();
+      fechaRegMap.set(u.nombre, f ? new Date(f.includes('T') ? f : f.replace(' ', 'T')).getTime() : 0);
+    });
+
     // Optimización: indexar asistencia por estudiante O(N) para evitar O(S x A)
     const asistenciaMap = new Map();
     for (const a of asistenciaTodos) {
       if (!a.estudiante) continue;
+      const tsReg = fechaRegMap.get(a.estudiante) || 0;
+      if (a.automatico && tsReg > 0 && a.fecha) {
+        const tsFecha = new Date(a.fecha + 'T23:59:59').getTime();
+        if (tsReg > tsFecha) continue;
+      }
       let rec = asistenciaMap.get(a.estudiante);
       if (!rec) {
         rec = { total: 0, presentes: 0 };
@@ -7403,7 +7705,7 @@ Fundación A+`;
         const rec = registros.find(r => r.docente === docenteNombre && r.cohorte === cohorteNombre && r.mes === m);
         if (!rec) return;
         const resultado = calcularNotaFinal(rec, estudianteNombre);
-        if (resultado && !resultado.pendiente) valoresDelDocente.push(resultado.valor);
+        if (resultado && resultado.valor !== null && !isNaN(resultado.valor)) valoresDelDocente.push(resultado.valor);
       });
       if (valoresDelDocente.length) {
         // Si es "General" y el docente tiene notas en varios meses, se
@@ -7434,7 +7736,7 @@ Fundación A+`;
         const rec = registros.find(r => r.docente === docenteNombre && r.cohorte === cohorteNombre && r.mes === m);
         if (!rec) return;
         const resultado = calcularNotaFinal(rec, estudianteNombre);
-        if (resultado && !resultado.pendiente) valores.push(resultado.valor);
+        if (resultado && resultado.valor !== null && !isNaN(resultado.valor)) valores.push(resultado.valor);
       });
       if (valores.length) {
         detalle.push({ docente: docenteNombre, nota: valores.reduce((a, b) => a + b, 0) / valores.length });
@@ -7556,10 +7858,12 @@ Fundación A+`;
     if (!estudiantes.length) { toast('No hay estudiantes en esta cohorte', 'err'); return; }
     const resultadosPorEstudiante = await Promise.all(estudiantes.map(e => promedioGeneralEstudianteCohorte(e.nombre, calificacionesAdminState.cohorte, calificacionesAdminState.mes)));
 
-    const rows = [['Estudiante', 'Cohorte', 'Periodo', 'Promedio', 'Profesores Evaluadores', 'Estado']];
+    const rows = [['Estudiante', 'Cohorte', 'Periodo', 'Promedio', 'Escala (A-F)', 'Profesores Evaluadores', 'Estado']];
     estudiantes.forEach((e, i) => {
       const res = resultadosPorEstudiante[i];
       const prom = res ? res.promedio.toFixed(1) : 'Sin notas';
+      const escala = res ? letraEscalaNota(res.promedio) : null;
+      const escalaStr = escala ? `${escala.letra} (${escala.descripcion})` : 'Sin notas';
       const profs = res ? res.profesores : 0;
       const estado = res ? (res.promedio >= NOTA_MINIMA_APROBACION ? 'Aprobado' : 'En riesgo') : 'Pendiente';
       rows.push([
@@ -7567,6 +7871,7 @@ Fundación A+`;
         `"${calificacionesAdminState.cohorte.replace(/"/g, '""')}"`,
         `"${(calificacionesAdminState.mes ? mesLabel(calificacionesAdminState.mes) : 'General').replace(/"/g, '""')}"`,
         `"${prom}"`,
+        `"${escalaStr}"`,
         `"${profs}"`,
         `"${estado}"`
       ]);
@@ -7625,14 +7930,24 @@ Fundación A+`;
     const filas = indicesFiltrados.map(i => {
       const e = estudiantes[i];
       const resultado = resultadosPorEstudiante[i];
-      const promedioHtml = resultado
-        ? `<span class="font-bold" style="color:${colorCualitativa(resultado.promedio)}">${resultado.promedio.toFixed(1)}</span>
-           <span class="text-[11px] text-slate2 ml-1">(${resultado.profesores} profesor${resultado.profesores !== 1 ? 'es' : ''})</span>`
+      const escala = (resultado && resultado.promedio !== null) ? letraEscalaNota(resultado.promedio) : null;
+      const promedioHtml = (resultado && resultado.promedio !== null)
+        ? `<div class="flex items-center gap-2">
+             <span class="font-bold text-sm" style="color:${colorCualitativa(resultado.promedio)}">${resultado.promedio.toFixed(1)}</span>
+             <span class="text-[11px] text-slate2">(${resultado.profesores} prof.)</span>
+           </div>`
         : `<span class="text-slate2 text-xs">Sin notas aún</span>`;
+      const escalaHtml = escala
+        ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold" style="background:${escala.bg};color:${escala.color}" title="${escala.letra}: ${escala.descripcion}">
+             <span class="w-5 h-5 rounded-full bg-white flex items-center justify-center font-extrabold text-[11px] shadow-xs text-ink">${escala.letra}</span>
+             <span>${escala.letra} · ${escala.descripcion}</span>
+           </span>`
+        : `<span class="text-slate2 text-xs">—</span>`;
       return `
       <tr data-search="${escapeHtml(e.nombre.toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(e.nombre)}</td>
         <td class="py-3 px-4 text-sm">${promedioHtml}</td>
+        <td class="py-3 px-4 text-center">${escalaHtml}</td>
       </tr>`;
     }).join('');
 
@@ -7704,9 +8019,11 @@ Fundación A+`;
         <div class="table-responsive-container">
           <table id="table-calificaciones-admin" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Estudiante</th><th class="py-2.5 px-4">Promedio${calificacionesAdminState.mes ? '' : ' general'}</th>
+              <th class="py-2.5 px-4">Estudiante</th>
+              <th class="py-2.5 px-4">Promedio${calificacionesAdminState.mes ? '' : ' general'}</th>
+              <th class="py-2.5 px-4 text-center">Escala (A - F)</th>
             </tr></thead>
-            <tbody>${filas || '<tr><td colspan="2" class="text-sm text-slate2 text-center py-6">No se encontraron estudiantes para este filtro.</td></tr>'}</tbody>
+            <tbody>${filas || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">No se encontraron estudiantes para este filtro.</td></tr>'}</tbody>
           </table>
         </div>
       </div>`;
@@ -7836,6 +8153,69 @@ Fundación A+`;
   }
   window.cursoDeDocenteEnCohorte = cursoDeDocenteEnCohorte;
 
+  // ---------- VENTANA DE EDICIÓN DE INFORMES (15 MINUTOS) ----------
+  const VENTANA_EDICION_INFORME_MS = 15 * 60 * 1000;
+
+  function obtenerTiempoRestanteEdicionInforme(inf) {
+    if (!inf) return { editable: false, minutos: 0, segundos: 0, msRestantes: 0, texto: '' };
+    const timestampEnvio = inf.primerEnvioEn || inf.enviadoEn;
+    if (!timestampEnvio) return { editable: false, minutos: 0, segundos: 0, msRestantes: 0, texto: '' };
+
+    const fechaEnvio = new Date(timestampEnvio).getTime();
+    if (isNaN(fechaEnvio)) return { editable: false, minutos: 0, segundos: 0, msRestantes: 0, texto: '' };
+
+    const ahora = Date.now();
+    const diff = (fechaEnvio + VENTANA_EDICION_INFORME_MS) - ahora;
+    if (diff <= 0) {
+      return { editable: false, minutos: 0, segundos: 0, msRestantes: 0, texto: 'Plazo de edición expirado' };
+    }
+
+    const totalSegundos = Math.floor(diff / 1000);
+    const minutos = Math.floor(totalSegundos / 60);
+    const segundos = totalSegundos % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return {
+      editable: true,
+      minutos,
+      segundos,
+      msRestantes: diff,
+      texto: `${minutos}:${pad(segundos)} min restantes`
+    };
+  }
+  window.obtenerTiempoRestanteEdicionInforme = obtenerTiempoRestanteEdicionInforme;
+
+  async function reabrirInformeDocente(informeId) {
+    const informes = await Store.list('informes_docente', { forceRefresh: true });
+    const idx = informes.findIndex(i => String(i.id) === String(informeId));
+    if (idx < 0) {
+      if (typeof toast === 'function') toast('No se encontró el informe a reabrir', 'err');
+      return;
+    }
+    const inf = informes[idx];
+    const tiempo = obtenerTiempoRestanteEdicionInforme(inf);
+    if (!tiempo.editable) {
+      if (typeof toast === 'function') toast('El plazo de 15 minutos para editar este informe ha expirado.', 'err');
+      if (typeof renderInformesDocente === 'function') await renderInformesDocente();
+      return;
+    }
+
+    inf.estado = 'Borrador';
+    inf.reabiertoParaEdicion = true;
+    inf.reabiertoEn = new Date().toISOString();
+    await Store.set('informes_docente', informes);
+
+    if (typeof cerrarModalDetalleInforme === 'function') {
+      cerrarModalDetalleInforme();
+    }
+    if (typeof toast === 'function') {
+      toast(`Informe de ${inf.estudiante} reabierto para corrección. Tienes ${tiempo.texto} para reenviarlo.`, 'ok');
+    }
+    if (typeof renderInformesDocente === 'function') {
+      await renderInformesDocente();
+    }
+  }
+  window.reabrirInformeDocente = reabrirInformeDocente;
+
   // ---------- MODAL INTERACTIVO DE DETALLE COMPLETO DE INFORME ----------
   async function abrirModalDetalleInforme(informeIdOData) {
     let inf = null;
@@ -7856,6 +8236,11 @@ Fundación A+`;
     const cualitativa = inf.cualitativa || (numPromedio !== null ? calificacionCualitativa(numPromedio) : 'Sin calificación');
     const asistPct = (inf.asistenciaPct !== null && inf.asistenciaPct !== undefined) ? inf.asistenciaPct + '%' : 'Sin datos';
     const notaCuant = numPromedio !== null ? numPromedio.toFixed(1) : 'Sin nota';
+
+    const docActual = (currentDocente && currentDocente.nombre) ? currentDocente.nombre : '';
+    const esDocenteAutor = Boolean(docActual && inf.docente === docActual);
+    const tiempoEdicion = obtenerTiempoRestanteEdicionInforme(inf);
+    const puedeReabrir = esDocenteAutor && tiempoEdicion.editable && inf.estado === 'Enviado';
 
     const modalHtml = `
       <div id="modalDetalleInformeBackdrop" class="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-ink/75 backdrop-blur-sm animate-fadeIn" onclick="if(event.target===this) cerrarModalDetalleInforme()">
@@ -7941,14 +8326,24 @@ Fundación A+`;
           </div>
 
           <!-- Footer del modal -->
-          <div class="px-6 py-3.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
+          <div class="px-6 py-3.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
             <span class="text-[11px] text-slate2 font-medium flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-              Informe radicado con éxito
+              <span class="w-2 h-2 rounded-full ${puedeReabrir ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}"></span>
+              ${puedeReabrir 
+                ? `<span class="text-amber-800 font-semibold">Ventana de edición activa: ${tiempoEdicion.texto}</span>` 
+                : (inf.estado === 'Enviado' ? 'Informe radicado con éxito (Definitivo)' : 'Borrador de informe')}
             </span>
-            <button type="button" onclick="cerrarModalDetalleInforme()" class="px-5 py-2 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition cursor-pointer">
-              Cerrar
-            </button>
+            <div class="flex items-center gap-2">
+              ${puedeReabrir ? `
+                <button type="button" onclick="reabrirInformeDocente('${escapeHtml(inf.id)}')" class="px-4 py-2 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md transition cursor-pointer flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                  <span>Reabrir y editar reporte</span>
+                </button>
+              ` : ''}
+              <button type="button" onclick="cerrarModalDetalleInforme()" class="px-5 py-2 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition cursor-pointer">
+                Cerrar
+              </button>
+            </div>
           </div>
 
         </div>
@@ -8155,23 +8550,31 @@ Fundación A+`;
   // ---------- RENDER: Encuestas de satisfacción ----------
   // async: 'encuestas' vía MySQL.
   async function renderEncuestas() {
-    // Tanto Superadmin como Administración pueden crear y editar encuestas.
+    const mount = document.getElementById('mount-encuestas');
+    if (!mount) return;
     const puedeEditar = true;
-    const records = [...(await Store.list('encuestas'))].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    let records = [];
+    try {
+      const raw = await Store.list('encuestas');
+      records = Array.isArray(raw) ? [...raw] : [];
+      records.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    } catch (err) {
+      console.warn('[renderEncuestas] Error al leer encuestas:', err);
+    }
     const rows = records.map(e => `
-      <tr data-search="${escapeHtml((e.titulo + ' ' + (e.cohorte || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
-        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(e.titulo)}</td>
+      <tr data-search="${escapeHtml(((e.titulo || '') + ' ' + (e.cohorte || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(e.titulo || 'Sin título')}</td>
         <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(e.cohorte || '—')}</td>
         <td class="py-3 px-4 text-sm text-slate2">${fmtDate(e.fecha)}</td>
-        <td class="py-3 px-4 text-sm">${e.url ? `<a href="${escapeHtml(e.url)}" target="_blank" rel="noopener" class="text-morado font-semibold hover:underline">Abrir link ↗</a>` : '—'}</td>
-        <td class="py-3 px-4">${statusPill(e.estado, ESTADO_COLORS)}</td>
+        <td class="py-3 px-4 text-sm">${e.url ? `<a href="${escapeHtml(e.url)}" target="_blank" rel="noopener" class="text-morado font-semibold hover:underline inline-flex items-center gap-1"><span>Abrir enlace</span><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>` : '—'}</td>
+        <td class="py-3 px-4">${statusPill(e.estado || 'Abierta', ESTADO_COLORS)}</td>
         <td class="py-3 px-4 text-right whitespace-nowrap">
-          ${puedeEditar ? `<button onclick="openModal('encuestas','${e.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
-          <button onclick="askDelete('encuestas','${e.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>` : `<span class="text-xs text-slate2">Solo lectura</span>`}
+          ${puedeEditar ? `<button onclick="openModal('encuestas','${e.id}')" class="text-xs font-semibold text-morado hover:underline mr-3 cursor-pointer">Editar</button>
+          <button onclick="askDelete('encuestas','${e.id}')" class="text-xs font-semibold text-coral hover:underline cursor-pointer">Eliminar</button>` : `<span class="text-xs text-slate2">Solo lectura</span>`}
         </td>
       </tr>`).join('');
 
-    document.getElementById('mount-encuestas').innerHTML = `
+    mount.innerHTML = `
       <div class="admin-panel-card p-6">
         ${sectionHeader('encuestas', 'Encuestas de satisfacción', 'Link externo (Google Forms u otro) enviado a los estudiantes de la cohorte elegida', null, puedeEditar)}
         ${!puedeEditar ? `<p class="text-xs text-slate2 -mt-2 mb-4">Acceso de solo lectura: la cuenta de Administración puede consultar las encuestas, pero no editarlas ni crear nuevas.</p>` : ''}
@@ -8181,7 +8584,7 @@ Fundación A+`;
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
               <th class="py-2.5 px-4">Encuesta</th><th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Link</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
             </tr></thead>
-            <tbody>${rows || emptyRow(6)}</tbody>
+            <tbody>${rows || emptyRow(6, 'encuestas')}</tbody>
           </table>
         </div>
       </div>`;
@@ -8646,8 +9049,572 @@ Fundación A+`;
     }
   }
 
+  // ============================================================================
+  // CENTRO DE NOTIFICACIONES Y ALERTAS TEMPRANAS (SUPERADMIN & ADMINISTRADORES)
+  // Monitorea:
+  // 1. Estudiantes con 3 o más memorandos (alerta disciplinaria crítica).
+  // 2. Estudiantes en riesgo académico (Semáforo Rojo y Amarillo).
+  // 3. Excusas médicas y justificaciones de asistencia pendientes de revisión.
+  // 4. PQRs y solicitudes de aspirantes pendientes.
+  // ============================================================================
+
+  let notifFiltroTipo = 'todas'; // 'todas' | 'criticas' | 'riesgo' | 'memorandos' | 'excusas' | 'pqr_solicitudes'
+  let notifFiltroCohorte = '';
+  let notifFiltroTexto = '';
+  let notifVerAtendidas = false;
+
+  async function obtenerNotificacionesAdmin() {
+    const [semaforoData, memorandos, justificaciones, usuarios, pqrs, modulos] = await Promise.all([
+      computeSemaforo(),
+      Store.list('memorandos'),
+      Store.list('justificaciones_asistencia'),
+      Store.list('usuarios'),
+      Store.list('pqr'),
+      Store.list('modulos')
+    ]);
+
+    let leidas = [];
+    try {
+      leidas = JSON.parse(localStorage.getItem('aplus_admin_notificaciones_leidas') || '[]');
+      if (!Array.isArray(leidas)) leidas = [];
+    } catch (e) { leidas = []; }
+    const leidasSet = new Set(leidas);
+
+    const notificaciones = [];
+
+    // 1. REGLA: Estudiantes con 3 o más memorandos acumulados (Alerta Disciplinaria)
+    const memosPorEstudiante = new Map();
+    const memosValidos = memorandos.filter(m => m.estado === 'Enviado');
+    memosValidos.forEach(m => {
+      const dest = (m.destinatario || '').trim();
+      if (!dest || dest === 'Todos' || dest === 'Todos los estudiantes' || dest === 'Todos los docentes') return;
+      const u = usuarios.find(usr => 
+        (usr.email && usr.email.toLowerCase() === dest.toLowerCase()) || 
+        (usr.nombre && usr.nombre.toLowerCase() === dest.toLowerCase())
+      );
+      const key = u ? u.nombre : dest;
+      if (!memosPorEstudiante.has(key)) memosPorEstudiante.set(key, { usuario: u, memos: [] });
+      memosPorEstudiante.get(key).memos.push(m);
+    });
+
+    memosPorEstudiante.forEach((data, estNombre) => {
+      if (data.memos.length >= 3) {
+        const u = data.usuario;
+        const cohorte = u ? (u.cohorte || '—') : '—';
+        const notifId = 'memo3_' + encodeURIComponent(estNombre);
+        notificaciones.push({
+          id: notifId,
+          tipo: 'memorando',
+          categoria: 'Alerta Disciplinaria',
+          severidad: 'critica',
+          titulo: `Límite disciplinario: ${data.memos.length} memorandos acumulados`,
+          mensaje: `El estudiante <strong>${escapeHtml(estNombre)}</strong> acumula <strong>${data.memos.length} memorandos</strong> enviados. Requiere citación prioritaria o apertura de caso disciplinario.`,
+          estudiante: estNombre,
+          cohorte: cohorte,
+          fecha: data.memos[0].fecha || '',
+          icono: 'shield-alert',
+          metadata: {
+            cantidadMemos: data.memos.length,
+            titulos: data.memos.map(m => m.titulo).slice(0, 3)
+          },
+          accionPrincipal: {
+            label: 'Ver expediente de memorandos',
+            onclick: `window.irAMemorandosEstudiante('${escapeHtml(estNombre).replace(/'/g, "\\'")}')`
+          },
+          atendida: leidasSet.has(notifId)
+        });
+      }
+    });
+
+    // 2. REGLA: Estudiantes en riesgo académico (Semáforo Rojo y Amarillo)
+    semaforoData.forEach(s => {
+      if (s.riesgo === 'Rojo' || s.riesgo === 'Amarillo') {
+        const esRojo = s.riesgo === 'Rojo';
+        const notifId = 'riesgo_' + encodeURIComponent(s.estudiante + '_' + s.cohorte);
+        const motivosTxt = (s.motivos && s.motivos.length) ? s.motivos.join(', ') : (esRojo ? 'Promedio por debajo de la aprobación o inasistencias altas' : 'Rendimiento académico en advertencia');
+        notificaciones.push({
+          id: notifId,
+          tipo: 'riesgo',
+          categoria: esRojo ? 'Riesgo Académico Crítico' : 'Alerta de Rendimiento',
+          severidad: esRojo ? 'critica' : 'alerta',
+          titulo: esRojo ? `Riesgo académico alto: ${escapeHtml(s.estudiante)}` : `Alerta de rendimiento: ${escapeHtml(s.estudiante)}`,
+          mensaje: `Estudiante en cohorte <strong>${escapeHtml(s.cohorte)}</strong> con promedio <strong>${s.promedio !== null ? s.promedio : '—'}</strong> y <strong>${s.asistencia}%</strong> de asistencia. Motivo: ${escapeHtml(motivosTxt)}.`,
+          estudiante: s.estudiante,
+          cohorte: s.cohorte,
+          promedio: s.promedio,
+          asistencia: s.asistencia,
+          fecha: '',
+          icono: 'trending-down',
+          metadata: {
+            promedio: s.promedio,
+            asistencia: s.asistencia,
+            riesgo: s.riesgo
+          },
+          accionPrincipal: {
+            label: 'Revisar en Semáforo',
+            onclick: `window.irASemaforoEstudiante('${escapeHtml(s.estudiante).replace(/'/g, "\\'")}', '${escapeHtml(s.cohorte).replace(/'/g, "\\'")}')`
+          },
+          atendida: leidasSet.has(notifId)
+        });
+      }
+    });
+
+    // 3. REGLA: Excusas médicas y justificaciones de asistencia pendientes
+    justificaciones.filter(j => j.estado === 'Pendiente').forEach(j => {
+      const notifId = 'just_' + j.id;
+      notificaciones.push({
+        id: notifId,
+        tipo: 'excusa',
+        categoria: 'Justificación Médica / Asistencia',
+        severidad: 'alerta',
+        titulo: `Excusa médica radicada: ${escapeHtml(j.estudiante)}`,
+        mensaje: `Radicó soporte para <strong>${escapeHtml(j.materia || 'clase')}</strong> (${fmtDate(j.fecha)}). Motivo: <em>${escapeHtml(j.motivo || 'Fuerza mayor')}</em>.${j.archivoNombre ? ` Soporte: <strong>${escapeHtml(j.archivoNombre)}</strong>` : ''}`,
+        estudiante: j.estudiante,
+        cohorte: '',
+        fecha: j.creadoEn || j.fecha,
+        icono: 'file-text',
+        metadata: {
+          justId: j.id,
+          tieneArchivo: !!j.archivoNombre
+        },
+        accionPrincipal: {
+          label: 'Examinar documento (PDF / Foto)',
+          onclick: `window.abrirModalVisorJustificacion('${j.id}')`
+        },
+        atendida: leidasSet.has(notifId)
+      });
+    });
+
+    // 4. REGLA: PQRs pendientes de respuesta
+    pqrs.filter(p => p.estado === 'Pendiente' || p.estado === 'Abierto').forEach(p => {
+      const notifId = 'pqr_' + p.id;
+      const esCritica = p.tipo === 'Reclamo' || p.tipo === 'Queja';
+      notificaciones.push({
+        id: notifId,
+        tipo: 'pqr_solicitudes',
+        categoria: 'PQR Pendiente',
+        severidad: esCritica ? 'critica' : 'info',
+        titulo: `${p.tipo || 'PQR'}: ${escapeHtml(p.asunto || 'Requerimiento pendiente')}`,
+        mensaje: `Radicado por <strong>${escapeHtml(p.solicitante || 'Usuario')}</strong> el ${fmtDate(p.fecha)}. Estado: ${escapeHtml(p.estado)}.`,
+        estudiante: p.solicitante,
+        cohorte: '',
+        fecha: p.fecha,
+        icono: 'mail',
+        metadata: { pqrId: p.id },
+        accionPrincipal: {
+          label: 'Gestionar PQR',
+          onclick: `showPanel('pqr')`
+        },
+        atendida: leidasSet.has(notifId)
+      });
+    });
+
+    // 5. REGLA: Solicitudes de inscripción / registros pendientes
+    usuarios.filter(u => u.rol === 'Estudiante' && u.estadoRegistro === 'Pendiente').forEach(u => {
+      const notifId = 'solicitud_' + u.id;
+      notificaciones.push({
+        id: notifId,
+        tipo: 'pqr_solicitudes',
+        categoria: 'Inscripción Pendiente',
+        severidad: 'info',
+        titulo: `Aspirante pendiente de confirmación: ${escapeHtml(u.nombre)}`,
+        mensaje: `Registro nuevo para cohorte <strong>${escapeHtml(u.cohorte || 'General')}</strong> (${escapeHtml(u.email)}). Requiere confirmación de matrícula.`,
+        estudiante: u.nombre,
+        cohorte: u.cohorte || '',
+        fecha: u.creadoEn || u.creado_en || '',
+        icono: 'user-check',
+        metadata: { userId: u.id },
+        accionPrincipal: {
+          label: 'Revisar en Usuarios',
+          onclick: `showPanel('usuarios')`
+        },
+        atendida: leidasSet.has(notifId)
+      });
+    });
+
+    // Ordenamiento: no atendidas primero, luego severidad (critica -> alerta -> info)
+    const prioridadSeveridad = { critica: 1, alerta: 2, info: 3 };
+    notificaciones.sort((a, b) => {
+      if (a.atendida !== b.atendida) return a.atendida ? 1 : -1;
+      const sA = prioridadSeveridad[a.severidad] || 99;
+      const sB = prioridadSeveridad[b.severidad] || 99;
+      if (sA !== sB) return sA - sB;
+      return (b.fecha || '').localeCompare(a.fecha || '');
+    });
+
+    const metricas = {
+      totalActivas: notificaciones.filter(n => !n.atendida).length,
+      totalCriticas: notificaciones.filter(n => !n.atendida && n.severidad === 'critica').length,
+      totalRiesgo: notificaciones.filter(n => !n.atendida && n.tipo === 'riesgo').length,
+      totalMemos: notificaciones.filter(n => !n.atendida && n.tipo === 'memorando').length,
+      totalExcusas: notificaciones.filter(n => !n.atendida && n.tipo === 'excusa').length,
+      totalPqr: notificaciones.filter(n => !n.atendida && n.tipo === 'pqr_solicitudes').length,
+      totalAtendidas: notificaciones.filter(n => n.atendida).length,
+    };
+
+    const cohortesLista = Array.from(new Set([
+      ...modulos.map(m => m.nombre).filter(Boolean),
+      ...notificaciones.map(n => n.cohorte).filter(Boolean)
+    ])).filter(c => c !== '—').sort();
+
+    return { notificaciones, metricas, cohortes: cohortesLista };
+  }
+
+  async function actualizarBadgesNotificacionesAdmin() {
+    try {
+      const { metricas } = await obtenerNotificacionesAdmin();
+      const badgeSide = document.getElementById('notifBadgeSidebar');
+      if (badgeSide) {
+        if (metricas.totalActivas > 0) {
+          badgeSide.textContent = metricas.totalActivas > 99 ? '99+' : metricas.totalActivas;
+          badgeSide.classList.remove('hidden');
+        } else {
+          badgeSide.classList.add('hidden');
+        }
+      }
+      const badgeHead = document.getElementById('notifBadgeHeader');
+      if (badgeHead) {
+        badgeHead.classList.toggle('hidden', metricas.totalActivas === 0);
+      }
+    } catch (e) {
+      console.warn('[actualizarBadgesNotificacionesAdmin]', e);
+    }
+  }
+  window.actualizarBadgesNotificacionesAdmin = actualizarBadgesNotificacionesAdmin;
+
+  async function renderNotificacionesAdmin() {
+    const mount = document.getElementById('mount-notificaciones');
+    if (!mount) return;
+
+    const { notificaciones, metricas, cohortes } = await obtenerNotificacionesAdmin();
+
+    let lista = notificaciones;
+    if (!notifVerAtendidas) {
+      lista = lista.filter(n => !n.atendida);
+    }
+    if (notifFiltroTipo !== 'todas') {
+      if (notifFiltroTipo === 'criticas') {
+        lista = lista.filter(n => n.severidad === 'critica');
+      } else {
+        lista = lista.filter(n => n.tipo === notifFiltroTipo);
+      }
+    }
+    if (notifFiltroCohorte) {
+      lista = lista.filter(n => n.cohorte === notifFiltroCohorte);
+    }
+    if (notifFiltroTexto) {
+      const q = notifFiltroTexto.toLowerCase().trim();
+      lista = lista.filter(n => 
+        (n.titulo || '').toLowerCase().includes(q) ||
+        (n.mensaje || '').toLowerCase().includes(q) ||
+        (n.estudiante || '').toLowerCase().includes(q) ||
+        (n.cohorte || '').toLowerCase().includes(q)
+      );
+    }
+
+    const ICONOS_NOTIF = {
+      'shield-alert': '<svg class="w-5 h-5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>',
+      'trending-down': '<svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg>',
+      'file-text': '<svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>',
+      'mail': '<svg class="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>',
+      'user-check': '<svg class="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>',
+    };
+
+    const SEVERIDAD_THEMES = {
+      critica: {
+        border: 'border-l-4 border-l-rose-500 border-gray-100',
+        badge: 'bg-rose-100 text-rose-800 border-rose-200',
+        label: 'Crítica',
+        bgIcon: 'bg-rose-50'
+      },
+      alerta: {
+        border: 'border-l-4 border-l-amber-500 border-gray-100',
+        badge: 'bg-amber-100 text-amber-800 border-amber-200',
+        label: 'Alerta',
+        bgIcon: 'bg-amber-50'
+      },
+      info: {
+        border: 'border-l-4 border-l-indigo-500 border-gray-100',
+        badge: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+        label: 'Informativa',
+        bgIcon: 'bg-indigo-50'
+      }
+    };
+
+    const tarjetasHtml = lista.map(n => {
+      const sev = SEVERIDAD_THEMES[n.severidad] || SEVERIDAD_THEMES.info;
+      const icono = ICONOS_NOTIF[n.icono] || ICONOS_NOTIF['shield-alert'];
+
+      return `
+        <div class="admin-panel-card p-5 transition-all duration-200 ${sev.border} ${n.atendida ? 'opacity-55 bg-gray-50/70 hover:opacity-90' : 'hover:shadow-md'}" id="notifCard_${n.id}">
+          <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            
+            <div class="flex items-start gap-3.5 flex-1">
+              <div class="w-10 h-10 rounded-2xl ${sev.bgIcon} flex items-center justify-center shrink-0 shadow-xs border border-gray-100 mt-0.5">
+                ${icono}
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap mb-1">
+                  <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${sev.badge}">
+                    ${sev.label}
+                  </span>
+                  <span class="text-[11px] font-semibold text-slate2 bg-gray-100 px-2 py-0.5 rounded-full">
+                    ${escapeHtml(n.categoria)}
+                  </span>
+                  ${n.cohorte && n.cohorte !== '—' ? `<span class="text-[11px] font-bold text-morado bg-morado/10 px-2 py-0.5 rounded-full">Cohorte ${escapeHtml(n.cohorte)}</span>` : ''}
+                  ${n.fecha ? `<span class="text-[11px] text-slate2">${fmtDate(n.fecha)}</span>` : ''}
+                  ${n.atendida ? `<span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full"><svg class="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Atendida</span>` : ''}
+                </div>
+                <h4 class="text-sm sm:text-base font-extrabold text-ink leading-snug">
+                  ${n.titulo}
+                </h4>
+                <p class="text-xs sm:text-sm text-slate2 mt-1 leading-relaxed">
+                  ${n.mensaje}
+                </p>
+
+                ${n.metadata && n.metadata.titulos ? `
+                  <div class="mt-2 flex items-center gap-1.5 flex-wrap">
+                    <span class="text-[11px] font-bold text-slate2">Causales recientes:</span>
+                    ${n.metadata.titulos.map(t => `<span class="text-[10px] font-semibold bg-gray-100 text-slate2 px-2 py-0.5 rounded-md border border-gray-200">${escapeHtml(t)}</span>`).join('')}
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+
+            <!-- Acciones directas -->
+            <div class="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+              ${n.accionPrincipal ? `
+                <button type="button" onclick="${n.accionPrincipal.onclick}" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-morado to-turquesa text-white font-bold text-xs shadow-xs hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer">
+                  <span>${n.accionPrincipal.label}</span>
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                </button>
+              ` : ''}
+              
+              <button type="button" onclick="marcarNotificacionAtendida('${n.id}', ${!n.atendida})" class="inline-flex items-center gap-1 text-xs font-semibold ${n.atendida ? 'text-morado hover:underline' : 'text-slate2 hover:text-ink'} transition cursor-pointer p-1">
+                ${n.atendida ? '<span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Reactivar alerta</span>' : '<span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Marcar atendida</span>'}
+              </button>
+            </div>
+
+          </div>
+        </div>`;
+    }).join('');
+
+    const emptyStateHtml = `
+      <div class="admin-panel-card p-12 text-center flex flex-col items-center justify-center gap-3">
+        <div class="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
+          <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <h3 class="text-base font-extrabold text-ink mt-2">¡Todo al día y bajo control!</h3>
+        <p class="text-xs text-slate2 max-w-md">No hay alertas ni novedades activas en esta categoría. Puedes consultar el historial activando "Ver atendidas" o cambiar los filtros.</p>
+      </div>`;
+
+    mount.innerHTML = `
+      <!-- Banner Hero -->
+      <div class="superadmin-banner p-6 sm:p-8 mb-6 relative overflow-hidden" style="--card-accent: linear-gradient(90deg, #8B5CF6, #1FC8C0);">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-turquesa text-xs font-bold uppercase tracking-wider mb-2 border border-white/10 backdrop-blur-md">
+              <span class="w-1.5 h-1.5 rounded-full bg-turquesa animate-pulse"></span>
+              Alertas y Novedades Institucionales
+            </div>
+            <h2 class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">Centro de Notificaciones</h2>
+            <p class="text-xs sm:text-sm text-white/70 max-w-xl mt-1 leading-relaxed">
+              Monitoreo activo de estudiantes en riesgo académico, alertas por 3+ memorandos disciplinarios y validación de excusas médicas.
+            </p>
+          </div>
+          <div class="flex items-center gap-2.5 shrink-0 flex-wrap">
+            <button type="button" onclick="marcarTodasNotificacionesAtendidas()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/20 backdrop-blur-md transition shadow-xs cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              Marcar todas atendidas
+            </button>
+            <button type="button" onclick="renderNotificacionesAdmin()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white text-ink hover:bg-gray-100 transition shadow-sm cursor-pointer">
+              <svg class="w-3.5 h-3.5 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Actualizar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Métricas / KPI Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3.5 mb-6">
+        <div onclick="filtrarNotificacionesTipo('todas')" class="admin-panel-card p-4 hover:border-morado/40 transition cursor-pointer ${notifFiltroTipo === 'todas' ? 'ring-2 ring-morado/40' : ''}">
+          <p class="text-[11px] font-bold text-slate2 uppercase tracking-wide">Total Activas</p>
+          <p class="text-2xl font-extrabold text-ink mt-1">${metricas.totalActivas}</p>
+          <span class="text-[10px] text-slate2 mt-0.5 block">${metricas.totalAtendidas} atendidas</span>
+        </div>
+
+        <div onclick="filtrarNotificacionesTipo('criticas')" class="admin-panel-card p-4 hover:border-rose-400 transition cursor-pointer ${notifFiltroTipo === 'criticas' ? 'ring-2 ring-rose-400' : ''}">
+          <div class="flex items-center justify-between">
+            <p class="text-[11px] font-bold text-rose-600 uppercase tracking-wide">Críticas</p>
+            <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+          </div>
+          <p class="text-2xl font-extrabold text-rose-600 mt-1">${metricas.totalCriticas}</p>
+          <span class="text-[10px] text-slate2 mt-0.5 block">Atención urgente</span>
+        </div>
+
+        <div onclick="filtrarNotificacionesTipo('riesgo')" class="admin-panel-card p-4 hover:border-amber-400 transition cursor-pointer ${notifFiltroTipo === 'riesgo' ? 'ring-2 ring-amber-400' : ''}">
+          <p class="text-[11px] font-bold text-amber-600 uppercase tracking-wide">Riesgo Académico</p>
+          <p class="text-2xl font-extrabold text-amber-600 mt-1">${metricas.totalRiesgo}</p>
+          <span class="text-[10px] text-slate2 mt-0.5 block">Notas / Asistencia</span>
+        </div>
+
+        <div onclick="filtrarNotificacionesTipo('memorandos')" class="admin-panel-card p-4 hover:border-purple-400 transition cursor-pointer ${notifFiltroTipo === 'memorandos' ? 'ring-2 ring-purple-400' : ''}">
+          <p class="text-[11px] font-bold text-purple-600 uppercase tracking-wide">Memorandos (3+)</p>
+          <p class="text-2xl font-extrabold text-purple-600 mt-1">${metricas.totalMemos}</p>
+          <span class="text-[10px] text-slate2 mt-0.5 block">Límite disciplinario</span>
+        </div>
+
+        <div onclick="filtrarNotificacionesTipo('excusas')" class="admin-panel-card p-4 hover:border-teal-400 transition cursor-pointer ${notifFiltroTipo === 'excusas' ? 'ring-2 ring-teal-400' : ''}">
+          <p class="text-[11px] font-bold text-teal-600 uppercase tracking-wide">Excusas Médicas</p>
+          <p class="text-2xl font-extrabold text-teal-600 mt-1">${metricas.totalExcusas}</p>
+          <span class="text-[10px] text-slate2 mt-0.5 block">Pendientes de revisión</span>
+        </div>
+      </div>
+
+      <!-- Barra de Filtros y Búsqueda -->
+      <div class="admin-panel-card p-4 mb-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          
+          <!-- Tabs de tipos -->
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button type="button" onclick="filtrarNotificacionesTipo('todas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'todas' ? 'bg-gradient-to-r from-morado to-turquesa text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-ink'}">
+              Todas (${notificaciones.filter(n => notifVerAtendidas || !n.atendida).length})
+            </button>
+            <button type="button" onclick="filtrarNotificacionesTipo('criticas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'criticas' ? 'bg-rose-500 text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-rose-600'}">
+              Críticas (${notificaciones.filter(n => n.severidad === 'critica' && (notifVerAtendidas || !n.atendida)).length})
+            </button>
+            <button type="button" onclick="filtrarNotificacionesTipo('riesgo')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'riesgo' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-amber-600'}">
+              Riesgo Académico (${notificaciones.filter(n => n.tipo === 'riesgo' && (notifVerAtendidas || !n.atendida)).length})
+            </button>
+            <button type="button" onclick="filtrarNotificacionesTipo('memorandos')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'memorandos' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-purple-600'}">
+              Memorandos (3+) (${notificaciones.filter(n => n.tipo === 'memorando' && (notifVerAtendidas || !n.atendida)).length})
+            </button>
+            <button type="button" onclick="filtrarNotificacionesTipo('excusas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'excusas' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-teal-600'}">
+              Excusas (${notificaciones.filter(n => n.tipo === 'excusa' && (notifVerAtendidas || !n.atendida)).length})
+            </button>
+            <button type="button" onclick="filtrarNotificacionesTipo('pqr_solicitudes')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'pqr_solicitudes' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-indigo-600'}">
+              PQRs / Solicitudes (${notificaciones.filter(n => n.tipo === 'pqr_solicitudes' && (notifVerAtendidas || !n.atendida)).length})
+            </button>
+          </div>
+
+          <!-- Búsqueda, Cohorte y Toggle de atendidas -->
+          <div class="flex items-center gap-3 flex-wrap">
+            <select onchange="filtrarNotificacionesCohorte(this.value)" class="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink focus:border-morado focus:ring-2 focus:ring-morado/20 outline-none">
+              <option value="">Todas las cohortes</option>
+              ${cohortes.map(c => `<option value="${escapeHtml(c)}" ${notifFiltroCohorte === c ? 'selected' : ''}>Cohorte ${escapeHtml(c)}</option>`).join('')}
+            </select>
+
+            <div class="relative">
+              <input type="text" placeholder="Buscar estudiante o detalle..." value="${escapeHtml(notifFiltroTexto)}" oninput="filtrarNotificacionesBuscar(this.value)" class="w-48 sm:w-56 rounded-xl border border-gray-200 bg-white pl-8 pr-3 py-1.5 text-xs text-ink focus:border-morado focus:ring-2 focus:ring-morado/20 outline-none" />
+              <svg class="w-3.5 h-3.5 text-slate2 absolute left-2.5 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+
+            <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate2 hover:text-ink cursor-pointer select-none">
+              <input type="checkbox" ${notifVerAtendidas ? 'checked' : ''} onchange="toggleVerNotificacionesAtendidas()" class="w-4 h-4 rounded text-morado focus:ring-morado/30" />
+              <span>Ver atendidas</span>
+            </label>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Lista de Notificaciones -->
+      <div class="space-y-3.5">
+        ${tarjetasHtml || emptyStateHtml}
+      </div>
+    `;
+
+    actualizarBadgesNotificacionesAdmin();
+  }
+
+  window.marcarNotificacionAtendida = function(id, marcarLeida) {
+    let leidas = [];
+    try {
+      leidas = JSON.parse(localStorage.getItem('aplus_admin_notificaciones_leidas') || '[]');
+      if (!Array.isArray(leidas)) leidas = [];
+    } catch (e) { leidas = []; }
+
+    const set = new Set(leidas);
+    if (marcarLeida) {
+      set.add(id);
+      toast('Alerta marcada como atendida', 'ok');
+    } else {
+      set.delete(id);
+      toast('Alerta reactivada', 'info');
+    }
+    localStorage.setItem('aplus_admin_notificaciones_leidas', JSON.stringify(Array.from(set)));
+    renderNotificacionesAdmin();
+  };
+
+  window.marcarTodasNotificacionesAtendidas = async function() {
+    const { notificaciones } = await obtenerNotificacionesAdmin();
+    let leidas = [];
+    try {
+      leidas = JSON.parse(localStorage.getItem('aplus_admin_notificaciones_leidas') || '[]');
+      if (!Array.isArray(leidas)) leidas = [];
+    } catch (e) { leidas = []; }
+
+    const set = new Set(leidas);
+    notificaciones.forEach(n => set.add(n.id));
+    localStorage.setItem('aplus_admin_notificaciones_leidas', JSON.stringify(Array.from(set)));
+    toast('Todas las alertas actuales han sido marcadas como atendidas', 'ok');
+    renderNotificacionesAdmin();
+  };
+
+  window.filtrarNotificacionesTipo = function(tipo) {
+    notifFiltroTipo = tipo;
+    renderNotificacionesAdmin();
+  };
+
+  window.filtrarNotificacionesCohorte = function(cohorte) {
+    notifFiltroCohorte = cohorte;
+    renderNotificacionesAdmin();
+  };
+
+  window.filtrarNotificacionesBuscar = function(texto) {
+    notifFiltroTexto = texto;
+    renderNotificacionesAdmin();
+  };
+
+  window.toggleVerNotificacionesAtendidas = function() {
+    notifVerAtendidas = !notifVerAtendidas;
+    renderNotificacionesAdmin();
+  };
+
+  window.irASemaforoEstudiante = function(estudiante, cohorte) {
+    if (cohorte && typeof semaforoCohorteFiltro !== 'undefined') {
+      semaforoCohorteFiltro = cohorte;
+    }
+    showPanel('semaforo').then(() => {
+      setTimeout(() => {
+        const input = document.querySelector('[data-table="table-semaforo"]');
+        if (input) {
+          input.value = estudiante;
+          if (typeof TableManager !== 'undefined' && TableManager.filter) {
+            TableManager.filter('table-semaforo', estudiante);
+          }
+        }
+      }, 180);
+    });
+  };
+
+  window.irAMemorandosEstudiante = function(estudiante) {
+    showPanel('memorandos').then(() => {
+      setTimeout(() => {
+        const input = document.querySelector('[data-table="table-memorandos"]');
+        if (input) {
+          input.value = estudiante;
+          if (typeof TableManager !== 'undefined' && TableManager.filter) {
+            TableManager.filter('table-memorandos', estudiante);
+          }
+        }
+      }, 180);
+    });
+  };
+
   const RENDERERS = {
     resumen: renderResumen,
+    notificaciones: renderNotificacionesAdmin,
     usuarios: renderUsuarios,
     perfiles: renderPerfiles,
     administradores: renderAdministradores,
@@ -8662,6 +9629,8 @@ Fundación A+`;
     calificaciones: renderCalificaciones,
     informesAdmin: renderInformesAdmin,
     encuestas: renderEncuestas,
+    formularios: typeof renderFormularios === 'function' ? renderFormularios : async () => {},
+    formulariosPapelera: typeof renderFormulariosPapelera === 'function' ? renderFormulariosPapelera : async () => {},
     auditoria: renderAuditoria,
     chatvoz: renderChatVozConocimiento,
     configuracion: renderConfiguracion,
@@ -8676,6 +9645,7 @@ Fundación A+`;
       ADMIN_BOOTED = true;
     }
     actualizarBadgePqrAdmin();
+    actualizarBadgesNotificacionesAdmin();
   }
 
   /**
@@ -8854,6 +9824,7 @@ Fundación A+`;
       currentDocente = { ...currentDocente, fotoUrl: reader.result };
       toast(resultado.remoto ? 'Foto de perfil actualizada' : 'Foto guardada solo en este navegador (sin conexión con el servidor)', resultado.remoto ? 'ok' : 'err');
       actualizarAvatarDocenteEnDom(reader.result);
+      actualizarHeaderUsuario('docente');
     };
     reader.onerror = () => toast('No se pudo leer la imagen', 'err');
     reader.readAsDataURL(file);
@@ -8864,6 +9835,7 @@ Fundación A+`;
     currentDocente = { ...currentDocente, fotoUrl: '' };
     toast(resultado.remoto ? 'Foto de perfil eliminada' : 'No se pudo eliminar la foto en el servidor', resultado.remoto ? 'ok' : 'err');
     actualizarAvatarDocenteEnDom('');
+    actualizarHeaderUsuario('docente');
   }
 
   // async: actualizarUsuarioDocenteActual ahora es async.
@@ -8893,6 +9865,7 @@ Fundación A+`;
     delete currentDocente.password; // no guardar el texto plano en memoria
     toast(resultado.remoto ? 'Perfil actualizado correctamente' : 'No se pudo guardar en el servidor, intenta de nuevo', resultado.remoto ? 'ok' : 'err');
     renderPerfilDocente();
+    actualizarHeaderUsuario('docente');
   }
 
   // async: Store.list() vía MySQL.
@@ -9325,7 +10298,7 @@ Fundación A+`;
     // Si estamos en localhost y es para un código QR (que se escaneará desde un celular),
     // debemos usar la IP de la red local para que el celular no intente conectarse a sí mismo.
     if (!forzarLocal && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-      const lanIp = (typeof window !== 'undefined' && window.SERVER_LAN_IP) ? window.SERVER_LAN_IP : '192.168.1.35';
+      const lanIp = (typeof window !== 'undefined' && window.SERVER_LAN_IP) ? window.SERVER_LAN_IP : '192.168.1.26';
       origin = location.protocol + '//' + lanIp + (location.port ? ':' + location.port : '');
     }
     return origin + location.pathname + '?qr=' + tipo + '&t=' + token;
@@ -9392,6 +10365,388 @@ Fundación A+`;
   const VENTANA_PUNTUAL_MIN = 20;
   const VENTANA_TARDE_MIN = 50; // 20 + 30 minutos de tolerancia
 
+  // ---------- No Repudio: Token Dinámico Efímero con Tolerancia Deslizante ----------
+  // Evita reenvío de fotos por WhatsApp: el token cambia cada 15 segundos.
+  // Para garantizar que nadie en el aula se quede por fuera por lentitud de conexión,
+  // el validador acepta el token actual y los 3 anteriores (60 segundos de gracia).
+  const TOKEN_ROTATIVO_SEGUNDOS = 15;
+
+  function calcularTokenEfimeroSesion(codigoBase, timestamp = Date.now(), paso = TOKEN_ROTATIVO_SEGUNDOS) {
+    if (!codigoBase) return 'APLUS';
+    const ventana = Math.floor(timestamp / (paso * 1000));
+    const semilla = String(codigoBase) + '_' + ventana;
+    let hash = 0;
+    for (let i = 0; i < semilla.length; i++) {
+      hash = ((hash << 5) - hash) + semilla.charCodeAt(i);
+      hash |= 0;
+    }
+    const alfabeto = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    let token = '';
+    let n = Math.abs(hash);
+    for (let j = 0; j < 5; j++) {
+      token += alfabeto[n % alfabeto.length];
+      n = Math.floor(n / alfabeto.length);
+    }
+    return token;
+  }
+  window.calcularTokenEfimeroSesion = calcularTokenEfimeroSesion;
+
+  function validarTokenSesionConGracia(codigoIngresado, codigoBase, paso = TOKEN_ROTATIVO_SEGUNDOS, ventanasGracia = 3) {
+    if (!codigoIngresado || !codigoBase) return false;
+    const normalizado = String(codigoIngresado).trim().toUpperCase();
+    if (normalizado === String(codigoBase).trim().toUpperCase()) return true;
+    const ahora = Date.now();
+    for (let offset = 0; offset <= ventanasGracia; offset++) {
+      const t = calcularTokenEfimeroSesion(codigoBase, ahora - (offset * paso * 1000), paso);
+      if (normalizado === t) return true;
+    }
+    return false;
+  }
+  window.validarTokenSesionConGracia = validarTokenSesionConGracia;
+
+  // ---------- Control de Justificaciones de Inasistencia (Foto / PDF) ----------
+  let archivoJustificacionTemporal = null;
+
+  function manejarSeleccionArchivoJustificacion(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 3.5 * 1024 * 1024) {
+      toast('El archivo supera el tamaño máximo permitido (3.5 MB). Comprime la imagen o PDF.', 'err');
+      input.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      archivoJustificacionTemporal = {
+        nombre: file.name,
+        tipo: file.type || 'application/octet-stream',
+        tamano: file.size,
+        base64: e.target.result
+      };
+      const label = document.getElementById('justFileLabel');
+      if (label) {
+        label.textContent = file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB)';
+        label.className = 'text-xs font-bold text-emerald-700';
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+  window.manejarSeleccionArchivoJustificacion = manejarSeleccionArchivoJustificacion;
+
+  function abrirModalJustificarAsistencia(asistId, fecha, materia, docente) {
+    archivoJustificacionTemporal = null;
+    const modal = document.getElementById('modalJustificarAsistencia');
+    if (!modal) return;
+    document.getElementById('justInputAsistId').value = asistId || '';
+    document.getElementById('justInputFecha').value = fecha || '';
+    document.getElementById('justInputMateria').value = materia || '';
+    document.getElementById('justInputDocente').value = docente || '';
+    document.getElementById('justInfoClase').textContent = (materia || 'Materia') + ' · ' + fmtDate(fecha) + (docente ? (' (Docente: ' + docente + ')') : '');
+    document.getElementById('justTextareaDetalle').value = '';
+    const fileInput = document.getElementById('justFileInput');
+    if (fileInput) fileInput.value = '';
+    const label = document.getElementById('justFileLabel');
+    if (label) {
+      label.textContent = 'Seleccionar Foto o documento PDF';
+      label.className = 'text-xs font-bold text-morado';
+    }
+    modal.classList.remove('hidden');
+  }
+  window.abrirModalJustificarAsistencia = abrirModalJustificarAsistencia;
+
+  function cerrarModalJustificarAsistencia() {
+    const modal = document.getElementById('modalJustificarAsistencia');
+    if (modal) modal.classList.add('hidden');
+    archivoJustificacionTemporal = null;
+  }
+  window.cerrarModalJustificarAsistencia = cerrarModalJustificarAsistencia;
+
+  async function enviarJustificacionEstudiante() {
+    const asistId = document.getElementById('justInputAsistId').value;
+    const fecha = document.getElementById('justInputFecha').value;
+    const materia = document.getElementById('justInputMateria').value;
+    const docente = document.getElementById('justInputDocente').value;
+    const motivo = document.getElementById('justSelectMotivo').value;
+    const detalle = (document.getElementById('justTextareaDetalle').value || '').trim();
+    const estudiante = estudianteNombre();
+
+    if (!detalle && !archivoJustificacionTemporal) {
+      toast('Por favor agrega una breve descripción o adjunta un soporte (foto/PDF).', 'err');
+      return;
+    }
+
+    const justificaciones = await Store.list('justificaciones_asistencia');
+    const nuevoRegistro = {
+      id: uid('just'),
+      asistenciaId: asistId,
+      estudiante,
+      fecha,
+      materia,
+      docente,
+      motivo,
+      detalle,
+      archivoNombre: archivoJustificacionTemporal ? archivoJustificacionTemporal.nombre : null,
+      archivoTipo: archivoJustificacionTemporal ? archivoJustificacionTemporal.tipo : null,
+      archivoBase64: archivoJustificacionTemporal ? archivoJustificacionTemporal.base64 : null,
+      estado: 'Pendiente',
+      creadoEn: new Date().toISOString()
+    };
+    justificaciones.unshift(nuevoRegistro);
+    await Store.set('justificaciones_asistencia', justificaciones);
+
+    cerrarModalJustificarAsistencia();
+    toast('Justificación radicada exitosamente. Tu docente y la administración la revisarán.', 'ok');
+    if (typeof renderAsistenciaEstudiante === 'function') renderAsistenciaEstudiante();
+  }
+  window.enviarJustificacionEstudiante = enviarJustificacionEstudiante;
+
+  // Visor de justificación para Docente y Admin
+  async function abrirModalVisorJustificacion(justId) {
+    const justificaciones = await Store.list('justificaciones_asistencia');
+    const just = justificaciones.find(j => j.id === justId);
+    if (!just) { toast('Justificación no encontrada', 'err'); return; }
+
+    const modal = document.getElementById('modalVisorJustificacion');
+    if (!modal) return;
+
+    document.getElementById('visorJustId').value = just.id;
+    const ini = (just.estudiante || 'E').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'E';
+    document.getElementById('visorJustIniciales').textContent = ini;
+    document.getElementById('visorJustEstudiante').textContent = just.estudiante;
+    document.getElementById('visorJustSubtitulo').textContent = `${escapeHtml(just.materia)} · ${fmtDate(just.fecha)}`;
+    document.getElementById('visorJustMotivo').textContent = just.motivo || 'Motivo no especificado';
+    document.getElementById('visorJustDescripcion').textContent = just.detalle || '(Sin descripción adicional)';
+
+    const estadoBadge = document.getElementById('visorJustEstadoBadge');
+    if (just.estado === 'Aprobada') {
+      estadoBadge.className = 'px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800';
+      estadoBadge.textContent = 'Aprobada';
+    } else if (just.estado === 'Rechazada') {
+      estadoBadge.className = 'px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-100 text-red-800';
+      estadoBadge.textContent = 'Rechazada';
+    } else {
+      estadoBadge.className = 'px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800';
+      estadoBadge.textContent = 'En revisión';
+    }
+
+    const contArchivo = document.getElementById('visorJustContenedorArchivo');
+    if (just.archivoBase64) {
+      if (just.archivoTipo && just.archivoTipo.startsWith('image/')) {
+        contArchivo.innerHTML = `
+          <img src="${just.archivoBase64}" alt="Evidencia médica" class="max-h-60 rounded-xl object-contain shadow-xs border border-gray-100 mb-2 cursor-pointer hover:opacity-95 transition" onclick="window.open('${just.archivoBase64}', '_blank')" />
+          <p class="text-[11px] font-bold text-slate2">Haz clic sobre la imagen para verla en tamaño completo</p>`;
+      } else {
+        contArchivo.innerHTML = `
+          <div class="p-4 flex flex-col items-center">
+            <div class="w-12 h-14 bg-red-100 border border-red-200 rounded-lg flex flex-col items-center justify-center mb-2">
+              <span class="text-red-700 font-extrabold text-xs">PDF</span>
+            </div>
+            <p class="text-xs font-bold text-ink">${escapeHtml(just.archivoNombre || 'Documento soporte.pdf')}</p>
+            <a href="${just.archivoBase64}" download="${escapeHtml(just.archivoNombre || 'justificacion.pdf')}" class="mt-2 px-3.5 py-1.5 rounded-full bg-morado text-white text-xs font-bold hover:bg-morado/90 transition shadow-xs inline-flex items-center gap-1.5">
+              <span>Descargar / Abrir PDF</span>
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </a>
+          </div>`;
+      }
+    } else {
+      contArchivo.innerHTML = '<p class="text-xs text-slate2 italic py-4">No se adjuntó archivo fotográfico ni documento PDF.</p>';
+    }
+
+    // Botones de acción según rol
+    const contAcciones = document.getElementById('visorJustAcciones');
+    const esPendiente = just.estado === 'Pendiente';
+    if (esPendiente) {
+      contAcciones.innerHTML = `
+        <button type="button" onclick="cerrarModalVisorJustificacion()" class="px-4 py-2 rounded-full text-xs font-semibold text-slate2 hover:text-ink hover:bg-gray-100 transition cursor-pointer">
+          Cerrar
+        </button>
+        <button type="button" onclick="window.rechazarJustificacionDocente('${just.id}')" class="px-4 py-2 rounded-full text-xs font-bold text-coral hover:bg-coral/10 transition cursor-pointer">
+          Rechazar Justificación
+        </button>
+        <button type="button" onclick="window.aprobarJustificacionDocente('${just.id}')" class="px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition cursor-pointer inline-flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          <span>Aprobar como Falla Justificada</span>
+        </button>`;
+    } else {
+      contAcciones.innerHTML = `
+        <button type="button" onclick="cerrarModalVisorJustificacion()" class="px-5 py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-ink text-xs font-bold transition cursor-pointer">
+          Cerrar Visor
+        </button>`;
+    }
+
+    modal.classList.remove('hidden');
+  }
+  window.abrirModalVisorJustificacion = abrirModalVisorJustificacion;
+
+  function cerrarModalVisorJustificacion() {
+    const modal = document.getElementById('modalVisorJustificacion');
+    if (modal) modal.classList.add('hidden');
+  }
+  window.cerrarModalVisorJustificacion = cerrarModalVisorJustificacion;
+
+  async function aprobarJustificacionDocente(justId) {
+    const justificaciones = await Store.list('justificaciones_asistencia');
+    const just = justificaciones.find(j => j.id === justId);
+    if (!just) return;
+
+    just.estado = 'Aprobada';
+    just.resueltoPor = (currentDocente && currentDocente.nombre) || (currentAdmin && currentAdmin.nombre) || 'Docente';
+    just.resueltoEn = new Date().toISOString();
+    await Store.set('justificaciones_asistencia', justificaciones);
+
+    // Actualizar registro de asistencia a 'Justificada'
+    const asistencias = await Store.list('asistencia', { forceRefresh: true });
+    const match = asistencias.find(a =>
+      (just.asistenciaId && a.id === just.asistenciaId) ||
+      (a.estudiante === just.estudiante && a.fecha === just.fecha && (a.modulo === just.materia || a.materia === just.materia))
+    );
+    if (match) {
+      match.estado = 'Justificada';
+      match.motivoAjuste = 'Justificada por soporte: ' + just.motivo;
+      await Store.set('asistencia', asistencias);
+    }
+
+    cerrarModalVisorJustificacion();
+    toast('Justificación aprobada: el estudiante ahora tiene Falla Justificada sin penalización.', 'ok');
+    if (typeof renderAsistenciaDocente === 'function') renderAsistenciaDocente();
+  }
+  window.aprobarJustificacionDocente = aprobarJustificacionDocente;
+
+  async function rechazarJustificacionDocente(justId) {
+    const motivoRechazo = prompt('Indica el motivo del rechazo para que el estudiante lo conozca:', 'Soporte ilegible o no corresponde a la fecha');
+    if (motivoRechazo === null) return;
+
+    const justificaciones = await Store.list('justificaciones_asistencia');
+    const just = justificaciones.find(j => j.id === justId);
+    if (!just) return;
+
+    just.estado = 'Rechazada';
+    just.comentarioResolucion = motivoRechazo;
+    just.resueltoPor = (currentDocente && currentDocente.nombre) || (currentAdmin && currentAdmin.nombre) || 'Docente';
+    just.resueltoEn = new Date().toISOString();
+    await Store.set('justificaciones_asistencia', justificaciones);
+
+    cerrarModalVisorJustificacion();
+    toast('Justificación rechazada.', 'info');
+    if (typeof renderAsistenciaDocente === 'function') renderAsistenciaDocente();
+  }
+  window.rechazarJustificacionDocente = rechazarJustificacionDocente;
+
+  // ---------- Control de Permanencia & Ajuste de Horas en Aula (Docente) ----------
+  function abrirModalAjusteHorasDocente(estudianteNombre, sesionId, horasActuales, motivoActual, estadoActual) {
+    const modal = document.getElementById('modalAjusteHorasDocente');
+    if (!modal) return;
+
+    document.getElementById('ajusteDocEstudianteInput').value = estudianteNombre;
+    document.getElementById('ajusteDocSesionIdInput').value = sesionId || '';
+    document.getElementById('ajusteDocEstudianteNombre').textContent = `Estudiante: ${estudianteNombre}`;
+    document.getElementById('ajusteDocMotivoInput').value = motivoActual || '';
+
+    const h = (horasActuales !== undefined && horasActuales !== null && !isNaN(horasActuales)) ? Number(horasActuales) : 4.0;
+    document.getElementById('ajusteDocHorasInput').value = h.toFixed(1);
+    actualizarCalculoHorasDocente(h);
+
+    modal.classList.remove('hidden');
+  }
+  window.abrirModalAjusteHorasDocente = abrirModalAjusteHorasDocente;
+
+  function cerrarModalAjusteHorasDocente() {
+    const modal = document.getElementById('modalAjusteHorasDocente');
+    if (modal) modal.classList.add('hidden');
+  }
+  window.cerrarModalAjusteHorasDocente = cerrarModalAjusteHorasDocente;
+
+  function actualizarCalculoHorasDocente(val) {
+    const num = Math.min(4.0, Math.max(0, parseFloat(val) || 0));
+    const pct = Math.round((num / 4.0) * 100);
+    const span = document.getElementById('ajusteDocPctCalculado');
+    if (span) span.textContent = `${pct}% de asistencia`;
+  }
+  window.actualizarCalculoHorasDocente = actualizarCalculoHorasDocente;
+
+  function setPresetAjusteHoras(tipo) {
+    const inputH = document.getElementById('ajusteDocHorasInput');
+    const inputM = document.getElementById('ajusteDocMotivoInput');
+    if (tipo === 'COMPLETO') {
+      inputH.value = '4.0';
+      inputM.value = 'Presencia física completa verificada por docente';
+    } else if (tipo === 'RETIRO') {
+      inputH.value = '1.5';
+      inputM.value = 'Retiro temprano del aula a mitad de clase';
+    } else if (tipo === 'TARDIO') {
+      inputH.value = '2.5';
+      inputM.value = 'Llegada tardía presencial (no escaneó QR pero asistió)';
+    } else if (tipo === 'AUSENTE') {
+      inputH.value = '0.0';
+      inputM.value = 'Ausente en aula (anulación de QR por suplantación/falta)';
+    }
+    actualizarCalculoHorasDocente(inputH.value);
+  }
+  window.setPresetAjusteHoras = setPresetAjusteHoras;
+
+  async function guardarAjusteHorasDocente() {
+    const estudianteNombre = document.getElementById('ajusteDocEstudianteInput').value;
+    const sesionId = document.getElementById('ajusteDocSesionIdInput').value;
+    const horas = Math.min(4.0, Math.max(0, parseFloat(document.getElementById('ajusteDocHorasInput').value) || 0));
+    const motivo = (document.getElementById('ajusteDocMotivoInput').value || '').trim();
+    const hoy = fechaHoyLocal();
+
+    const registros = await Store.list('asistencia', { forceRefresh: true });
+    let match = registros.find(r => r.estudiante === estudianteNombre && (r.sesionId === sesionId || r.fecha === hoy));
+
+    let nuevoEstado = 'Presente';
+    if (horas >= 3.8) nuevoEstado = 'Presente';
+    else if (horas >= 2.0) nuevoEstado = (motivo.toLowerCase().includes('retiro') ? 'Asistencia Parcial' : 'Tarde');
+    else if (horas > 0) nuevoEstado = 'Asistencia Parcial';
+    else nuevoEstado = 'Falla';
+
+    if (match) {
+      match.estado = nuevoEstado;
+      match.horasCumplidas = horas;
+      match.motivoAjuste = motivo;
+      match.ajustadoPorDocente = true;
+    } else {
+      registros.push({
+        id: uid('as'),
+        estudiante: estudianteNombre,
+        sesionId,
+        fecha: hoy,
+        estado: nuevoEstado,
+        horasCumplidas: horas,
+        motivoAjuste: motivo,
+        ajustadoPorDocente: true,
+        automatico: false
+      });
+    }
+
+    await Store.set('asistencia', registros);
+    cerrarModalAjusteHorasDocente();
+    toast(`Novedad guardada para ${estudianteNombre}: ${horas.toFixed(1)} hrs (${nuevoEstado}).`, 'ok');
+    if (typeof renderAsistenciaDocente === 'function') renderAsistenciaDocente();
+  }
+  window.guardarAjusteHorasDocente = guardarAjusteHorasDocente;
+
+  async function confirmarTodosPresentesDocente(sesionId) {
+    if (!sesionId) return;
+    const registros = await Store.list('asistencia', { forceRefresh: true });
+    let actualizados = 0;
+    registros.forEach(r => {
+      if (r.sesionId === sesionId && (r.estado === 'Presente' || r.estado === 'Tarde')) {
+        r.horasCumplidas = (r.horasCumplidas !== undefined) ? r.horasCumplidas : (r.estado === 'Presente' ? 4.0 : 3.0);
+        r.verificadoAula = true;
+        actualizados++;
+      }
+    });
+    if (actualizados > 0) {
+      await Store.set('asistencia', registros);
+      toast(`Doble Check completado: presencia física confirmada para ${actualizados} estudiantes.`, 'ok');
+      if (typeof renderAsistenciaDocente === 'function') renderAsistenciaDocente();
+    } else {
+      toast('No hay registros activos para confirmar en este momento.', 'info');
+    }
+  }
+  window.confirmarTodosPresentesDocente = confirmarTodosPresentesDocente;
+
   function generarCodigoSesion() {
     return Math.random().toString(36).slice(2, 8).toUpperCase();
   }
@@ -9416,15 +10771,29 @@ Fundación A+`;
     return 'Falla';
   }
 
-  // ASISTENCIA POR DEFECTO: En cuanto se crea la sesión, todos los estudiantes
-  // de la cohorte inician con registro 'Falla' (pérdida por defecto).
-  // Si el estudiante escanea o digita el código, su registro se actualiza a Presente o Tarde.
+  // ASISTENCIA AUTOMÁTICA: Solo cuando la ventana de tolerancia expira (> 50 min)
+  // se registran las inasistencias definitivas ('Falla').
+  // Los estudiantes nuevos que ingresaron a la plataforma después del inicio de la sesión
+  // NO se marcan como Falla.
   // async: 'asistencia' vía MySQL.
   async function sincronizarAusentesSesion(sesion, estudiantesCohorte) {
     if (!sesion || !estudiantesCohorte || !estudiantesCohorte.length) return;
+    const mins = minutosTranscurridos(sesion.horaInicio);
+    // Si la sesión aún está dentro de los 50 minutos de tolerancia, no se registran fallas definitivas
+    if (mins <= VENTANA_TARDE_MIN) return;
+
     const registros = await Store.list('asistencia', { forceRefresh: true });
     let cambiado = false;
+    const horaSesionStr = sesion.horaInicio ? (sesion.horaInicio.includes('T') ? sesion.horaInicio : sesion.horaInicio.replace(' ', 'T')) : (sesion.fecha + 'T23:59:59');
+    const tsSesion = new Date(horaSesionStr).getTime();
+
     estudiantesCohorte.forEach(e => {
+      // Si el estudiante se registró DESPUÉS de que inició la sesión, no se le penaliza
+      const fechaReg = (e.creadoEn || e.creado_en || '').trim();
+      if (fechaReg) {
+        const tsReg = new Date(fechaReg.includes('T') ? fechaReg : fechaReg.replace(' ', 'T')).getTime();
+        if (tsReg > tsSesion) return;
+      }
       const yaTiene = registros.some(r => r.estudiante === e.nombre && (r.sesionId === sesion.id || (r.fecha === sesion.fecha && (r.materia === sesion.materia || r.modulo === sesion.modulo))));
       if (!yaTiene) {
         registros.push({
@@ -9452,14 +10821,32 @@ Fundación A+`;
   }
 
   // async: 'asistencia' vía MySQL.
-  async function estadoActualEstudianteSesion(sesion, estudianteNombreVal, asistListPreloaded = null) {
+  async function estadoActualEstudianteSesion(sesion, estudianteNombreVal, asistListPreloaded = null, estudianteObj = null) {
     if (!sesion) return { estado: 'Sin sesión', automatico: false };
     const list = asistListPreloaded || (await Store.list('asistencia'));
     const todos = list.filter(r => r.estudiante === estudianteNombreVal && (r.sesionId === sesion.id || (r.fecha === sesion.fecha && (r.materia === sesion.materia || r.modulo === sesion.modulo))));
-    if (!todos.length) return { estado: 'Falla', automatico: true };
-    const prioridad = { Presente: 1, Tarde: 2, Justificada: 3, Falla: 4 };
-    todos.sort((a, b) => (prioridad[a.estado] || 99) - (prioridad[b.estado] || 99));
-    return { estado: todos[0].estado, automatico: !!todos[0].automatico };
+    if (todos.length > 0) {
+      const prioridad = { Presente: 1, Tarde: 2, Justificada: 3, Falla: 4 };
+      todos.sort((a, b) => (prioridad[a.estado] || 99) - (prioridad[b.estado] || 99));
+      return { estado: todos[0].estado, automatico: !!todos[0].automatico };
+    }
+    // Si no tiene registro: verificar si el estudiante ingresó después del inicio de la sesión
+    if (estudianteObj) {
+      const fechaReg = (estudianteObj.creadoEn || estudianteObj.creado_en || '').trim();
+      if (fechaReg) {
+        const tsReg = new Date(fechaReg.includes('T') ? fechaReg : fechaReg.replace(' ', 'T')).getTime();
+        const horaSesionStr = sesion.horaInicio ? (sesion.horaInicio.includes('T') ? sesion.horaInicio : sesion.horaInicio.replace(' ', 'T')) : (sesion.fecha + 'T23:59:59');
+        const tsSesion = new Date(horaSesionStr).getTime();
+        if (tsReg > tsSesion) {
+          return { estado: 'No aplica', automatico: false };
+        }
+      }
+    }
+    const mins = minutosTranscurridos(sesion.horaInicio);
+    if (mins <= VENTANA_TARDE_MIN) {
+      return { estado: 'Esperando escaneo', automatico: false };
+    }
+    return { estado: 'Falla', automatico: true };
   }
 
   // ---------- RENDER: Asistencia (QR automático) — docente ----------
@@ -9586,7 +10973,7 @@ Fundación A+`;
     const sesion = await sesionAsistenciaHoy(moduloSel.nombre, doc.nombre);
     if (sesion) await sincronizarAusentesSesion(sesion, estudiantes);
 
-    const pillMap = { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'], 'Esperando escaneo': { bg: '#5B647214', text: '#5B6472' }, 'Sin sesión': { bg: '#5B647214', text: '#5B6472' } };
+    const pillMap = { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'], 'Esperando escaneo': { bg: '#F5A62314', text: '#b5790f' }, 'Sin sesión': { bg: '#5B647214', text: '#5B6472' }, 'No aplica': { bg: '#5B647214', text: '#5B6472' } };
 
     const selector = `<select onchange="cambiarCohorteAsistDocente(this.value)" class="rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado">
       ${modulos.map(m => `<option value="${escapeHtml(m.nombre)}" ${m.nombre === docenteAsistCohorte ? 'selected' : ''}>${escapeHtml(m.nombre)} — ${escapeHtml(m.modulo)}</option>`).join('')}
@@ -9644,7 +11031,20 @@ Fundación A+`;
             </div>
             <span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">Código de hoy</span>
           </div>
-          <p class="text-xs text-slate2 mb-4 text-left">Proyéctalo en clase o comparte el enlace. Al escanearlo, su asistencia se registrará automáticamente en el sistema.</p>
+          <p class="text-xs text-slate2 mb-3 text-left">Proyéctalo en clase o comparte el enlace. Al escanearlo, su asistencia se registrará automáticamente en el sistema.</p>
+          
+          ${sesion ? `
+          <div class="mb-3.5 p-3 rounded-2xl bg-purple-50/80 border border-purple-200/70 flex items-center justify-between text-left">
+            <div>
+              <span class="text-[10px] uppercase font-bold text-morado tracking-wider block">Token Dinámico Anti-Fraude (15s)</span>
+              <span id="tokenDinamicoDocenteTxt" class="text-base font-extrabold text-ink font-mono tracking-widest">${calcularTokenEfimeroSesion(sesion.codigo)}</span>
+            </div>
+            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-purple-200 text-morado text-xs font-bold shadow-xs">
+              <span class="w-2 h-2 rounded-full bg-morado animate-pulse"></span>
+              <span id="tokenDinamicoDocenteTimer">15s</span>
+            </div>
+          </div>` : ''}
+
           <div id="qrEstudianteImg" class="flex justify-center mb-4 min-h-[160px] items-center"></div>
           <div class="flex flex-wrap items-center justify-center gap-3 pt-2 border-t border-gray-100">
             <button type="button" onclick="copiarEnlaceEstudiante('${tokenEstudiante}')" class="text-xs font-semibold text-turquesa hover:underline flex items-center gap-1 cursor-pointer">
@@ -9684,30 +11084,57 @@ Fundación A+`;
     }
 
     const asistenciaTodos = await Store.list('asistencia');
-    const infoPorEstudiante = await Promise.all(estudiantes.map(e => estadoActualEstudianteSesion(sesion, e.nombre, asistenciaTodos)));
+    const justificacionesTodas = await Store.list('justificaciones_asistencia');
+    const infoPorEstudiante = await Promise.all(estudiantes.map(e => estadoActualEstudianteSesion(sesion, e.nombre, asistenciaTodos, e)));
     let countPresentes = 0;
     let countTardes = 0;
     let countFallas = 0;
+    let countPendientes = 0;
 
     const filasHoy = estudiantes.length ? estudiantes.map((e, i) => {
       const info = infoPorEstudiante[i];
       if (info.estado === 'Presente') countPresentes++;
       else if (info.estado === 'Tarde') countTardes++;
-      else countFallas++;
+      else if (info.estado === 'Falla') countFallas++;
+      else countPendientes++;
 
       const iniciales = (e.nombre || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'E';
+      const regEst = asistenciaTodos.find(a => a.estudiante === e.nombre && (a.sesionId === (sesion ? sesion.id : '') || (sesion && a.fecha === sesion.fecha && (a.materia === sesion.materia || a.modulo === sesion.modulo))));
+      const justEst = justificacionesTodas.find(j => j.estudiante === e.nombre && (sesion && (j.fecha === sesion.fecha || (regEst && j.asistenciaId === regEst.id))));
+      const horas = (regEst && regEst.horasCumplidas !== undefined && regEst.horasCumplidas !== null) ? Number(regEst.horasCumplidas) : (info.estado === 'Presente' ? 4.0 : (info.estado === 'Tarde' ? 3.0 : (info.estado === 'Justificada' ? 4.0 : 0.0)));
+      const horasPct = Math.round((horas / 4.0) * 100);
 
       return `<tr data-estudiante="1" data-nombre="${escapeHtml(e.nombre.toLowerCase())}" data-estado="${escapeHtml(info.estado)}" class="border-b border-gray-50 last:border-0 hover:bg-slate-50/80 transition-colors">
         <td class="py-2.5 px-4 text-sm font-semibold text-ink">
           <div class="flex items-center gap-2.5">
             <span class="w-7 h-7 rounded-full bg-morado/10 text-morado text-[11px] font-bold flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
-            <span class="truncate">${escapeHtml(e.nombre)}</span>
+            <div>
+              <p class="font-bold text-ink leading-tight">${escapeHtml(e.nombre)}</p>
+              ${regEst && regEst.motivoAjuste ? `<span class="text-[10px] text-amber-700 italic block leading-tight mt-0.5">${escapeHtml(regEst.motivoAjuste)}</span>` : ''}
+            </div>
           </div>
         </td>
-        <td class="py-2.5 px-4 text-right sm:text-left">
-          <div class="flex items-center justify-end sm:justify-start gap-1.5 flex-wrap">
+        <td class="py-2.5 px-4">
+          <div class="flex items-center gap-1.5 flex-wrap">
             ${statusPill(info.estado === 'Falla' ? 'Falla' : info.estado, pillMap)}
             ${info.automatico && info.estado === 'Falla' ? '<span class="hidden sm:inline-block text-[10px] text-coral font-medium bg-coral/10 px-2 py-0.5 rounded-full border border-coral/20">por defecto</span>' : ''}
+          </div>
+        </td>
+        <td class="py-2.5 px-4 text-xs font-semibold text-ink">
+          <span>${horas.toFixed(1)} / 4.0 hrs</span>
+          <span class="text-[10px] text-slate2 ml-1">(${horasPct}%)</span>
+        </td>
+        <td class="py-2.5 px-4 text-right whitespace-nowrap">
+          <div class="flex items-center justify-end gap-1.5">
+            ${justEst ? `
+              <button type="button" onclick="window.abrirModalVisorJustificacion('${justEst.id}')" class="px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs flex items-center gap-1 cursor-pointer transition" title="Ver soporte médico o excusa">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <span>${justEst.estado === 'Aprobada' ? 'Justificada' : (justEst.estado === 'Rechazada' ? 'Rechazada' : 'Ver excusa')}</span>
+              </button>
+            ` : ''}
+            <button type="button" onclick="window.abrirModalAjusteHorasDocente('${escapeHtml(e.nombre)}', '${sesion ? sesion.id : ''}', ${horas}, '${escapeHtml((regEst && regEst.motivoAjuste) || '')}', '${info.estado}')" class="px-2.5 py-1 rounded-lg border border-gray-200 hover:border-morado hover:text-morado text-slate2 font-semibold text-xs transition cursor-pointer">
+              Novedad / Horas
+            </button>
           </div>
         </td>
       </tr>`;
@@ -10791,6 +12218,10 @@ Fundación A+`;
     const doc = currentDocente || {};
     const registros = await Store.list('notas_modulos');
     let rec = registros.find(r => r.docente === doc.nombre && r.cohorte === cohorteNombre && r.mes === mes);
+    if (rec) {
+      if (!rec.valores || Array.isArray(rec.valores)) rec.valores = {};
+      if (!rec.criterios || !Array.isArray(rec.criterios)) rec.criterios = [];
+    }
     if (!rec && crear) {
       // Migración suave: si existe un registro de antes de separar las notas
       // por mes (sin campo "mes") para este mismo docente+cohorte, se adopta
@@ -10798,6 +12229,8 @@ Fundación A+`;
       const legacy = registros.find(r => r.docente === doc.nombre && r.cohorte === cohorteNombre && !r.mes);
       if (legacy) {
         legacy.mes = mes;
+        if (!legacy.valores || Array.isArray(legacy.valores)) legacy.valores = {};
+        if (!legacy.criterios || !Array.isArray(legacy.criterios)) legacy.criterios = [];
         rec = legacy;
         await Store.set('notas_modulos', registros);
       } else {
@@ -10811,10 +12244,25 @@ Fundación A+`;
 
   // async: 'notas_modulos' vía MySQL.
   async function guardarNotasModuloRecord(rec) {
+    if (!rec.valores || Array.isArray(rec.valores)) rec.valores = {};
+    if (!rec.criterios || !Array.isArray(rec.criterios)) rec.criterios = [];
+    // Asegurar que valores sea un objeto puro {} y no un Array [], para que JSON.stringify no descarte las notas
+    const valoresLimpios = {};
+    for (const est in rec.valores) {
+      if (rec.valores.hasOwnProperty(est) && rec.valores[est] && typeof rec.valores[est] === 'object' && !Array.isArray(rec.valores[est])) {
+        valoresLimpios[est] = { ...rec.valores[est] };
+      }
+    }
+    rec.valores = valoresLimpios;
+
     const registros = await Store.list('notas_modulos');
     const idx = registros.findIndex(r => r.id === rec.id);
     if (idx >= 0) registros[idx] = rec; else registros.push(rec);
-    await Store.set('notas_modulos', registros);
+    const saveRes = await Store.set('notas_modulos', registros);
+    if (saveRes && saveRes.error) {
+      console.error('[guardarNotasModuloRecord] Error al persistir notas en MySQL:', saveRes.error);
+      toast('Aviso: Las notas se guardaron localmente pero hubo error de sincronización: ' + saveRes.error, 'err');
+    }
     // Deja rastro en "Actividad reciente" del dashboard: quién subió/editó
     // notas, en qué cohorte y mes. currentDocente siempre está disponible
     // aquí porque los 4 llamadores de esta función viven en el panel Docente.
@@ -10833,18 +12281,39 @@ Fundación A+`;
   function calcularNotaFinal(rec, estudianteNombre) {
     const criterios = rec.criterios || [];
     if (!criterios.length) return null;
-    const valores = (rec.valores && rec.valores[estudianteNombre]) || {};
-    let sumaPeso = 0, sumaPonderada = 0, faltan = false;
+    const valores = (rec.valores && !Array.isArray(rec.valores) && rec.valores[estudianteNombre]) || {};
+    let sumaPeso = 0, sumaPonderada = 0, faltan = false, notasPuestas = 0;
+    let pesoCalificado = 0, sumaPonderadaCalificada = 0;
     criterios.forEach(c => {
       const peso = Number(c.peso) || 0;
       sumaPeso += peso;
       const v = valores[c.id];
-      if (v === undefined || v === null || v === '') { faltan = true; return; }
-      sumaPonderada += Number(v) * peso;
+      if (v === undefined || v === null || v === '') {
+        faltan = true;
+      } else {
+        notasPuestas++;
+        pesoCalificado += peso;
+        sumaPonderada += Number(v) * peso;
+        sumaPonderadaCalificada += Number(v) * peso;
+      }
     });
-    if (!sumaPeso) return null;
-    if (faltan) return { pendiente: true };
-    return { valor: sumaPonderada / sumaPeso, pendiente: false };
+    if (!sumaPeso && !notasPuestas) return null;
+    // Si los pesos aún están en 0 (docente no configuró pesos todavía), calcula promedio aritmético simple
+    if (!sumaPeso && notasPuestas > 0) {
+      let sumaSimple = 0;
+      criterios.forEach(c => {
+        const v = valores[c.id];
+        if (v !== undefined && v !== null && v !== '') sumaSimple += Number(v);
+      });
+      return { valor: sumaSimple / notasPuestas, pendiente: faltan, parcial: faltan };
+    }
+    if (faltan) {
+      if (pesoCalificado > 0) {
+        return { valor: sumaPonderadaCalificada / pesoCalificado, pendiente: true, parcial: true };
+      }
+      return { pendiente: true, valor: null };
+    }
+    return { valor: sumaPonderada / sumaPeso, pendiente: false, parcial: false };
   }
 
   function calificacionCualitativa(nota) {
@@ -10859,8 +12328,25 @@ Fundación A+`;
     if (nota >= 9) return '#1FC8C0';
     if (nota >= 7) return '#0f8f89';
     if (nota >= 6) return '#F5A623';
-    return '#F0455C';
+    return '#EC4899';
   }
+
+  // Escala académica por letras (A, B, C, D, F) según la escala oficial 0.0 - 10.0
+  // A (Sobresaliente / Excelente): 9.0 a 10.0
+  // B (Notable / Bueno): 7.5 a 8.9
+  // C (Aprobado / Suficiente): 6.0 a 7.4
+  // D (Insuficiente / Bajo): 5.0 a 5.9
+  // F (Reprobado / Suspenso): Menor de 5.0
+  function letraEscalaNota(nota) {
+    if (nota === null || nota === undefined || isNaN(nota)) return null;
+    const n = Math.round(Number(nota) * 10) / 10;
+    if (n >= 9.0) return { letra: 'A', descripcion: 'Sobresaliente / Excelente', nivel: 'Sobresaliente', color: '#1FC8C0', bg: '#1FC8C01A' };
+    if (n >= 7.5) return { letra: 'B', descripcion: 'Notable / Bueno', nivel: 'Notable', color: '#0f8f89', bg: '#0f8f891A' };
+    if (n >= 6.0) return { letra: 'C', descripcion: 'Aprobado / Suficiente', nivel: 'Aprobado', color: '#F5A623', bg: '#F5A6231A' };
+    if (n >= 5.0) return { letra: 'D', descripcion: 'Insuficiente / Bajo', nivel: 'Insuficiente', color: '#9A5B3F', bg: '#9A5B3F1A' };
+    return { letra: 'F', descripcion: 'Reprobado / Suspenso', nivel: 'Reprobado', color: '#EC4899', bg: '#EC48991A' };
+  }
+  window.letraEscalaNota = letraEscalaNota;
 
   // Opciones para el selector de "Calificar estudiantes": una por cada
   // combinación real Cohorte+Mes que aparece en el Horario del docente
@@ -10904,6 +12390,7 @@ Fundación A+`;
     }
 
     const rec = (await getNotasModuloRecord(sel.cohorte, sel.mes, false)) || { criterios: [], valores: {} };
+    if (!rec.valores || Array.isArray(rec.valores)) rec.valores = {};
     const pesoTotal = pesoTotalCriterios(rec);
     const pesoOk = pesoTotal === 100;
     const estudiantes = await docenteEstudiantesDeCohorte(sel.cohorte);
@@ -10935,7 +12422,7 @@ Fundación A+`;
     } else {
       const headerCriterios = rec.criterios.map(c => `<th class="py-2.5 px-3 text-center">${escapeHtml(c.nombre)}<br/><span class="text-[10px] font-normal normal-case text-slate2">${c.peso}%</span></th>`).join('');
       const filas = estudiantes.map(e => {
-        const valores = (rec.valores && rec.valores[e.nombre]) || {};
+        const valores = (rec.valores && !Array.isArray(rec.valores) && rec.valores[e.nombre]) || {};
         const celdas = rec.criterios.map(c => `
           <td class="py-2 px-3 text-center">
             <input type="number" min="0" max="10" step="0.1" value="${valores[c.id] !== undefined ? valores[c.id] : ''}" placeholder="0.0" ${editable ? '' : 'disabled'}
@@ -10978,7 +12465,7 @@ Fundación A+`;
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-6">
         <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
           <p class="text-sm font-bold text-ink">Notas de evaluación — ${escapeHtml(sel.materia)} · ${escapeHtml(mesLabel(sel.mes))}</p>
-          <span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${pesoOk ? '#1FC8C01A' : '#F0455C1A'};color:${pesoOk ? '#0f8f89' : '#F0455C'}">Peso total: ${pesoTotal}%${pesoOk ? '' : ' — debe sumar 100%'}</span>
+          <span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${pesoOk ? '#1FC8C01A' : '#EC48991A'};color:${pesoOk ? '#0f8f89' : '#EC4899'}">Peso total: ${pesoTotal}%${pesoOk ? '' : ' — debe sumar 100%'}</span>
         </div>
         <div class="space-y-2.5 mb-4">${criteriosFilas || '<p class="text-sm text-slate2">Aún no has definido notas para este periodo.</p>'}</div>
         ${editable ? `<button onclick="agregarCriterioCalif('${sel.cohorte}','${sel.mes}')" class="rounded-xl border border-dashed border-gray-300 text-slate2 hover:text-ink hover:border-ink text-sm font-semibold px-4 py-2.5 transition">+ Agregar nota</button>` : ''}
@@ -11039,11 +12526,12 @@ Fundación A+`;
       if (n > 10) n = 10;
     }
     const rec = await getNotasModuloRecord(cohorteNombre, mes, true);
-    rec.valores = rec.valores || {};
-    rec.valores[est.nombre] = rec.valores[est.nombre] || {};
+    if (!rec.valores || Array.isArray(rec.valores)) rec.valores = {};
+    if (!rec.valores[est.nombre] || Array.isArray(rec.valores[est.nombre])) rec.valores[est.nombre] = {};
     if (n === null) delete rec.valores[est.nombre][criterioId];
     else rec.valores[est.nombre][criterioId] = n;
     await guardarNotasModuloRecord(rec);
+    toast('Nota guardada: ' + (n !== null ? n.toFixed(1) : 'Eliminada') + ' (' + est.nombre + ')', 'ok');
     renderCalificacionesDocente();
   }
 
@@ -11152,6 +12640,26 @@ Fundación A+`;
   }
   window.toggleVerInformesEnviadosDocente = toggleVerInformesEnviadosDocente;
 
+  // Temporizador para refrescar badges y estados mientras existan reportes en la ventana de 15 minutos
+  let _timerVentanaEdicionDocente = null;
+  function iniciarTimerVentanaEdicionSiAplica(tieneEditables) {
+    if (_timerVentanaEdicionDocente) {
+      clearInterval(_timerVentanaEdicionDocente);
+      _timerVentanaEdicionDocente = null;
+    }
+    if (tieneEditables) {
+      _timerVentanaEdicionDocente = setInterval(() => {
+        const mount = document.getElementById('mount-t-informes');
+        if (!mount) {
+          clearInterval(_timerVentanaEdicionDocente);
+          _timerVentanaEdicionDocente = null;
+          return;
+        }
+        renderInformesDocente();
+      }, 15000);
+    }
+  }
+
   // async: docenteEstudiantesDeCohorte y docenteModulosActivos son async.
   async function renderInformesDocente() {
     const doc = currentDocente || {};
@@ -11206,6 +12714,36 @@ Fundación A+`;
       (i.mes === docenteInformesMes || (i.fecha && i.fecha.slice(0, 7) === docenteInformesMes))
     );
 
+    // Auto-cierre si expiró la ventana de 15 minutos en un borrador reabierto
+    let huboCierreExpirado = false;
+    for (const g of guardados) {
+      if (g.estado === 'Borrador' && g.reabiertoParaEdicion) {
+        const tiempo = obtenerTiempoRestanteEdicionInforme(g);
+        if (!tiempo.editable) {
+          g.estado = 'Enviado';
+          g.reabiertoParaEdicion = false;
+          huboCierreExpirado = true;
+        }
+      }
+    }
+    if (huboCierreExpirado) {
+      Store.list('informes_docente').then(all => {
+        let modificado = false;
+        guardados.forEach(g => {
+          const idx = all.findIndex(x => x.id === g.id);
+          if (idx >= 0 && all[idx].estado === 'Borrador' && all[idx].reabiertoParaEdicion) {
+            const tiempo = obtenerTiempoRestanteEdicionInforme(all[idx]);
+            if (!tiempo.editable) {
+              all[idx].estado = 'Enviado';
+              all[idx].reabiertoParaEdicion = false;
+              modificado = true;
+            }
+          }
+        });
+        if (modificado) Store.set('informes_docente', all);
+      });
+    }
+
     const cursoSel = await cursoDeDocenteEnCohorte(doc.nombre, docenteInformesCohorte, docenteInformesMes);
     const [asistList, recNotas] = await Promise.all([
       Store.list('asistencia'),
@@ -11225,6 +12763,13 @@ Fundación A+`;
     const enviados = listaCompleta.filter(item => item.enviado);
     const enviadosCount = enviados.length;
     const todosEnviados = estudiantes.length > 0 && pendientes.length === 0;
+
+    const tieneEditables = listaCompleta.some(item => {
+      if (!item.guardado) return false;
+      const t = obtenerTiempoRestanteEdicionInforme(item.guardado);
+      return t.editable;
+    });
+    iniciarTimerVentanaEdicionSiAplica(tieneEditables);
 
     let avisoPeriodoHtml = '';
     if (esFuturo) {
@@ -11327,47 +12872,67 @@ Fundación A+`;
           </div>
         </div>`;
     } else {
-      // Periodo activo: Aún quedan estudiantes pendientes por informe
+      // Periodo activo: Aún quedan estudiantes pendientes por informe (o reabiertos para corrección)
       cuerpoInformesHtml = `
         <div class="flex items-center justify-between gap-3 mb-5 flex-wrap bg-linear-to-r from-morado/5 to-turquesa/5 p-4 rounded-2xl border border-morado/15">
           <div class="flex items-center gap-2.5">
             <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
             <p class="text-xs sm:text-sm font-bold text-ink">
-              Informes pendientes por diligenciar: <span class="text-morado font-extrabold">${pendientes.length}</span> de ${estudiantes.length}
+              Informes pendientes o en edición: <span class="text-morado font-extrabold">${pendientes.length}</span> de ${estudiantes.length}
             </p>
           </div>
-          <span class="text-xs text-slate2">Al enviar el informe de un estudiante, su tarjeta se radicará y desaparecerá de esta lista.</span>
+          <span class="text-xs text-slate2">Dispones de hasta 15 minutos tras el primer envío para realizar cualquier corrección.</span>
         </div>
 
         <div class="space-y-4">
           ${pendientes.map(item => {
             const { e, datos, guardado } = item;
             const iniciales = (e.nombre || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'E';
+            const tiempoEdicion = guardado ? obtenerTiempoRestanteEdicionInforme(guardado) : null;
+            const esReabierto = Boolean(guardado && guardado.reabiertoParaEdicion && tiempoEdicion && tiempoEdicion.editable);
             return `
-            <div id="card_informe_${e.id}" class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 transition-all duration-300">
+            <div id="card_informe_${e.id}" class="bg-white rounded-2xl border ${esReabierto ? 'border-amber-300 ring-2 ring-amber-100/70' : 'border-gray-100'} shadow-soft p-6 transition-all duration-300">
               <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
                 <div class="flex items-center gap-2.5">
-                  <span class="w-8 h-8 rounded-full bg-morado/10 text-morado text-xs font-bold flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
+                  <span class="w-8 h-8 rounded-full ${esReabierto ? 'bg-amber-100 text-amber-800' : 'bg-morado/10 text-morado'} text-xs font-bold flex items-center justify-center shrink-0">${escapeHtml(iniciales)}</span>
                   <p class="text-sm font-bold text-ink">${escapeHtml(e.nombre)}</p>
                 </div>
                 <div class="flex items-center gap-2">
-                  <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200/60">Pendiente de envío</span>
+                  ${esReabierto ? `
+                    <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-xs">
+                      <svg class="w-3.5 h-3.5 shrink-0 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                      <span>Edición activa: ${tiempoEdicion.texto}</span>
+                    </span>
+                  ` : `
+                    <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200/60">Pendiente de envío</span>
+                  `}
                   ${datos.nota !== null ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${colorCualitativa(datos.nota)}1A;color:${colorCualitativa(datos.nota)}">${datos.cualitativa}</span>` : ''}
                 </div>
               </div>
+              ${esReabierto ? `
+                <div class="mb-3.5 p-3 rounded-xl bg-amber-50/90 border border-amber-200/80 flex items-start gap-2.5 text-xs text-amber-900">
+                  <svg class="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <div>
+                    <p class="font-bold">Informe reabierto para corrección</p>
+                    <p class="mt-0.5 text-amber-800">Tienes hasta 15 minutos desde el primer envío para ajustar tus observaciones. Al hacer clic en reenviar se actualizará el reporte oficial.</p>
+                  </div>
+                </div>
+              ` : ''}
               <p class="text-xs text-slate2 mb-2">Curso: <strong class="text-ink">${escapeHtml(cursoSel)}</strong> · Asistencia: <strong class="text-ink">${datos.pctAsistencia !== null ? datos.pctAsistencia + '%' : 'Sin datos'}</strong> · Nota cuantitativa: <strong class="text-ink">${datos.nota !== null ? datos.nota.toFixed(1) : 'Sin datos'}</strong></p>
               <p class="text-sm text-ink mb-3 bg-slate-50/70 rounded-xl p-3 border border-gray-100">${escapeHtml(datos.conclusion)}</p>
               <label class="block text-xs font-semibold text-slate2 mb-1.5" for="obs_${e.id}">Observaciones personales del docente</label>
-              <textarea id="obs_${e.id}" rows="2" placeholder="Ej. Durante las clases mostró mayor liderazgo y compromiso." oninput="autoguardarBorradorInforme('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')" class="w-full rounded-xl border border-morado/25 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado bg-morado/5">${escapeHtml(guardado ? guardado.observaciones : '')}</textarea>
+              <textarea id="obs_${e.id}" rows="2" placeholder="Ej. Durante las clases mostró mayor liderazgo y compromiso." oninput="autoguardarBorradorInforme('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')" class="w-full rounded-xl border ${esReabierto ? 'border-amber-300 focus:border-amber-500 focus:ring-amber-200 bg-amber-50/20' : 'border-morado/25 focus:border-morado focus:ring-morado/30 bg-morado/5'} px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2">${escapeHtml(guardado ? guardado.observaciones : '')}</textarea>
               <div class="flex items-center justify-between gap-3 mt-3 flex-wrap">
                 <div class="flex items-center gap-3">
                   <button type="button" id="btn_enviar_${e.id}" onclick="enviarInformeDocente('${e.id}','${escapeHtml(docenteInformesCohorte)}','${escapeHtml(docenteInformesMes)}')" style="background: linear-gradient(135deg, #8B5CF6 0%, #1FC8C0 100%) !important; color: #ffffff !important;" class="cursor-pointer rounded-full px-5 py-2.5 text-xs font-bold text-white shadow-md hover:shadow-lg transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]">
                     <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                    <span>Enviar informe</span>
+                    <span>${esReabierto ? 'Guardar corrección y reenviar' : 'Enviar informe'}</span>
                   </button>
                   <span id="autoguardado_${e.id}" class="text-xs text-slate2"></span>
                 </div>
-                <span class="text-[11px] text-slate2">Una vez enviado se archivará definitivamente</span>
+                <span class="text-[11px] ${esReabierto ? 'text-amber-800 font-semibold' : 'text-slate2'}">
+                  ${esReabierto ? `Ventana de corrección: ${tiempoEdicion.texto}` : 'Podrás editarlo hasta 15 min después del envío'}
+                </span>
               </div>
             </div>`;
           }).join('')}
@@ -11393,6 +12958,7 @@ Fundación A+`;
             ${enviados.map(item => {
               const { e, datos, guardado } = item;
               const iniciales = (e.nombre || '').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'E';
+              const tiempoEdicion = guardado ? obtenerTiempoRestanteEdicionInforme(guardado) : { editable: false, texto: '' };
               return `
               <div onclick="abrirModalDetalleInforme('${escapeHtml((guardado && guardado.id) || '')}')" class="bg-gray-50/80 rounded-2xl border border-gray-200/80 p-3.5 sm:p-4 flex items-center justify-between gap-3 hover:border-morado/30 hover:bg-morado/5 transition cursor-pointer group" title="Clic para ver reporte">
                 <div class="flex items-center gap-2.5 min-w-0">
@@ -11402,8 +12968,21 @@ Fundación A+`;
                     <p class="text-[11px] text-slate2 truncate">Asistencia: <strong class="text-ink">${datos.pctAsistencia !== null ? datos.pctAsistencia + '%' : '—'}</strong> · Nota: <strong class="text-ink">${datos.nota !== null ? datos.nota.toFixed(1) : '—'}</strong> · Radicado ${fmtDate(guardado ? guardado.fecha : '')}</p>
                   </div>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
-                  <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200"><svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Enviado</span>
+                <div class="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                  ${tiempoEdicion.editable ? `
+                    <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200" title="Ventana de 15 min activa para editar">
+                      <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                      Editable (${tiempoEdicion.texto})
+                    </span>
+                    <button type="button" onclick="event.stopPropagation(); reabrirInformeDocente('${escapeHtml((guardado && guardado.id) || '')}')" class="px-3 py-1 rounded-full text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-xs transition cursor-pointer flex items-center gap-1">
+                      <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      <span>Editar</span>
+                    </button>
+                  ` : `
+                    <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Definitivo
+                    </span>
+                  `}
                   <button type="button" onclick="event.stopPropagation(); abrirModalDetalleInforme('${escapeHtml((guardado && guardado.id) || '')}')" class="px-3 py-1 rounded-full text-xs font-bold bg-morado/10 text-morado hover:bg-morado hover:text-white transition cursor-pointer">
                     Ver reporte
                   </button>
@@ -11419,7 +12998,7 @@ Fundación A+`;
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
           <div>
             <h2 class="text-lg font-black text-ink">Informes mensuales de estudiantes</h2>
-            <p class="text-xs text-slate2 mt-0.5 max-w-xl">El sistema autocompleta asistencia, notas y conclusión a partir de tus registros reales. Filtra por cohorte y mes para redactar tus observaciones y enviar los informes definitivos a la administración.</p>
+            <p class="text-xs text-slate2 mt-0.5 max-w-xl">El sistema autocompleta asistencia, notas y conclusión a partir de tus registros reales. Filtra por cohorte y mes para redactar tus observaciones y enviar los informes a la administración.</p>
           </div>
           <div class="bg-gray-50 rounded-2xl px-4 py-2 border border-gray-100 shrink-0 text-right">
             <span class="text-[11px] font-bold text-slate2 uppercase tracking-wide">Estado de envíos</span>
@@ -11469,10 +13048,26 @@ Fundación A+`;
       (r.mes === mesComparar || (r.fecha && r.fecha.slice(0, 7) === mesComparar))
     );
 
-    if (idx >= 0 && registros[idx].estado === 'Enviado' && estadoFinal === 'Borrador') return registros[idx];
+    const registroPrevio = idx >= 0 ? registros[idx] : null;
+
+    if (registroPrevio && registroPrevio.estado === 'Enviado' && estadoFinal === 'Borrador') {
+      const tiempo = obtenerTiempoRestanteEdicionInforme(registroPrevio);
+      if (!tiempo.editable) return registroPrevio;
+    }
 
     const hoyStr = fechaHoyLocal();
     const fechaInforme = (mesComparar && mesComparar !== hoyStr.slice(0, 7)) ? `${mesComparar}-01` : hoyStr;
+    const ahoraIso = new Date().toISOString();
+
+    let primerEnvioEn = registroPrevio ? (registroPrevio.primerEnvioEn || null) : null;
+    let enviadoEn = registroPrevio ? (registroPrevio.enviadoEn || null) : null;
+
+    if (estadoFinal === 'Enviado') {
+      if (!primerEnvioEn) {
+        primerEnvioEn = ahoraIso;
+      }
+      enviadoEn = ahoraIso;
+    }
 
     const registro = {
       id: idx >= 0 ? registros[idx].id : uid('inf'),
@@ -11489,6 +13084,10 @@ Fundación A+`;
       conclusion: datos.conclusion,
       observaciones,
       estado: estadoFinal,
+      primerEnvioEn: primerEnvioEn,
+      enviadoEn: enviadoEn,
+      reabiertoParaEdicion: (estadoFinal === 'Enviado') ? false : (registroPrevio ? Boolean(registroPrevio.reabiertoParaEdicion) : false),
+      actualizadoEn: ahoraIso
     };
 
     if (idx >= 0) registros[idx] = registro;
@@ -11516,8 +13115,7 @@ Fundación A+`;
   }
   window.autoguardarBorradorInforme = autoguardarBorradorInforme;
 
-  // Envío definitivo: pide confirmación porque, una vez enviado, el
-  // informe ya no se puede editar.
+  // Envío de informe con ventana de gracia de 15 minutos para corrección
   async function enviarInformeDocente(estudianteId, cohorteNombre, mes) {
     const mesHoy = mesActualReal();
     if (mes && mes > mesHoy) {
@@ -11531,7 +13129,28 @@ Fundación A+`;
     }
 
     const est = (await Store.list('usuarios')).find(u => u.id === estudianteId);
-    const confirmado = confirm(`¿Enviar el informe de ${est ? est.nombre : 'este estudiante'}?\n\nUna vez enviado quedará definitivo y no se podrá editar.`);
+    const estNombre = est ? est.nombre : 'este estudiante';
+
+    const informesPrevios = await Store.list('informes_docente');
+    const infPrevio = informesPrevios.find(r => 
+      r.docente === (currentDocente?.nombre || '') && 
+      r.estudiante === estNombre && 
+      r.cohorte === cohorteNombre && 
+      (r.mes === mes || (r.fecha && r.fecha.slice(0, 7) === mes))
+    );
+
+    const esReenvio = Boolean(infPrevio && infPrevio.primerEnvioEn);
+    const tiempoRestante = esReenvio ? obtenerTiempoRestanteEdicionInforme(infPrevio) : null;
+
+    let mensajeConfirm = '';
+    if (esReenvio) {
+      const tiempoTxt = (tiempoRestante && tiempoRestante.editable) ? tiempoRestante.texto : 'plazo por expirar';
+      mensajeConfirm = `¿Guardar corrección y reenviar el informe de ${estNombre}?\n\nQuedan ${tiempoTxt} de la ventana de 15 minutos para ajustes.`;
+    } else {
+      mensajeConfirm = `¿Enviar el informe de ${estNombre}?\n\nUna vez enviado, dispondrás de una ventana de hasta 15 minutos para corregir o reabrir el reporte si necesitas realizar ajustes antes del radicado definitivo.`;
+    }
+
+    const confirmado = confirm(mensajeConfirm);
     if (!confirmado) return;
 
     // Animación inmediata de salida de la tarjeta para una respuesta visual instantánea
@@ -11546,7 +13165,13 @@ Fundación A+`;
 
     const registro = await guardarInformeDocenteInterno(estudianteId, cohorteNombre, mes, 'Enviado');
     if (registro) {
-      if (typeof toast === 'function') toast('Informe enviado con éxito: ' + registro.estudiante, 'ok');
+      if (typeof toast === 'function') {
+        if (esReenvio) {
+          toast(`Corrección guardada y reenviada: ${registro.estudiante}`, 'ok');
+        } else {
+          toast(`Informe enviado con éxito: ${registro.estudiante} (dispones de 15 min para editar si lo necesitas)`, 'ok');
+        }
+      }
     }
     await renderInformesDocente();
   }
@@ -11759,7 +13384,7 @@ Fundación A+`;
     { nombre: 'Asistencia perfecta', descripcion: 'Sin fallas durante un módulo completo.', color: '#F5A623' },
     { nombre: 'Mente analítica', descripcion: 'Obtuviste una nota sobresaliente en una evaluación.', color: '#8B5CF6' },
     { nombre: 'Participación activa', descripcion: 'Respondiste todas las encuestas de satisfacción disponibles.', color: '#EC4899' },
-    { nombre: 'Ruta cumplida', descripcion: 'Completaste una ruta de aprendizaje sugerida por la IA.', color: '#F0455C' },
+    { nombre: 'Ruta cumplida', descripcion: 'Completaste una ruta de aprendizaje sugerida por la IA.', color: '#7C3AED' },
     { nombre: 'Colaborador A+', descripcion: 'Participaste en una reunión virtual institucional.', color: '#9A5B3F' },
   ];
 
@@ -11798,6 +13423,8 @@ Fundación A+`;
     const tab = document.querySelector('.panel-tab-s[data-spanel="' + panel + '"]');
     if (tab && tab.classList.contains('hidden')) return;
     if (!(await permisoUsuarioSobrePanel(currentEstudiante, 'estudiante.' + panel)).ver) return;
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // Ocultar de inmediato todos los demás paneles de estudiante y desmarcar tabs
     document.querySelectorAll('.panel-content-s').forEach(p => {
@@ -11856,11 +13483,22 @@ Fundación A+`;
     const nombre = estudianteNombre();
     const est = currentEstudiante || {};
     const mod = await estudianteModulo();
-    const asistenciaReg = (await Store.list('asistencia')).filter(a => a.estudiante === nombre);
+    const fechaRegEst = (est.creadoEn || est.creado_en || '').trim();
+    const tsRegEst = fechaRegEst ? new Date(fechaRegEst.includes('T') ? fechaRegEst : fechaRegEst.replace(' ', 'T')).getTime() : 0;
+    const asistenciaReg = (await Store.list('asistencia')).filter(a => {
+      if (a.estudiante !== nombre) return false;
+      if (a.automatico && tsRegEst > 0 && a.fecha) {
+        const tsFecha = new Date(a.fecha + 'T23:59:59').getTime();
+        if (tsRegEst > tsFecha) return false;
+      }
+      return true;
+    });
     const presentes = asistenciaReg.filter(a => a.estado === 'Presente').length;
-    const pctAsistencia = asistenciaReg.length ? Math.round((presentes / asistenciaReg.length) * 100) : 100;
+    const pctAsistencia = asistenciaReg.length ? Math.round((presentes / asistenciaReg.length) * 100) : null;
+    const pctAsistenciaNum = pctAsistencia !== null ? pctAsistencia : 100;
+    const pctAsistenciaTexto = pctAsistencia !== null ? `${pctAsistencia}%` : '—';
     const agenda = [...(await Store.list('agenda_estudiante'))].filter(a => a.estudiante === nombre)
-      .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '')).slice(0, 3);
+      .sort((a, b) => (a.fecha || '').localeCompare(a.fecha || '')).slice(0, 3);
 
     // Promedio real: misma fuente que Calificaciones/Semáforo/Historial
     // Trainee, no la entidad genérica "calificaciones" (nunca se llena).
@@ -11895,14 +13533,14 @@ Fundación A+`;
       <div class="grid sm:grid-cols-3 gap-5 mb-6">
         <div class="dash-stat-card flex items-center gap-4" style="--brand:#1FC8C0">
           <div class="relative shrink-0">
-            ${anilloProgreso(pctAsistencia, pctAsistencia >= 90 ? '#1FC8C0' : pctAsistencia >= 75 ? '#F5A623' : '#F0455C', 64, 6)}
+            ${anilloProgreso(pctAsistenciaNum, pctAsistencia !== null ? (pctAsistencia >= 90 ? '#1FC8C0' : pctAsistencia >= 75 ? '#F5A623' : '#F0455C') : '#1FC8C0', 64, 6)}
             <div class="absolute inset-0 grid place-items-center">
-              <span class="font-display text-sm font-bold text-ink">${pctAsistencia}%</span>
+              <span class="font-display text-sm font-bold text-ink">${pctAsistenciaTexto}</span>
             </div>
           </div>
           <div>
             <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">Asistencia</p>
-            <p class="text-xs text-slate2 mt-1">${asistenciaReg.length} registro${asistenciaReg.length === 1 ? '' : 's'}</p>
+            <p class="text-xs text-slate2 mt-1">${asistenciaReg.length ? `${asistenciaReg.length} registro${asistenciaReg.length === 1 ? '' : 's'}` : 'Sin sesiones aún'}</p>
           </div>
         </div>
         <div class="dash-stat-card" style="--brand:#F5A623">
@@ -12051,6 +13689,7 @@ Fundación A+`;
       currentEstudiante = { ...currentEstudiante, fotoUrl: reader.result };
       toast(resultado.remoto ? 'Foto de perfil actualizada' : 'Foto guardada solo en este navegador (sin conexión con el servidor)', resultado.remoto ? 'ok' : 'err');
       actualizarAvatarEstudianteEnDom(reader.result);
+      actualizarHeaderUsuario('estudiante');
     };
     reader.onerror = () => toast('No se pudo leer la imagen', 'err');
     reader.readAsDataURL(file);
@@ -12061,6 +13700,7 @@ Fundación A+`;
     currentEstudiante = { ...currentEstudiante, fotoUrl: '' };
     toast(resultado.remoto ? 'Foto de perfil eliminada' : 'No se pudo eliminar la foto en el servidor', resultado.remoto ? 'ok' : 'err');
     actualizarAvatarEstudianteEnDom('');
+    actualizarHeaderUsuario('estudiante');
   }
 
   async function guardarPerfilEstudiante() {
@@ -12086,6 +13726,7 @@ Fundación A+`;
     delete currentEstudiante.password;
     toast(resultado.remoto ? 'Perfil actualizado correctamente' : 'No se pudo guardar en el servidor, intenta de nuevo', resultado.remoto ? 'ok' : 'err');
     renderPerfilEstudiante();
+    actualizarHeaderUsuario('estudiante');
   }
 
   // ---------- VER PERFIL DE OTRA PERSONA (modal de solo lectura) ----------
@@ -12174,8 +13815,23 @@ Fundación A+`;
 
     const nombre = estudianteNombre();
     const mod = await estudianteModulo();
-    const rawRegistros = [...(await Store.list('asistencia', { forceRefresh: true }))].filter(a => a.estudiante === nombre);
-    const prioridad = { Presente: 1, Tarde: 2, Justificada: 3, Falla: 4 };
+    const estObj = currentEstudiante || {};
+    const fechaRegEst = (estObj.creadoEn || estObj.creado_en || '').trim();
+    const tsRegEst = fechaRegEst ? new Date(fechaRegEst.includes('T') ? fechaRegEst : fechaRegEst.replace(' ', 'T')).getTime() : 0;
+
+    const rawRegistros = [...(await Store.list('asistencia', { forceRefresh: true }))].filter(a => {
+      if (a.estudiante !== nombre) return false;
+      // Ignorar fallas automáticas de sesiones que ocurrieron antes del registro del estudiante
+      if (a.automatico && tsRegEst > 0 && a.fecha) {
+        const tsFecha = new Date(a.fecha + 'T23:59:59').getTime();
+        if (tsRegEst > tsFecha) return false;
+      }
+      return true;
+    });
+    const justificaciones = await Store.list('justificaciones_asistencia');
+    const justificacionesEst = justificaciones.filter(j => j.estudiante === nombre);
+
+    const prioridad = { Presente: 1, Tarde: 2, 'Asistencia Parcial': 3, Justificada: 4, Falla: 5 };
     const porSesion = new Map();
     rawRegistros.forEach(r => {
       const key = r.sesionId ? ('ses_' + r.sesionId) : ('date_' + r.fecha + '_' + (r.materia || r.modulo));
@@ -12189,16 +13845,11 @@ Fundación A+`;
       }
     });
     const registros = Array.from(porSesion.values()).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
-    const totales = { Presente: 0, Tarde: 0, Falla: 0 };
+    const totales = { Presente: 0, Tarde: 0, Falla: 0, Justificada: 0, 'Asistencia Parcial': 0 };
     registros.forEach(r => { if (totales[r.estado] !== undefined) totales[r.estado]++; });
-    const pct = registros.length ? Math.round((totales.Presente / registros.length) * 100) : 100;
-
-    const rows = registros.map(r => `
-      <tr data-search="${escapeHtml((r.fecha + ' ' + (r.modulo || '') + ' ' + r.estado).toLowerCase())}" class="border-b border-gray-50 last:border-0">
-        <td class="py-3 px-4 text-sm text-ink">${fmtDate(r.fecha)}</td>
-        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(r.modulo)}</td>
-        <td class="py-3 px-4">${statusPill(r.estado, { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['En proceso'] || ESTADO_COLORS['Planeada'], Falla: ESTADO_COLORS['Abierto'] })}${r.automatico ? '<span class="text-[10px] text-slate2 ml-2">automático</span>' : ''}</td>
-      </tr>`).join('');
+    const presenciasEfectivas = totales.Presente + totales.Justificada + (totales.Tarde * 0.8) + (totales['Asistencia Parcial'] * 0.5);
+    const pct = registros.length ? Math.min(100, Math.round((presenciasEfectivas / registros.length) * 100)) : null;
+    const pctStr = pct !== null ? `${pct}%` : '—';
 
     let tarjetasSesiones;
     if (!mod) {
@@ -12223,16 +13874,15 @@ Fundación A+`;
             </div>
           </div>`;
       } else {
-        // Se resuelve una vez, antes del .map() síncrono de abajo (que no
-        // puede usar await dentro): docenteEstudiantesDeCohorte ahora es
-        // async (usa 'usuarios' vía MySQL). Como es el mismo mod.nombre
-        // para todas las sesiones del día, basta una sola llamada.
         const estudiantesCohorte = await docenteEstudiantesDeCohorte(mod.nombre);
         sesionesHoy.forEach(sesion => sincronizarAusentesSesion(sesion, estudiantesCohorte));
         tarjetasSesiones = sesionesHoy.map(sesion => {
           const materiaLabel = sesion.materia || sesion.modulo;
           const yaReg = registros.find(r => r.sesionId === sesion.id);
           const mins = minutosTranscurridos(sesion.horaInicio);
+          const horaSesionStr = sesion.horaInicio ? (sesion.horaInicio.includes('T') ? sesion.horaInicio : sesion.horaInicio.replace(' ', 'T')) : (sesion.fecha + 'T23:59:59');
+          const tsSesion = new Date(horaSesionStr).getTime();
+          const ingresoDespues = tsRegEst > 0 && tsRegEst > tsSesion;
 
           // Si el estudiante ya confirmó su asistencia y quedó en Presente o Tarde
           if (yaReg && (yaReg.estado === 'Presente' || yaReg.estado === 'Tarde')) {
@@ -12253,46 +13903,92 @@ Fundación A+`;
               </div>`;
           }
 
+          // Si el estudiante ingresó a la plataforma después de esta clase, no se le penaliza
+          if (ingresoDespues) {
+            return `
+              <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
+                <div class="w-28 h-28 rounded-2xl border-2 border-gray-200 bg-gray-50 grid place-items-center shrink-0">
+                  <div class="text-center p-2">
+                    <span class="text-xs font-bold text-slate2 block">PREVIO</span>
+                    <span class="text-[10px] text-slate2 block">A tu ingreso</span>
+                  </div>
+                </div>
+                <div class="flex-1 text-center sm:text-left">
+                  <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
+                  <p class="text-xs text-slate2 mt-1">Esta sesión inició antes de tu fecha de registro. No se computa inasistencia ni afecta tu porcentaje. Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
+                  <div class="mt-2 flex items-center gap-2 justify-center sm:justify-start">
+                    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-slate2 border border-gray-200">No aplica</span>
+                  </div>
+                </div>
+              </div>`;
+          }
+
           // Si ya expiró la ventana de tolerancia (+50 min) y quedó con Falla definitiva
           if (mins > VENTANA_TARDE_MIN) {
+            const yaRegFalla = registros.find(r => r.sesionId === sesion.id);
+            const just = justificacionesEst.find(j => (j.asistenciaId && yaRegFalla && j.asistenciaId === yaRegFalla.id) || (j.fecha === sesion.fecha && j.materia === materiaLabel));
+            let estadoAccionHtml = '';
+            if (just) {
+              if (just.estado === 'Aprobada') {
+                estadoAccionHtml = `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"><svg class="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Justificada</span> <button type="button" onclick="abrirModalVisorJustificacion('${just.id}')" class="text-xs font-bold text-morado hover:underline inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Ver soporte</button>`;
+              } else if (just.estado === 'Pendiente') {
+                estadoAccionHtml = `<button type="button" onclick="abrirModalVisorJustificacion('${just.id}')" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-200 transition"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Excusa en revisión</button>`;
+              } else {
+                estadoAccionHtml = `<button type="button" onclick="abrirModalVisorJustificacion('${just.id}')" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 hover:bg-rose-200 transition"><svg class="w-3.5 h-3.5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg> Excusa rechazada</button>`;
+              }
+            } else {
+              const asistId = yaRegFalla ? yaRegFalla.id : '';
+              estadoAccionHtml = `
+                <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-coral/15 text-coral border border-coral/20">Falla</span>
+                <button type="button" onclick="abrirModalJustificarAsistencia('${asistId}', '${sesion.fecha}', '${escapeHtml(materiaLabel).replace(/'/g, "\\'")}', '${escapeHtml((sesion.iniciadaPor || '').replace(/'/g, "\\'"))}')" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-morado text-white hover:opacity-90 shadow-sm transition cursor-pointer">
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                  Adjuntar excusa médica / laboral
+                </button>`;
+            }
             return `
               <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
                 <div class="w-28 h-28 rounded-2xl border-2 border-coral grid place-items-center shrink-0">
                   <svg class="w-11 h-11 text-coral" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                 </div>
                 <div class="flex-1 text-center sm:text-left">
-                  <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)} — la ventana ya cerró</p>
-                  <p class="text-xs text-slate2 mt-1">Quedaste registrado como ausente (Falla definitiva). Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
-                  <div class="mt-2 flex items-center gap-2 justify-center sm:justify-start">
-                    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-coral/15 text-coral border border-coral/20">Falla</span>
+                  <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)} — la ventana de clase ya cerró</p>
+                  <p class="text-xs text-slate2 mt-1">Docente: ${escapeHtml(sesion.iniciadaPor || '—')} · Si tuviste una calamidad o motivo de fuerza mayor, puedes radicar tu soporte con foto o PDF para que sea validada.</p>
+                  <div class="mt-3 flex items-center gap-2.5 justify-center sm:justify-start flex-wrap">
+                    ${estadoAccionHtml}
                   </div>
                 </div>
               </div>`;
           }
 
-          // Ventana de asistencia activa (<= 50 min): la asistencia está en 'Falla' por defecto
+          // Ventana de asistencia activa (<= 50 min): la sesión está en curso, PENDIENTE de registro
           const ventana = estadoVentanaSesion(sesion);
           return `
-            <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
-              <div class="w-28 h-28 rounded-2xl border-2 border-dashed border-coral/50 bg-coral/5 grid place-items-center shrink-0">
+            <div class="bg-white rounded-2xl border border-amber-200/70 bg-amber-50/20 shadow-soft p-6 mb-4 flex flex-col sm:flex-row items-center gap-6">
+              <div class="w-28 h-28 rounded-2xl border-2 border-dashed border-amber-400 bg-amber-50 grid place-items-center shrink-0">
                 <div class="text-center p-2">
-                  <span class="text-xs font-extrabold text-coral block">FALLA</span>
-                  <span class="text-[10px] text-slate2 block">(por defecto)</span>
+                  <span class="text-xs font-extrabold text-amber-700 block">EN CURSO</span>
+                  <span class="text-[10px] text-amber-600 block">Registra aquí</span>
                 </div>
               </div>
               <div class="flex-1 text-center sm:text-left">
                 <div class="flex items-center gap-2 justify-center sm:justify-start mb-1 flex-wrap">
                   <p class="text-sm font-bold text-ink">${escapeHtml(materiaLabel)}</p>
-                  <span class="text-[11px] px-2 py-0.5 rounded-full font-bold bg-coral/10 text-coral border border-coral/20">Estado actual: Pérdida</span>
+                  <span class="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-200">Sesión en curso</span>
                 </div>
                 <p class="text-xs text-slate2 mt-0.5 mb-1">Docente: ${escapeHtml(sesion.iniciadaPor || '—')}</p>
                 <p class="text-xs font-bold mb-2" style="color:${ventana.color}">${ventana.texto}</p>
-                <div class="p-3 bg-morado/5 rounded-xl border border-morado/15 max-w-md">
+                <div class="p-3.5 bg-morado/5 rounded-xl border border-morado/15 max-w-lg">
                   <p class="text-xs text-morado font-medium flex items-center gap-1.5 justify-center sm:justify-start">
                     <svg class="w-4 h-4 shrink-0 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
-                    Asistencia 100% automatizada vía QR
+                    Escanear QR o ingresar código de clase
                   </p>
-                  <p class="text-[11px] text-slate2 mt-1">Escanea el código QR proyectado en clase o abre el enlace compartido para registrar tu asistencia automáticamente en el sistema.</p>
+                  <div class="mt-2.5 flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    <input type="text" id="codigo_qr_estudiante_${sesion.id}" placeholder="Código o token (ej: 8F2A)" maxlength="12" class="w-full sm:w-48 uppercase font-mono tracking-wider text-center text-xs font-bold rounded-xl border border-gray-200 px-3 py-2 bg-white text-ink focus:border-morado focus:ring-2 focus:ring-morado/20 outline-none" />
+                    <button type="button" onclick="escanearAsistencia('${sesion.id}')" class="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-morado to-turquesa text-white font-bold text-xs shadow-sm hover:opacity-90 active:scale-95 transition cursor-pointer shrink-0">
+                      Confirmar asistencia
+                    </button>
+                  </div>
+                  <p class="text-[11px] text-slate2 mt-1.5">El token dinámico anti-fraude rota cada 15s con 60s de tolerancia ante lentitud de red en el aula.</p>
                 </div>
               </div>
             </div>`;
@@ -12300,16 +13996,97 @@ Fundación A+`;
       }
     }
 
+    function renderColumnaSoporteEstudiante(r) {
+      const just = justificacionesEst.find(j => (j.asistenciaId && j.asistenciaId === r.id) || (j.fecha === r.fecha && j.materia === (r.materia || r.modulo)));
+      if (r.estado === 'Justificada') {
+        return `<div class="flex items-center gap-1.5 flex-wrap">
+          <span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200"><svg class="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Justificada</span>
+          ${just ? `<button type="button" onclick="abrirModalVisorJustificacion('${just.id}')" class="text-[11px] font-bold text-morado hover:underline cursor-pointer">Ver excusa</button>` : ''}
+        </div>`;
+      }
+      if (just) {
+        if (just.estado === 'Pendiente') {
+          return `<button type="button" onclick="abrirModalVisorJustificacion('${just.id}')" class="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 transition cursor-pointer">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Excusa en revisión
+          </button>`;
+        }
+        if (just.estado === 'Rechazada') {
+          return `<button type="button" onclick="abrirModalVisorJustificacion('${just.id}')" class="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200 transition cursor-pointer">
+            <svg class="w-3 h-3 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg> Soporte rechazado
+          </button>`;
+        }
+        return `<button type="button" onclick="abrirModalVisorJustificacion('${just.id}')" class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 transition cursor-pointer">
+          <svg class="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Aprobada
+        </button>`;
+      }
+      if (r.estado === 'Falla' || r.estado === 'Asistencia Parcial') {
+        const mat = (r.materia || r.modulo || '').replace(/'/g, "\\'");
+        const doc = (r.docente || '').replace(/'/g, "\\'");
+        return `<button type="button" onclick="abrirModalJustificarAsistencia('${r.id || ''}', '${r.fecha}', '${mat}', '${doc}')" class="inline-flex items-center gap-1 text-[11px] font-bold text-morado bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition cursor-pointer shadow-xs">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+          Adjuntar excusa
+        </button>`;
+      }
+      return '<span class="text-xs text-slate2 font-medium">—</span>';
+    }
+
+    const MAX_FILAS_ASIST = 5;
+    const rowsLimitadas = registros.slice(0, MAX_FILAS_ASIST).map(r => `
+      <tr data-search="${escapeHtml((r.fecha + ' ' + (r.modulo || '') + ' ' + r.estado).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+        <td class="py-3 px-4 text-sm text-ink">${fmtDate(r.fecha)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(r.modulo)}</td>
+        <td class="py-3 px-4">${statusPill(r.estado, { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['En proceso'] || ESTADO_COLORS['Planeada'], Justificada: '#10B981', 'Asistencia Parcial': '#F59E0B', Falla: ESTADO_COLORS['Abierto'] })}${r.automatico ? '<span class="text-[10px] text-slate2 ml-2">automático</span>' : ''}</td>
+        <td class="py-3 px-4">${renderColumnaSoporteEstudiante(r)}</td>
+      </tr>`).join('');
+
+    const rowsRestantes = registros.slice(MAX_FILAS_ASIST).map(r => `
+      <tr data-search="${escapeHtml((r.fecha + ' ' + (r.modulo || '') + ' ' + r.estado).toLowerCase())}" class="border-b border-gray-50 last:border-0 asist-row-extra hidden">
+        <td class="py-3 px-4 text-sm text-ink">${fmtDate(r.fecha)}</td>
+        <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(r.modulo)}</td>
+        <td class="py-3 px-4">${statusPill(r.estado, { Presente: ESTADO_COLORS['Activo'], Tarde: ESTADO_COLORS['En proceso'] || ESTADO_COLORS['Planeada'], Justificada: '#10B981', 'Asistencia Parcial': '#F59E0B', Falla: ESTADO_COLORS['Abierto'] })}${r.automatico ? '<span class="text-[10px] text-slate2 ml-2">automático</span>' : ''}</td>
+        <td class="py-3 px-4">${renderColumnaSoporteEstudiante(r)}</td>
+      </tr>`).join('');
+
+    const hayMas = registros.length > MAX_FILAS_ASIST;
+    const botonVerMas = hayMas ? `
+      <tr id="asist-ver-mas-row" class="border-0">
+        <td colspan="4" class="py-3 px-4 text-center">
+          <button onclick="window.toggleAsistenciaExtra()" id="asist-ver-mas-btn"
+            class="text-xs font-bold text-morado hover:text-morado/80 underline underline-offset-2 transition cursor-pointer">
+            Ver todos los registros (${registros.length}) ↓
+          </button>
+        </td>
+      </tr>` : '';
+
     document.getElementById('mount-s-asistencia').innerHTML = `
-      <div class="grid sm:grid-cols-3 gap-5 mb-6">
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5"><p class="text-xs font-semibold text-slate2 uppercase tracking-wide">% Asistencia</p><p class="text-2xl font-extrabold text-ink mt-1">${pct}%</p></div>
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5"><p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Llegadas tarde</p><p class="text-2xl font-extrabold text-ink mt-1">${totales.Tarde}</p></div>
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5"><p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Fallas</p><p class="text-2xl font-extrabold text-ink mt-1">${totales.Falla}</p></div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+          <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">% Asistencia</p>
+          <p class="text-2xl font-extrabold text-ink mt-1">${pctStr}</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+          <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Puntuales</p>
+          <p class="text-2xl font-extrabold text-ink mt-1">${totales.Presente}</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+          <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Tardes / Parcial</p>
+          <p class="text-2xl font-extrabold text-ink mt-1">${totales.Tarde + (totales['Asistencia Parcial'] || 0)}</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+          <div class="flex items-center justify-between">
+            <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Inasistencias</p>
+            ${totales.Justificada ? `<span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">${totales.Justificada} justif.</span>` : ''}
+          </div>
+          <p class="text-2xl font-extrabold text-coral mt-1">${totales.Falla}</p>
+        </div>
       </div>
       ${tarjetasSesiones}
       <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 overflow-hidden">
         <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <p class="text-xs font-bold uppercase tracking-wide text-slate2">Historial de asistencia</p>
+          <div>
+            <p class="text-xs font-bold uppercase tracking-wide text-slate2">Historial de asistencia</p>
+            ${hayMas ? `<p class="text-[11px] text-slate2 mt-0.5">Mostrando los ${MAX_FILAS_ASIST} más recientes de ${registros.length} registros.</p>` : ''}
+          </div>
           <div class="relative">
             <input data-table="table-estudiante-asistencia" oninput="TableManager.filter('table-estudiante-asistencia', this.value)" type="text" placeholder="Buscar fecha o materia..." class="rounded-xl border border-amber-400/40 bg-amber-50/60 pl-9 pr-3 py-1.5 text-xs w-44 text-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-500 transition" />
             <svg class="w-3.5 h-3.5 text-amber-500 absolute left-3 top-2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
@@ -12317,12 +14094,30 @@ Fundación A+`;
         </div>
         <div class="table-responsive-container">
           <table id="table-estudiante-asistencia" class="w-full admin-table">
-            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Fecha</th><th class="py-3 px-4">Materia</th><th class="py-3 px-4">Estado</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="3" class="text-sm text-slate2 text-center py-6">Aún no tienes registros de asistencia.</td></tr>'}</tbody>
+            <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100"><th class="py-3 px-4">Fecha</th><th class="py-3 px-4">Materia</th><th class="py-3 px-4">Estado</th><th class="py-3 px-4">Soporte / Excusa</th></tr></thead>
+            <tbody>${rowsLimitadas || '<tr><td colspan="4" class="text-sm text-slate2 text-center py-6">Aún no tienes registros de asistencia.</td></tr>'}${rowsRestantes}${botonVerMas}</tbody>
           </table>
         </div>
       </div>`;
     TableManager.init('table-estudiante-asistencia');
+
+    // Botón para mostrar/ocultar registros adicionales
+    window.toggleAsistenciaExtra = function() {
+      const extras = document.querySelectorAll('.asist-row-extra');
+      const btn = document.getElementById('asist-ver-mas-btn');
+      const row = document.getElementById('asist-ver-mas-row');
+      const visible = extras.length && !extras[0].classList.contains('hidden');
+      extras.forEach(tr => tr.classList.toggle('hidden', visible));
+      if (btn) btn.textContent = visible
+        ? `Ver todos los registros (${registros.length}) ↓`
+        : 'Ocultar registros anteriores ↑';
+      if (row) {
+        // Mover el botón al final cuando se expande
+        const tbody = row.parentElement;
+        if (tbody && !visible) tbody.appendChild(row);
+      }
+    };
+
 
     asistenciaEstudianteTimer = setInterval(() => {
       const panel = document.getElementById('panel-s-asistencia');
@@ -12352,14 +14147,22 @@ Fundación A+`;
     }
     const input = document.getElementById('codigo_qr_estudiante_' + sesionId);
     const codigo = (input ? input.value : '').trim().toUpperCase();
-    if (!codigo) { toast('Ingresa el código que muestra tu docente', 'err'); return; }
-    if (codigo !== sesion.codigo) { toast('El código no coincide con el de la sesión de hoy', 'err'); return; }
+    if (!codigo) { toast('Ingresa el código o token que muestra tu docente', 'err'); return; }
+
+    const esValido = (codigo === (sesion.codigo || '').toUpperCase()) || validarTokenSesionConGracia(codigo, sesion.codigo, 15, 3);
+    if (!esValido) { 
+      toast('Código o token incorrecto o expirado. Ingresa el código visible en pantalla.', 'err'); 
+      return; 
+    }
 
     const estado = estadoPorTiempo(mins);
+    const horasCumplidas = estado === 'Presente' ? 4.0 : 3.0;
     if (registroExistente) {
       registroExistente.estado = estado;
       registroExistente.automatico = false;
       registroExistente.materia = sesion.materia || sesion.modulo;
+      registroExistente.horasCumplidas = horasCumplidas;
+      registroExistente.horasTotal = 4.0;
     } else {
       registros.push({
         id: uid('as'),
@@ -12370,11 +14173,13 @@ Fundación A+`;
         fecha: sesion.fecha,
         estado,
         sesionId: sesion.id,
+        horasCumplidas,
+        horasTotal: 4.0,
         automatico: false
       });
     }
     await Store.set('asistencia', registros);
-    const msg = estado === 'Presente' ? 'Asistencia registrada: llegaste puntual.' : 'Asistencia registrada: llegaste tarde.';
+    const msg = estado === 'Presente' ? 'Asistencia registrada: llegaste puntual (4.0 hrs).' : 'Asistencia registrada: llegada tarde (3.0 hrs).';
     toast(msg, 'ok');
     renderAsistenciaEstudiante();
   }
@@ -12383,49 +14188,125 @@ Fundación A+`;
   // Mes seleccionado por el estudiante para ver su horario (memoria de sesión)
   let estudianteHorarioMes = null;
 
-  // ---------- Calificaciones (estudiante) — solo lectura ----------
-  // Muestra, por cada docente que le sube notas en su cohorte: cuántas notas
-  // hay, el porcentaje (peso) de cada una, la nota definitiva y el puesto
-  // que ocupa entre sus compañeros de esa misma cohorte. Nada más.
-  // async: docenteEstudiantesDeCohorte ahora es async.
+  // Mes seleccionado en el filtro de calificaciones del estudiante
+  let estudianteCalifMes = null;
+
+  // Cambia el mes del filtro y re-renderiza
+  window.cambiarCalifMesEstudiante = function(mes) {
+    estudianteCalifMes = mes;
+    renderCalificacionesEstudiante();
+  };
+
   async function renderCalificacionesEstudiante() {
     const nombre = estudianteNombre();
     const mod = await estudianteModulo();
+    const mount = document.getElementById('mount-s-calificaciones');
 
     if (!mod) {
-      document.getElementById('mount-s-calificaciones').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
+      mount.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
         <p class="text-sm text-slate2">Aún no tienes una cohorte activa asignada, así que todavía no hay calificaciones para mostrar.</p>
       </div>`;
       return;
     }
 
-    // Un bloque por cada registro Docente+Cohorte+MES real —misma separación
-    // que ya usa el docente al calificar (ver renderCalificacionesDocente).
-    // El mes más reciente de cada docente es el periodo activo; los
-    // anteriores quedan visibles como historial de solo lectura, igual que
-    // ya ocurre en el panel del docente.
+    // Todos los registros de la cohorte del estudiante
     const registros = [...(await Store.list('notas_modulos'))]
       .filter(r => r.cohorte === mod.nombre && (r.criterios || []).length)
       .sort((a, b) => (b.mes || '').localeCompare(a.mes || '') || (a.docente || '').localeCompare(b.docente || ''));
 
     if (!registros.length) {
-      document.getElementById('mount-s-calificaciones').innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
+      mount.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 sm:p-10 text-center">
         <p class="text-sm text-slate2">Tu(s) docente(s) aún no han registrado notas en <strong class="text-ink">${escapeHtml(mod.nombre)}</strong>.</p>
       </div>`;
       return;
     }
 
+    // Lista de meses únicos disponibles (más reciente primero)
+    const mesesDisponibles = [...new Set(registros.map(r => r.mes).filter(Boolean))].sort((a, b) => b.localeCompare(a));
+
+    // Si el mes seleccionado ya no existe, resetear al más reciente
+    if (!estudianteCalifMes || !mesesDisponibles.includes(estudianteCalifMes)) {
+      estudianteCalifMes = mesesDisponibles[0];
+    }
+
+    // Filtrar registros por mes seleccionado
+    const registrosFiltrados = registros.filter(r => r.mes === estudianteCalifMes);
+
     const compañeros = await docenteEstudiantesDeCohorte(mod.nombre);
 
-    const esActualPorRegistro = await Promise.all(registros.map(rec => mesActualParaDocenteCohorte(rec.docente, mod.nombre)));
-    const slotsPorRegistro = await Promise.all(registros.map(rec => getSlotsDocente(rec.docente)));
+    // Cálculo de promedio general y ranking global de la cohorte en todas las materias
+    const notasEstudiante = [];
+    registros.forEach(rec => {
+      const res = calcularNotaFinal(rec, nombre);
+      if (res && res.valor !== null && !isNaN(res.valor)) {
+        notasEstudiante.push(res.valor);
+      }
+    });
+    const promGeneralEstudiante = notasEstudiante.length
+      ? (notasEstudiante.reduce((acc, v) => acc + v, 0) / notasEstudiante.length)
+      : null;
+    const escalaGlobal = promGeneralEstudiante !== null ? letraEscalaNota(promGeneralEstudiante) : null;
 
-    const bloques = registros.map((rec, i) => {
+    // Ranking global entre todos los compañeros de la cohorte
+    const rankingGlobalCohorte = compañeros.map(u => {
+      const notasU = [];
+      registros.forEach(rec => {
+        const res = calcularNotaFinal(rec, u.nombre);
+        if (res && res.valor !== null && !isNaN(res.valor)) notasU.push(res.valor);
+      });
+      const promU = notasU.length ? (notasU.reduce((acc, v) => acc + v, 0) / notasU.length) : null;
+      return { nombre: u.nombre, promedio: promU };
+    }).filter(x => x.promedio !== null).sort((a, b) => b.promedio - a.promedio);
+
+    const puestoGlobal = promGeneralEstudiante !== null
+      ? (rankingGlobalCohorte.findIndex(x => x.nombre === nombre) + 1)
+      : null;
+    const totalEstudiantesRanking = rankingGlobalCohorte.length || compañeros.length;
+
+    const resumenSuperior = `
+      <div class="grid sm:grid-cols-2 gap-4 mb-6">
+        <!-- Puesto en la cohorte -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 flex items-center gap-4">
+          <div class="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+            </svg>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Puesto en la cohorte</p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <p class="text-2xl font-extrabold text-ink">${puestoGlobal !== null ? `${puestoGlobal}º` : '—'}</p>
+              <span class="text-xs text-slate2 font-medium">${puestoGlobal !== null ? `de ${totalEstudiantesRanking} estudiantes` : 'Sin ponderar aún'}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Promedio general -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 flex items-center gap-4">
+          <div class="w-12 h-12 rounded-2xl bg-turquesa/10 text-turquesa flex items-center justify-center shrink-0">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Promedio general de todas las materias</p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <p class="text-2xl font-extrabold" style="color:${colorCualitativa(promGeneralEstudiante)}">${promGeneralEstudiante !== null ? promGeneralEstudiante.toFixed(1) : '—'}</p>
+              ${escalaGlobal ? `<span class="text-xs font-bold px-2 py-0.5 rounded-md" style="background:${escalaGlobal.bg};color:${escalaGlobal.color}">Escala: ${escalaGlobal.letra} (${escalaGlobal.descripcion})</span>` : '<span class="text-xs text-slate2 font-medium">Pendiente</span>'}
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    const esActualPorRegistro = await Promise.all(registrosFiltrados.map(rec => mesActualParaDocenteCohorte(rec.docente, mod.nombre)));
+    const slotsPorRegistro = await Promise.all(registrosFiltrados.map(rec => getSlotsDocente(rec.docente)));
+
+    const bloques = registrosFiltrados.map((rec, i) => {
       const esActual = rec.mes === esActualPorRegistro[i];
       const materias = [...new Set(slotsPorRegistro[i].filter(s => s.cohorte === mod.nombre && s.mes === rec.mes).map(s => s.materia))];
       const materiaLabel = materias.length ? materias.join(', ') : mod.modulo;
 
-      const valores = (rec.valores && rec.valores[nombre]) || {};
+      const valores = (rec.valores && !Array.isArray(rec.valores) && rec.valores[nombre]) || {};
       const filasNotas = (rec.criterios || []).map(c => {
         const v = valores[c.id];
         const tieneValor = v !== undefined && v !== null && v !== '';
@@ -12437,12 +14318,13 @@ Fundación A+`;
       }).join('');
 
       const resultado = calcularNotaFinal(rec, nombre);
-      const definitiva = resultado && !resultado.pendiente ? resultado.valor : null;
+      const definitiva = resultado && resultado.valor !== null ? resultado.valor : null;
+      const escala = definitiva !== null ? letraEscalaNota(definitiva) : null;
 
       const ranking = compañeros
         .map(u => {
           const r = calcularNotaFinal(rec, u.nombre);
-          return { nombre: u.nombre, valor: r && !r.pendiente ? r.valor : null };
+          return { nombre: u.nombre, valor: r && r.valor !== null ? r.valor : null };
         })
         .filter(x => x.valor !== null)
         .sort((a, b) => b.valor - a.valor);
@@ -12459,7 +14341,7 @@ Fundación A+`;
             ${esActual
               ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-turquesa/10 text-turquesa">Periodo actual</span>`
               : `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-slate2">Historial</span>`}
-            ${definitiva !== null ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${colorCualitativa(definitiva)}1A;color:${colorCualitativa(definitiva)}">${calificacionCualitativa(definitiva)}</span>` : ''}
+            ${definitiva !== null && escala ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${escala.bg};color:${escala.color}"><span class="w-4 h-4 inline-flex items-center justify-center rounded-full bg-white text-ink text-[10px] font-black mr-1 shadow-xs">${escala.letra}</span> ${calificacionCualitativa(definitiva)} (${escala.letra})</span>` : ''}
           </div>
         </div>
         <div class="overflow-x-auto">
@@ -12471,7 +14353,10 @@ Fundación A+`;
         <div class="grid sm:grid-cols-2 gap-4 px-6 py-5 border-t border-gray-100">
           <div>
             <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Nota definitiva</p>
-            <p class="text-2xl font-extrabold mt-1" style="color:${colorCualitativa(definitiva)}">${definitiva !== null ? definitiva.toFixed(1) : '—'}</p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <p class="text-2xl font-extrabold" style="color:${colorCualitativa(definitiva)}">${definitiva !== null ? definitiva.toFixed(1) : '—'}</p>
+              ${escala ? `<span class="text-xs font-bold px-2 py-0.5 rounded-md" style="background:${escala.bg};color:${escala.color}">Escala: ${escala.letra} (${escala.descripcion})</span>` : ''}
+            </div>
           </div>
           <div>
             <p class="text-xs font-semibold text-slate2 uppercase tracking-wide">Puesto en la cohorte</p>
@@ -12481,13 +14366,34 @@ Fundación A+`;
       </div>`;
     }).join('');
 
-    document.getElementById('mount-s-calificaciones').innerHTML = `
-      <p class="text-xs text-slate2 mb-5">Cada mes y materia que te asignaron tiene su propia hoja de calificación — el periodo más reciente es el actual; los anteriores quedan como historial.</p>
-      ${bloques}`;
+    // Selector de mes
+    const selectorMes = mesesDisponibles.length > 1 ? `
+      <div class="flex items-center gap-2 mb-5 flex-wrap">
+        <span class="text-xs font-bold text-slate2 uppercase tracking-wide shrink-0">Filtrar por mes:</span>
+        <div class="flex flex-wrap gap-2">
+          ${mesesDisponibles.map(m => `
+            <button onclick="cambiarCalifMesEstudiante('${m}')"
+              class="px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-200 ${m === estudianteCalifMes
+                ? 'bg-morado text-white shadow-md shadow-morado/25'
+                : 'bg-gray-100 text-slate2 hover:bg-morado/10 hover:text-morado'
+              }">
+              ${escapeHtml(mesLabel(m))}
+            </button>`).join('')}
+        </div>
+      </div>` : '';
+
+    mount.innerHTML = `
+      ${resumenSuperior}
+      <p class="text-xs text-slate2 mb-4">Cada mes y materia que te asignaron tiene su propia hoja de calificación — el periodo más reciente es el actual; los anteriores quedan como historial.</p>
+      ${selectorMes}
+      ${bloques || `<div class="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 text-center">
+        <p class="text-sm text-slate2">No hay calificaciones registradas para <strong class="text-ink">${escapeHtml(mesLabel(estudianteCalifMes))}</strong>.</p>
+      </div>`}`;
   }
 
   // async: 'modulos' vía MySQL.
   async function renderAcademicoEstudiante() {
+
     const mod = await estudianteModulo();
     const pensumItems = mod ? (await Store.list('pensum')).filter(p => p.modulo === mod.modulo) : [];
     const docentesCohorte = mod ? await docentesDeCohorte(mod.nombre) : [];
@@ -13040,11 +14946,6 @@ Fundación A+`;
     healthCheckIntervalMs: 30000,
   };
 
-  // Valida si existe una sesión activa real en la interfaz de la aplicación
-  function haySesionActivaApp() {
-    return Boolean(currentAdminRole || currentDocente || currentEstudiante || currentAdminUser);
-  }
-
   // Token de sesión del CHAT: vive ÚNICAMENTE en memoria durante la sesión activa.
   // No se persiste en localStorage para evitar que un visitante público en la misma máquina
   // herede credenciales administrativas residuales y acceda a información privada.
@@ -13099,6 +15000,7 @@ Fundación A+`;
     const input = document.getElementById('aplusInput');
     const sendBtn = document.getElementById('aplusSend');
     const clearBtn = document.getElementById('aplusClear');
+    const closeBtn = document.getElementById('aplusClose');
     const chipsWrap = document.getElementById('aplusChips');
     const statusDot = document.getElementById('aplusStatusDot');
     const statusText = document.getElementById('aplusStatusText');
@@ -13494,6 +15396,7 @@ Fundación A+`;
     }
 
     fab.addEventListener('click', toggleChat);
+    if (closeBtn) closeBtn.addEventListener('click', toggleChat);
     sendBtn.addEventListener('click', sendMessage);
     if (clearBtn) clearBtn.addEventListener('click', clearConversation);
     input.addEventListener('input', autoGrow);
@@ -13504,3 +15407,82 @@ Fundación A+`;
       }
     });
   }
+
+/* ==========================================================================
+   SISTEMA DE NAVEGACIÓN Y MENÚ FLOTANTE AL HACER SCROLL HACIA ABAJO
+   - Al bajar demasiado en cualquier módulo (> 100px), oculta la cabecera
+     para dar pantalla completa y muestra un botón flotante con icono de menú.
+   - Al tocar el botón flotante, despliega el cajón lateral con todos los
+     módulos sin necesidad de subir hasta el tope de la página.
+   - Al elegir un módulo, se cambia de panel, se cierra el menú y la vista
+     vuelve suavemente al inicio.
+   ========================================================================== */
+
+/** Detecta qué panel de rol (Admin, Docente, Estudiante) está activo actualmente. */
+function getActiveRoleViewId() {
+  const views = ['dashboardView', 'teacherView', 'studentView'];
+  for (let i = 0; i < views.length; i++) {
+    const el = document.getElementById(views[i]);
+    if (el && !el.classList.contains('hidden')) return views[i];
+  }
+  return null;
+}
+
+/** Abre el sidebar del panel indicado como drawer deslizante y muestra el overlay. */
+function abrirSidebarMovil(viewId) {
+  const targetId = viewId || getActiveRoleViewId();
+  if (!targetId) return;
+  const view = document.getElementById(targetId);
+  if (!view) return;
+  const sidebar = view.querySelector('.role-sidebar');
+  const overlay = document.getElementById('mobSidebarOverlay');
+  if (!sidebar || !overlay) return;
+
+  sidebar.classList.add('mob-open');
+  overlay.classList.add('is-open');
+  document.body.style.overflow = 'hidden';
+}
+
+/** Cierra cualquier sidebar que esté abierto como drawer y oculta el overlay. */
+function cerrarSidebarMovil() {
+  document.querySelectorAll('.role-sidebar.mob-open').forEach(function(sb) {
+    sb.classList.remove('mob-open');
+  });
+  const overlay = document.getElementById('mobSidebarOverlay');
+  if (overlay) overlay.classList.remove('is-open');
+  document.body.style.overflow = '';
+}
+
+// Inicialización de navegación móvil y accesibilidad
+(function () {
+  function iniciarSistemaNavegacion() {
+    // 1. Delegación de clics en las pestañas de módulos para cerrar drawer en móvil
+    ['dashboardView', 'teacherView', 'studentView'].forEach(function(viewId) {
+      const view = document.getElementById(viewId);
+      if (!view) return;
+      const sidebar = view.querySelector('.role-sidebar');
+      if (!sidebar) return;
+
+      sidebar.addEventListener('click', function(e) {
+        const tab = e.target.closest('.panel-tab, .panel-tab-t, .panel-tab-s');
+        if (tab && sidebar.classList.contains('mob-open')) {
+          setTimeout(function() {
+            cerrarSidebarMovil();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }, 120);
+        }
+      });
+    });
+
+    // 2. Cerrar drawer móvil con la tecla Escape
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') cerrarSidebarMovil();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iniciarSistemaNavegacion);
+  } else {
+    iniciarSistemaNavegacion();
+  }
+})();

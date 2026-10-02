@@ -27,10 +27,52 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/middleware.php';
+require_once __DIR__ . '/formularios.php';
 
 // La entidad llega por query string (?entidad=usuarios), reescrito desde
 // una URL limpia /api/usuarios por el .htaccess de la raíz del sitio.
 $entidad = $_GET['entidad'] ?? '';
+
+// ── Puerta de Enlace de Seguridad (API Gateway & Broken Access Control) ────
+// Valida sesión y roles permitidos en el punto de entrada ANTES de intentar
+// abrir conexión a MySQL. Esto previene saturación y ataques DoS por agotamiento
+// de conexiones a la base de datos con peticiones maliciosas o no autenticadas.
+$metodoHttp = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$rutasPublicas = ['public_info', 'registro', 'qr_asistencia', 'formulario_publico'];
+
+if (!in_array($entidad, $rutasPublicas, true)) {
+    // Matriz de permisos RBAC para mutaciones (POST, PUT, DELETE)
+    $rolesMutacionPorEntidad = [
+        'usuarios'                => ['Superadmin'],
+        'superadmin_credentials'  => ['Superadmin'],
+        'configuracion'           => ['Superadmin'],
+        'perfiles'                => ['Superadmin'],
+        'modulos'                 => ['Superadmin', 'Coordinador'],
+        'cursos'                  => ['Superadmin', 'Coordinador'],
+        'pensum'                  => ['Superadmin', 'Coordinador'],
+        'chat_voz_conocimiento'   => ['Superadmin', 'Coordinador'],
+        'memorandos'              => ['Superadmin', 'Coordinador'],
+        'encuestas'               => ['Superadmin', 'Coordinador'],
+        'formularios'             => ['Superadmin', 'Administrador', 'Coordinador'],
+        'enviar_correo'           => ['Superadmin', 'Coordinador', 'Docente'],
+        'horarios'                => ['Superadmin', 'Coordinador', 'Docente'],
+        'notas_modulos'           => ['Superadmin', 'Coordinador', 'Docente'],
+        'asistencia'              => ['Superadmin', 'Coordinador', 'Docente'],
+        'sesiones_asistencia'     => ['Superadmin', 'Coordinador', 'Docente'],
+        'qr_tokens'               => ['Superadmin', 'Coordinador', 'Docente'],
+        'informes_docente'        => ['Superadmin', 'Coordinador', 'Docente'],
+        'trainee_archivos'        => ['Superadmin', 'Coordinador', 'Docente', 'Estudiante'],
+        'pqr'                     => ['Superadmin', 'Coordinador', 'Docente', 'Estudiante'],
+    ];
+
+    if ($metodoHttp !== 'GET') {
+        if (isset($rolesMutacionPorEntidad[$entidad])) {
+            exigirSesion($rolesMutacionPorEntidad[$entidad]);
+        } else {
+            exigirSesion();
+        }
+    }
+}
 
 try {
     $pdo = obtenerConexion();
@@ -90,6 +132,12 @@ switch ($entidad) {
         break;
     case 'encuestas':
         manejarEncuestas($pdo);
+        break;
+    case 'formularios':
+        manejarFormularios($pdo);
+        break;
+    case 'formulario_publico':
+        manejarFormularioPublico($pdo);
         break;
     case 'cursos':
         manejarCursos($pdo);
@@ -224,9 +272,9 @@ function manejarRegistroPublico(PDO $pdo): void {
 
     $stmtInsert = $pdo->prepare(
         "INSERT INTO usuarios (id, nombre, email, password, password_plano, rol, estado, estado_registro, cohorte, telefono)
-         VALUES (?, ?, ?, ?, ?, 'Estudiante', 'Activo', 'Pendiente', '', ?)"
+         VALUES (?, ?, ?, ?, NULL, 'Estudiante', 'Activo', 'Pendiente', '', ?)"
     );
-    $stmtInsert->execute([$id, $nombre, $email, $hash, $password, $telefono]);
+    $stmtInsert->execute([$id, $nombre, $email, $hash, $telefono]);
 
     responderJson(['ok' => true, 'id' => $id, 'mensaje' => 'Solicitud de registro enviada con éxito.']);
 }
@@ -376,7 +424,7 @@ function manejarEnviarCorreo(PDO $pdo): void {
         responderError('Método no permitido.', 405);
     }
     
-    exigirSesion();
+    $sesion = exigirSesion(['Superadmin', 'Coordinador', 'Docente']);
     require_once __DIR__ . '/mailer.php';
 
     $body = leerBodyJson();
@@ -387,8 +435,13 @@ function manejarEnviarCorreo(PDO $pdo): void {
     $mensajeHtml = trim($body['mensajeHtml'] ?? '');
     $esPrueba = !empty($body['esPrueba']);
 
-    if (!$destinatarioEmail) {
-        responderError('El correo del destinatario es obligatorio.', 400);
+    if (!$destinatarioEmail || !filter_var($destinatarioEmail, FILTER_VALIDATE_EMAIL)) {
+        responderError('El correo del destinatario es inválido o está vacío.', 400);
+    }
+
+    // Prevenir inyección CRLF en cabeceras de correo
+    if (preg_match("/[\r\n]/", $destinatarioEmail) || preg_match("/[\r\n]/", $asunto) || preg_match("/[\r\n]/", $destinatarioNombre)) {
+        responderError('Parámetros de correo inválidos.', 400);
     }
 
     $fila = $pdo->query('SELECT * FROM configuracion WHERE id = 1')->fetch();
@@ -446,13 +499,8 @@ function manejarSuperadminCredentials(PDO $pdo): void {
             responderJson(['data' => ['email' => 'superadmin@aplus.org', 'password' => '']]);
             return;
         }
-        // Se devuelve la contraseña vacía por seguridad: el frontend
-        // nunca la muestra al usuario, solo se usa para verificar "contraseña actual"
-        // al guardar — esa verificación la hace el propio PHP en auth.php.
-        // Para que la UI de Configuración funcione igual que antes (muestra el email,
-        // pide la actual para confirmar), devolvemos el email real y la contraseña
-        // en crudo SOLO si el rol confirmado es Superadmin (ya lo garantiza exigirSesion).
-        responderJson(['data' => ['email' => $fila['email'], 'password' => $fila['password']]]);
+        // NUNCA devolver el hash de la contraseña al frontend
+        responderJson(['data' => ['email' => $fila['email'], 'password' => '']]);
         return;
     }
 
@@ -461,18 +509,24 @@ function manejarSuperadminCredentials(PDO $pdo): void {
         $body  = leerBodyJson();
         $cred  = $body['data'] ?? $body;
         $email = trim($cred['email'] ?? '');
-        $pass  = $cred['password'] ?? '';
+        $pass  = trim((string)($cred['password'] ?? ''));
 
         if (!$email) responderError('El correo no puede estar vacío.', 400);
 
-        // Si la contraseña ya es un hash bcrypt, no se vuelve a hashear
-        $hashFinal = esHashBcrypt($pass) ? $pass : password_hash($pass, PASSWORD_BCRYPT);
-
-        $stmt = $pdo->prepare(
-            "INSERT INTO superadmin_credentials (id, email, password) VALUES (1, ?, ?)
-             ON DUPLICATE KEY UPDATE email = VALUES(email), password = VALUES(password)"
-        );
-        $stmt->execute([$email, $hashFinal]);
+        if ($pass !== '') {
+            $hashFinal = esHashBcrypt($pass) ? $pass : password_hash($pass, PASSWORD_BCRYPT);
+            $stmt = $pdo->prepare(
+                "INSERT INTO superadmin_credentials (id, email, password) VALUES (1, ?, ?)
+                 ON DUPLICATE KEY UPDATE email = VALUES(email), password = VALUES(password)"
+            );
+            $stmt->execute([$email, $hashFinal]);
+        } else {
+            $stmt = $pdo->prepare(
+                "INSERT INTO superadmin_credentials (id, email, password) VALUES (1, ?, '')
+                 ON DUPLICATE KEY UPDATE email = VALUES(email)"
+            );
+            $stmt->execute([$email]);
+        }
         responderJson(['ok' => true]);
         return;
     }
@@ -552,7 +606,7 @@ function manejarPerfiles(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($perfiles)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudieron guardar los perfiles: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar los perfiles');
         }
         return;
     }
@@ -575,15 +629,16 @@ function manejarUsuarios(PDO $pdo): void {
     $metodo = $_SERVER['REQUEST_METHOD'];
 
     if ($metodo === 'GET') {
-        exigirSesion(); // cualquier rol autenticado puede leer
+        $sesion = exigirSesion(); // cualquier rol autenticado puede leer
 
         // Eliminar el registro us_lorenliseth que fue rechazado por el Superadmin
         try {
             $pdo->query("DELETE FROM usuarios WHERE id = 'us_lorenliseth'");
         } catch (Exception $e) {}
 
+        // NUNCA seleccionar password ni password_plano por seguridad
         $filas = $pdo->query(
-            'SELECT id, nombre, email, password, password_plano, rol, estado, estado_registro,
+            'SELECT id, nombre, email, rol, estado, estado_registro,
                     cohorte, telefono, fue_estudiante, foto_url, descripcion,
                     creado_en, actualizado_en
              FROM usuarios'
@@ -627,8 +682,8 @@ function mapearUsuariosACamelCase(array $filas, array $perfilesPorUsuario = []):
             'id' => $fila['id'],
             'nombre' => $fila['nombre'],
             'email' => $fila['email'],
-            'password' => $fila['password'],
-            'passwordPlano' => $fila['password_plano'] ?? '',
+            'password' => '',
+            'passwordPlano' => '',
             'rol' => $fila['rol'],
             'estado' => $fila['estado'],
             'estadoRegistro' => $fila['estado_registro'],
@@ -670,23 +725,23 @@ function mapearUsuariosACamelCase(array $filas, array $perfilesPorUsuario = []):
 function reemplazarTablaUsuarios(PDO $pdo, array $usuarios): void {
     $pdo->beginTransaction();
     try {
-        $planoPrevioMap = [];
+        $passPrevioMap = [];
         try {
-            $filasPlanos = $pdo->query("SELECT id, password_plano FROM usuarios WHERE password_plano IS NOT NULL AND password_plano != ''")->fetchAll();
-            foreach ($filasPlanos as $fp) {
-                $planoPrevioMap[$fp['id']] = $fp['password_plano'];
+            $filasPass = $pdo->query("SELECT id, password FROM usuarios")->fetchAll();
+            foreach ($filasPass as $fp) {
+                $passPrevioMap[$fp['id']] = $fp['password'];
             }
         } catch (Exception $e) {}
 
         $stmt = $pdo->prepare(
             'INSERT INTO usuarios
                 (id, nombre, email, password, password_plano, rol, estado, estado_registro, cohorte, telefono, fue_estudiante, foto_url, descripcion)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                 nombre = VALUES(nombre),
                 email = VALUES(email),
                 password = VALUES(password),
-                password_plano = VALUES(password_plano),
+                password_plano = NULL,
                 rol = VALUES(rol),
                 estado = VALUES(estado),
                 estado_registro = VALUES(estado_registro),
@@ -709,21 +764,16 @@ function reemplazarTablaUsuarios(PDO $pdo, array $usuarios): void {
         foreach ($usuarios as $u) {
             $idUsuario = $u['id'] ?? bin2hex(random_bytes(16));
             $idsUsuariosEnviados[] = $idUsuario;
-            $passRecibido = (string)($u['password'] ?? '');
-            $passPlanoRecibido = (string)($u['passwordPlano'] ?? '');
+            $passRecibido = trim((string)($u['password'] ?? ''));
 
-            if (!esHashBcrypt($passRecibido)) {
-                $passwordFinal = $passRecibido !== '' ? password_hash($passRecibido, PASSWORD_BCRYPT) : '';
-                $passwordPlanoFinal = $passRecibido !== '' ? $passRecibido : null;
-            } else {
+            if ($passRecibido === '') {
+                // Conservar contraseña existente en la BD
+                $passwordFinal = $passPrevioMap[$idUsuario] ?? '';
+            } elseif (esHashBcrypt($passRecibido)) {
                 $passwordFinal = $passRecibido;
-                if (!empty($passPlanoRecibido) && !esHashBcrypt($passPlanoRecibido)) {
-                    $passwordPlanoFinal = $passPlanoRecibido;
-                } elseif (isset($planoPrevioMap[$idUsuario])) {
-                    $passwordPlanoFinal = $planoPrevioMap[$idUsuario];
-                } else {
-                    $passwordPlanoFinal = null;
-                }
+            } else {
+                // Nueva contraseña en texto plano para hashear
+                $passwordFinal = password_hash($passRecibido, PASSWORD_BCRYPT);
             }
 
             $stmt->execute([
@@ -731,7 +781,6 @@ function reemplazarTablaUsuarios(PDO $pdo, array $usuarios): void {
                 $u['nombre'] ?? '',
                 strtolower($u['email'] ?? ''),
                 $passwordFinal,
-                $passwordPlanoFinal,
                 $u['rol'] ?? 'Estudiante',
                 $u['estado'] ?? 'Activo',
                 $u['estadoRegistro'] ?? null,
@@ -761,7 +810,7 @@ function reemplazarTablaUsuarios(PDO $pdo, array $usuarios): void {
         $pdo->commit();
     } catch (Exception $e) {
         $pdo->rollBack();
-        responderError('No se pudo guardar la lista de usuarios: ' . $e->getMessage(), 500);
+        responderErrorDb($e, 'guardar la lista de usuarios');
     }
 }
 
@@ -793,6 +842,21 @@ function esHashBcrypt(string $valor): bool {
  */
 function manejarPerfilPropio(PDO $pdo): void {
     $metodo = $_SERVER['REQUEST_METHOD'];
+    if ($metodo === 'GET') {
+        $payload = exigirSesion();
+        $id = $payload['id'] ?? '';
+        if (!$id && ($payload['rol'] ?? '') === 'Superadmin') {
+            responderJson(['id' => 'superadmin', 'nombre' => 'Superadmin', 'email' => $payload['email'] ?? '', 'rol' => 'Superadmin']);
+        }
+        $stmt = $pdo->prepare('SELECT id, nombre, email, rol, cohorte, telefono, foto_url as fotoUrl, descripcion FROM usuarios WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $perfil = $stmt->fetch();
+        if (!$perfil) {
+            responderJson(['id' => $id, 'nombre' => $payload['email'] ?? 'Usuario', 'email' => $payload['email'] ?? '', 'rol' => $payload['rol'] ?? '']);
+        }
+        responderJson($perfil);
+    }
+
     if ($metodo !== 'PUT' && $metodo !== 'POST') {
         responderError('Método no permitido.', 405);
     }
@@ -841,8 +905,8 @@ function manejarPerfilPropio(PDO $pdo): void {
  * Exige sesión válida (cualquier rol) y decodifica el body como array para
  * un POST — común a las entidades de esta fase, evita repetirlo.
  */
-function prepararReemplazoGenerico(): array {
-    exigirSesion();
+function prepararReemplazoGenerico(array $rolesPermitidos = []): array {
+    exigirSesion($rolesPermitidos);
     $datos = leerBodyJson();
     if (!is_array($datos)) {
         responderError('Se esperaba un array en el body.', 400);
@@ -866,7 +930,7 @@ function manejarModulos(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -899,7 +963,7 @@ function manejarModulos(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Cohortes: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Cohortes');
         }
         return;
     }
@@ -939,7 +1003,7 @@ function manejarHorarios(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador', 'Docente']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -970,7 +1034,7 @@ function manejarHorarios(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Horarios: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Horarios');
         }
         return;
     }
@@ -1004,17 +1068,19 @@ function manejarNotasModulos(PDO $pdo): void {
         $stmt->execute($params);
         $filas = $stmt->fetchAll();
         responderJson(array_map(function ($f) {
+            $valDecoded = json_decode($f['valores'] ?? '{}', true);
+            $valoresObj = (!empty($valDecoded) && is_array($valDecoded)) ? (object)$valDecoded : new stdClass();
             return [
                 'id' => $f['id'], 'docente' => $f['docente'], 'cohorte' => $f['cohorte'], 'mes' => $f['mes'],
-                'criterios' => json_decode($f['criterios'], true) ?? [],
-                'valores' => json_decode($f['valores'], true) ?? [],
+                'criterios' => json_decode($f['criterios'] ?? '[]', true) ?? [],
+                'valores' => $valoresObj,
                 'creadoEn' => $f['creado_en'], 'actualizadoEn' => $f['actualizado_en'],
             ];
         }, $filas));
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador', 'Docente']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -1031,22 +1097,31 @@ function manejarNotasModulos(PDO $pdo): void {
             foreach ($registros as $r) {
                 $id = $r['id'] ?? bin2hex(random_bytes(16));
                 $ids[] = $id;
+
+                $valores = $r['valores'] ?? null;
+                if (empty($valores) || !is_array($valores)) {
+                    $jsonValores = '{}';
+                } else {
+                    $jsonValores = json_encode((object)$valores, JSON_UNESCAPED_UNICODE);
+                }
+
+                $criterios = $r['criterios'] ?? [];
+                $jsonCriterios = json_encode(is_array($criterios) ? array_values($criterios) : [], JSON_UNESCAPED_UNICODE);
+
                 $stmt->execute([
-                    $id, $r['docente'] ?? '', $r['cohorte'] ?? '', $r['mes'] ?? '',
-                    json_encode($r['criterios'] ?? [], JSON_UNESCAPED_UNICODE),
-                    json_encode($r['valores'] ?? [], JSON_UNESCAPED_UNICODE),
+                    $id,
+                    $r['docente'] ?? '',
+                    $r['cohorte'] ?? '',
+                    $r['mes'] ?? '',
+                    $jsonCriterios,
+                    $jsonValores,
                 ]);
-            }
-            if (!empty($ids)) {
-                $inQuery = implode(',', array_fill(0, count($ids), '?'));
-                $stmtPrune = $pdo->prepare("DELETE FROM notas_modulos WHERE id NOT IN ($inQuery)");
-                $stmtPrune->execute(array_values($ids));
             }
             $pdo->commit();
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Calificaciones: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Calificaciones');
         }
         return;
     }
@@ -1102,7 +1177,7 @@ function manejarAsistencia(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador', 'Docente']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -1133,7 +1208,7 @@ function manejarAsistencia(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Asistencia: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Asistencia');
         }
         return;
     }
@@ -1184,8 +1259,18 @@ function manejarSemaforo(PDO $pdo): void {
         return;
     }
 
-    // 3. Agregación de asistencias en MySQL
-    $stmtAsis = $pdo->query("SELECT estudiante, COUNT(*) as total, SUM(CASE WHEN estado = 'Presente' THEN 1 ELSE 0 END) as presentes FROM asistencia GROUP BY estudiante");
+    // 3. Agregación de asistencias en MySQL (excluyendo registros automáticos previos a la fecha/hora de registro del estudiante)
+    $stmtAsis = $pdo->query("
+        SELECT a.estudiante, COUNT(*) as total, SUM(CASE WHEN a.estado = 'Presente' THEN 1 ELSE 0 END) as presentes 
+        FROM asistencia a
+        LEFT JOIN usuarios u ON u.nombre = a.estudiante
+        LEFT JOIN sesiones_asistencia s ON s.id = a.sesion_id
+        WHERE NOT (a.automatico = 1 AND u.creado_en IS NOT NULL AND (
+            (s.hora_inicio IS NOT NULL AND u.creado_en > s.hora_inicio)
+            OR (s.hora_inicio IS NULL AND DATE(a.fecha) < DATE(u.creado_en))
+        ))
+        GROUP BY a.estudiante
+    ");
     $asistMap = [];
     foreach ($stmtAsis->fetchAll() as $row) {
         $tot = (int)$row['total'];
@@ -1226,9 +1311,11 @@ function manejarSemaforo(PDO $pdo): void {
                     $pesoTotal = 0.0;
                     foreach ($criterios as $crit) {
                         $cNombre = $crit['nombre'] ?? '';
+                        $cId = $crit['id'] ?? '';
                         $cPeso = (float)($crit['peso'] ?? 0);
-                        if (isset($valores[$cNombre]) && is_numeric($valores[$cNombre])) {
-                            $suma += ((float)$valores[$cNombre]) * ($cPeso / 100);
+                        $vCrit = $valores[$cId] ?? $valores[$cNombre] ?? null;
+                        if ($vCrit !== null && is_numeric($vCrit)) {
+                            $suma += ((float)$vCrit) * ($cPeso / 100);
                             $pesoTotal += $cPeso;
                         }
                     }
@@ -1339,7 +1426,7 @@ function manejarSesionesAsistencia(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador', 'Docente']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -1373,7 +1460,7 @@ function manejarSesionesAsistencia(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Sesiones de asistencia: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Sesiones de asistencia');
         }
         return;
     }
@@ -1395,7 +1482,7 @@ function manejarQrTokens(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador', 'Docente']);
         $pdo->beginTransaction();
         try {
             $pdo->exec('DELETE FROM qr_tokens');
@@ -1410,7 +1497,7 @@ function manejarQrTokens(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Códigos QR: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Códigos QR');
         }
         return;
     }
@@ -1488,15 +1575,23 @@ function manejarQrAsistencia(PDO $pdo): void {
                 $recienActivada = true;
 
                 // Asistencia por defecto como pérdida (Falla)
-                // Para todos los estudiantes de la cohorte, insertar registro en 'asistencia' con estado = 'Falla'
-                $stmtEsts = $pdo->prepare('SELECT nombre FROM usuarios WHERE rol = "Estudiante" AND cohorte = ?');
+                // Para todos los estudiantes de la cohorte que ya existían cuando inició la sesión
+                $stmtEsts = $pdo->prepare('SELECT nombre, creado_en FROM usuarios WHERE rol = "Estudiante" AND cohorte = ?');
                 $stmtEsts->execute([$qr['cohorte']]);
                 $estudiantesCohorte = $stmtEsts->fetchAll(PDO::FETCH_ASSOC);
 
                 $stmtCheckAsist = $pdo->prepare('SELECT id FROM asistencia WHERE sesion_id = ? AND estudiante = ? LIMIT 1');
                 $stmtInsDef = $pdo->prepare('INSERT INTO asistencia (id, estudiante, docente, modulo, materia, fecha, estado, sesion_id, automatico) VALUES (?, ?, ?, ?, ?, ?, "Falla", ?, 1)');
 
+                $tsSesion = strtotime($sesion['horaInicio'] ?? ($sesion['fecha'] . ' 23:59:59'));
                 foreach ($estudiantesCohorte as $estRow) {
+                    // Si el estudiante fue registrado después del inicio de la sesión, no se le penaliza con Falla
+                    if (!empty($estRow['creado_en'])) {
+                        $tsCreado = strtotime($estRow['creado_en']);
+                        if ($tsCreado > $tsSesion) {
+                            continue;
+                        }
+                    }
                     $stmtCheckAsist->execute([$sesion['id'], $estRow['nombre']]);
                     if (!$stmtCheckAsist->fetch()) {
                         $nuevoId = 'as_' . bin2hex(random_bytes(6)) . time();
@@ -1825,13 +1920,25 @@ function manejarQrAsistencia(PDO $pdo): void {
 function manejarPqr(PDO $pdo): void {
     $metodo = $_SERVER['REQUEST_METHOD'];
     if ($metodo === 'GET') {
-        exigirSesion();
+        $sesion = exigirSesion();
+        $rol = $sesion['rol'] ?? '';
         $id = $_GET['id'] ?? null;
         if ($id) {
             $stmt = $pdo->prepare('SELECT id, tipo, solicitante, remitente_rol, asunto, fecha, estado, fecha_activacion, archivo_nombre, archivo_tipo, archivo_datos FROM pqr WHERE id = ?');
             $stmt->execute([$id]);
             $f = $stmt->fetch();
             if (!$f) { responderError('PQR no encontrada', 404); }
+
+            // BOLA protection: estudiantes y docentes solo ven sus propias PQR
+            if (!in_array($rol, ['Superadmin', 'Coordinador'], true)) {
+                $nombreSesion = strtolower(trim($sesion['nombre'] ?? ''));
+                $emailSesion = strtolower(trim($sesion['email'] ?? ''));
+                $solic = strtolower(trim($f['solicitante'] ?? ''));
+                if ($solic !== $nombreSesion && $solic !== $emailSesion) {
+                    responderError('No tienes permiso para ver esta PQR.', 403);
+                }
+            }
+
             responderJson([
                 'id' => $f['id'], 'tipo' => $f['tipo'], 'solicitante' => $f['solicitante'],
                 'remitenteRol' => $f['remitente_rol'], 'asunto' => $f['asunto'], 'fecha' => $f['fecha'],
@@ -1843,8 +1950,17 @@ function manejarPqr(PDO $pdo): void {
             return;
         }
 
-        // Listado optimizado: no transfiere el blob Base64 archivo_datos en masa
-        $filas = $pdo->query('SELECT id, tipo, solicitante, remitente_rol, asunto, fecha, estado, fecha_activacion, archivo_nombre, archivo_tipo, (archivo_datos IS NOT NULL AND archivo_datos != "") AS tiene_archivo FROM pqr')->fetchAll();
+        // Listado: administradores ven todo, usuarios regulares solo sus propias solicitudes
+        if (in_array($rol, ['Superadmin', 'Coordinador'], true)) {
+            $filas = $pdo->query('SELECT id, tipo, solicitante, remitente_rol, asunto, fecha, estado, fecha_activacion, archivo_nombre, archivo_tipo, (archivo_datos IS NOT NULL AND archivo_datos != "") AS tiene_archivo FROM pqr')->fetchAll();
+        } else {
+            $nombreSesion = trim($sesion['nombre'] ?? '');
+            $emailSesion = trim($sesion['email'] ?? '');
+            $stmt = $pdo->prepare('SELECT id, tipo, solicitante, remitente_rol, asunto, fecha, estado, fecha_activacion, archivo_nombre, archivo_tipo, (archivo_datos IS NOT NULL AND archivo_datos != "") AS tiene_archivo FROM pqr WHERE solicitante = ? OR solicitante = ?');
+            $stmt->execute([$nombreSesion, $emailSesion]);
+            $filas = $stmt->fetchAll();
+        }
+
         responderJson(array_map(function ($f) {
             $tiene = !empty($f['tiene_archivo']);
             return [
@@ -1852,13 +1968,15 @@ function manejarPqr(PDO $pdo): void {
                 'remitenteRol' => $f['remitente_rol'], 'asunto' => $f['asunto'], 'fecha' => $f['fecha'],
                 'estado' => $f['estado'], 'fechaActivacion' => $f['fecha_activacion'],
                 'archivoNombre' => $f['archivo_nombre'], 'archivoTipo' => $f['archivo_tipo'],
-                'archivoDatos' => $tiene ? '1' : '', // marcador booleano para compatibilidad con checks existentes
+                'archivoDatos' => $tiene ? '1' : '',
                 'tieneArchivo' => $tiene,
             ];
         }, $filas));
         return;
     }
     if ($metodo === 'POST') {
+        $sesion = exigirSesion();
+        $rol = $sesion['rol'] ?? '';
         $registros = prepararReemplazoGenerico();
         $pdo->beginTransaction();
         try {
@@ -1893,14 +2011,21 @@ function manejarPqr(PDO $pdo): void {
             }
             if (!empty($ids)) {
                 $inQuery = implode(',', array_fill(0, count($ids), '?'));
-                $stmtPrune = $pdo->prepare("DELETE FROM pqr WHERE id NOT IN ($inQuery)");
-                $stmtPrune->execute(array_values($ids));
+                if (in_array($rol, ['Superadmin', 'Coordinador'], true)) {
+                    $stmtPrune = $pdo->prepare("DELETE FROM pqr WHERE id NOT IN ($inQuery)");
+                    $stmtPrune->execute(array_values($ids));
+                } else {
+                    $nombreSesion = trim($sesion['nombre'] ?? '');
+                    $emailSesion = trim($sesion['email'] ?? '');
+                    $stmtPrune = $pdo->prepare("DELETE FROM pqr WHERE (solicitante = ? OR solicitante = ?) AND id NOT IN ($inQuery)");
+                    $stmtPrune->execute(array_merge([$nombreSesion, $emailSesion], array_values($ids)));
+                }
             }
             $pdo->commit();
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar PQR: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar PQR');
         }
         return;
     }
@@ -1943,7 +2068,7 @@ function manejarMemorandos(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -1980,7 +2105,7 @@ function manejarMemorandos(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Memorandos: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Memorandos');
         }
         return;
     }
@@ -2024,7 +2149,7 @@ function manejarMemorandosLeidos(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => $total]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Memorandos leídos: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Memorandos leídos');
         }
         return;
     }
@@ -2043,7 +2168,7 @@ function manejarEncuestas(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -2074,7 +2199,7 @@ function manejarEncuestas(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Encuestas: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Encuestas');
         }
         return;
     }
@@ -2093,7 +2218,7 @@ function manejarCursos(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -2121,7 +2246,7 @@ function manejarCursos(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Cursos: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Cursos');
         }
         return;
     }
@@ -2164,7 +2289,7 @@ function manejarPensum(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -2202,7 +2327,7 @@ function manejarPensum(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Pensum: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Pensum');
         }
         return;
     }
@@ -2227,7 +2352,7 @@ function manejarChatVozConocimiento(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -2258,7 +2383,7 @@ function manejarChatVozConocimiento(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar la base de conocimiento del chat: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar la base de conocimiento del chat');
         }
         return;
     }
@@ -2330,7 +2455,7 @@ function manejarAuditoriaAcciones(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador', 'Docente']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -2354,7 +2479,7 @@ function manejarAuditoriaAcciones(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Auditoria de acciones: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Auditoria de acciones');
         }
         return;
     }
@@ -2395,7 +2520,7 @@ function manejarAuditoriaHorario(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador', 'Docente']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -2423,7 +2548,7 @@ function manejarAuditoriaHorario(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Auditoria de horario: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Auditoria de horario');
         }
         return;
     }
@@ -2479,7 +2604,7 @@ function manejarInformesDocente(PDO $pdo): void {
         return;
     }
     if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico();
+        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador', 'Docente']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -2517,7 +2642,7 @@ function manejarInformesDocente(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar Informes de docentes: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar Informes de docentes');
         }
         return;
     }
@@ -2581,7 +2706,7 @@ function manejarAgendaDocente(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar la Agenda del docente: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar la Agenda del docente');
         }
         return;
     }
@@ -2645,7 +2770,7 @@ function manejarAgendaEstudiante(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudo guardar la Agenda del estudiante: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar la Agenda del estudiante');
         }
         return;
     }
@@ -2656,13 +2781,22 @@ function manejarAgendaEstudiante(PDO $pdo): void {
 function manejarTraineeArchivos(PDO $pdo): void {
     $metodo = $_SERVER['REQUEST_METHOD'];
     if ($metodo === 'GET') {
-        exigirSesion();
+        $sesion = exigirSesion();
+        $rol = $sesion['rol'] ?? '';
+        $miId = $sesion['id'] ?? '';
+
         $id = $_GET['id'] ?? null;
         if ($id) {
             $stmt = $pdo->prepare('SELECT id, estudiante_id, nombre, tipo, datos, fecha, origen FROM trainee_archivos WHERE id = ?');
             $stmt->execute([$id]);
             $f = $stmt->fetch();
             if (!$f) { responderError('Archivo no encontrado', 404); }
+
+            // BOLA protection: un estudiante solo puede ver y descargar sus propios archivos
+            if ($rol === 'Estudiante' && $f['estudiante_id'] !== $miId) {
+                responderError('No tienes permiso para acceder a este archivo.', 403);
+            }
+
             responderJson([
                 'id'           => $f['id'],
                 'estudianteId' => $f['estudiante_id'],
@@ -2677,6 +2811,11 @@ function manejarTraineeArchivos(PDO $pdo): void {
         }
 
         $estudianteId = $_GET['estudiante_id'] ?? $_GET['estudianteId'] ?? null;
+        // BOLA protection: si es estudiante, aislar forzosamente a su propio ID
+        if ($rol === 'Estudiante') {
+            $estudianteId = $miId;
+        }
+
         $conDatos = isset($_GET['con_datos']) && $_GET['con_datos'] === '1';
 
         $columnas = $conDatos
@@ -2706,13 +2845,20 @@ function manejarTraineeArchivos(PDO $pdo): void {
     }
 
     if ($metodo === 'POST') {
-        exigirSesion();
+        $sesion = exigirSesion();
+        $rol = $sesion['rol'] ?? '';
+        $miId = $sesion['id'] ?? '';
         $body = leerBodyJson();
         $esRegistroUnico = isset($body['estudianteId']) || isset($body['estudiante_id']) || isset($body['datos']);
 
         if ($esRegistroUnico) {
             $id = $body['id'] ?? bin2hex(random_bytes(16));
             $estudianteId = $body['estudianteId'] ?? $body['estudiante_id'] ?? '';
+            // Si es estudiante, forzar que solo suba a su propio perfil
+            if ($rol === 'Estudiante') {
+                $estudianteId = $miId;
+            }
+
             $nombre = trim($body['nombre'] ?? '') ?: 'Archivo';
             $tipo = $body['tipo'] ?? 'application/pdf';
             $datos = $body['datos'] ?? '';
@@ -2738,7 +2884,7 @@ function manejarTraineeArchivos(PDO $pdo): void {
                 $stmt->execute([$id, $estudianteId, $nombre, $tipo, $datos, $fecha, $origen]);
                 responderJson(['ok' => true, 'id' => $id]);
             } catch (Exception $e) {
-                responderError('No se pudo guardar el archivo en la base de datos: ' . $e->getMessage(), 500);
+                responderErrorDb($e, 'guardar el archivo en la base de datos');
             }
             return;
         }
@@ -2759,7 +2905,7 @@ function manejarTraineeArchivos(PDO $pdo): void {
             );
             foreach ($registros as $r) {
                 $id = $r['id'] ?? bin2hex(random_bytes(16));
-                $estId = $r['estudianteId'] ?? $r['estudiante_id'] ?? '';
+                $estId = ($rol === 'Estudiante') ? $miId : ($r['estudianteId'] ?? $r['estudiante_id'] ?? '');
                 if (!$estId || empty($r['datos'])) continue;
                 $stmt->execute([
                     $id,
@@ -2775,23 +2921,36 @@ function manejarTraineeArchivos(PDO $pdo): void {
             responderJson(['ok' => true, 'total' => count($registros)]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            responderError('No se pudieron guardar los archivos en la base de datos: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'guardar los archivos en la base de datos');
         }
         return;
     }
 
     if ($metodo === 'DELETE') {
-        exigirSesion();
+        $sesion = exigirSesion();
+        $rol = $sesion['rol'] ?? '';
+        $miId = $sesion['id'] ?? '';
         $id = $_GET['id'] ?? leerBodyJson()['id'] ?? null;
         if (!$id) {
             responderError('ID del archivo obligatorio para eliminar.', 400);
         }
+
+        // BOLA protection: si es Estudiante, validar que el archivo sea suyo antes de borrar
+        if ($rol === 'Estudiante') {
+            $stmtCheck = $pdo->prepare('SELECT estudiante_id FROM trainee_archivos WHERE id = ?');
+            $stmtCheck->execute([$id]);
+            $f = $stmtCheck->fetch();
+            if (!$f || $f['estudiante_id'] !== $miId) {
+                responderError('No tienes permiso para eliminar este archivo.', 403);
+            }
+        }
+
         try {
             $stmt = $pdo->prepare('DELETE FROM trainee_archivos WHERE id = ?');
             $stmt->execute([$id]);
             responderJson(['ok' => true]);
         } catch (Exception $e) {
-            responderError('No se pudo eliminar el archivo de la base de datos: ' . $e->getMessage(), 500);
+            responderErrorDb($e, 'eliminar el archivo');
         }
         return;
     }

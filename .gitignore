@@ -7,3 +7,4 @@ api/*.log
 *.log
 .DS_Store
 Thumbs.db
+scratch/
