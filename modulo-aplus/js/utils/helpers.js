@@ -15,7 +15,7 @@ export function escapeHtml(value) {
 export function normalizeText(value) {
   return String(value ?? '')
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '') // elimina los diacríticos (tildes)
     .toLowerCase()
     .trim();
 }

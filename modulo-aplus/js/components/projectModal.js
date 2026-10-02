@@ -32,6 +32,7 @@ export function createProjectModal(host) {
 
   let opener = null;
   let closeTimer = null;
+  let isOpen = false; // false también durante la animación de salida
   let previousOverflow = '';
   let previousPaddingRight = '';
 
@@ -158,16 +159,15 @@ export function createProjectModal(host) {
   /* API pública ------------------------------------------------------------ */
 
   function open(project, trigger = null) {
-    clearTimeout(closeTimer);
-    const wasOpen = !overlay.hidden;
+    clearTimeout(closeTimer); // si se reabre durante la animación de cierre, se cancela el cierre
+    const wasHidden = overlay.hidden;
     opener = trigger ?? opener;
 
     renderContent(project);
     overlay.hidden = false;
-    if (!wasOpen) {
-      lockScroll();
-      document.addEventListener('keydown', onKeydown);
-    }
+    if (wasHidden) lockScroll(); // durante la animación de cierre el scroll sigue bloqueado
+    if (!isOpen) document.addEventListener('keydown', onKeydown);
+    isOpen = true;
     // Forzamos reflow para que la transición de entrada se dispare
     void overlay.offsetWidth;
     overlay.classList.add('is-open');
@@ -175,7 +175,8 @@ export function createProjectModal(host) {
   }
 
   function close() {
-    if (overlay.hidden) return;
+    if (!isOpen) return;
+    isOpen = false;
     overlay.classList.remove('is-open');
     document.removeEventListener('keydown', onKeydown);
     clearTimeout(closeTimer);
@@ -192,5 +193,5 @@ export function createProjectModal(host) {
     if (event.target.closest('[data-aplus-close]')) close();
   });
 
-  return { open, close, isOpen: () => !overlay.hidden };
+  return { open, close, isOpen: () => isOpen };
 }

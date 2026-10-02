@@ -3,7 +3,8 @@
  * -----------------------------------------------------------------------------
  * Punto de entrada del módulo "Proyectos y Oportunidades A+".
  * Orquesta servicio + componentes. Se auto-inicializa si existe
- * #aplus-module-root en la página; también puede montarse manualmente:
+ * #aplus-module-root en la página; también puede montarse manualmente
+ * (añadiendo data-aplus-autoinit="false" al root para evitar el automático):
  *
  *   import { initAPlusModule } from './js/app.js';
  *   initAPlusModule(document.querySelector('#aplus-module-root'), { pageSize: 9 });
@@ -112,9 +113,16 @@ export async function initAPlusModule(root = document.getElementById('aplus-modu
   return { reload: loadProjects, openProject: modal.open, closeModal: modal.close };
 }
 
-/* Auto-inicialización cuando el DOM está listo */
+/* Auto-inicialización cuando el DOM está listo.
+ * Para montarlo manualmente (p. ej. con otro pageSize o tras configurar el
+ * servicio REST) marca el root con data-aplus-autoinit="false". */
+function autoInit() {
+  const root = document.getElementById('aplus-module-root');
+  if (root && root.dataset.aplusAutoinit !== 'false') initAPlusModule(root);
+}
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => initAPlusModule());
+  document.addEventListener('DOMContentLoaded', autoInit);
 } else {
-  initAPlusModule();
+  autoInit();
 }
