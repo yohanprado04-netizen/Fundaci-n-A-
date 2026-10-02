@@ -4670,14 +4670,14 @@
         <div id="traineeArchivoNombreWrap"></div>
 
         <!-- Grid de Archivos -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div id="traineeGridArchivos" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           ${archivosMostrados.map(a => {
             const badge = getBadgeArchivo(a);
             const esImg = (a.tipo || '').startsWith('image/');
             const esPdf = (a.tipo === 'application/pdf' || (a.nombre || '').toLowerCase().endsWith('.pdf'));
 
             return `
-            <div class="group relative rounded-2xl border border-gray-200/80 bg-white hover:border-morado/30 hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden">
+            <div class="trainee-archivo-card group relative rounded-2xl border border-gray-200/80 bg-white hover:border-morado/30 hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden" data-nombre="${escapeHtml((a.nombre || '').toLowerCase())}">
               <!-- Thumbnail / Vista Previa -->
               ${esImg ? `
                 <div class="relative h-44 sm:h-48 bg-gray-100 overflow-hidden cursor-pointer" onclick="verArchivoTraineeModal('${a.id}')">
@@ -4790,13 +4790,21 @@
       </div>`;
   }
 
-  // Escribe en traineeState y vuelve a pintar la ficha para aplicar el
-  // filtro — se hace en cada tecla (oninput).
-  async function buscarArchivoTrainee(valor) {
+  // Filtra los archivos directamente en el DOM para nunca perder el foco del input
+  function buscarArchivoTrainee(valor) {
     traineeState.busquedaArchivo = valor;
-    await renderTraineeFicha();
-    const input = document.getElementById('traineeArchivoBusqueda');
-    if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+    const q = (valor || '').toLowerCase().trim();
+    const grid = document.getElementById('traineeGridArchivos');
+    if (!grid) {
+      renderTraineeFicha();
+      return;
+    }
+    const cards = grid.querySelectorAll('.trainee-archivo-card');
+    cards.forEach(c => {
+      const nombre = c.getAttribute('data-nombre') || '';
+      const match = !q || nombre.includes(q);
+      c.classList.toggle('hidden', !match);
+    });
   }
 
   function setFiltroTipoArchivoTrainee(tipo) {
@@ -9451,34 +9459,6 @@ Fundación A+`;
 
     const { notificaciones, metricas, cohortes, modulos } = await obtenerNotificacionesAdmin();
 
-    // Filtros del feed en la columna derecha
-    let listaFiltrada = notificaciones;
-    if (comHistFiltroTipo !== 'Todas') {
-      if (comHistFiltroTipo === 'Publica') {
-        listaFiltrada = listaFiltrada.filter(n => n.tipoEnvio === 'Pública');
-      } else if (comHistFiltroTipo === 'Privada') {
-        listaFiltrada = listaFiltrada.filter(n => n.tipoEnvio === 'Privada');
-      } else if (comHistFiltroTipo === 'Alertas') {
-        listaFiltrada = listaFiltrada.filter(n => !n.esComunicado);
-      }
-    }
-    if (comHistFiltroCohorte) {
-      const qC = comHistFiltroCohorte.toLowerCase();
-      listaFiltrada = listaFiltrada.filter(n => {
-        if (n.cohorte && n.cohorte.toLowerCase().includes(qC)) return true;
-        if (Array.isArray(n.destinatarios) && n.destinatarios.some(d => String(d).toLowerCase().includes(qC))) return true;
-        return false;
-      });
-    }
-    if (comHistFiltroTexto) {
-      const qT = comHistFiltroTexto.toLowerCase().trim();
-      listaFiltrada = listaFiltrada.filter(n => 
-        (n.titulo || '').toLowerCase().includes(qT) ||
-        (n.mensaje || '').toLowerCase().includes(qT) ||
-        (n.categoria || '').toLowerCase().includes(qT)
-      );
-    }
-
     // Opciones para destinatarios
     const cohortesOptions = (modulos && modulos.length) 
       ? modulos.map(m => m.nombre) 
@@ -9488,8 +9468,8 @@ Fundación A+`;
       ? comunicadoDestinatarios.join(', ')
       : (comunicadoTipoEnvio === 'Publica' ? 'Toda la comunidad (Pública)' : 'Seleccionar destinatarios...');
 
-    // Render de cada tarjeta en el feed
-    const tarjetasFeedHtml = listaFiltrada.map(n => {
+    // Render de cada tarjeta en el feed (con metadatos para filtrado reactivo en DOM sin perder foco)
+    const tarjetasFeedHtml = notificaciones.map(n => {
       const esPriv = n.tipoEnvio === 'Privada';
       const fechaFmt = n.fecha ? (typeof fmtDate === 'function' ? fmtDate(n.fecha) : n.fecha.slice(0, 10)) : 'Hoy';
       const iconoHtml = ICONOS_COMUNICADO[n.icono] || ICONOS_COMUNICADO['megaphone'];
@@ -9507,7 +9487,13 @@ Fundación A+`;
         : (n.tipoEnvio === 'Pública' ? 'Pública' : 'Comunidad');
 
       return `
-        <div class="p-4 rounded-2xl bg-white border border-gray-100 hover:border-morado/30 hover:shadow-md transition-all duration-200 ${n.atendida ? 'opacity-60 bg-gray-50/60' : ''}" id="feedCard_${n.id}">
+        <div class="card-comunicado-historial p-4 rounded-2xl bg-white border border-gray-100 hover:border-morado/30 hover:shadow-md transition-all duration-200 ${n.atendida ? 'opacity-60 bg-gray-50/60' : ''}" 
+             id="feedCard_${n.id}"
+             data-tipo="${n.tipoEnvio || (esPriv ? 'Privada' : 'Pública')}"
+             data-es-comunicado="${n.esComunicado ? 'true' : 'false'}"
+             data-prioridad="${n.prioridad || ''}"
+             data-destinatarios="${escapeHtml((Array.isArray(n.destinatarios) ? n.destinatarios.join(' ') : (n.cohorte || ''))).toLowerCase()}"
+             data-search="${escapeHtml(((n.titulo || '') + ' ' + (n.mensaje || '') + ' ' + (n.categoria || '') + ' ' + (n.tipoEnvio || '')).toLowerCase())}">
           <div class="flex items-start gap-3.5">
             <div class="w-10 h-10 rounded-2xl ${esPriv ? 'bg-morado/10 text-morado' : 'bg-turquesa/10 text-turquesa'} flex items-center justify-center shrink-0 border border-gray-100 shadow-xs mt-0.5">
               ${iconoHtml}
@@ -9754,18 +9740,18 @@ Fundación A+`;
               </h3>
 
               <div class="flex items-center gap-2 flex-wrap">
-                <button type="button" onclick="filtrarHistorialComunicados('Todas')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${comHistFiltroTipo === 'Todas' ? 'bg-morado text-white' : 'bg-gray-100 text-slate2 hover:text-ink'}">
+                <button type="button" data-tipo="Todas" onclick="filtrarHistorialComunicados('Todas')" class="btn-historial-filtro-tipo px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${comHistFiltroTipo === 'Todas' ? 'bg-morado text-white' : 'bg-gray-100 text-slate2 hover:text-ink'}">
                   Todas
                 </button>
-                <button type="button" onclick="filtrarHistorialComunicados('Publica')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${comHistFiltroTipo === 'Publica' ? 'bg-turquesa text-white' : 'bg-gray-100 text-slate2 hover:text-ink'}">
+                <button type="button" data-tipo="Publica" onclick="filtrarHistorialComunicados('Publica')" class="btn-historial-filtro-tipo px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${comHistFiltroTipo === 'Publica' ? 'bg-turquesa text-white' : 'bg-gray-100 text-slate2 hover:text-ink'}">
                   Públicas
                 </button>
-                <button type="button" onclick="filtrarHistorialComunicados('Privada')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${comHistFiltroTipo === 'Privada' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-slate2 hover:text-ink'}">
+                <button type="button" data-tipo="Privada" onclick="filtrarHistorialComunicados('Privada')" class="btn-historial-filtro-tipo px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${comHistFiltroTipo === 'Privada' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-slate2 hover:text-ink'}">
                   Privadas
                 </button>
 
                 <!-- Selector de Cohortes -->
-                <select onchange="filtrarHistorialCohorte(this.value)" class="p-1 rounded-lg border border-gray-200 bg-white text-[11px] font-bold text-ink outline-none">
+                <select id="selectFiltroHistorialCohorte" onchange="filtrarHistorialCohorte(this.value)" class="p-1 rounded-lg border border-gray-200 bg-white text-[11px] font-bold text-ink outline-none">
                   <option value="">Cohortes ▾</option>
                   ${cohortesOptions.map(c => `<option value="${escapeHtml(c)}" ${comHistFiltroCohorte === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
                 </select>
@@ -9774,13 +9760,16 @@ Fundación A+`;
 
             <!-- Buscador en tiempo real dentro del historial -->
             <div class="relative">
-              <input type="text" value="${escapeHtml(comHistFiltroTexto)}" oninput="filtrarHistorialTexto(this.value)" placeholder="Buscar por título, contenido o etiqueta..." class="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-medium text-ink focus:border-morado outline-none" />
+              <input type="text" id="buscadorHistorialAdmin" value="${escapeHtml(comHistFiltroTexto)}" oninput="filtrarHistorialTexto(this.value)" placeholder="Buscar por título, contenido o etiqueta..." class="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-medium text-ink focus:border-morado outline-none" />
               <svg class="w-3.5 h-3.5 text-slate2 absolute left-2.5 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
 
             <!-- Feed de Tarjetas -->
-            <div class="space-y-3">
-              ${tarjetasFeedHtml || emptyFeedHtml}
+            <div class="space-y-3" id="feed-comunicados-admin">
+              ${tarjetasFeedHtml.join('')}
+              <div id="feed-comunicados-admin-empty" class="hidden p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
+                <p class="text-xs text-slate2 font-medium">No se encontraron notificaciones con este criterio.</p>
+              </div>
             </div>
 
           </div>
@@ -9789,6 +9778,7 @@ Fundación A+`;
       </div>
     `;
 
+    aplicarFiltrosHistorialAdmin();
     actualizarBadgesNotificacionesAdmin();
   }
 
@@ -9906,19 +9896,65 @@ Fundación A+`;
     }
   };
 
+  function aplicarFiltrosHistorialAdmin() {
+    const container = document.getElementById('feed-comunicados-admin');
+    if (!container) return;
+    const cards = container.querySelectorAll('.card-comunicado-historial');
+    const qT = (comHistFiltroTexto || '').toLowerCase().trim();
+    const qC = (comHistFiltroCohorte || '').toLowerCase().trim();
+    let visibles = 0;
+
+    cards.forEach(card => {
+      const search = card.getAttribute('data-search') || '';
+      const tipo = card.getAttribute('data-tipo') || '';
+      const esCom = card.getAttribute('data-es-comunicado') === 'true';
+      const prioridad = card.getAttribute('data-prioridad') || '';
+      const dest = card.getAttribute('data-destinatarios') || '';
+
+      let matchTipo = true;
+      if (comHistFiltroTipo === 'Publica') matchTipo = (tipo === 'Pública' || tipo === 'Publica');
+      else if (comHistFiltroTipo === 'Privada') matchTipo = (tipo === 'Privada');
+      else if (comHistFiltroTipo === 'Alertas') matchTipo = !esCom;
+      else if (comHistFiltroTipo === 'Alta') matchTipo = (prioridad === 'Alta');
+
+      let matchCohorte = true;
+      if (qC) matchCohorte = dest.includes(qC);
+
+      let matchTexto = true;
+      if (qT) matchTexto = search.includes(qT);
+
+      const visible = matchTipo && matchCohorte && matchTexto;
+      card.classList.toggle('hidden', !visible);
+      if (visible) visibles++;
+    });
+
+    const emptyMsg = document.getElementById('feed-comunicados-admin-empty');
+    if (emptyMsg) emptyMsg.classList.toggle('hidden', visibles > 0);
+  }
+  window.aplicarFiltrosHistorialAdmin = aplicarFiltrosHistorialAdmin;
+
   window.filtrarHistorialComunicados = function(tipo) {
     comHistFiltroTipo = tipo;
-    renderNotificacionesAdmin();
+    document.querySelectorAll('.btn-historial-filtro-tipo').forEach(btn => {
+      const bTipo = btn.getAttribute('data-tipo');
+      if (bTipo === tipo) {
+        btn.className = 'btn-historial-filtro-tipo px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ' + 
+          (tipo === 'Todas' ? 'bg-morado text-white' : (tipo === 'Publica' ? 'bg-turquesa text-white' : (tipo === 'Privada' ? 'bg-indigo-600 text-white' : 'bg-amber-500 text-white')));
+      } else {
+        btn.className = 'btn-historial-filtro-tipo px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer bg-gray-100 text-slate2 hover:text-ink';
+      }
+    });
+    aplicarFiltrosHistorialAdmin();
   };
 
   window.filtrarHistorialCohorte = function(c) {
     comHistFiltroCohorte = c;
-    renderNotificacionesAdmin();
+    aplicarFiltrosHistorialAdmin();
   };
 
   window.filtrarHistorialTexto = function(t) {
     comHistFiltroTexto = t;
-    renderNotificacionesAdmin();
+    aplicarFiltrosHistorialAdmin();
   };
 
   // ----------------------------------------------------------------------------
@@ -10266,7 +10302,7 @@ Fundación A+`;
     const comunicados = await Store.list('comunicados');
 
     // Columna 1: Notificaciones de su Cohorte
-    let notifsCorte = (comunicados || []).filter(c => {
+    const notifsCorte = (comunicados || []).filter(c => {
       const dest = Array.isArray(c.destinatarios) ? c.destinatarios : [c.destinatarios || ''];
       const tocaMiCohorte = dest.some(d => String(d).toLowerCase().includes(miCohorte.toLowerCase()) || d === 'Todos los Estudiantes');
       const esPriv = String(c.tipo || '').toLowerCase().includes('privad');
@@ -10274,22 +10310,13 @@ Fundación A+`;
     });
 
     // Columna 2: Mensajes Públicos y Fundación A+
-    let notifsPublicas = (comunicados || []).filter(c => {
+    const notifsPublicas = (comunicados || []).filter(c => {
       const esPub = String(c.tipo || '').toLowerCase().includes('publi');
       return esPub;
     });
 
-    if (notifEstudianteQueryCorte) {
-      const q = notifEstudianteQueryCorte.toLowerCase();
-      notifsCorte = notifsCorte.filter(n => (n.titulo || '').toLowerCase().includes(q) || (n.mensaje || '').toLowerCase().includes(q));
-    }
-    if (notifEstudianteQueryPublicas) {
-      const q = notifEstudianteQueryPublicas.toLowerCase();
-      notifsPublicas = notifsPublicas.filter(n => (n.titulo || '').toLowerCase().includes(q) || (n.mensaje || '').toLowerCase().includes(q));
-    }
-
-    const renderCardEstudiante = n => `
-      <div class="p-5 rounded-2xl bg-white border border-gray-100 hover:border-morado/30 hover:shadow-md transition-all duration-200">
+    const renderCardEstudiante = (n, tipo) => `
+      <div class="card-notif-estudiante card-notif-est-${tipo} p-5 rounded-2xl bg-white border border-gray-100 hover:border-morado/30 hover:shadow-md transition-all duration-200" data-search="${escapeHtml(((n.titulo || '') + ' ' + (n.mensaje || '') + ' ' + (n.categoria || '')).toLowerCase())}">
         <div class="flex items-start gap-3.5">
           <div class="w-10 h-10 rounded-2xl bg-morado/10 text-morado flex items-center justify-center shrink-0 border border-gray-100">
             ${ICONOS_COMUNICADO[n.categoria === 'Eventos' ? 'calendar' : (n.categoria === 'Académico' ? 'academic' : 'megaphone')]}
@@ -10337,13 +10364,14 @@ Fundación A+`;
               Notificaciones de ${escapeHtml(miCohorte)} <span class="text-morado">(${notifsCorte.length} nuevas)</span>
             </h3>
             <div class="relative w-36 sm:w-44">
-              <input type="text" placeholder="Buscar..." oninput="notifEstudianteQueryCorte = this.value; renderNotificacionesEstudiante();" class="w-full pl-7 pr-2.5 py-1.5 rounded-xl border border-gray-200 text-xs text-ink outline-none focus:border-morado" />
+              <input type="text" id="buscadorNotifEstudianteCorte" value="${escapeHtml(notifEstudianteQueryCorte)}" placeholder="Buscar..." oninput="filtrarNotifsEstudianteCorteLive(this.value)" class="w-full pl-7 pr-2.5 py-1.5 rounded-xl border border-gray-200 text-xs text-ink outline-none focus:border-morado" />
               <svg class="w-3.5 h-3.5 text-slate2 absolute left-2 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
           </div>
 
-          <div class="space-y-3.5">
-            ${notifsCorte.map(renderCardEstudiante).join('') || '<p class="text-xs text-slate2 text-center py-6">No hay avisos recientes para tu cohorte.</p>'}
+          <div class="space-y-3.5" id="feed-notifs-estudiante-corte">
+            ${notifsCorte.map(n => renderCardEstudiante(n, 'corte')).join('') || '<p class="text-xs text-slate2 text-center py-6">No hay avisos recientes para tu cohorte.</p>'}
+            <div id="empty-notifs-estudiante-corte" class="hidden p-6 text-center text-xs text-slate2 bg-gray-50 rounded-2xl">No se encontraron avisos para tu búsqueda.</div>
           </div>
         </div>
 
@@ -10354,18 +10382,22 @@ Fundación A+`;
               Mensajes Públicos y Fundación A+ <span class="text-turquesa">(${notifsPublicas.length} nuevas)</span>
             </h3>
             <div class="relative w-36 sm:w-44">
-              <input type="text" placeholder="Buscar..." oninput="notifEstudianteQueryPublicas = this.value; renderNotificacionesEstudiante();" class="w-full pl-7 pr-2.5 py-1.5 rounded-xl border border-gray-200 text-xs text-ink outline-none focus:border-turquesa" />
+              <input type="text" id="buscadorNotifEstudiantePublicas" value="${escapeHtml(notifEstudianteQueryPublicas)}" placeholder="Buscar..." oninput="filtrarNotifsEstudiantePublicasLive(this.value)" class="w-full pl-7 pr-2.5 py-1.5 rounded-xl border border-gray-200 text-xs text-ink outline-none focus:border-turquesa" />
               <svg class="w-3.5 h-3.5 text-slate2 absolute left-2 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
           </div>
 
-          <div class="space-y-3.5">
-            ${notifsPublicas.map(renderCardEstudiante).join('') || '<p class="text-xs text-slate2 text-center py-6">No hay anuncios públicos en este momento.</p>'}
+          <div class="space-y-3.5" id="feed-notifs-estudiante-publicas">
+            ${notifsPublicas.map(n => renderCardEstudiante(n, 'publicas')).join('') || '<p class="text-xs text-slate2 text-center py-6">No hay anuncios públicos en este momento.</p>'}
+            <div id="empty-notifs-estudiante-publicas" class="hidden p-6 text-center text-xs text-slate2 bg-gray-50 rounded-2xl">No se encontraron anuncios para tu búsqueda.</div>
           </div>
         </div>
 
       </div>
     `;
+
+    if (notifEstudianteQueryCorte) filtrarNotifsEstudianteCorteLive(notifEstudianteQueryCorte);
+    if (notifEstudianteQueryPublicas) filtrarNotifsEstudiantePublicasLive(notifEstudianteQueryPublicas);
 
     // Actualizar badges
     const totalEst = notifsCorte.length + notifsPublicas.length;
@@ -10379,6 +10411,40 @@ Fundación A+`;
       bHead.classList.toggle('hidden', totalEst === 0);
     }
   }
+
+  window.filtrarNotifsEstudianteCorteLive = function(texto) {
+    notifEstudianteQueryCorte = texto;
+    const q = (texto || '').toLowerCase().trim();
+    const container = document.getElementById('feed-notifs-estudiante-corte');
+    if (!container) return;
+    const cards = container.querySelectorAll('.card-notif-est-corte');
+    let visibles = 0;
+    cards.forEach(card => {
+      const s = card.getAttribute('data-search') || '';
+      const match = !q || s.includes(q);
+      card.classList.toggle('hidden', !match);
+      if (match) visibles++;
+    });
+    const empty = document.getElementById('empty-notifs-estudiante-corte');
+    if (empty) empty.classList.toggle('hidden', visibles > 0);
+  };
+
+  window.filtrarNotifsEstudiantePublicasLive = function(texto) {
+    notifEstudianteQueryPublicas = texto;
+    const q = (texto || '').toLowerCase().trim();
+    const container = document.getElementById('feed-notifs-estudiante-publicas');
+    if (!container) return;
+    const cards = container.querySelectorAll('.card-notif-est-publicas');
+    let visibles = 0;
+    cards.forEach(card => {
+      const s = card.getAttribute('data-search') || '';
+      const match = !q || s.includes(q);
+      card.classList.toggle('hidden', !match);
+      if (match) visibles++;
+    });
+    const empty = document.getElementById('empty-notifs-estudiante-publicas');
+    if (empty) empty.classList.toggle('hidden', visibles > 0);
+  };
 
   // ----------------------------------------------------------------------------
   // Utilidades Compartidas y Marcado de Estado
