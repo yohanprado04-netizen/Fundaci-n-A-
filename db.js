@@ -165,6 +165,7 @@ const ENTIDADES_MYSQL = new Set([
   'memorandos_leidos',       // objeto anidado { memorandoId: { email: true } }
   'chat_voz_conocimiento',   // base de conocimiento en MySQL
   'trainee_archivos',        // historial de archivos del estudiante en MySQL
+  'comunicados',             // comunicados institucionales y notificaciones
 ]);
 
 // Entidades que son objetos únicos (no arrays).

@@ -1100,8 +1100,16 @@
           </div>
         </div>
       </div>
-      <!-- Perfil de usuario en esquina superior derecha con avatar y dropdown -->
-      <div class="relative header-user-menu" id="headerUserMenu-docente">
+      <!-- Notificaciones y Perfil de usuario en esquina superior derecha -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <button type="button" onclick="showPanelDocente('notificaciones')" class="relative p-2 rounded-xl text-slate2 hover:text-morado hover:bg-morado/10 transition cursor-pointer" title="Centro de Notificaciones" aria-label="Notificaciones">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+          <span id="notifBadgeHeader-docente" class="hidden absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-morado rounded-full ring-2 ring-white"></span>
+        </button>
+
+        <div class="relative header-user-menu" id="headerUserMenu-docente">
         <button type="button" onclick="toggleHeaderProfileMenu('docente')" class="flex items-center gap-2.5 p-1 pr-3 rounded-full hover:bg-gray-100 transition cursor-pointer border border-transparent hover:border-gray-200" id="headerAvatarBtn-docente" aria-label="Menú de perfil" aria-expanded="false">
           <div class="header-avatar-circle role-docente" id="headerAvatarImg-docente" style="background: linear-gradient(135deg, #1FC8C0 0%, #8B5CF6 100%) !important; color: #FFFFFF !important; width: 38px; height: 38px; min-width: 38px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center;">
             <span style="color: #FFFFFF !important; font-weight: 800; font-size: 13px;">DOC</span>
@@ -1141,6 +1149,7 @@
           </div>
         </div>
       </div>
+      </div>
     </div>
   </header>
 
@@ -1158,6 +1167,13 @@
           <button onclick="showPanelDocente('resumen')" data-tpanel="resumen" data-panel-code="docente.resumen" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
             Mi resumen
+          </button>
+          <button onclick="showPanelDocente('notificaciones')" data-tpanel="notificaciones" data-panel-code="docente.notificaciones" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center justify-between group">
+            <div class="flex items-center gap-2.5">
+              <svg class="w-4 h-4 shrink-0 transition-colors group-hover:text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+              <span>Notificaciones</span>
+            </div>
+            <span id="notifBadgeDocente" class="hidden text-[10px] font-extrabold bg-morado text-white rounded-full px-2 py-0.5 shadow-xs">0</span>
           </button>
         </nav>
       </div>
@@ -1243,6 +1259,7 @@
         </div>
         <div id="mount-t-resumen"></div>
       </div>
+      <div id="panel-t-notificaciones" class="panel-content-t hidden"><div id="mount-t-notificaciones"></div></div>
       <div id="panel-t-perfil" class="panel-content-t hidden"><div id="mount-t-perfil"></div></div>
       <div id="panel-t-asistencia" class="panel-content-t hidden"><div id="mount-t-asistencia"></div></div>
       <div id="panel-t-riesgo" class="panel-content-t hidden"><div id="mount-t-riesgo"></div></div>
@@ -1278,8 +1295,16 @@
           </div>
         </div>
       </div>
-      <!-- Perfil de usuario en esquina superior derecha con avatar y dropdown -->
-      <div class="relative header-user-menu" id="headerUserMenu-estudiante">
+      <!-- Notificaciones y Perfil de usuario en esquina superior derecha -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <button type="button" onclick="showPanelEstudiante('notificaciones')" class="relative p-2 rounded-xl text-slate2 hover:text-morado hover:bg-morado/10 transition cursor-pointer" title="Centro de Notificaciones" aria-label="Notificaciones">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+          <span id="notifBadgeHeader-estudiante" class="hidden absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-morado rounded-full ring-2 ring-white"></span>
+        </button>
+
+        <div class="relative header-user-menu" id="headerUserMenu-estudiante">
         <button type="button" onclick="toggleHeaderProfileMenu('estudiante')" class="flex items-center gap-2.5 p-1 pr-3 rounded-full hover:bg-gray-100 transition cursor-pointer border border-transparent hover:border-gray-200" id="headerAvatarBtn-estudiante" aria-label="Menú de perfil" aria-expanded="false">
           <div class="header-avatar-circle role-estudiante" id="headerAvatarImg-estudiante" style="background: linear-gradient(135deg, #F5A623 0%, #EC4899 100%) !important; color: #FFFFFF !important; width: 38px; height: 38px; min-width: 38px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center;">
             <span style="color: #FFFFFF !important; font-weight: 800; font-size: 13px;">EST</span>
@@ -1319,6 +1344,7 @@
           </div>
         </div>
       </div>
+      </div>
     </div>
   </header>
 
@@ -1336,6 +1362,13 @@
           <button onclick="showPanelEstudiante('resumen')" data-spanel="resumen" data-panel-code="estudiante.resumen" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
             Mi resumen
+          </button>
+          <button onclick="showPanelEstudiante('notificaciones')" data-spanel="notificaciones" data-panel-code="estudiante.notificaciones" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center justify-between group">
+            <div class="flex items-center gap-2.5">
+              <svg class="w-4 h-4 shrink-0 transition-colors group-hover:text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+              <span>Notificaciones</span>
+            </div>
+            <span id="notifBadgeEstudiante" class="hidden text-[10px] font-extrabold bg-morado text-white rounded-full px-2 py-0.5 shadow-xs">0</span>
           </button>
         </nav>
       </div>
@@ -1421,6 +1454,7 @@
 
         <div id="mount-s-resumen"></div>
       </div>
+      <div id="panel-s-notificaciones" class="panel-content-s hidden"><div id="mount-s-notificaciones"></div></div>
       <div id="panel-s-perfil" class="panel-content-s hidden"><div id="mount-s-perfil"></div></div>
       <div id="panel-s-asistencia" class="panel-content-s hidden"><div id="mount-s-asistencia"></div></div>
       <div id="panel-s-academico" class="panel-content-s hidden"><div id="mount-s-academico"></div></div>
@@ -1630,6 +1664,39 @@
   </div>
 </div>
 
+<!-- ============ MODAL: DETALLE DE COMUNICADO (SUPERADMIN, DOCENTE, ESTUDIANTE) ============ -->
+<div id="modalDetalleComunicado" class="hidden fixed inset-0 z-[130] flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-ink/50 backdrop-blur-sm transition-opacity" onclick="cerrarModalDetalleComunicado()"></div>
+  <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-lg p-6 sm:p-8 z-10 animate-fade-in border border-gray-100 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between pb-3.5 border-b border-gray-100 mb-4">
+      <div class="flex items-center gap-2 flex-wrap" id="modalComBadges">
+        <!-- Badges dinámicos: tipo, categoría, prioridad -->
+      </div>
+      <button type="button" onclick="cerrarModalDetalleComunicado()" class="text-slate2 hover:text-ink p-1 rounded-full hover:bg-gray-100 transition cursor-pointer">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="space-y-3">
+      <h3 id="modalComTitulo" class="text-lg font-extrabold text-ink leading-snug"></h3>
+      <div class="flex items-center gap-2 text-xs text-slate2">
+        <span id="modalComAutor" class="font-bold text-ink"></span>
+        <span>•</span>
+        <span id="modalComFecha"></span>
+      </div>
+      <div class="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 text-xs text-slate2" id="modalComDestinatariosBox">
+        <span class="font-bold text-ink">Destinatarios: </span>
+        <span id="modalComDestinatarios"></span>
+      </div>
+      <div class="pt-2 text-sm text-ink leading-relaxed whitespace-pre-line" id="modalComMensaje"></div>
+    </div>
+    <div class="mt-6 pt-4 border-t border-gray-100 flex items-center justify-end">
+      <button type="button" onclick="cerrarModalDetalleComunicado()" class="px-5 py-2.5 rounded-xl bg-gray-100 text-ink text-xs font-bold hover:bg-gray-200 transition cursor-pointer">
+        Cerrar
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ MODAL: AJUSTE DE HORAS Y CONTROL DE PERMANENCIA (DOCENTE) ============ -->
 <div id="modalAjusteHorasDocente" class="hidden fixed inset-0 z-[125] flex items-center justify-center p-4">
   <div class="absolute inset-0 bg-ink/50 backdrop-blur-sm transition-opacity" onclick="cerrarModalAjusteHorasDocente()"></div>
@@ -1761,8 +1828,8 @@
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-<script defer src="db.js?v=20260926-v1"></script>
-<script defer src="app.js?v=20261002-forms24"></script>
+<script defer src="db.js?v=20261002-comms1"></script>
+<script defer src="app.js?v=20261002-comms1"></script>
 <script defer src="forms.js?v=20261002-forms24"></script>
 
 <!-- Registro de Service Worker para carga instantánea y caché inteligente -->
