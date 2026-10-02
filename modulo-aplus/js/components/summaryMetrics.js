@@ -20,10 +20,10 @@ export function createSummaryMetrics(container) {
 
   function render(summary) {
     const items = [
-      { label: 'Total oportunidades', value: summary.total, modifier: '', icon: icons.inbox },
-      { label: 'Oportunidades A+ activas', value: summary.aplusActive, modifier: ' aplus-metric--aplus', icon: icons.star },
-      { label: 'ROI promedio A+', value: formatPercent(summary.avgRoiAPlus), modifier: '', icon: icons.trend },
-      { label: 'Capital en oportunidades A+', value: formatCurrency(summary.aplusCapital), modifier: '', icon: icons.trend },
+      { label: 'Proyectos en portafolio', value: summary.total, modifier: '', icon: icons.inbox },
+      { label: 'Iniciativas A+ activas', value: summary.aplusActive, modifier: ' aplus-metric--aplus', icon: icons.award },
+      { label: 'Multiplicador social (SROI)', value: formatPercent(summary.avgRoiAPlus), modifier: '', icon: icons.trend },
+      { label: 'Fondos asignados A+', value: formatCurrency(summary.aplusCapital), modifier: '', icon: icons.trend },
     ];
 
     container.setAttribute('aria-busy', 'false');

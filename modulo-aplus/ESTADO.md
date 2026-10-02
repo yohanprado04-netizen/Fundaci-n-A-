@@ -1,4 +1,4 @@
-# Estado del módulo "Proyectos y Oportunidades A+"
+# Estado del módulo "Proyectos e Iniciativas A+" — Fundación A+
 
 Especificación completa: [propmt.md](propmt.md). Guía de uso e integración: [README.md](README.md).
 Este archivo resume el estado, las decisiones y lo pendiente.

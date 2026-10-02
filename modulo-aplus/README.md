@@ -1,10 +1,6 @@
-# Módulo "Proyectos y Oportunidades A+"
+# Módulo "Proyectos e Iniciativas A+" — Fundación A+
 
-Módulo web independiente para listar proyectos y oportunidades de negocio, con trato
-destacado para las **oportunidades A+** (alto impacto financiero / ROI y prioridad
-estratégica inmediata). Está hecho con HTML5, CSS moderno (variables CSS) y JavaScript
-vanilla en módulos ES nativos: **cero dependencias**, sin frameworks, sin CDN y sin
-fuentes externas (usa la tipografía del sistema).
+Módulo web independiente para listar proyectos e iniciativas de impacto social y comunitario de la **Fundación A+**, con trato destacado para las **iniciativas A+** (alto impacto territorial, efecto multiplicador 10 a 1 y prioridad estratégica). Está hecho con HTML5, CSS moderno (variables CSS) y JavaScript vanilla en módulos ES nativos: **cero dependencias**, sin frameworks, sin CDN y sin fuentes externas (usa la tipografía del sistema).
 
 ## Estructura
 
@@ -59,8 +55,8 @@ Después abre `http://localhost:8080/` (o la URL que indique `serve`).
    <div id="aplus-module-root">
      <section class="aplus-module" aria-labelledby="aplus-title">
        <header class="aplus-header">
-         <p class="aplus-header__eyebrow">Portafolio estratégico</p>
-         <h1 class="aplus-header__title" id="aplus-title">Proyectos y Oportunidades A+</h1>
+         <p class="aplus-header__eyebrow">Fundación A+ · Portafolio Social &amp; Territorial</p>
+         <h1 class="aplus-header__title" id="aplus-title">Proyectos e Iniciativas A+</h1>
          <p class="aplus-header__subtitle">Texto explicativo…</p>
          <ul class="aplus-metrics" aria-label="Resumen del portafolio" data-aplus-metrics></ul>
        </header>
@@ -179,7 +175,7 @@ genéricos de la web anfitriona sin pisar las clases del módulo.
 ## Accesibilidad y comportamiento
 
 - Búsqueda en tiempo real con debounce de 300 ms (Enter la aplica al instante).
-- El switch "⭐ Solo Oportunidades A+" es un `role="switch"` con `aria-checked`.
+- El switch "Solo Iniciativas A+" es un `role="switch"` con `aria-checked`.
 - Contador de resultados con `aria-live="polite"`; listados con `aria-busy` durante la carga.
 - Modal con `role="dialog"`, `aria-modal`, trampa de foco con Tab, cierre con ESC, clic en el
   fondo o botón Cerrar, y devolución del foco al botón que lo abrió.

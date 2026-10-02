@@ -11,13 +11,13 @@ import { icons } from '../utils/icons.js';
 
 /* ---------------------------------------------------- Fragmentos compartidos */
 
-/** Badge distintivo "A+ High Impact". */
+/** Badge distintivo "A+ Alto Impacto" sin estrellas. */
 export function aplusBadgeHtml() {
-  return `<span class="aplus-badge aplus-badge--aplus">${icons.star}<span>A+ High Impact</span></span>`;
+  return `<span class="aplus-badge aplus-badge--aplus"><span>A+ Alto Impacto</span></span>`;
 }
 
 export function categoryBadgeHtml(category) {
-  return `<span class="aplus-badge aplus-badge--category">${escapeHtml(category)}</span>`;
+  return `<span class="aplus-badge aplus-badge--category aplus-badge--${slugify(category)}">${escapeHtml(category)}</span>`;
 }
 
 export function statusPillHtml(status) {
@@ -27,8 +27,8 @@ export function statusPillHtml(status) {
 /** Medidor del índice de impacto (el ancho se aplica con applyMeters). */
 export function impactMeterHtml(score) {
   return `
-    <div class="aplus-meter" role="img" aria-label="Índice de impacto: ${score} de 100">
-      <div class="aplus-meter__label"><span>Impacto</span><strong>${score}</strong></div>
+    <div class="aplus-meter" role="img" aria-label="Índice de impacto social: ${score} de 100">
+      <div class="aplus-meter__label"><span>Impacto Social</span><strong>${score}</strong></div>
       <div class="aplus-meter__track"><span class="aplus-meter__fill" data-aplus-meter="${score}"></span></div>
     </div>`;
 }
@@ -60,15 +60,15 @@ export function createProjectCard(project) {
     <div class="aplus-card__indicators">
       <dl class="aplus-kpis">
         <div class="aplus-kpis__item aplus-kpis__item--roi">
-          <dt>ROI</dt>
+          <dt>SROI</dt>
           <dd>${formatPercent(project.roi)}</dd>
         </div>
         <div class="aplus-kpis__item">
-          <dt>Inversión</dt>
+          <dt>Fondos</dt>
           <dd>${formatCurrency(project.investment)}</dd>
         </div>
         <div class="aplus-kpis__item">
-          <dt>Payback</dt>
+          <dt>Horizonte</dt>
           <dd>${project.paybackMonths} meses</dd>
         </div>
       </dl>

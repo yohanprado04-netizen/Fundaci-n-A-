@@ -39,12 +39,12 @@ export function createFilterBar(container, { categories, statuses, sortOptions, 
           <span class="aplus-search__icon">${icons.search}</span>
           <label class="aplus-sr-only" for="aplus-search-input">Buscar por nombre, código o resumen</label>
           <input id="aplus-search-input" class="aplus-search__input" type="search" autocomplete="off"
-                 placeholder="Buscar por nombre, código o resumen ejecutivo…" />
+                 placeholder="Buscar por nombre, código o resumen de la iniciativa…" />
         </div>
 
         <button type="button" class="aplus-switch" role="switch" aria-checked="false" data-aplus-aplus-toggle>
           <span class="aplus-switch__track" aria-hidden="true"><span class="aplus-switch__thumb"></span></span>
-          <span class="aplus-switch__label">⭐ Solo Oportunidades A+</span>
+          <span class="aplus-switch__label">Solo Iniciativas A+</span>
         </button>
       </div>
 

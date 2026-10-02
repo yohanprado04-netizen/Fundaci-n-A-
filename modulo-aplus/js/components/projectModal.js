@@ -62,15 +62,15 @@ export function createProjectModal(host) {
       </header>
 
       <section class="aplus-detail__section" aria-labelledby="aplus-detail-roi">
-        <h3 class="aplus-detail__heading" id="aplus-detail-roi">Retorno e impacto</h3>
+        <h3 class="aplus-detail__heading" id="aplus-detail-roi">Impacto social y sostenibilidad</h3>
         <dl class="aplus-detail__kpis">
           <div class="aplus-detail__kpi aplus-detail__kpi--roi">
-            <dt>ROI proyectado (${Math.round(project.roiHorizonMonths / 12)} años)</dt>
+            <dt>Retorno Social (SROI a ${Math.round(project.roiHorizonMonths / 12)} años)</dt>
             <dd>${formatPercent(project.roi)}</dd>
           </div>
-          <div class="aplus-detail__kpi"><dt>Inversión inicial</dt><dd>${formatCurrency(project.investment)}</dd></div>
-          <div class="aplus-detail__kpi"><dt>Retorno neto esperado</dt><dd>${formatCurrency(project.projectedReturn)}</dd></div>
-          <div class="aplus-detail__kpi"><dt>Recuperación (payback)</dt><dd>${project.paybackMonths} meses</dd></div>
+          <div class="aplus-detail__kpi"><dt>Fondos requeridos</dt><dd>${formatCurrency(project.investment)}</dd></div>
+          <div class="aplus-detail__kpi"><dt>Valor social generado</dt><dd>${formatCurrency(project.projectedReturn)}</dd></div>
+          <div class="aplus-detail__kpi"><dt>Maduración de impacto</dt><dd>${project.paybackMonths} meses</dd></div>
         </dl>
         <div class="aplus-detail__impact">${impactMeterHtml(project.impactScore)}</div>
         <ul class="aplus-detail__breakdown">
@@ -89,7 +89,7 @@ export function createProjectModal(host) {
       </section>
 
       <section class="aplus-detail__section" aria-labelledby="aplus-detail-specs">
-        <h3 class="aplus-detail__heading" id="aplus-detail-specs">Ficha técnica</h3>
+        <h3 class="aplus-detail__heading" id="aplus-detail-specs">Ficha técnica y alcance</h3>
         <dl class="aplus-detail__specs">
           ${specs.map((s) => `<div><dt>${escapeHtml(s.label)}</dt><dd>${escapeHtml(s.value)}</dd></div>`).join('')}
         </dl>
@@ -99,14 +99,14 @@ export function createProjectModal(host) {
     const subject = encodeURIComponent(`Consulta sobre ${project.id} – ${project.name}`);
     footerEl.innerHTML = `
       <div class="aplus-detail__owner">
-        <span class="aplus-detail__owner-label">Responsable</span>
+        <span class="aplus-detail__owner-label">Coordinación del proyecto</span>
         <strong>${escapeHtml(project.owner.name)}</strong>
         <span>${escapeHtml(project.owner.role)}</span>
       </div>
       <div class="aplus-detail__actions">
         <button type="button" class="aplus-btn aplus-btn--ghost" data-aplus-close>Cerrar</button>
         <a class="aplus-btn aplus-btn--primary" href="mailto:${escapeHtml(project.owner.email)}?subject=${subject}">
-          ${icons.mail}<span>Contactar al responsable</span>
+          ${icons.mail}<span>Contactar coordinación</span>
         </a>
       </div>
     `;

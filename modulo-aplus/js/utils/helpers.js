@@ -36,16 +36,17 @@ export function debounce(fn, wait = 300) {
   return debounced;
 }
 
-const decimalFormatter = new Intl.NumberFormat('es-ES', { maximumFractionDigits: 1 });
-const dateFormatter = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+const copFormatter = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
+const decimalFormatter = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
+const dateFormatter = new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
 
-/** 1800000 -> "US$ 1,8 M" */
+/** 450000000 -> "$ 450 M COP" | 85000000 -> "$ 85 M COP" */
 export function formatCurrency(amount) {
   const value = Number(amount) || 0;
   const abs = Math.abs(value);
-  if (abs >= 1e6) return `US$ ${decimalFormatter.format(value / 1e6)} M`;
-  if (abs >= 1e3) return `US$ ${decimalFormatter.format(value / 1e3)} K`;
-  return `US$ ${decimalFormatter.format(value)}`;
+  if (abs >= 1e6) return `$ ${copFormatter.format(value / 1e6)} M COP`;
+  if (abs >= 1e3) return `$ ${copFormatter.format(value / 1e3)} mil COP`;
+  return `$ ${copFormatter.format(value)} COP`;
 }
 
 /** 214 -> "214 %" */

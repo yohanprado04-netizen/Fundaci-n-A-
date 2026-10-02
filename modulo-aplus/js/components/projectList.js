@@ -30,7 +30,7 @@ function buildPageList(current, total) {
  */
 export function createProjectList(container, { onOpenDetail, onPageChange, onClearFilters, onRetry }) {
   container.innerHTML = `
-    <section class="aplus-results" aria-label="Listado de proyectos y oportunidades">
+    <section class="aplus-results" aria-label="Listado de proyectos e iniciativas">
       <p class="aplus-results__count" role="status" aria-live="polite" data-aplus-count></p>
       <div class="aplus-results__body" data-aplus-body data-view="grid"></div>
       <nav class="aplus-pagination" aria-label="Paginación de resultados" data-aplus-pagination hidden></nav>
@@ -100,7 +100,7 @@ export function createProjectList(container, { onOpenDetail, onPageChange, onCle
   /** Skeleton Loader mientras llegan los datos. */
   function showLoading(count = 6) {
     bodyEl.setAttribute('aria-busy', 'true');
-    countEl.textContent = 'Cargando oportunidades…';
+    countEl.textContent = 'Cargando proyectos…';
     paginationEl.hidden = true;
     setBody(buildGrid(Array.from({ length: count }, createProjectCardSkeleton)));
   }
@@ -114,7 +114,7 @@ export function createProjectList(container, { onOpenDetail, onPageChange, onCle
       paginationEl.hidden = true;
       setBody(messageState({
         icon: icons.inbox,
-        title: 'No encontramos oportunidades',
+        title: 'No encontramos proyectos o iniciativas',
         text: 'Ningún proyecto coincide con tu búsqueda o filtros. Prueba con otros términos o limpia los filtros.',
         actionLabel: 'Limpiar filtros',
         actionAttr: 'data-aplus-empty-clear',
@@ -124,12 +124,12 @@ export function createProjectList(container, { onOpenDetail, onPageChange, onCle
 
     const from = (page - 1) * pageSize + 1;
     const to = from + items.length - 1;
-    countEl.textContent = `Mostrando ${from}–${to} de ${total} ${total === 1 ? 'oportunidad' : 'oportunidades'}`;
+    countEl.textContent = `Mostrando ${from}–${to} de ${total} ${total === 1 ? 'proyecto' : 'proyectos'}`;
     setBody(buildGrid(items.map(createProjectCard)));
     renderPagination({ page, totalPages });
   }
 
-  function showError(message = 'No pudimos cargar las oportunidades.') {
+  function showError(message = 'No pudimos cargar los proyectos.') {
     bodyEl.setAttribute('aria-busy', 'false');
     countEl.textContent = 'Error al cargar';
     paginationEl.hidden = true;
