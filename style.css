@@ -2121,20 +2121,19 @@ html.dark #studentView .fixed.inset-0 .bg-white {
   --u-head: #121620; --u-row: #1c2331; --u-row-hover: #222a3d;
 }
 
-/* Tonos de la fundación */
+/* Tonos oficiales de la fundación */
 .usr-tone-teal   { --tone: #1FC8C0; --tone-ink: #0f8f89; --tone-soft: rgba(31, 200, 192, .14); }
 .usr-tone-purple { --tone: #8B5CF6; --tone-ink: #5B21B6; --tone-soft: rgba(139, 92, 246, .12); }
 .usr-tone-gold   { --tone: #F5A623; --tone-ink: #8f5a05; --tone-soft: rgba(245, 166, 35, .18); }
-.usr-tone-coral  { --tone: #F0455C; --tone-ink: #c22b41; --tone-soft: rgba(240, 69, 92, .12); }
 .usr-tone-brown  { --tone: #9A5B3F; --tone-ink: #7a4630; --tone-soft: rgba(154, 91, 63, .13); }
 .usr-tone-ink    { --tone: #0a0a0a; --tone-ink: #0a0a0a; --tone-soft: rgba(115, 115, 115, .14); }
 :is(html.dark, #dashboardView.dark) .usr-panel [class*="usr-tone-"] { --tone-ink: var(--tone); }
 :is(html.dark, #dashboardView.dark) .usr-panel .usr-tone-ink { --tone: #E2E8F0; }
 
-/* Firma de marca: franja con los 4 colores del logo */
+/* Firma de marca: franja exclusiva con los 3 colores institucionales (morado, turquesa y oro) */
 .usr-brandbar {
-  height: 5px; margin: 0 -1.5rem 1.1rem;
-  background: linear-gradient(90deg, #8B5CF6 0 34%, #1FC8C0 34% 64%, #F5A623 64% 84%, #F0455C 84% 100%);
+  height: 4px; margin: 0 -1.5rem 1.1rem;
+  background: linear-gradient(90deg, #8B5CF6 0%, #1FC8C0 50%, #F5A623 100%);
 }
 
 /* Barra superior */
@@ -2250,12 +2249,13 @@ html.dark #studentView .fixed.inset-0 .bg-white {
 .usr-btn:active { transform: scale(.97); }
 .usr-btn--edit { background: rgba(139, 92, 246, .1); color: #5B21B6; }
 .usr-btn--edit:hover { background: #8B5CF6; color: #fff; }
-.usr-btn--del { background: rgba(240, 69, 92, .09); color: #c22b41; }
-.usr-btn--del:hover { background: #F0455C; color: #fff; }
+.usr-btn--del { background: rgba(115, 115, 115, .08); color: #525252; border: 1px solid rgba(115, 115, 115, .2); }
+.usr-btn--del:hover { background: #525252; color: #fff; }
 .usr-btn--ok { background: #1FC8C0; color: #04332f; }
 .usr-btn--ok:hover { background: #17b3ab; }
 :is(html.dark, #dashboardView.dark) .usr-btn--edit { color: #c4b0ff; }
-:is(html.dark, #dashboardView.dark) .usr-btn--del { color: #ff8a9b; }
+:is(html.dark, #dashboardView.dark) .usr-btn--del { background: rgba(148, 163, 184, .12); color: #cbd5e1; border-color: rgba(148, 163, 184, .25); }
+:is(html.dark, #dashboardView.dark) .usr-btn--del:hover { background: #64748b; color: #fff; }
 
 /* Aviso de solicitudes pendientes */
 .usr-alert {
