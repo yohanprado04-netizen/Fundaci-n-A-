@@ -106,6 +106,13 @@ fundacion-api/
 - El panel administrativo permite redactar temas en la base de conocimiento (`chat_voz_conocimiento`).
 - El asistente de IA responde de forma contextualizada reconociendo quién pregunta (Estudiante, Docente, Admin o Visitante) y personalizando las respuestas con datos reales de notas, asistencias u horarios.
 
+### F. Formularios (constructor tipo Google Forms)
+- Panel **Formularios** en el dashboard (lista, editor, vista previa, respuestas CSV y papelera).
+- Publicación estricta: una vez el formulario es público, restringido a autenticados, cerrado o ya tiene respuestas, **la estructura de preguntas queda congelada**. Las celdas de respuesta viven en `formulario_respuesta_valores` ligadas a `pregunta_id`; editar o recrear preguntas rompería columnas y dejaría valores huérfanos.
+- **Clonar** genera un borrador independiente (nuevos IDs, sin copiar envíos) para corregir un formulario publicado por error.
+- Placeholders por tipo de campo (texto, correo `nombre@correo.com`, número, fecha, opciones, archivo).
+- Notas de esta versión: [`docs/formularios-v1.md`](docs/formularios-v1.md).
+
 ---
 
 ## 4. Guía de Instalación y Puesta en Marcha (Entorno Local)

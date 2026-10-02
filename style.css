@@ -1171,3 +1171,39 @@ body {
 .animate-fadeIn {
   animation: fadeInScale 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+.forms-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+}
+.forms-toolbar button {
+  width: 1.85rem;
+  height: 1.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #14181f;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+.forms-toolbar button:hover {
+  border-color: #8B5CF6;
+  color: #6A1B9A;
+  background: rgba(139, 92, 246, 0.06);
+}
+.forms-rich {
+  outline: none;
+}
+.forms-rich:focus {
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.28);
+  border-color: #8B5CF6;
+}
+.forms-rich a {
+  color: #6A1B9A;
+  text-decoration: underline;
+}

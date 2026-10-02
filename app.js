@@ -1784,6 +1784,7 @@
     { codigo: 'admin.calificaciones', categoria: 'Administrativo', etiqueta: 'Calificaciones' },
     { codigo: 'admin.informesAdmin', categoria: 'Administrativo', etiqueta: 'Informes' },
     { codigo: 'admin.encuestas', categoria: 'Administrativo', etiqueta: 'Encuestas de satisfacción' },
+    { codigo: 'admin.forms', categoria: 'Administrativo', etiqueta: 'Forms' },
     { codigo: 'admin.trainee', categoria: 'Administrativo', etiqueta: 'Historial Trainee' },
     { codigo: 'admin.auditoria', categoria: 'Administrativo', etiqueta: 'Auditoría' },
     { codigo: 'admin.chatvoz', categoria: 'Administrativo', etiqueta: 'Chat conocimiento — Base de conocimiento' },
@@ -1849,6 +1850,14 @@
           cambiosPerfiles = true;
         }
       });
+    });
+
+    perfiles.forEach(p => {
+      if (!p.permisos) p.permisos = {};
+      if (!p.permisos['admin.forms'] && p.permisos['admin.encuestas']) {
+        p.permisos['admin.forms'] = { ...p.permisos['admin.encuestas'] };
+        cambiosPerfiles = true;
+      }
     });
 
     if (cambiosPerfiles) await Store.set('perfiles', perfiles);
@@ -8662,6 +8671,8 @@ Fundación A+`;
     calificaciones: renderCalificaciones,
     informesAdmin: renderInformesAdmin,
     encuestas: renderEncuestas,
+    formularios: typeof renderFormularios === 'function' ? renderFormularios : async () => {},
+    formulariosPapelera: typeof renderFormulariosPapelera === 'function' ? renderFormulariosPapelera : async () => {},
     auditoria: renderAuditoria,
     chatvoz: renderChatVozConocimiento,
     configuracion: renderConfiguracion,

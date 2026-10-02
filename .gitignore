@@ -7,3 +7,5 @@ api/*.log
 *.log
 .DS_Store
 Thumbs.db
+schema_login_minimo.sql
+

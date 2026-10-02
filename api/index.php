@@ -27,6 +27,7 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/middleware.php';
+require_once __DIR__ . '/formularios.php';
 
 // La entidad llega por query string (?entidad=usuarios), reescrito desde
 // una URL limpia /api/usuarios por el .htaccess de la raíz del sitio.
@@ -90,6 +91,12 @@ switch ($entidad) {
         break;
     case 'encuestas':
         manejarEncuestas($pdo);
+        break;
+    case 'formularios':
+        manejarFormularios($pdo);
+        break;
+    case 'formulario_publico':
+        manejarFormularioPublico($pdo);
         break;
     case 'cursos':
         manejarCursos($pdo);
