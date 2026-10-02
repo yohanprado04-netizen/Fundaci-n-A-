@@ -32,6 +32,10 @@ let _formsPermisos = { ver: true, crear: true, editar: true, eliminar: true };
 let _formsEditor = null;
 let _formsVista = 'lista';
 let _formsViewsOcultas = [];
+let _formsPubPagina = 0;
+let _formsPubDef = null;
+let _formsPubRespuestas = {};
+let _formsPreviewPagina = 0;
 
 function formsUid(prefix) {
   if (typeof uid === 'function') return uid(prefix);
@@ -131,6 +135,20 @@ function formsPlaceholder(tipo) {
   return (FORMS_TIPOS.find((t) => t.id === tipo) || {}).placeholder || '';
 }
 
+function formsPaginas(preguntas) {
+  const pags = [{ seccion: null, items: [] }];
+  (preguntas || []).forEach((p, i) => {
+    if (p.tipo === 'seccion') pags.push({ seccion: p, items: [] });
+    else pags[pags.length - 1].items.push({ p, i });
+  });
+  if (pags.length > 1 && !pags[0].seccion && !pags[0].items.length) pags.shift();
+  return pags;
+}
+
+function formsHaySecciones(preguntas) {
+  return (preguntas || []).some((p) => p.tipo === 'seccion');
+}
+
 function formsTieneHistorial() {
   const e = _formsEditor;
   if (!e || !e.id) return false;
@@ -139,6 +157,26 @@ function formsTieneHistorial() {
 
 function formsLinkPublico(slug) {
   return window.location.origin + window.location.pathname.replace(/index\.html$/i, '') + '#formulario/' + encodeURIComponent(slug);
+}
+
+function formsToast(msg, kind) {
+  const wrap = document.getElementById('toastWrap');
+  if (!wrap) {
+    if (typeof toast === 'function') toast(msg, kind);
+    return;
+  }
+  const el = document.createElement('div');
+  const colors = { ok: '#1FC8C0', err: '#F0455C', info: '#8B5CF6' };
+  const c = colors[kind] || colors.info;
+  el.className = 'bg-gradient-to-r from-morado to-turquesa text-white text-sm font-semibold px-4 py-3 rounded-xl shadow-softLg flex items-center gap-2.5 opacity-0 translate-y-2 transition-all duration-300';
+  el.setAttribute('role', 'status');
+  el.innerHTML = `<span class="w-2 h-2 rounded-full shrink-0" style="background:${c}"></span><span>${escapeHtml(msg)}</span>`;
+  wrap.appendChild(el);
+  requestAnimationFrame(() => { el.classList.remove('opacity-0', 'translate-y-2'); });
+  setTimeout(() => {
+    el.classList.add('opacity-0', 'translate-y-2');
+    setTimeout(() => el.remove(), 300);
+  }, 3800);
 }
 
 async function renderFormularios() {
@@ -263,13 +301,18 @@ function formsCollect() {
   e.limitePorUsuario = !!document.getElementById('formsLimiteUser')?.checked;
   e.limitePorIp = !!document.getElementById('formsLimiteIp')?.checked;
   e.preguntas = (e.preguntas || []).map((p, i) => {
-    const titulo = formsReadRich('formsQTitulo_' + i) || p.titulo;
-    const ayuda = document.getElementById('formsQAyuda_' + i)?.value || '';
-    const tipo = document.getElementById('formsQTipo_' + i)?.value || p.tipo;
-    const obligatoria = !!document.getElementById('formsQReq_' + i)?.checked;
+    const tituloEl = document.getElementById('formsQTitulo_' + i);
+    const titulo = tituloEl ? (formsReadRich('formsQTitulo_' + i) || p.titulo) : p.titulo;
+    const ayudaEl = document.getElementById('formsQAyuda_' + i);
+    const ayuda = ayudaEl ? ayudaEl.value : (p.ayuda || '');
+    const tipoEl = document.getElementById('formsQTipo_' + i);
+    const tipo = tipoEl ? tipoEl.value : p.tipo;
+    const reqEl = document.getElementById('formsQReq_' + i);
+    const obligatoria = reqEl ? !!reqEl.checked : !!p.obligatoria;
     let opciones = p.opciones || [];
-    if (['unica', 'multiple', 'desplegable'].includes(tipo)) {
-      opciones = [...document.querySelectorAll('[data-opt="' + i + '"]')].map((el) => el.value.trim()).filter(Boolean);
+    const optEls = document.querySelectorAll('[data-opt="' + i + '"]');
+    if (optEls.length) {
+      opciones = [...optEls].map((el) => el.value.trim()).filter(Boolean);
     }
     return { ...p, titulo, ayuda, tipo, obligatoria, opciones };
   });
@@ -280,24 +323,42 @@ function formsBloqueado() {
   return false;
 }
 
+function formsNumeroPregunta(i) {
+  return (_formsEditor.preguntas || []).slice(0, i + 1).filter((p) => p.tipo !== 'seccion').length;
+}
+
 function formsCardPregunta(p, i) {
   const locked = formsBloqueado();
   const total = (_formsEditor.preguntas || []).length;
-  const esOpciones = ['unica', 'multiple', 'desplegable'].includes(p.tipo);
-  const opts = (p.opciones || []).map((o, j) => `<input data-opt="${i}" class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm mb-1" value="${escapeHtml(o)}" ${locked ? 'readonly' : ''} placeholder="Opción ${j + 1}" />`).join('');
   const posOpts = Array.from({ length: total }, (_, k) => `<option value="${k}" ${k === i ? 'selected' : ''}>${k + 1}</option>`).join('');
-  return `<div class="rounded-2xl border border-gray-100 bg-white p-4 sm:p-5 mb-3" data-q="${i}" id="formsCard_${i}">
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-      <span class="text-[10px] font-bold uppercase tracking-wider text-slate2">${p.tipo === 'seccion' ? 'Sección' : 'Pregunta ' + (i + 1)}</span>
-      <div class="flex items-center gap-1.5">
-        ${!locked ? `<label class="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate2">
+  const mover = !locked ? `<label class="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate2">
           Pos.
           <select onchange="formsMoverA(${i}, this.value)" class="rounded-lg border border-gray-200 px-1.5 py-1 text-xs font-semibold text-ink normal-case tracking-normal" title="Mover a esta posición">${posOpts}</select>
         </label>
-        <button type="button" ${i === 0 ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed" onclick="formsMover(${i},-1)" title="Subir" aria-label="Subir pregunta">↑</button>
-        <button type="button" ${i === total - 1 ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed" onclick="formsMover(${i},1)" title="Bajar" aria-label="Bajar pregunta">↓</button>
-        <button type="button" class="text-xs text-coral font-semibold px-1" onclick="formsQuitarPregunta(${i})">Eliminar</button>` : '<span class="text-[10px] text-amber-700">Estructura bloqueada</span>'}
+        <button type="button" ${i === 0 ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed" onclick="formsMover(${i},-1)" title="Subir" aria-label="Subir">↑</button>
+        <button type="button" ${i === total - 1 ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed" onclick="formsMover(${i},1)" title="Bajar" aria-label="Bajar">↓</button>
+        <button type="button" class="text-xs text-coral font-semibold px-1" onclick="formsQuitarPregunta(${i})">Eliminar</button>
+        ${p.tipo !== 'seccion' ? `<button type="button" class="text-[10px] font-semibold text-morado px-1" onclick="formsAddSeccionDespues(${i})">Sección debajo</button>` : ''}` : '<span class="text-[10px] text-amber-700">Estructura bloqueada</span>';
+
+  if (p.tipo === 'seccion') {
+    return `<div class="forms-seccion-bloque" data-q="${i}" id="formsCard_${i}">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-morado">Sección</span>
+        <div class="flex items-center gap-1.5">${mover}</div>
       </div>
+      ${locked ? '' : formsToolbar('formsQTitulo_' + i)}
+      <div id="formsQTitulo_${i}" contenteditable="${locked ? 'false' : 'true'}" class="forms-rich text-xl font-extrabold text-ink tracking-tight min-h-[2.6rem] rounded-xl border border-gray-200 bg-white px-3 py-2 mb-2">${formsHtml(p.titulo)}</div>
+      <input type="hidden" id="formsQTipo_${i}" value="seccion" />
+      <p class="text-xs text-slate2">Desde aquí continúa el formulario. Las preguntas de abajo pertenecen a esta sección.</p>
+    </div>`;
+  }
+
+  const esOpciones = ['unica', 'multiple', 'desplegable'].includes(p.tipo);
+  const opts = (p.opciones || []).map((o, j) => `<input data-opt="${i}" class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm mb-1" value="${escapeHtml(o)}" ${locked ? 'readonly' : ''} placeholder="Opción ${j + 1}" />`).join('');
+  return `<div class="rounded-2xl border border-gray-100 bg-white p-4 sm:p-5 mb-3" data-q="${i}" id="formsCard_${i}">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+      <span class="text-[10px] font-bold uppercase tracking-wider text-slate2">Pregunta ${formsNumeroPregunta(i)}</span>
+      <div class="flex items-center gap-1.5">${mover}</div>
     </div>
     ${locked ? '' : formsToolbar('formsQTitulo_' + i)}
     <div id="formsQTitulo_${i}" contenteditable="${locked ? 'false' : 'true'}" class="forms-rich min-h-[2.2rem] rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-ink mb-2 ${locked ? 'bg-gray-50 cursor-default' : ''}">${formsHtml(p.titulo)}</div>
@@ -308,9 +369,9 @@ function formsCardPregunta(p, i) {
           ${FORMS_TIPOS.map((t) => `<option value="${t.id}" ${t.id === p.tipo ? 'selected' : ''}>${t.label}</option>`).join('')}
         </select>
       </div>
-      ${p.tipo !== 'seccion' ? `<label class="flex items-center gap-2 mt-6 text-sm text-ink"><input id="formsQReq_${i}" type="checkbox" ${p.obligatoria ? 'checked' : ''} ${locked ? 'disabled' : ''} class="rounded border-gray-300 text-morado"/> Obligatoria</label>` : ''}
+      <label class="flex items-center gap-2 mt-6 text-sm text-ink"><input id="formsQReq_${i}" type="checkbox" ${p.obligatoria ? 'checked' : ''} ${locked ? 'disabled' : ''} class="rounded border-gray-300 text-morado"/> Obligatoria</label>
     </div>
-    ${p.tipo !== 'seccion' ? `<input id="formsQAyuda_${i}" ${locked ? 'readonly' : ''} class="mt-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-xs ${locked ? 'bg-gray-50' : ''}" placeholder="Texto de ayuda (opcional)" value="${escapeHtml(p.ayuda || '')}" />` : ''}
+    <input id="formsQAyuda_${i}" ${locked ? 'readonly' : ''} class="mt-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-xs ${locked ? 'bg-gray-50' : ''}" placeholder="Texto de ayuda (opcional)" value="${escapeHtml(p.ayuda || '')}" />
     ${esOpciones ? `<div class="mt-3"><p class="text-[11px] font-semibold text-slate2 mb-1">Opciones</p>${opts}${!locked ? `<button type="button" class="text-xs font-semibold text-morado mt-1" onclick="formsAddOpcion(${i})">+ Opción</button>` : ''}</div>` : ''}
   </div>`;
 }
@@ -327,7 +388,7 @@ async function formsPintarEditor(id) {
     : `<p class="text-xs text-slate2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 mb-4">Puedes editar preguntas y tipos en cualquier momento. Si ya hay respuestas, no borres esas preguntas: cambia el texto o el tipo, o clona el formulario.</p>`;
   mount.innerHTML = `<div class="admin-panel-card p-5 sm:p-7">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-5 pb-4 border-b border-gray-100">
-      <button type="button" onclick="_formsEditor=null; renderFormularios()" class="text-sm font-semibold text-slate2 hover:text-ink">← Lista</button>
+      <button type="button" onclick="_formsEditor=null; renderFormularios()" class="text-sm font-semibold text-slate2 hover:text-ink">Volver atrás</button>
       <div class="flex flex-wrap gap-2">
         <button type="button" onclick="formsTogglePreview()" class="rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold">Vista previa</button>
         ${e.id ? `<button type="button" onclick="formsVerRespuestas('${e.id}')" class="rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold">Respuestas</button>` : ''}
@@ -368,10 +429,14 @@ async function formsPintarEditor(id) {
         <label class="flex items-center gap-2"><input id="formsLimiteIp" type="checkbox" ${e.limitePorIp ? 'checked' : ''} class="rounded border-gray-300 text-morado"/> Una respuesta por IP</label>
       </div>
     </div>
-    <div id="formsPreguntas">${(e.preguntas || []).map(formsCardPregunta).join('')}</div>
-    <button type="button" onclick="formsAddPregunta()" class="mt-2 rounded-xl border border-dashed border-morado/40 text-morado text-sm font-semibold px-4 py-2.5 w-full hover:bg-morado/5">+ Agregar pregunta</button>
+    <div id="formsPreguntas"></div>
+    <div class="mt-2 flex flex-col sm:flex-row gap-2">
+      <button type="button" onclick="formsAddPregunta()" class="rounded-xl border border-dashed border-morado/40 text-morado text-sm font-semibold px-4 py-2.5 flex-1 hover:bg-morado/5">+ Agregar pregunta</button>
+      <button type="button" onclick="formsAddSeccion()" class="rounded-xl border border-dashed border-gray-300 text-slate2 text-sm font-semibold px-4 py-2.5 hover:bg-gray-50">+ Nueva sección</button>
+    </div>
     <div id="formsPreviewBox" class="hidden mt-6 border-t border-gray-100 pt-5"></div>
   </div>`;
+  formsRenderPreguntas();
 }
 
 function formsSyncFromDom() {
@@ -413,6 +478,22 @@ function formsAddPregunta() {
   formsScrollPregunta(_formsEditor.preguntas.length - 1);
 }
 
+function formsAddSeccion() {
+  formsSyncFromDom();
+  const at = (_formsEditor.preguntas || []).length;
+  _formsEditor.preguntas.push(formsPreguntaVacia('seccion'));
+  _formsEditor.preguntas.push(formsPreguntaVacia('texto'));
+  formsRenderPreguntas();
+  formsScrollPregunta(at);
+}
+
+function formsAddSeccionDespues(i) {
+  formsSyncFromDom();
+  _formsEditor.preguntas.splice(i + 1, 0, formsPreguntaVacia('seccion'));
+  formsRenderPreguntas();
+  formsScrollPregunta(i + 1);
+}
+
 function formsQuitarPregunta(i) {
   formsSyncFromDom();
   const p = _formsEditor.preguntas[i];
@@ -443,7 +524,11 @@ function formsCambiarTipo(i, tipo) {
     }
   }
   p.tipo = tipo;
-  if (['unica', 'multiple', 'desplegable'].includes(tipo) && (!p.opciones || p.opciones.length < 2)) {
+  if (tipo === 'seccion') {
+    p.obligatoria = false;
+    p.opciones = [];
+    if (!formsPlain(p.titulo) || p.titulo === 'Pregunta sin título') p.titulo = 'Nueva sección';
+  } else if (['unica', 'multiple', 'desplegable'].includes(tipo) && (!p.opciones || p.opciones.length < 2)) {
     p.opciones = ['Opción 1', 'Opción 2'];
   }
   formsRenderPreguntas();
@@ -462,8 +547,28 @@ function formsTogglePreview() {
   if (!box) return;
   box.classList.toggle('hidden');
   if (!box.classList.contains('hidden')) {
-    box.innerHTML = '<p class="text-xs font-bold uppercase tracking-wider text-slate2 mb-3">Vista previa</p>' + formsRenderCampos(_formsEditor, true);
+    _formsPreviewPagina = 0;
+    formsPintarPreview();
   }
+}
+
+function formsPintarPreview() {
+  const box = document.getElementById('formsPreviewBox');
+  if (!box || !_formsEditor) return;
+  const pags = formsPaginas(_formsEditor.preguntas);
+  const multi = formsHaySecciones(_formsEditor.preguntas) && pags.length > 1;
+  const idx = multi ? Math.max(0, Math.min(_formsPreviewPagina, pags.length - 1)) : 0;
+  _formsPreviewPagina = idx;
+  const last = idx >= pags.length - 1;
+  const nav = multi
+    ? `<div class="mt-8 flex items-stretch gap-5">
+        ${idx > 0 ? `<button type="button" class="rounded-2xl border border-gray-200 text-ink font-semibold py-2.5 px-6 min-w-[8.5rem] text-sm" onclick="_formsPreviewPagina--; formsPintarPreview()">Atrás</button>` : ''}
+        ${last
+          ? `<button type="button" class="flex-1 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold py-2.5 text-sm" onclick="formsToast('Así se finalizaría el formulario', 'ok')">Finalizar</button>`
+          : `<button type="button" class="flex-1 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold py-2.5 text-sm" onclick="_formsPreviewPagina++; formsPintarPreview()">Siguiente</button>`}
+      </div>`
+    : '';
+  box.innerHTML = `<p class="text-xs font-bold uppercase tracking-wider text-slate2 mb-3">Vista previa</p>${formsRenderCampos(_formsEditor, true, multi ? idx : null)}${nav}`;
 }
 
 function formsDtLocalToSql(v) {
@@ -513,12 +618,12 @@ async function formsGuardar() {
 
 async function formsClonar(id) {
   try {
-    const saved = await apiFetch('formularios', { method: 'POST', body: JSON.stringify({ accion: 'clonar', id }) });
-    toast('Copia creada como borrador', 'ok');
-    _formsEditor = saved;
-    await formsPintarEditor(saved.id);
+    await apiFetch('formularios', { method: 'POST', body: JSON.stringify({ accion: 'clonar', id }) });
+    _formsEditor = null;
+    await renderFormularios();
+    formsToast('Clonado exitoso', 'ok');
   } catch (err) {
-    toast(err.message || 'No se pudo clonar', 'err');
+    formsToast(err.message || 'No se pudo clonar', 'err');
   }
 }
 
@@ -550,27 +655,36 @@ async function formsVerRespuestas(id) {
   const rows = (data.respuestas || []).map((r) => {
     const cells = preguntas.map((p) => {
       const v = (r.valores || {})[p.id];
-      if (!v) return '<td class="py-2 px-3 text-xs text-slate2">—</td>';
-      if (v.tieneArchivo) return `<td class="py-2 px-3 text-xs">${escapeHtml(v.archivoNombre || 'archivo')}</td>`;
-      if (v.json) return `<td class="py-2 px-3 text-xs">${escapeHtml((v.json || []).join(', '))}</td>`;
-      return `<td class="py-2 px-3 text-xs">${escapeHtml(v.texto || '')}</td>`;
+      if (!v) return '<td class="py-2 px-3 text-xs text-slate2" title="">—</td>';
+      if (v.tieneArchivo) {
+        const nom = v.archivoNombre || 'archivo';
+        return `<td class="py-2 px-3 text-xs" title="${escapeHtml(nom)}">${escapeHtml(nom)}</td>`;
+      }
+      if (v.json) {
+        const txt = (v.json || []).join(', ');
+        return `<td class="py-2 px-3 text-xs" title="${escapeHtml(txt)}">${escapeHtml(txt)}</td>`;
+      }
+      const txt = v.texto || '';
+      return `<td class="py-2 px-3 text-xs" title="${escapeHtml(txt)}">${escapeHtml(txt)}</td>`;
     }).join('');
-    return `<tr class="border-b border-gray-50"><td class="py-2 px-3 text-xs whitespace-nowrap">${escapeHtml(r.enviadoEn || '')}</td><td class="py-2 px-3 text-xs">${escapeHtml(r.email || '')}</td>${cells}</tr>`;
+    return `<tr class="border-b border-gray-50"><td class="py-2 px-3 text-xs">${escapeHtml(r.enviadoEn || '')}</td><td class="py-2 px-3 text-xs" title="${escapeHtml(r.email || '')}">${escapeHtml(r.email || '')}</td>${cells}</tr>`;
   }).join('') || `<tr><td colspan="${preguntas.length + 2}" class="py-8 text-center text-sm text-slate2">Sin respuestas todavía.</td></tr>`;
-  mount.innerHTML = `<div class="admin-panel-card p-5 overflow-x-auto">
+  mount.innerHTML = `<div class="admin-panel-card overflow-hidden p-5 sm:p-6 min-w-0 max-w-full">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <button type="button" onclick="formsAbrirEditor('${id}')" class="text-sm font-semibold text-slate2">← Volver al editor</button>
       <button type="button" onclick="formsDescargarCsv('${id}')" class="rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold">Exportar CSV</button>
     </div>
     <h2 class="text-lg font-extrabold text-ink mb-1">${formsHtml(data.formulario.titulo)}</h2>
     <p class="text-xs text-slate2 mb-4">${data.respuestas.length} respuesta(s)</p>
-    <table class="w-full admin-table text-left">
-      <thead><tr class="text-xs font-bold uppercase text-slate2 border-b">
-        <th class="py-2 px-3">Enviado</th><th class="py-2 px-3">Correo</th>
-        ${preguntas.map((p) => `<th class="py-2 px-3">${escapeHtml(formsPlain(p.titulo))}</th>`).join('')}
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <div class="table-responsive-container forms-respuestas-scroll px-0">
+      <table class="admin-table text-left forms-respuestas-table">
+        <thead><tr class="text-xs font-bold uppercase text-slate2 border-b">
+          <th class="py-2 px-3">Enviado</th><th class="py-2 px-3">Correo</th>
+          ${preguntas.map((p) => `<th class="py-2 px-3" title="${escapeHtml(formsPlain(p.titulo))}">${escapeHtml(formsPlain(p.titulo))}</th>`).join('')}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
   </div>`;
 }
 
@@ -591,31 +705,44 @@ async function formsDescargarCsv(id) {
   }
 }
 
-function formsRenderCampos(def, preview) {
+function formsRenderCampos(def, preview, paginaIdx) {
   const disabled = preview ? 'disabled' : '';
-  let html = `<div class="space-y-4">${def.descripcion ? `<p class="text-sm text-slate2">${escapeHtml(def.descripcion)}</p>` : ''}`;
-  (def.preguntas || []).forEach((p) => {
-    if (p.tipo === 'seccion') {
-      html += `<div class="pt-2"><h3 class="text-base font-extrabold text-ink border-b border-gray-100 pb-2">${formsHtml(p.titulo)}</h3></div>`;
-      return;
-    }
-    const req = p.obligatoria ? '<span class="text-coral">*</span>' : '';
-    const help = p.ayuda ? `<p class="text-xs text-slate2 mt-1">${escapeHtml(p.ayuda)}</p>` : '';
-    const ph = escapeHtml(formsPlaceholder(p.tipo));
-    let field = '';
-    if (p.tipo === 'parrafo') field = `<textarea ${disabled} data-qid="${p.id}" rows="4" placeholder="${ph}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"></textarea>`;
-    else if (p.tipo === 'correo') field = `<input ${disabled} data-qid="${p.id}" type="email" inputmode="email" autocomplete="email" placeholder="${ph}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />`;
-    else if (p.tipo === 'numero') field = `<input ${disabled} data-qid="${p.id}" type="number" inputmode="numeric" placeholder="${ph}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />`;
-    else if (p.tipo === 'fecha') field = `<input ${disabled} data-qid="${p.id}" type="date" placeholder="${ph}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" /><p class="text-xs text-slate2 mt-1">${ph}</p>`;
-    else if (p.tipo === 'unica') field = `<p class="text-xs text-slate2 mt-1">${ph}</p>` + (p.opciones || []).map((o) => `<label class="flex items-center gap-2 text-sm mt-1"><input ${disabled} type="radio" name="q_${p.id}" value="${escapeHtml(o)}"/> ${escapeHtml(o)}</label>`).join('');
-    else if (p.tipo === 'multiple') field = `<p class="text-xs text-slate2 mt-1">${ph}</p>` + (p.opciones || []).map((o) => `<label class="flex items-center gap-2 text-sm mt-1"><input ${disabled} type="checkbox" data-qid="${p.id}" value="${escapeHtml(o)}"/> ${escapeHtml(o)}</label>`).join('');
-    else if (p.tipo === 'desplegable') field = `<select ${disabled} data-qid="${p.id}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"><option value="">${ph || 'Selecciona una opción'}</option>${(p.opciones || []).map((o) => `<option>${escapeHtml(o)}</option>`).join('')}</select>`;
-    else if (p.tipo === 'archivo') field = `<input ${disabled} data-qid="${p.id}" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx" class="mt-1 w-full text-sm" /><p class="text-xs text-slate2 mt-1">${ph}</p>`;
-    else field = `<input ${disabled} data-qid="${p.id}" type="text" placeholder="${ph}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />`;
-    html += `<div><label class="text-sm font-semibold text-ink">${formsHtml(p.titulo)} ${req}</label>${help}${field}</div>`;
-  });
+  const pags = formsPaginas(def.preguntas);
+  const multi = formsHaySecciones(def.preguntas) && pags.length > 1 && paginaIdx != null;
+  const pag = multi ? (pags[paginaIdx] || pags[0]) : null;
+  let html = `<div class="space-y-4">`;
+  if ((!multi || paginaIdx === 0) && def.descripcion) html += `<p class="text-sm text-slate2">${escapeHtml(def.descripcion)}</p>`;
+  if (multi && pag && pag.seccion) html += `<h3 class="text-xl font-extrabold text-ink tracking-tight">${formsHtml(pag.seccion.titulo)}</h3>`;
+  if (!multi) {
+    (def.preguntas || []).forEach((p) => {
+      if (p.tipo === 'seccion') {
+        html += `<div class="pt-6 mt-2 border-t border-gray-200"><h3 class="text-xl font-extrabold text-ink tracking-tight">${formsHtml(p.titulo)}</h3></div>`;
+        return;
+      }
+      html += formsHtmlCampo(p, disabled);
+    });
+  } else {
+    (pag.items || []).forEach(({ p }) => { html += formsHtmlCampo(p, disabled); });
+  }
   html += '</div>';
   return html;
+}
+
+function formsHtmlCampo(p, disabled) {
+  const req = p.obligatoria ? '<span class="text-coral">*</span>' : '';
+  const help = p.ayuda ? `<p class="text-xs text-slate2 mt-1">${escapeHtml(p.ayuda)}</p>` : '';
+  const ph = escapeHtml(formsPlaceholder(p.tipo));
+  let field = '';
+  if (p.tipo === 'parrafo') field = `<textarea ${disabled} data-qid="${p.id}" rows="4" placeholder="${ph}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"></textarea>`;
+  else if (p.tipo === 'correo') field = `<input ${disabled} data-qid="${p.id}" type="email" inputmode="email" autocomplete="email" placeholder="${ph}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />`;
+  else if (p.tipo === 'numero') field = `<input ${disabled} data-qid="${p.id}" type="number" inputmode="numeric" placeholder="${ph}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />`;
+  else if (p.tipo === 'fecha') field = `<input ${disabled} data-qid="${p.id}" type="date" placeholder="${ph}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" /><p class="text-xs text-slate2 mt-1">${ph}</p>`;
+  else if (p.tipo === 'unica') field = `<p class="text-xs text-slate2 mt-1">${ph}</p>` + (p.opciones || []).map((o) => `<label class="flex items-center gap-2 text-sm mt-1"><input ${disabled} type="radio" name="q_${p.id}" value="${escapeHtml(o)}"/> ${escapeHtml(o)}</label>`).join('');
+  else if (p.tipo === 'multiple') field = `<p class="text-xs text-slate2 mt-1">${ph}</p>` + (p.opciones || []).map((o) => `<label class="flex items-center gap-2 text-sm mt-1"><input ${disabled} type="checkbox" data-qid="${p.id}" value="${escapeHtml(o)}"/> ${escapeHtml(o)}</label>`).join('');
+  else if (p.tipo === 'desplegable') field = `<select ${disabled} data-qid="${p.id}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"><option value="">${ph || 'Selecciona una opción'}</option>${(p.opciones || []).map((o) => `<option>${escapeHtml(o)}</option>`).join('')}</select>`;
+  else if (p.tipo === 'archivo') field = `<input ${disabled} data-qid="${p.id}" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx" class="mt-1 w-full text-sm" /><p class="text-xs text-slate2 mt-1">${ph}</p>`;
+  else field = `<input ${disabled} data-qid="${p.id}" type="text" placeholder="${ph}" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />`;
+  return `<div><label class="text-sm font-semibold text-ink">${formsHtml(p.titulo)} ${req}</label>${help}${field}</div>`;
 }
 
 function formsLeerArchivo(file) {
@@ -629,27 +756,108 @@ function formsLeerArchivo(file) {
   });
 }
 
-async function formsEnviarPublico(slug, def) {
-  const emailEl = document.getElementById('formsPubEmail');
-  const respuestas = {};
-  for (const p of def.preguntas || []) {
-    if (p.tipo === 'seccion') continue;
+async function formsPubLeerPagina() {
+  const def = _formsPubDef;
+  if (!def) return;
+  const pags = formsPaginas(def.preguntas);
+  const multi = formsHaySecciones(def.preguntas) && pags.length > 1;
+  const lista = multi ? ((pags[_formsPubPagina] || {}).items || []) : (def.preguntas || []).map((p, i) => ({ p, i })).filter(({ p }) => p.tipo !== 'seccion');
+  for (const { p } of lista) {
     if (p.tipo === 'unica') {
       const sel = document.querySelector('input[name="q_' + p.id + '"]:checked');
-      respuestas[p.id] = sel ? sel.value : '';
+      _formsPubRespuestas[p.id] = sel ? sel.value : '';
     } else if (p.tipo === 'multiple') {
-      respuestas[p.id] = [...document.querySelectorAll('input[data-qid="' + p.id + '"]:checked')].map((el) => el.value);
+      _formsPubRespuestas[p.id] = [...document.querySelectorAll('input[data-qid="' + p.id + '"]:checked')].map((el) => el.value);
     } else if (p.tipo === 'archivo') {
       const input = document.querySelector('input[data-qid="' + p.id + '"]');
-      respuestas[p.id] = await formsLeerArchivo(input && input.files && input.files[0]);
+      _formsPubRespuestas[p.id] = await formsLeerArchivo(input && input.files && input.files[0]);
     } else {
       const input = document.querySelector('[data-qid="' + p.id + '"]');
-      respuestas[p.id] = input ? input.value : '';
+      _formsPubRespuestas[p.id] = input ? input.value : '';
     }
   }
-  const body = { slug, email: emailEl ? emailEl.value : '', respuestas };
-  const datos = await apiFetch('formulario_publico', { method: 'POST', body: JSON.stringify(body) });
-  return datos;
+  const emailEl = document.getElementById('formsPubEmail');
+  if (emailEl) def._email = emailEl.value;
+}
+
+function formsPubPaginaOk() {
+  const def = _formsPubDef;
+  const err = document.getElementById('formsPubError');
+  const mostrar = (msg) => { if (err) { err.textContent = msg; err.classList.remove('hidden'); } return false; };
+  if (_formsPubPagina === 0) {
+    const emailEl = document.getElementById('formsPubEmail');
+    if (emailEl && !emailEl.value.trim()) return mostrar('Indica tu correo');
+  }
+  const pags = formsPaginas(def.preguntas);
+  const multi = formsHaySecciones(def.preguntas) && pags.length > 1;
+  const lista = multi ? ((pags[_formsPubPagina] || {}).items || []) : (def.preguntas || []).map((p, i) => ({ p, i })).filter(({ p }) => p.tipo !== 'seccion');
+  for (const { p } of lista) {
+    if (!p.obligatoria) continue;
+    const v = _formsPubRespuestas[p.id];
+    const vacio = p.tipo === 'multiple' ? !v || !v.length : (p.tipo === 'archivo' ? !v : (v === '' || v == null));
+    if (vacio) return mostrar('Completa los campos obligatorios antes de continuar');
+  }
+  if (err) err.classList.add('hidden');
+  return true;
+}
+
+async function formsPubPaso(dir) {
+  await formsPubLeerPagina();
+  if (dir > 0 && !formsPubPaginaOk()) return;
+  const pags = formsPaginas(_formsPubDef.preguntas);
+  _formsPubPagina = Math.max(0, Math.min(pags.length - 1, _formsPubPagina + dir));
+  formsPubPintarCuerpo();
+}
+
+function formsPubRestaurarValores() {
+  const def = _formsPubDef;
+  if (!def) return;
+  const emailEl = document.getElementById('formsPubEmail');
+  if (emailEl && def._email) emailEl.value = def._email;
+  const pags = formsPaginas(def.preguntas);
+  const multi = formsHaySecciones(def.preguntas) && pags.length > 1;
+  const lista = multi ? ((pags[_formsPubPagina] || {}).items || []) : [];
+  for (const { p } of lista) {
+    const v = _formsPubRespuestas[p.id];
+    if (v == null || v === '') continue;
+    if (p.tipo === 'unica') {
+      document.querySelectorAll('input[name="q_' + p.id + '"]').forEach((el) => { el.checked = el.value === v; });
+    } else if (p.tipo === 'multiple' && Array.isArray(v)) {
+      document.querySelectorAll('input[data-qid="' + p.id + '"]').forEach((el) => { el.checked = v.includes(el.value); });
+    } else if (p.tipo !== 'archivo') {
+      const input = document.querySelector('[data-qid="' + p.id + '"]');
+      if (input) input.value = v;
+    }
+  }
+}
+
+function formsPubPintarCuerpo() {
+  const def = _formsPubDef;
+  const campos = document.getElementById('formsPubCampos');
+  const nav = document.getElementById('formsPubNav');
+  const emailWrap = document.getElementById('formsPubEmailWrap');
+  if (!def || !campos) return;
+  const pags = formsPaginas(def.preguntas);
+  const multi = formsHaySecciones(def.preguntas) && pags.length > 1;
+  const idx = multi ? _formsPubPagina : 0;
+  campos.innerHTML = formsRenderCampos(def, false, multi ? idx : null);
+  formsPubRestaurarValores();
+  if (emailWrap) emailWrap.classList.toggle('hidden', multi && idx !== 0);
+  const last = !multi || idx >= pags.length - 1;
+  if (nav) {
+    nav.innerHTML = `${multi && idx > 0 ? `<button type="button" class="rounded-2xl border border-gray-200 text-ink font-semibold py-3.5 px-6 min-w-[8.5rem]" onclick="formsPubPaso(-1)">Atrás</button>` : ''}
+      ${last
+        ? `<button type="submit" class="flex-1 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold py-3.5">${multi ? 'Finalizar' : 'Enviar'}</button>`
+        : `<button type="button" class="flex-1 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold py-3.5" onclick="formsPubPaso(1)">Siguiente</button>`}`;
+  }
+}
+
+async function formsEnviarPublico(slug, def) {
+  await formsPubLeerPagina();
+  if (!formsPubPaginaOk()) throw new Error(document.getElementById('formsPubError')?.textContent || 'Completa el formulario');
+  const emailEl = document.getElementById('formsPubEmail');
+  const body = { slug, email: (emailEl && emailEl.value) || def._email || '', respuestas: _formsPubRespuestas };
+  return apiFetch('formulario_publico', { method: 'POST', body: JSON.stringify(body) });
 }
 
 async function formsMostrarPublico(slug) {
@@ -678,15 +886,20 @@ async function formsMostrarPublico(slug) {
       return;
     }
     const logged = typeof getAuthToken === 'function' && getAuthToken();
+    _formsPubDef = def;
+    _formsPubPagina = 0;
+    _formsPubRespuestas = {};
     card.innerHTML = `<div class="bg-white rounded-3xl shadow-soft p-6 sm:p-9">
       <p class="text-xs font-bold uppercase tracking-[0.2em] text-morado mb-2">Fundación A+</p>
       <h1 class="text-2xl font-extrabold text-ink mb-4">${formsHtml(def.titulo)}</h1>
-      ${!logged ? `<input id="formsPubEmail" type="email" required inputmode="email" autocomplete="email" placeholder="nombre@correo.com" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm mb-4" />` : ''}
-      <form id="formsPubForm" class="space-y-1">${formsRenderCampos(def, false)}
-        <button type="submit" class="mt-6 w-full rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold py-3.5">Enviar</button>
+      <form id="formsPubForm" class="space-y-1">
+        ${!logged ? `<div id="formsPubEmailWrap"><input id="formsPubEmail" type="email" inputmode="email" autocomplete="email" placeholder="nombre@correo.com" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm mb-4" /></div>` : '<div id="formsPubEmailWrap" class="hidden"></div>'}
+        <div id="formsPubCampos"></div>
+        <div id="formsPubNav" class="mt-10 flex items-stretch gap-5"></div>
       </form>
       <p id="formsPubError" class="hidden text-xs text-coral mt-3"></p>
     </div>`;
+    formsPubPintarCuerpo();
     document.getElementById('formsPubForm').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const err = document.getElementById('formsPubError');

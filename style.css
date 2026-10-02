@@ -1207,3 +1207,26 @@ body {
   color: #6A1B9A;
   text-decoration: underline;
 }
+.forms-seccion-bloque {
+  margin: 1.75rem 0 1rem;
+  padding: 1.25rem 1.1rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(139, 92, 246, 0.22);
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.08) 0%, #fff 42%);
+}
+.forms-respuestas-scroll {
+  max-width: 100%;
+  min-width: 0;
+}
+.forms-respuestas-table {
+  width: max-content;
+  min-width: 100%;
+}
+.forms-respuestas-table th,
+.forms-respuestas-table td {
+  white-space: nowrap;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
