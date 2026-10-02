@@ -9766,7 +9766,7 @@ Fundación A+`;
 
             <!-- Feed de Tarjetas -->
             <div class="space-y-3" id="feed-comunicados-admin">
-              ${tarjetasFeedHtml.join('')}
+              ${tarjetasFeedHtml || emptyFeedHtml}
               <div id="feed-comunicados-admin-empty" class="hidden p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
                 <p class="text-xs text-slate2 font-medium">No se encontraron notificaciones con este criterio.</p>
               </div>
