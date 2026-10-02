@@ -2287,6 +2287,7 @@
     if (usuario.rol === 'Superadmin' || currentAdminRole === 'superadmin') {
       return { ver: true, crear: true, editar: true, eliminar: true };
     }
+    const idsPerfiles = usuario.perfiles || [];
     // Notificaciones institucionales siempre visibles para el rol respectivo
     if (panelCodigo === 'admin.notificaciones' || panelCodigo === 'docente.notificaciones' || panelCodigo === 'estudiante.notificaciones') {
       return { ver: true, crear: true, editar: true, eliminar: true };
@@ -2295,6 +2296,16 @@
     if (!idsPerfiles.length && (usuario.rol === 'Administrador' || usuario.rol === 'Coordinador')) {
       const esSuperOnly = panelCodigo === 'admin.auditoria' || panelCodigo === 'admin.chatvoz';
       return { ver: !esSuperOnly, crear: !esSuperOnly, editar: !esSuperOnly, eliminar: !esSuperOnly };
+    }
+    // Si es Docente y no tiene perfil restringido, otorgar acceso completo a sus módulos
+    if (!idsPerfiles.length && usuario.rol === 'Docente') {
+      const esDocente = panelCodigo.startsWith('docente.');
+      return { ver: esDocente, crear: esDocente, editar: esDocente, eliminar: esDocente };
+    }
+    // Si es Estudiante y no tiene perfil restringido, otorgar acceso completo a sus módulos
+    if (!idsPerfiles.length && usuario.rol === 'Estudiante') {
+      const esEstudiante = panelCodigo.startsWith('estudiante.');
+      return { ver: esEstudiante, crear: esEstudiante, editar: esEstudiante, eliminar: esEstudiante };
     }
     if (!idsPerfiles.length) return vacio;
     if (!_perfilesMemoryCache || (Date.now() - _perfilesMemoryCacheTime > 45000)) {
@@ -9969,6 +9980,11 @@ Fundación A+`;
     if (modal) modal.classList.add('hidden');
   };
 
+  window.filtrarNotificacionesDocenteTab = function(tab) {
+    notifDocenteTab = tab;
+    renderNotificacionesDocente();
+  };
+
   // ----------------------------------------------------------------------------
   // PANEL DOCENTE: CENTRO DE NOTIFICACIONES Y PUBLICACIONES (Fiel a Imagen 1)
   // ----------------------------------------------------------------------------
@@ -10045,6 +10061,20 @@ Fundación A+`;
       });
     });
 
+    const totalCount = relevantes.length;
+    const criticasCount = relevantes.filter(r => r.prioridad === 'Alta').length;
+    const cortesCount = relevantes.filter(r => r.tipo === 'comunicado').length;
+    const excusasCount = excusasDoc.length;
+
+    let filtradas = relevantes;
+    if (notifDocenteTab === 'criticas') {
+      filtradas = relevantes.filter(r => r.prioridad === 'Alta');
+    } else if (notifDocenteTab === 'mis_cortes') {
+      filtradas = relevantes.filter(r => r.tipo === 'comunicado');
+    } else if (notifDocenteTab === 'excusas') {
+      filtradas = relevantes.filter(r => r.tipo === 'excusa');
+    }
+
     mount.innerHTML = `
       <!-- Banner Hero Docente -->
       <div class="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-morado via-indigo-700 to-morado text-white mb-6 shadow-sm">
@@ -10071,11 +10101,11 @@ Fundación A+`;
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6 pt-5 border-t border-white/10">
           <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-md">
             <p class="text-[10px] uppercase font-bold text-white/70">TOTAL ACTIVAS</p>
-            <p class="text-xl font-extrabold text-white mt-0.5">${relevantes.length}</p>
+            <p class="text-xl font-extrabold text-white mt-0.5">${totalCount}</p>
           </div>
           <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-md">
             <p class="text-[10px] uppercase font-bold text-white/70">CRÍTICAS</p>
-            <p class="text-xl font-extrabold text-white mt-0.5">${relevantes.filter(r => r.prioridad === 'Alta').length}</p>
+            <p class="text-xl font-extrabold text-white mt-0.5">${criticasCount}</p>
           </div>
           <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-md">
             <p class="text-[10px] uppercase font-bold text-white/70">RIESGO</p>
@@ -10087,7 +10117,7 @@ Fundación A+`;
           </div>
           <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-md">
             <p class="text-[10px] uppercase font-bold text-white/70">EXCUSAS</p>
-            <p class="text-xl font-extrabold text-white mt-0.5">${excusasDoc.length}</p>
+            <p class="text-xl font-extrabold text-white mt-0.5">${excusasCount}</p>
           </div>
         </div>
       </div>
@@ -10098,7 +10128,7 @@ Fundación A+`;
         <!-- Izquierda: Mis Cortes Asignadas y Filtros -->
         <div class="lg:col-span-6 space-y-4">
           <div class="admin-panel-card p-6 bg-white rounded-3xl border border-gray-100 shadow-sm">
-            <h3 class="text-sm font-extrabold text-ink mb-3">**Gestor de Comunicación para Mis Cortes**</h3>
+            <h3 class="text-sm font-extrabold text-ink mb-3">Gestor de Comunicación para Mis Cortes</h3>
             <p class="text-[11px] font-bold text-slate2 uppercase tracking-wide mb-2">MIS CORTES ASIGNADAS</p>
             
             <div class="flex items-center gap-2.5 flex-wrap">
@@ -10115,10 +10145,10 @@ Fundación A+`;
 
             <!-- Tabs de navegación -->
             <div class="flex items-center gap-1.5 flex-wrap mt-5 pt-4 border-t border-gray-100">
-              <button type="button" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-morado text-white">Todas (${relevantes.length})</button>
-              <button type="button" class="px-3 py-1.5 rounded-xl text-xs font-bold text-slate2 hover:bg-gray-100">Críticas (${relevantes.filter(r => r.prioridad === 'Alta').length})</button>
-              <button type="button" class="px-3 py-1.5 rounded-xl text-xs font-bold text-slate2 hover:bg-gray-100">Por mis Cortes (${relevantes.filter(r => r.tipo === 'comunicado').length})</button>
-              <button type="button" class="px-3 py-1.5 rounded-xl text-xs font-bold text-slate2 hover:bg-gray-100">Excusas (${excusasDoc.length})</button>
+              <button type="button" onclick="filtrarNotificacionesDocenteTab('todas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifDocenteTab === 'todas' ? 'bg-morado text-white shadow-xs' : 'text-slate2 hover:bg-gray-100'}">Todas (${totalCount})</button>
+              <button type="button" onclick="filtrarNotificacionesDocenteTab('criticas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifDocenteTab === 'criticas' ? 'bg-morado text-white shadow-xs' : 'text-slate2 hover:bg-gray-100'}">Críticas (${criticasCount})</button>
+              <button type="button" onclick="filtrarNotificacionesDocenteTab('mis_cortes')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifDocenteTab === 'mis_cortes' ? 'bg-morado text-white shadow-xs' : 'text-slate2 hover:bg-gray-100'}">Por mis Cortes (${cortesCount})</button>
+              <button type="button" onclick="filtrarNotificacionesDocenteTab('excusas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifDocenteTab === 'excusas' ? 'bg-morado text-white shadow-xs' : 'text-slate2 hover:bg-gray-100'}">Excusas (${excusasCount})</button>
             </div>
           </div>
         </div>
@@ -10156,12 +10186,21 @@ Fundación A+`;
 
       <!-- Feed de Alertas Docente -->
       <div class="space-y-3">
-        ${relevantes.map(r => `
+        ${filtradas.length === 0 ? `
+          <div class="p-8 text-center bg-white rounded-2xl border border-gray-100">
+            <p class="text-xs font-bold text-slate2">No hay notificaciones en este filtro.</p>
+          </div>
+        ` : filtradas.map(r => `
           <div class="p-4 rounded-2xl bg-white border border-gray-100 hover:shadow-xs transition flex items-start gap-3.5">
-            <div class="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100">
-              <svg class="w-4 h-4 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+            <div class="w-9 h-9 rounded-xl ${r.prioridad === 'Alta' ? 'bg-morado/10 text-morado border-morado/20' : (r.tipo === 'excusa' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-gray-50 text-morado border-gray-200')} flex items-center justify-center shrink-0 border">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
             </div>
             <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1 flex-wrap">
+                <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-morado/10 text-morado border border-morado/20">${escapeHtml(r.categoria || 'Aviso')}</span>
+                ${r.prioridad === 'Alta' ? `<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-morado text-white">Crítica</span>` : ''}
+                ${r.fecha ? `<span class="text-[10px] text-slate2 font-medium">${fmtDate(r.fecha)}</span>` : ''}
+              </div>
               <h4 class="text-xs sm:text-sm font-extrabold text-ink">${escapeHtml(r.titulo)}</h4>
               <p class="text-xs text-slate2 mt-0.5 leading-relaxed">${escapeHtml(r.mensaje)}</p>
             </div>
@@ -10173,8 +10212,8 @@ Fundación A+`;
     // Actualizar badge
     const bDoc = document.getElementById('notifBadgeDocente');
     if (bDoc) {
-      bDoc.textContent = relevantes.length;
-      bDoc.classList.toggle('hidden', relevantes.length === 0);
+      bDoc.textContent = totalCount;
+      bDoc.classList.toggle('hidden', totalCount === 0);
     }
   }
 
