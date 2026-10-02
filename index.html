@@ -1828,26 +1828,23 @@
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-<script defer src="db.js?v=20261002-livesearch1"></script>
-<script defer src="app.js?v=20261002-livesearch1"></script>
+<script defer src="db.js?v=20261002-v5comms"></script>
+<script defer src="app.js?v=20261002-v5comms"></script>
 <script defer src="forms.js?v=20261002-forms24"></script>
 
 <!-- Registro de Service Worker para carga instantánea y caché inteligente -->
 <script>
   if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').then((reg) => {
-        // Actualización silenciosa en segundo plano si hay nuevo contenido
-        reg.onupdatefound = () => {
-          const installingWorker = reg.installing;
-          if (installingWorker) {
-            installingWorker.onstatechange = () => {
-              if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[SW] Nueva versión de la plataforma disponible en caché.');
-              }
-            };
-          }
-        };
+      if ('caches' in window) {
+        caches.keys().then(keys => {
+          keys.forEach(k => {
+            if (k !== 'fundacion-aplus-v5.0') caches.delete(k);
+          });
+        });
+      }
+      navigator.serviceWorker.register('./sw.js?v=20261002-v50').then((reg) => {
+        reg.update();
       }).catch((err) => {
         console.warn('[SW] Registro de Service Worker omitido:', err);
       });

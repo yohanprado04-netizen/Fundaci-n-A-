@@ -1,36 +1,35 @@
 /**
  * Service Worker - Fundación A+ (https://fundacionamas.org.co/)
- * Optimización de velocidad, almacenamiento en caché y resiliencia offline.
+ * Optimización de velocidad, resiliencia y actualización instantánea sin bloqueos de caché.
  */
 
-const CACHE_NAME = 'fundacion-aplus-v4.0';
+const CACHE_NAME = 'fundacion-aplus-v5.0';
 const CORE_ASSETS = [
-  './',
-  './index.html',
-  './style.css?v=20260927-v17',
   './logo.jpg',
   './logo.webp',
   './manifest.json'
 ];
 
-// Instalación: Precarga de recursos estáticos críticos
+// Instalación: Activar de inmediato sin esperar
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(CORE_ASSETS).catch((err) => {
-        console.warn('[SW] Aviso de precarga en instalación:', err);
+        console.warn('[SW] Aviso de precarga:', err);
       });
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
-// Activación: Limpieza defensiva de cachés antiguas
+// Activación: Purgar inmediatamente todas las cachés viejas (v4.0 y anteriores)
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('[SW] Purgando caché antigua:', key);
             return caches.delete(key);
           }
         })
@@ -40,18 +39,31 @@ self.addEventListener('activate', (event) => {
 });
 
 // Estrategia de Fetch:
-// 1. APIs dinámicas (/api/) y métodos no-GET: Directo a la red (Network-Only).
-// 2. Recursos estáticos (imágenes, fuentes, estilos): Stale-While-Revalidate para carga instantánea (<50ms).
+// Scripts JS, HTML y endpoints API siempre van a la RED (Network-First) para recibir cambios de inmediato.
+// Sólo imágenes y fuentes pueden usar fallback de caché.
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // No interceptar peticiones no GET ni llamadas a endpoints de backend/API o chat
+  // APIs dinámicas y chat: siempre red directa
   if (req.method !== 'GET' || url.pathname.includes('/api/') || url.port === '8001') {
     return;
   }
 
-  // Para navegación y assets estáticos: Stale-While-Revalidate
+  // HTML y scripts JS: Network-First (siempre obtiene la versión fresca del servidor)
+  const esCodigo = req.url.includes('.js') || req.url.includes('.html') || req.mode === 'navigate';
+  if (esCodigo) {
+    event.respondWith(
+      fetch(req).then((networkResponse) => {
+        return networkResponse;
+      }).catch(() => {
+        return caches.match(req);
+      })
+    );
+    return;
+  }
+
+  // Assets estáticos (imágenes, favicons): Stale-While-Revalidate
   event.respondWith(
     caches.match(req).then((cachedResponse) => {
       const fetchPromise = fetch(req).then((networkResponse) => {
@@ -62,10 +74,7 @@ self.addEventListener('fetch', (event) => {
           });
         }
         return networkResponse;
-      }).catch(() => {
-        // En caso de fallo total de red, retornar recurso en caché si existe
-        return cachedResponse;
-      });
+      }).catch(() => cachedResponse);
 
       return cachedResponse || fetchPromise;
     })
