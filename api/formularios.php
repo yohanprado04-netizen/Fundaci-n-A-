@@ -249,38 +249,62 @@ function normalizarPreguntasEntrada(array $preguntas): array
     return $out;
 }
 
+function preguntaIdsConValores(PDO $pdo, string $formularioId): array
+{
+    $stmt = $pdo->prepare(
+        'SELECT DISTINCT v.pregunta_id
+         FROM formulario_respuesta_valores v
+         INNER JOIN formulario_respuestas r ON r.id = v.respuesta_id
+         WHERE r.formulario_id = ?'
+    );
+    $stmt->execute([$formularioId]);
+    $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    return is_array($ids) ? $ids : [];
+}
+
 function guardarPreguntas(PDO $pdo, string $formularioId, array $preguntas, bool $tieneRespuestas): void
 {
     $existentes = [];
-    $stmt = $pdo->prepare('SELECT id, tipo FROM formulario_preguntas WHERE formulario_id = ?');
+    $stmt = $pdo->prepare('SELECT id FROM formulario_preguntas WHERE formulario_id = ?');
     $stmt->execute([$formularioId]);
     foreach ($stmt->fetchAll() as $row) {
-        $existentes[$row['id']] = $row['tipo'];
+        $existentes[$row['id']] = true;
     }
 
-    if ($tieneRespuestas) {
-        $idsNuevos = array_column($preguntas, 'id');
-        foreach ($existentes as $id => $tipo) {
-            if (!in_array($id, $idsNuevos, true)) {
-                responderError('No se pueden eliminar preguntas de un formulario que ya tiene respuestas. Agrégalas al final o archívalo.', 409);
-            }
-        }
-        foreach ($preguntas as $p) {
-            if (isset($existentes[$p['id']]) && $existentes[$p['id']] !== $p['tipo']) {
-                responderError('No se puede cambiar el tipo de una pregunta con respuestas registradas.', 409);
-            }
+    $idsNuevos = array_column($preguntas, 'id');
+    $conValores = $tieneRespuestas ? preguntaIdsConValores($pdo, $formularioId) : [];
+    foreach (array_keys($existentes) as $id) {
+        if (!in_array($id, $idsNuevos, true) && in_array($id, $conValores, true)) {
+            responderError('No se puede eliminar una pregunta que ya tiene respuestas (dejaría celdas huérfanas). Edita el enunciado o el tipo, o clona el formulario.', 409);
         }
     }
 
-    $pdo->prepare('DELETE FROM formulario_preguntas WHERE formulario_id = ?')->execute([$formularioId]);
+    $upd = $pdo->prepare(
+        'UPDATE formulario_preguntas
+         SET orden=?, tipo=?, titulo=?, ayuda=?, obligatoria=?, opciones=?
+         WHERE id=? AND formulario_id=?'
+    );
     $ins = $pdo->prepare(
         'INSERT INTO formulario_preguntas (id, formulario_id, orden, tipo, titulo, ayuda, obligatoria, opciones)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
     foreach ($preguntas as $p) {
-        $ins->execute([
-            $p['id'], $formularioId, $p['orden'], $p['tipo'], $p['titulo'], $p['ayuda'], $p['obligatoria'], $p['opciones'],
-        ]);
+        if (!empty($existentes[$p['id']])) {
+            $upd->execute([
+                $p['orden'], $p['tipo'], $p['titulo'], $p['ayuda'], $p['obligatoria'], $p['opciones'],
+                $p['id'], $formularioId,
+            ]);
+        } else {
+            $ins->execute([
+                $p['id'], $formularioId, $p['orden'], $p['tipo'], $p['titulo'], $p['ayuda'], $p['obligatoria'], $p['opciones'],
+            ]);
+        }
+    }
+    $del = $pdo->prepare('DELETE FROM formulario_preguntas WHERE id = ? AND formulario_id = ?');
+    foreach (array_keys($existentes) as $id) {
+        if (!in_array($id, $idsNuevos, true)) {
+            $del->execute([$id, $formularioId]);
+        }
     }
 }
 
@@ -351,14 +375,8 @@ function actualizarFormulario(PDO $pdo, array $body): void
     }
     $titulo = sanitizarHtmlTitulo($body['titulo'] ?? $f['titulo']);
     $estado = in_array($body['estado'] ?? '', FORM_ESTADOS, true) ? $body['estado'] : $f['estado'];
-    $estructuraCerrada = in_array($f['estado'], ['publico', 'autenticados', 'cerrado'], true)
-        || formularioTieneRespuestas($pdo, $id)
-        || !empty($f['archivado_en']);
-    if ($estructuraCerrada && $estado === 'borrador') {
-        responderError('Un formulario publicado no puede volver a borrador. Clónalo para editar la estructura sin romper respuestas existentes.', 409);
-    }
-    if ($estructuraCerrada && isset($body['preguntas'])) {
-        responderError('La estructura de un formulario publicado está congelada. Clónalo, corrige la copia y publícala.', 409);
+    if (!empty($f['archivado_en']) && isset($body['preguntas'])) {
+        responderError('Restaura el formulario de la papelera para editar sus preguntas.', 409);
     }
     $slug = $f['slug'];
     $pdo->prepare(

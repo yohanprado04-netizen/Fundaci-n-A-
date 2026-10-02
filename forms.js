@@ -131,11 +131,10 @@ function formsPlaceholder(tipo) {
   return (FORMS_TIPOS.find((t) => t.id === tipo) || {}).placeholder || '';
 }
 
-function formsEstructuraCerrada() {
+function formsTieneHistorial() {
   const e = _formsEditor;
   if (!e || !e.id) return false;
-  if (e.tieneRespuestas) return true;
-  return ['publico', 'autenticados', 'cerrado'].includes(e.estado);
+  return !!(e.tieneRespuestas || ['publico', 'autenticados', 'cerrado'].includes(e.estado));
 }
 
 function formsLinkPublico(slug) {
@@ -278,7 +277,7 @@ function formsCollect() {
 }
 
 function formsBloqueado() {
-  return formsEstructuraCerrada();
+  return false;
 }
 
 function formsCardPregunta(p, i) {
@@ -321,11 +320,11 @@ async function formsPintarEditor(id) {
   const e = _formsEditor;
   const mount = document.getElementById('mount-formularios');
   if (!mount || !e) return;
-  const locked = formsEstructuraCerrada();
+  const historial = formsTieneHistorial();
   const link = e.slug ? formsLinkPublico(e.slug) : '';
-  const lockedNote = locked
-    ? `<p class="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-4">Estructura congelada: este formulario ya fue publicado o tiene respuestas. No se pueden cambiar preguntas (evita celdas huérfanas y ruptura de datos). Para corregirlo, <button type="button" class="font-bold underline" onclick="formsClonar('${e.id}')">clónalo</button> como borrador, revísalo completo y publica la copia.</p>`
-    : `<p class="text-xs text-slate2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 mb-4">Revisa título, preguntas, tipos y vista previa antes de pasar a Público. Una vez publicado, la estructura queda bloqueada.</p>`;
+  const lockedNote = historial
+    ? `<p class="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-4">Versión editable: puedes cambiar enunciados y el tipo de cada campo. Las respuestas ya enviadas siguen ligadas al mismo ID de pregunta. No elimines una pregunta con envíos (celdas huérfanas); si necesitas un historial limpio, <button type="button" class="font-bold underline" onclick="formsClonar('${e.id}')">clónalo</button>.</p>`
+    : `<p class="text-xs text-slate2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 mb-4">Puedes editar preguntas y tipos en cualquier momento. Si ya hay respuestas, no borres esas preguntas: cambia el texto o el tipo, o clona el formulario.</p>`;
   mount.innerHTML = `<div class="admin-panel-card p-5 sm:p-7">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-5 pb-4 border-b border-gray-100">
       <button type="button" onclick="_formsEditor=null; renderFormularios()" class="text-sm font-semibold text-slate2 hover:text-ink">← Lista</button>
@@ -343,7 +342,7 @@ async function formsPintarEditor(id) {
       <div>
         <label class="text-[11px] font-semibold text-slate2">Estado</label>
         <select id="formsEstado" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm">
-          ${Object.entries(FORMS_ESTADO_LABEL).filter(([k]) => !locked || k !== 'borrador').map(([k, v]) => `<option value="${k}" ${e.estado === k ? 'selected' : ''}>${v}</option>`).join('')}
+          ${Object.entries(FORMS_ESTADO_LABEL).map(([k, v]) => `<option value="${k}" ${e.estado === k ? 'selected' : ''}>${v}</option>`).join('')}
         </select>
       </div>
       <div>
@@ -370,7 +369,7 @@ async function formsPintarEditor(id) {
       </div>
     </div>
     <div id="formsPreguntas">${(e.preguntas || []).map(formsCardPregunta).join('')}</div>
-    ${locked ? '' : `<button type="button" onclick="formsAddPregunta()" class="mt-2 rounded-xl border border-dashed border-morado/40 text-morado text-sm font-semibold px-4 py-2.5 w-full hover:bg-morado/5">+ Agregar pregunta</button>`}
+    <button type="button" onclick="formsAddPregunta()" class="mt-2 rounded-xl border border-dashed border-morado/40 text-morado text-sm font-semibold px-4 py-2.5 w-full hover:bg-morado/5">+ Agregar pregunta</button>
     <div id="formsPreviewBox" class="hidden mt-6 border-t border-gray-100 pt-5"></div>
   </div>`;
 }
@@ -408,7 +407,6 @@ function formsReordenar(desde, hasta) {
 }
 
 function formsAddPregunta() {
-  if (formsBloqueado()) { toast('Clona el formulario para cambiar su estructura.', 'err'); return; }
   formsSyncFromDom();
   _formsEditor.preguntas.push(formsPreguntaVacia('texto'));
   formsRenderPreguntas();
@@ -416,8 +414,11 @@ function formsAddPregunta() {
 }
 
 function formsQuitarPregunta(i) {
-  if (formsBloqueado()) { toast('Clona el formulario para cambiar su estructura.', 'err'); return; }
   formsSyncFromDom();
+  const p = _formsEditor.preguntas[i];
+  if (_formsEditor.tieneRespuestas && p && p.id) {
+    if (!confirm('Si esta pregunta ya tiene respuestas, el servidor impedirá borrarla para no dejar celdas huérfanas. ¿Quitar de todas formas?')) return;
+  }
   _formsEditor.preguntas.splice(i, 1);
   formsRenderPreguntas();
 }
@@ -431,9 +432,16 @@ function formsMoverA(i, dest) {
 }
 
 function formsCambiarTipo(i, tipo) {
-  if (formsBloqueado()) return;
+  const prev = (_formsEditor.preguntas[i] || {}).tipo;
   formsSyncFromDom();
   const p = _formsEditor.preguntas[i];
+  if (_formsEditor.tieneRespuestas && prev !== tipo) {
+    if (!confirm('Ya hay respuestas. El tipo nuevo vale para envíos futuros; los anteriores quedan en el formato viejo, ligados al mismo ID. ¿Cambiar tipo?')) {
+      p.tipo = prev;
+      formsRenderPreguntas();
+      return;
+    }
+  }
   p.tipo = tipo;
   if (['unica', 'multiple', 'desplegable'].includes(tipo) && (!p.opciones || p.opciones.length < 2)) {
     p.opciones = ['Opción 1', 'Opción 2'];
@@ -442,7 +450,6 @@ function formsCambiarTipo(i, tipo) {
 }
 
 function formsAddOpcion(i) {
-  if (formsBloqueado()) return;
   formsSyncFromDom();
   _formsEditor.preguntas[i].opciones = _formsEditor.preguntas[i].opciones || [];
   _formsEditor.preguntas[i].opciones.push('Opción ' + (_formsEditor.preguntas[i].opciones.length + 1));
@@ -490,8 +497,8 @@ async function formsGuardar() {
     cierraEn: formsDtLocalToSql(e.cierraEn),
     limitePorUsuario: e.limitePorUsuario,
     limitePorIp: e.limitePorIp,
+    preguntas: e.preguntas,
   };
-  if (!formsEstructuraCerrada()) payload.preguntas = e.preguntas;
   try {
     const saved = await apiFetch('formularios', { method: 'POST', body: JSON.stringify(payload) });
     _formsEditor = saved;

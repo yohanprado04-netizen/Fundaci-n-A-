@@ -108,8 +108,8 @@ fundacion-api/
 
 ### F. Formularios (constructor tipo Google Forms)
 - Panel **Formularios** en el dashboard (lista, editor, vista previa, respuestas CSV y papelera).
-- Publicación estricta: una vez el formulario es público, restringido a autenticados, cerrado o ya tiene respuestas, **la estructura de preguntas queda congelada**. Las celdas de respuesta viven en `formulario_respuesta_valores` ligadas a `pregunta_id`; editar o recrear preguntas rompería columnas y dejaría valores huérfanos.
-- **Clonar** genera un borrador independiente (nuevos IDs, sin copiar envíos) para corregir un formulario publicado por error.
+- **v1.1 editable:** se pueden cambiar enunciados y tipos de input aunque el formulario ya esté publicado. Las respuestas siguen ligadas a `pregunta_id` (no se regeneran IDs al guardar).
+- Única restricción fuerte: no eliminar una pregunta que ya tiene envíos (evitaría celdas huérfanas). Clonar sigue disponible para un historial limpio.
 - Placeholders por tipo de campo (texto, correo `nombre@correo.com`, número, fecha, opciones, archivo).
 - Notas de esta versión: [`docs/formularios-v1.md`](docs/formularios-v1.md).
 
