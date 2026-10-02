@@ -29,12 +29,24 @@ function asegurarTablasFormularios(PDO $pdo): void
         cierra_en DATETIME NULL,
         limite_por_usuario TINYINT(1) NOT NULL DEFAULT 1,
         limite_por_ip TINYINT(1) NOT NULL DEFAULT 0,
+        roles_permitidos TEXT NULL,
+        cohortes_permitidas TEXT NULL,
         creado_por VARCHAR(160) NULL,
         creado_en DATETIME NOT NULL,
         actualizado_en DATETIME NOT NULL,
         archivado_en DATETIME NULL,
         UNIQUE KEY uq_formularios_slug (slug)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM formularios")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('roles_permitidos', $cols, true)) {
+            $pdo->exec("ALTER TABLE formularios ADD COLUMN roles_permitidos TEXT NULL AFTER limite_por_ip");
+        }
+        if (!in_array('cohortes_permitidas', $cols, true)) {
+            $pdo->exec("ALTER TABLE formularios ADD COLUMN cohortes_permitidas TEXT NULL AFTER roles_permitidos");
+        }
+    } catch (Throwable $e) {}
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS formulario_preguntas (
         id VARCHAR(40) PRIMARY KEY,
@@ -155,6 +167,8 @@ function mapFormulario(array $f, int $preguntas = 0, int $respuestas = 0): array
         'cierraEn' => $f['cierra_en'],
         'limitePorUsuario' => (bool) $f['limite_por_usuario'],
         'limitePorIp' => (bool) $f['limite_por_ip'],
+        'rolesPermitidos' => !empty($f['roles_permitidos']) ? json_decode($f['roles_permitidos'], true) : ['Docente', 'Estudiante'],
+        'cohortesPermitidas' => !empty($f['cohortes_permitidas']) ? json_decode($f['cohortes_permitidas'], true) : ['todas'],
         'creadoPor' => $f['creado_por'],
         'creadoEn' => $f['creado_en'],
         'actualizadoEn' => $f['actualizado_en'],
@@ -213,6 +227,63 @@ function vigenciaPublica(array $f): array
         return ['ok' => false, 'motivo' => 'El plazo de este formulario ya venció.'];
     }
     return ['ok' => true, 'requiereAuth' => $estado === 'autenticados', 'motivo' => $motivo];
+}
+
+function verificarAudienciaFormulario(PDO $pdo, array $f, ?array $sesion): array
+{
+    if (($f['estado'] ?? '') !== 'autenticados') {
+        return ['ok' => true];
+    }
+    if (!$sesion || empty($sesion['id'])) {
+        return ['ok' => false, 'requiereAuth' => true, 'motivo' => 'Inicia sesión para responder este formulario.'];
+    }
+
+    $rol = trim((string) ($sesion['rol'] ?? ''));
+    if (in_array($rol, ['Superadmin', 'Administrador', 'Coordinador'], true)) {
+        return ['ok' => true];
+    }
+
+    $rolesRaw = $f['roles_permitidos'] ?? null;
+    $roles = !empty($rolesRaw) ? json_decode($rolesRaw, true) : ['Docente', 'Estudiante'];
+    if (!is_array($roles) || empty($roles)) {
+        $roles = ['Docente', 'Estudiante'];
+    }
+
+    if ($rol === 'Docente') {
+        if (!in_array('Docente', $roles, true)) {
+            return ['ok' => false, 'requiereAuth' => false, 'motivo' => 'Este formulario está dirigido exclusivamente a estudiantes.'];
+        }
+        return ['ok' => true];
+    }
+
+    if ($rol === 'Estudiante') {
+        if (!in_array('Estudiante', $roles, true)) {
+            return ['ok' => false, 'requiereAuth' => false, 'motivo' => 'Este formulario está dirigido exclusivamente a profesores.'];
+        }
+
+        $cohortesRaw = $f['cohortes_permitidas'] ?? null;
+        $cohortes = !empty($cohortesRaw) ? json_decode($cohortesRaw, true) : ['todas'];
+        if (!is_array($cohortes) || empty($cohortes) || in_array('todas', $cohortes, true) || in_array('', $cohortes, true)) {
+            return ['ok' => true];
+        }
+
+        $st = $pdo->prepare('SELECT cohorte FROM usuarios WHERE id = ?');
+        $st->execute([$sesion['id']]);
+        $cohorteEst = trim((string) $st->fetchColumn());
+
+        if (!in_array($cohorteEst, $cohortes, true)) {
+            $listaPermitidas = implode(', ', $cohortes);
+            return [
+                'ok' => false,
+                'requiereAuth' => false,
+                'motivo' => "Este formulario es exclusivo para la cohorte {$listaPermitidas}. Tu cohorte registrada es " . ($cohorteEst ? "\"{$cohorteEst}\"" : 'ninguna') . '.'
+            ];
+        }
+
+        return ['ok' => true];
+    }
+
+    return ['ok' => false, 'requiereAuth' => false, 'motivo' => 'Tu rol no tiene acceso a este formulario.'];
 }
 
 function normalizarPreguntasEntrada(array $preguntas): array
@@ -347,15 +418,22 @@ function crearFormulario(PDO $pdo, array $sesion, array $body): void
     $id = formNuevoId('fm');
     $slug = slugUnico($pdo, slugificar($titulo));
     $estado = in_array($body['estado'] ?? '', FORM_ESTADOS, true) ? $body['estado'] : 'borrador';
+    $rolesPermitidos = isset($body['rolesPermitidos']) && is_array($body['rolesPermitidos'])
+        ? json_encode(array_values(array_filter($body['rolesPermitidos'], 'is_string')), JSON_UNESCAPED_UNICODE)
+        : json_encode(['Docente', 'Estudiante'], JSON_UNESCAPED_UNICODE);
+    $cohortesPermitidas = isset($body['cohortesPermitidas']) && is_array($body['cohortesPermitidas'])
+        ? json_encode(array_values(array_filter($body['cohortesPermitidas'], 'is_string')), JSON_UNESCAPED_UNICODE)
+        : json_encode(['todas'], JSON_UNESCAPED_UNICODE);
     $ahora = date('Y-m-d H:i:s');
     $pdo->prepare(
-        'INSERT INTO formularios (id, titulo, slug, descripcion, estado, abre_en, cierra_en, limite_por_usuario, limite_por_ip, creado_por, creado_en, actualizado_en)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO formularios (id, titulo, slug, descripcion, estado, abre_en, cierra_en, limite_por_usuario, limite_por_ip, roles_permitidos, cohortes_permitidas, creado_por, creado_en, actualizado_en)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )->execute([
         $id, $titulo, $slug, mb_substr((string) ($body['descripcion'] ?? ''), 0, 4000), $estado,
         ($body['abreEn'] ?? null) ?: null, ($body['cierraEn'] ?? null) ?: null,
         isset($body['limitePorUsuario']) ? (int) !!$body['limitePorUsuario'] : 1,
         isset($body['limitePorIp']) ? (int) !!$body['limitePorIp'] : 0,
+        $rolesPermitidos, $cohortesPermitidas,
         $sesion['email'] ?? $sesion['nombre'] ?? '',
         $ahora, $ahora,
     ]);
@@ -379,14 +457,30 @@ function actualizarFormulario(PDO $pdo, array $body): void
         responderError('Restaura el formulario de la papelera para editar sus preguntas.', 409);
     }
     $slug = $f['slug'];
+    $deseado = trim((string) ($body['slug'] ?? ''));
+    if ($deseado !== '') {
+        $slug = slugUnico($pdo, slugificar($deseado), $id);
+    } elseif ($f['slug'] === 'formulario-sin-titulo' || str_starts_with($f['slug'], 'formulario-sin-titulo-')) {
+        $slugBase = slugificar($titulo);
+        if ($slugBase !== '' && $slugBase !== 'formulario-sin-titulo') {
+            $slug = slugUnico($pdo, $slugBase, $id);
+        }
+    }
+    $rolesPermitidos = isset($body['rolesPermitidos']) && is_array($body['rolesPermitidos'])
+        ? json_encode(array_values(array_filter($body['rolesPermitidos'], 'is_string')), JSON_UNESCAPED_UNICODE)
+        : ($f['roles_permitidos'] ?? json_encode(['Docente', 'Estudiante'], JSON_UNESCAPED_UNICODE));
+    $cohortesPermitidas = isset($body['cohortesPermitidas']) && is_array($body['cohortesPermitidas'])
+        ? json_encode(array_values(array_filter($body['cohortesPermitidas'], 'is_string')), JSON_UNESCAPED_UNICODE)
+        : ($f['cohortes_permitidas'] ?? json_encode(['todas'], JSON_UNESCAPED_UNICODE));
     $pdo->prepare(
-        'UPDATE formularios SET titulo=?, slug=?, descripcion=?, estado=?, abre_en=?, cierra_en=?, limite_por_usuario=?, limite_por_ip=?, actualizado_en=?
+        'UPDATE formularios SET titulo=?, slug=?, descripcion=?, estado=?, abre_en=?, cierra_en=?, limite_por_usuario=?, limite_por_ip=?, roles_permitidos=?, cohortes_permitidas=?, actualizado_en=?
          WHERE id=?'
     )->execute([
         $titulo, $slug, mb_substr((string) ($body['descripcion'] ?? ''), 0, 4000), $estado,
         ($body['abreEn'] ?? null) ?: null, ($body['cierraEn'] ?? null) ?: null,
         isset($body['limitePorUsuario']) ? (int) !!$body['limitePorUsuario'] : (int) $f['limite_por_usuario'],
         isset($body['limitePorIp']) ? (int) !!$body['limitePorIp'] : (int) $f['limite_por_ip'],
+        $rolesPermitidos, $cohortesPermitidas,
         date('Y-m-d H:i:s'), $id,
     ]);
     if (isset($body['preguntas']) && is_array($body['preguntas'])) {
@@ -417,6 +511,8 @@ function clonarFormulario(PDO $pdo, array $sesion, string $id): void
         'cierraEn' => $f['cierra_en'] ?? '',
         'limitePorUsuario' => (bool) $f['limite_por_usuario'],
         'limitePorIp' => (bool) $f['limite_por_ip'],
+        'rolesPermitidos' => !empty($f['roles_permitidos']) ? json_decode($f['roles_permitidos'], true) : ['Docente', 'Estudiante'],
+        'cohortesPermitidas' => !empty($f['cohortes_permitidas']) ? json_decode($f['cohortes_permitidas'], true) : ['todas'],
         'preguntas' => array_map(static function (array $p): array {
             return [
                 'tipo' => $p['tipo'],
@@ -487,7 +583,7 @@ function exportarCsv(PDO $pdo, string $id): void
     header('Content-Disposition: attachment; filename="formulario-' . $f['slug'] . '.csv"');
     $out = fopen('php://output', 'w');
     fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
-    $header = ['Enviado', 'Correo', 'IP'];
+    $header = ['Enviado', 'Correo'];
     foreach ($preguntas as $p) {
         $header[] = textoPlanoTitulo($p['titulo']);
     }
@@ -505,7 +601,7 @@ function exportarCsv(PDO $pdo, string $id): void
                 $map[$v['pregunta_id']] = (string) $v['valor_texto'];
             }
         }
-        $row = [$r['enviado_en'], $r['email'], $r['ip']];
+        $row = [$r['enviado_en'], $r['email'] ?? ''];
         foreach ($preguntas as $p) {
             $row[] = $map[$p['id']] ?? '';
         }
@@ -522,6 +618,11 @@ function manejarFormularios(PDO $pdo): void
     $sesion = exigirSesion(FORM_ROLES_ADMIN);
 
     if ($metodo === 'GET') {
+        if (!empty($_GET['cohortes'])) {
+            $cohortes = $pdo->query("SELECT DISTINCT cohorte FROM usuarios WHERE cohorte IS NOT NULL AND cohorte != '' UNION SELECT DISTINCT nombre AS cohorte FROM modulos WHERE nombre IS NOT NULL AND nombre != '' ORDER BY cohorte ASC")->fetchAll(PDO::FETCH_COLUMN);
+            responderJson(['cohortes' => array_values(array_filter($cohortes))]);
+            return;
+        }
         if (!empty($_GET['csv']) && !empty($_GET['id'])) {
             exportarCsv($pdo, (string) $_GET['id']);
             return;
@@ -668,11 +769,12 @@ function manejarFormularioPublico(PDO $pdo): void
         if ($vigencia['ok'] && !empty($vigencia['requiereAuth'])) {
             $token = obtenerTokenDeCabecera();
             $payload = verificarToken($token);
-            if (!$payload) {
-                responderJson(array_merge(publicarDefinicionPublica($f, [], $vigencia), [
+            $checkAud = verificarAudienciaFormulario($pdo, $f, $payload);
+            if (!$checkAud['ok']) {
+                responderJson(array_merge(publicarDefinicionPublica($f, [], $checkAud), [
                     'disponible' => false,
-                    'requiereAuth' => true,
-                    'motivo' => 'Inicia sesión para responder este formulario.',
+                    'requiereAuth' => !empty($checkAud['requiereAuth']),
+                    'motivo' => $checkAud['motivo'],
                 ]));
                 return;
             }
@@ -699,50 +801,59 @@ function manejarFormularioPublico(PDO $pdo): void
     }
 
     $sesion = null;
+    $usuarioId = null;
+    $email = '';
+
     if (!empty($vigencia['requiereAuth'])) {
         $sesion = exigirSesion();
+        $checkAud = verificarAudienciaFormulario($pdo, $f, $sesion);
+        if (!$checkAud['ok']) {
+            responderError($checkAud['motivo'] ?: 'Acceso restringido para este formulario.', 403);
+        }
+        $usuarioId = $sesion['id'] ?? null;
+        $email = strtolower(trim((string) ($sesion['email'] ?? '')));
     } else {
-        $token = obtenerTokenDeCabecera();
-        $sesion = verificarToken($token);
+        // Formulario público: NO tomar email ni usuario de sesión bajo ninguna circunstancia.
+        if (!empty($body['email'])) {
+            $email = strtolower(trim((string) $body['email']));
+        }
     }
 
     $preguntas = cargarPreguntas($pdo, $f['id']);
     $valoresIn = is_array($body['respuestas'] ?? null) ? $body['respuestas'] : [];
-    $email = strtolower(trim((string) ($body['email'] ?? ($sesion['email'] ?? ''))));
-    if ($sesion && !empty($sesion['email'])) {
-        $email = strtolower((string) $sesion['email']);
+
+    // Si aún no hay email y alguna pregunta de tipo 'correo' fue respondida, tomarla
+    if ($email === '') {
+        foreach ($preguntas as $p) {
+            if ($p['tipo'] === 'correo' && !empty($valoresIn[$p['id']])) {
+                $email = strtolower(trim((string) $valoresIn[$p['id']]));
+                break;
+            }
+        }
     }
+
     if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         responderError('Correo no válido.', 400);
     }
-    if (!$sesion && $email === '') {
-        responderError('Indica tu correo para enviar la respuesta.', 400);
-    }
 
-    $ip = obtenerIpCliente();
     if (!empty($f['limite_por_usuario'])) {
-        if ($sesion && !empty($sesion['id'])) {
+        if ($usuarioId) {
             $st = $pdo->prepare('SELECT COUNT(*) FROM formulario_respuestas WHERE formulario_id = ? AND usuario_id = ?');
-            $st->execute([$f['id'], $sesion['id']]);
+            $st->execute([$f['id'], $usuarioId]);
             if ((int) $st->fetchColumn() > 0) {
                 responderError('Ya registraste una respuesta en este formulario.', 409);
             }
-        }
-        if ($email !== '') {
+        } elseif ($email !== '') {
             $st = $pdo->prepare('SELECT COUNT(*) FROM formulario_respuestas WHERE formulario_id = ? AND email = ?');
             $st->execute([$f['id'], $email]);
             if ((int) $st->fetchColumn() > 0) {
-                responderError('Ya hay una respuesta con este correo.', 409);
+                responderError('Ya hay una respuesta registrada con este correo.', 409);
             }
         }
     }
-    if (!empty($f['limite_por_ip'])) {
-        $st = $pdo->prepare('SELECT COUNT(*) FROM formulario_respuestas WHERE formulario_id = ? AND ip = ?');
-        $st->execute([$f['id'], $ip]);
-        if ((int) $st->fetchColumn() > 0) {
-            responderError('Ya se registró una respuesta desde esta red.', 409);
-        }
-    }
+
+    // IP del que responde: NO se registra bajo ninguna circunstancia (privacidad).
+    $ip = null;
 
     foreach ($preguntas as $p) {
         if ($p['tipo'] === 'seccion' || !$p['obligatoria']) {
@@ -762,7 +873,7 @@ function manejarFormularioPublico(PDO $pdo): void
             'INSERT INTO formulario_respuestas (id, formulario_id, usuario_id, email, ip, user_agent, enviado_en)
              VALUES (?, ?, ?, ?, ?, ?, ?)'
         )->execute([
-            $respuestaId, $f['id'], $sesion['id'] ?? null, $email ?: null, $ip,
+            $respuestaId, $f['id'], $usuarioId, $email ?: null, $ip,
             mb_substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 250),
             date('Y-m-d H:i:s'),
         ]);

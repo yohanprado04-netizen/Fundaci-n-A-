@@ -8,26 +8,33 @@ echo          SERVIDOR FUNDACION A+ (WEB + CHAT INTELIGENTE)
 echo ================================================================
 echo.
 
-:: Obtener la IP local de la maquina
+:: Obtener la IP local de la maquina (Wi-Fi / Ethernet real)
 set LOCAL_IP=
-for /f "tokens=4" %%a in ('route print ^| findstr 0.0.0.0.*0.0.0.0 ^| findstr /v "Default"') do (
-    if not defined LOCAL_IP set LOCAL_IP=%%a
+for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "(Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Sort-Object RouteMetric | Select-Object -First 1 | Get-NetIPAddress -AddressFamily IPv4).IPAddress" 2^>nul`) do (
+    set LOCAL_IP=%%i
+)
+if "%LOCAL_IP%"=="" (
+    for /f "tokens=4" %%a in ('route print ^| findstr 0.0.0.0.*0.0.0.0 ^| findstr /v "Default"') do (
+        if not defined LOCAL_IP set LOCAL_IP=%%a
+    )
 )
 if "%LOCAL_IP%"=="" set LOCAL_IP=127.0.0.1
 
 echo  [+] Iniciando servicios de la Fundacion A+...
 echo.
 echo   * Aplicacion Web:
-echo     http://localhost:8000 (o http://%LOCAL_IP%:8000 en red WiFi)
+echo     Local:        http://localhost:8000
+echo     Otra PC/WiFi: http://%LOCAL_IP%:8000
 echo.
 echo   * Servidor de Chat IA:
-echo     http://localhost:8001 (o http://%LOCAL_IP%:8001 en red WiFi)
+echo     Local:        http://localhost:8001
+echo     Otra PC/WiFi: http://%LOCAL_IP%:8001
 echo.
 echo  ----------------------------------------------------------------
-echo   REQUISITOS:
+echo   REQUISITOS Y CONEXION EN RED LOCAL:
 echo   1. MySQL debe estar activo en XAMPP.
-echo   2. Si te conectas desde el celular en WiFi, ejecuta
-echo      "abrir_puerto_firewall.bat" como Administrador.
+echo   2. Si otra PC o celular no carga, ejecuta:
+echo      "abrir_puerto_firewall.bat" (Ejecutar como Administrador).
 echo.
 echo   Presiona Ctrl + C en esta ventana para apagar el servidor web.
 echo ================================================================

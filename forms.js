@@ -36,6 +36,13 @@ let _formsPubPagina = 0;
 let _formsPubDef = null;
 let _formsPubRespuestas = {};
 let _formsPreviewPagina = 0;
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"']/g, (s) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+}
+if (typeof window !== 'undefined' && !window.escapeHtml) {
+  window.escapeHtml = escapeHtml;
+}
 
 function formsUid(prefix) {
   if (typeof uid === 'function') return uid(prefix);
@@ -87,12 +94,19 @@ function formsHtml(html) {
 }
 
 async function formsPermisosActuales() {
-  if (typeof currentAdminRole !== 'undefined' && currentAdminRole === 'superadmin') {
+  const role = (typeof currentAdminRole !== 'undefined' && currentAdminRole)
+    ? currentAdminRole
+    : (typeof window !== 'undefined' ? (window.currentAdminRole || (typeof window.getCurrentAdminRole === 'function' ? window.getCurrentAdminRole() : null)) : null);
+  const user = (typeof currentAdminUser !== 'undefined' && currentAdminUser)
+    ? currentAdminUser
+    : (typeof window !== 'undefined' ? (window.currentAdminUser || (typeof window.getCurrentAdminUser === 'function' ? window.getCurrentAdminUser() : null)) : null);
+
+  if (role === 'superadmin') {
     _formsPermisos = { ver: true, crear: true, editar: true, eliminar: true };
     return _formsPermisos;
   }
-  if (typeof permisoUsuarioSobrePanel === 'function' && typeof currentAdminUser !== 'undefined') {
-    _formsPermisos = await permisoUsuarioSobrePanel(currentAdminUser, 'admin.forms');
+  if (typeof permisoUsuarioSobrePanel === 'function' && user) {
+    _formsPermisos = await permisoUsuarioSobrePanel(user, 'admin.forms');
   }
   return _formsPermisos;
 }
@@ -162,7 +176,11 @@ function formsLinkPublico(slug) {
 function formsToast(msg, kind) {
   const wrap = document.getElementById('toastWrap');
   if (!wrap) {
-    if (typeof toast === 'function') toast(msg, kind);
+    if (typeof window.toast === 'function' && window.toast !== formsToast) {
+      window.toast(msg, kind);
+      return;
+    }
+    console.log('[Toast ' + kind + ']: ' + msg);
     return;
   }
   const el = document.createElement('div');
@@ -179,6 +197,10 @@ function formsToast(msg, kind) {
   }, 3800);
 }
 
+if (typeof window !== 'undefined' && !window.toast) {
+  window.toast = formsToast;
+}
+
 async function renderFormularios() {
   _formsVista = 'lista';
   await formsPermisosActuales();
@@ -186,9 +208,27 @@ async function renderFormularios() {
     await formsPintarEditor(_formsEditor.id);
     return;
   }
-  const lista = await apiFetch('formularios');
   const mount = document.getElementById('mount-formularios');
   if (!mount) return;
+
+  let lista = [];
+  try {
+    lista = await apiFetch('formularios');
+  } catch (err) {
+    console.error('[renderFormularios] Error al consultar API:', err);
+    mount.innerHTML = `<div class="admin-panel-card p-10 text-center flex flex-col items-center justify-center gap-4">
+      <div class="w-14 h-14 rounded-2xl bg-coral/10 text-coral flex items-center justify-center shadow-sm">
+        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      </div>
+      <div>
+        <p class="text-sm font-bold text-ink">No se pudo cargar la lista de formularios</p>
+        <p class="text-xs text-slate2 mt-1 max-w-sm">${escapeHtml(err.message || 'Error de comunicación con el servidor')}</p>
+      </div>
+      <button onclick="renderFormularios()" class="mt-1 px-5 py-2 rounded-full bg-gradient-to-r from-morado to-indigo-600 text-white text-xs font-bold shadow-md hover:opacity-90 transition cursor-pointer">Reintentar</button>
+    </div>`;
+    return;
+  }
+
   const extra = _formsPermisos.crear
     ? `<button onclick="formsNuevo()" class="btn-glow-primary rounded-xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white text-xs sm:text-sm font-bold px-4 py-2 hover:opacity-95 transition flex items-center gap-1.5 shadow-md shadow-morado/20">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
@@ -198,15 +238,31 @@ async function renderFormularios() {
   const header = typeof sectionHeader === 'function'
     ? sectionHeader('formularios', 'Forms', 'Crea, publica y restringe formularios. La papelera está en el menú Formularios.', extra, false)
     : `<div class="mb-5"><h2 class="text-lg font-extrabold">Forms</h2></div>`;
-  const rows = (lista || []).map((f) => {
+  let slugPostulacionActiva = 'postulaciones';
+  try {
+    const cfg = (await Store.get('configuracion')) || {};
+    if (cfg.postulacionSlug) slugPostulacionActiva = cfg.postulacionSlug;
+    else if (cfg.postulacionUrl) slugPostulacionActiva = cfg.postulacionUrl.replace(/^#formulario\//, '');
+  } catch (e) {}
+
+  const items = Array.isArray(lista) ? lista : (Array.isArray(lista?.formularios) ? lista.formularios : (Array.isArray(lista?.data) ? lista.data : []));
+  const rows = items.map((f) => {
     const label = FORMS_ESTADO_LABEL[f.estado] || f.estado;
     const pill = typeof statusPill === 'function' ? statusPill(label, FORMS_ESTADO_COLORS) : label;
+    const esPostulacionActiva = (f.slug === slugPostulacionActiva);
+    const badgeActiva = esPostulacionActiva
+      ? `<span class="inline-flex items-center gap-1 ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Formulario vinculado actualmente al botón 'Postular' de la landing page"><svg class="w-3 h-3 text-amber-500 fill-amber-400" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg> Postulación activa</span>`
+      : '';
+    const btnActivar = (!esPostulacionActiva && f.estado === 'publico')
+      ? `<button onclick="formsActivarComoPostulacion('${escapeHtml(f.slug)}')" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:underline mr-2" title="Establecer como formulario de postulación oficial en la landing page">Activar postulación</button>`
+      : '';
     return `<tr class="border-b border-gray-50 hover:bg-gray-50/80" data-search="${escapeHtml((f.tituloPlano || '') + ' ' + f.slug)}">
-      <td class="py-3 px-4 text-sm font-semibold text-ink">${formsHtml(f.titulo)}</td>
+      <td class="py-3 px-4 text-sm font-semibold text-ink">${formsHtml(f.titulo)}${badgeActiva}</td>
       <td class="py-3 px-4 text-xs text-slate2">${escapeHtml(f.slug)}</td>
       <td class="py-3 px-4">${pill}</td>
       <td class="py-3 px-4 text-xs text-slate2">${f.preguntasCount} · ${f.respuestasCount} resp.</td>
       <td class="py-3 px-4 text-right whitespace-nowrap">
+        ${btnActivar}
         <button onclick="formsAbrirEditor('${f.id}')" class="text-xs font-semibold text-morado hover:underline mr-2">Editar</button>
         ${_formsPermisos.crear ? `<button onclick="formsClonar('${f.id}')" class="text-xs font-semibold text-slate2 hover:text-ink hover:underline mr-2">Clonar</button>` : ''}
         <button onclick="formsVerRespuestas('${f.id}')" class="text-xs font-semibold text-slate2 hover:text-ink hover:underline mr-2">Respuestas</button>
@@ -231,13 +287,32 @@ async function renderFormularios() {
 async function renderFormulariosPapelera() {
   _formsEditor = null;
   await formsPermisosActuales();
-  const lista = await apiFetch('formularios?papelera=1');
   const mount = document.getElementById('mount-formulariosPapelera');
   if (!mount) return;
+
+  let lista = [];
+  try {
+    lista = await apiFetch('formularios?papelera=1');
+  } catch (err) {
+    console.error('[renderFormulariosPapelera] Error al consultar API:', err);
+    mount.innerHTML = `<div class="admin-panel-card p-10 text-center flex flex-col items-center justify-center gap-4">
+      <div class="w-14 h-14 rounded-2xl bg-coral/10 text-coral flex items-center justify-center shadow-sm">
+        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      </div>
+      <div>
+        <p class="text-sm font-bold text-ink">No se pudo cargar la papelera de formularios</p>
+        <p class="text-xs text-slate2 mt-1 max-w-sm">${escapeHtml(err.message || 'Error de comunicación con el servidor')}</p>
+      </div>
+      <button onclick="renderFormulariosPapelera()" class="mt-1 px-5 py-2 rounded-full bg-gradient-to-r from-morado to-indigo-600 text-white text-xs font-bold shadow-md hover:opacity-90 transition cursor-pointer">Reintentar</button>
+    </div>`;
+    return;
+  }
+
   const header = typeof sectionHeader === 'function'
     ? sectionHeader('formularios-papelera', 'Papelera', 'Formularios archivados. Restaura o destruye de forma definitiva.', '', false)
     : '';
-  const rows = (lista || []).map((f) => `<tr class="border-b border-gray-50" data-search="${escapeHtml(f.tituloPlano || '')}">
+  const items = Array.isArray(lista) ? lista : (Array.isArray(lista?.formularios) ? lista.formularios : (Array.isArray(lista?.data) ? lista.data : []));
+  const rows = items.map((f) => `<tr class="border-b border-gray-50" data-search="${escapeHtml(f.tituloPlano || '')}">
       <td class="py-3 px-4 text-sm font-semibold text-ink">${formsHtml(f.titulo)}</td>
       <td class="py-3 px-4 text-xs text-slate2">${escapeHtml(f.archivadoEn || '')}</td>
       <td class="py-3 px-4 text-xs text-slate2">${f.respuestasCount} respuestas</td>
@@ -256,6 +331,202 @@ async function renderFormulariosPapelera() {
   </div>`;
 }
 
+async function formsActivarComoPostulacion(slug) {
+  if (!slug) return;
+  try {
+    const cfg = (await Store.get('configuracion')) || {};
+    cfg.postulacionSlug = slug;
+    cfg.postulacionHabilitada = true;
+    cfg.postulacionUrl = '#formulario/' + encodeURIComponent(slug);
+    await Store.set('configuracion', cfg);
+    formsToast('Formulario activado para postulaciones públicas', 'ok');
+    if (typeof actualizarBotonesPostular === 'function') {
+      actualizarBotonesPostular(cfg);
+    }
+    await renderFormularios();
+  } catch (err) {
+    console.error('[formsActivarComoPostulacion] Error:', err);
+    formsToast('No se pudo activar el formulario de postulación', 'err');
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.renderFormularios = renderFormularios;
+  window.renderFormulariosPapelera = renderFormulariosPapelera;
+  window.formsActivarComoPostulacion = formsActivarComoPostulacion;
+  window.formsAplicarFormatoPostulacion = formsAplicarFormatoPostulacion;
+  window.formsQuitarFormatoPostulacion = formsQuitarFormatoPostulacion;
+  window.formsActualizarBtnFormatoPostulacion = formsActualizarBtnFormatoPostulacion;
+}
+
+function formsPreguntasPredefinidas() {
+  return [
+    {
+      id: formsUid('fp'),
+      tipo: 'texto',
+      titulo: 'Nombre completo',
+      ayuda: 'Ingresa tus nombres y apellidos completos tal como figuran en tu documento',
+      obligatoria: true,
+      opciones: [],
+      esFormatoPostulacion: true,
+    },
+    {
+      id: formsUid('fp'),
+      tipo: 'texto',
+      titulo: 'Tipo y número de documento de identidad',
+      ayuda: 'Ejemplo: CC 1007123456 o TI',
+      obligatoria: true,
+      opciones: [],
+      esFormatoPostulacion: true,
+    },
+    {
+      id: formsUid('fp'),
+      tipo: 'correo',
+      titulo: 'Correo electrónico personal',
+      ayuda: 'Correo donde recibirás notificaciones y el estado de tu proceso',
+      obligatoria: true,
+      opciones: [],
+      esFormatoPostulacion: true,
+    },
+    {
+      id: formsUid('fp'),
+      tipo: 'numero',
+      titulo: 'Número de WhatsApp / Teléfono de contacto',
+      ayuda: 'Ejemplo: 3001234567 (solo números)',
+      obligatoria: true,
+      opciones: [],
+      esFormatoPostulacion: true,
+    },
+    {
+      id: formsUid('fp'),
+      tipo: 'texto',
+      titulo: 'Dirección de residencia, barrio y municipio',
+      ayuda: 'Lugar donde resides actualmente',
+      obligatoria: true,
+      opciones: [],
+      esFormatoPostulacion: true,
+    },
+    {
+      id: formsUid('fp'),
+      tipo: 'numero',
+      titulo: '¿Cuántos años tienes?',
+      ayuda: 'Edad actual en años cumplidos',
+      obligatoria: true,
+      opciones: [],
+      esFormatoPostulacion: true,
+    },
+    {
+      id: formsUid('fp'),
+      tipo: 'desplegable',
+      titulo: 'Nivel educativo actual alcanzado',
+      ayuda: 'Selecciona tu nivel de escolaridad más reciente',
+      obligatoria: true,
+      opciones: [
+        'Bachiller',
+        'Técnico / Tecnólogo en curso',
+        'Técnico / Tecnólogo graduado',
+        'Universitario en curso',
+        'Universitario graduado',
+        'Otro'
+      ],
+      esFormatoPostulacion: true,
+    },
+    {
+      id: formsUid('fp'),
+      tipo: 'parrafo',
+      titulo: '¿Por qué te gustaría postularte y formarte en el programa TrAIning de la Fundación A+?',
+      ayuda: 'Cuéntanos tu motivación, qué te apasiona de la tecnología y tu disponibilidad de tiempo',
+      obligatoria: true,
+      opciones: [],
+      esFormatoPostulacion: true,
+    },
+  ];
+}
+
+function formsTieneFormatoPostulacion(editor) {
+  if (!editor || !Array.isArray(editor.preguntas)) return false;
+  return editor.preguntas.some(p => p.esFormatoPostulacion || (p.titulo && (
+    p.titulo.toLowerCase().includes('documento de identidad') ||
+    p.titulo.toLowerCase().includes('por qué te gustaría postularte')
+  )));
+}
+
+function formsHtmlBtnFormatoPostulacion(estado, tieneFormato) {
+  const esAutenticados = (estado === 'autenticados');
+
+  if (tieneFormato) {
+    return `<button type="button" id="btnFormatoPostulacion" onclick="formsQuitarFormatoPostulacion()" class="rounded-xl border border-coral/40 bg-coral/10 hover:bg-coral/20 text-coral px-3 py-2 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-sm" title="El Formato de Postulaciones ya está cargado. Haz clic para eliminar estas preguntas.">
+      <svg class="w-3.5 h-3.5 text-coral shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+      <span>Eliminar Formato de Postulaciones</span>
+    </button>`;
+  }
+
+  if (esAutenticados) {
+    return `<button type="button" id="btnFormatoPostulacion" onclick="formsToast('El Formato de Postulaciones no se puede activar en formularios de Solo autenticados.', 'err')" class="rounded-xl border border-gray-200 bg-gray-50 text-slate2/50 px-3 py-2 text-xs font-semibold flex items-center gap-1.5 cursor-not-allowed opacity-50" title="No permitido en 'Solo autenticados'. Este formato está diseñado exclusivamente para postulaciones públicas de aspirantes.">
+      <svg class="w-3.5 h-3.5 shrink-0 text-slate2/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+      <span>Formato de Postulaciones</span>
+    </button>`;
+  }
+
+  return `<button type="button" id="btnFormatoPostulacion" onclick="formsAplicarFormatoPostulacion()" class="rounded-xl border border-morado/35 bg-morado/5 hover:bg-morado/15 text-morado px-3 py-2 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-sm" title="Inserta las preguntas estándar de postulación (se limita a agregarse una sola vez)">
+    <svg class="w-3.5 h-3.5 text-morado shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+    <span>Formato de Postulaciones</span>
+  </button>`;
+}
+
+function formsActualizarBtnFormatoPostulacion() {
+  const container = document.getElementById('wrapBtnFormatoPostulacion');
+  if (!container || !_formsEditor) return;
+  const estado = document.getElementById('formsEstado')?.value || _formsEditor.estado || 'borrador';
+  const tieneFormato = formsTieneFormatoPostulacion(_formsEditor);
+  container.innerHTML = formsHtmlBtnFormatoPostulacion(estado, tieneFormato);
+}
+
+function formsAplicarFormatoPostulacion() {
+  formsSyncFromDom();
+  if (!_formsEditor) return;
+  const estadoActual = document.getElementById('formsEstado')?.value || _formsEditor.estado;
+  if (estadoActual === 'autenticados') {
+    formsToast('El Formato de Postulaciones no se puede activar en formularios de Solo autenticados.', 'err');
+    return;
+  }
+  if (formsTieneFormatoPostulacion(_formsEditor)) {
+    formsToast('El Formato de Postulaciones ya está agregado en este formulario.', 'info');
+    return;
+  }
+  const nuevas = formsPreguntasPredefinidas();
+  if (!_formsEditor.preguntas || !_formsEditor.preguntas.length) {
+    _formsEditor.preguntas = nuevas;
+  } else {
+    _formsEditor.preguntas.push(...nuevas);
+  }
+  formsRenderPreguntas();
+  formsToast('Formato de Postulaciones agregado con éxito', 'ok');
+}
+
+function formsQuitarFormatoPostulacion() {
+  formsSyncFromDom();
+  if (!_formsEditor) return;
+  if (!confirm('¿Deseas eliminar las preguntas correspondientes al Formato de Postulaciones?')) {
+    return;
+  }
+  _formsEditor.preguntas = (_formsEditor.preguntas || []).filter(p => {
+    if (p.esFormatoPostulacion) return false;
+    const t = (p.titulo || '').toLowerCase();
+    if (t.includes('documento de identidad') || 
+        t.includes('por qué te gustaría postularte') ||
+        t.includes('whatsapp / teléfono de contacto') ||
+        t.includes('¿cuántos años tienes?') ||
+        t.includes('nivel educativo actual alcanzado') ||
+        t.includes('dirección de residencia, barrio y municipio')) {
+      return false;
+    }
+    return true;
+  });
+  formsRenderPreguntas();
+  formsToast('Formato de Postulaciones eliminado', 'ok');
+}
+
 function formsPreguntaVacia(tipo) {
   return {
     id: formsUid('fp'),
@@ -267,6 +538,38 @@ function formsPreguntaVacia(tipo) {
   };
 }
 
+let _formsListaCohortes = null;
+async function formsCargarCohortes() {
+  if (_formsListaCohortes) return _formsListaCohortes;
+  try {
+    const res = await apiFetch('formularios?cohortes=1');
+    _formsListaCohortes = (res && res.cohortes) || [];
+  } catch (err) {
+    _formsListaCohortes = [];
+  }
+  return _formsListaCohortes;
+}
+
+function formsOnCambioEstado(val) {
+  const restr = document.getElementById('formsRestriccionesWrap');
+  if (restr) restr.classList.toggle('hidden', val === 'publico');
+  const aud = document.getElementById('formsAudienciaWrap');
+  if (aud) aud.classList.toggle('hidden', val !== 'autenticados');
+  if (typeof formsActualizarBtnFormatoPostulacion === 'function') {
+    formsActualizarBtnFormatoPostulacion();
+  }
+}
+
+function formsToggleCohortesWrap(checked) {
+  const wrap = document.getElementById('formsCohortesWrap');
+  if (wrap) wrap.classList.toggle('hidden', !checked);
+}
+
+function formsToggleCohorteSelect(especifica) {
+  const wrap = document.getElementById('formsCohorteSelectWrap');
+  if (wrap) wrap.classList.toggle('hidden', !especifica);
+}
+
 async function formsNuevo() {
   _formsEditor = {
     id: null,
@@ -276,13 +579,19 @@ async function formsNuevo() {
     estado: 'borrador',
     abreEn: '',
     cierraEn: '',
-    limitePorUsuario: true,
+    limitePorUsuario: false,
     limitePorIp: false,
-    preguntas: [formsPreguntaVacia('texto')],
+    rolesPermitidos: ['Docente', 'Estudiante'],
+    cohortesPermitidas: ['todas'],
+    preguntas: [],
     tieneRespuestas: false,
     respuestasCount: 0,
   };
   await formsPintarEditor(null);
+}
+
+function formsCargarPredefinidas() {
+  formsAplicarFormatoPostulacion();
 }
 
 async function formsAbrirEditor(id) {
@@ -293,13 +602,38 @@ async function formsAbrirEditor(id) {
 
 function formsCollect() {
   const e = _formsEditor;
-  e.titulo = formsReadRich('formsTitulo');
+  if (!e) return null;
+  e.titulo = formsReadRich('formsTitulo') || 'Formulario sin título';
   e.descripcion = (document.getElementById('formsDescripcion') || {}).value || '';
   e.estado = (document.getElementById('formsEstado') || {}).value || 'borrador';
   e.abreEn = (document.getElementById('formsAbre') || {}).value || '';
   e.cierraEn = (document.getElementById('formsCierra') || {}).value || '';
-  e.limitePorUsuario = !!document.getElementById('formsLimiteUser')?.checked;
-  e.limitePorIp = !!document.getElementById('formsLimiteIp')?.checked;
+  const esPub = e.estado === 'publico';
+  e.limitePorUsuario = esPub ? false : !!document.getElementById('formsLimiteUser')?.checked;
+  e.limitePorIp = false;
+
+  if (e.estado === 'autenticados') {
+    const roles = [];
+    if (document.getElementById('formsRolDocente')?.checked) roles.push('Docente');
+    if (document.getElementById('formsRolEstudiante')?.checked) roles.push('Estudiante');
+    e.rolesPermitidos = roles.length ? roles : ['Docente', 'Estudiante'];
+
+    if (e.rolesPermitidos.includes('Estudiante')) {
+      const esTodas = document.getElementById('formsCohortesTodas')?.checked;
+      if (esTodas) {
+        e.cohortesPermitidas = ['todas'];
+      } else {
+        const selVal = document.getElementById('formsCohorteSelect')?.value;
+        e.cohortesPermitidas = selVal ? [selVal] : ['todas'];
+      }
+    } else {
+      e.cohortesPermitidas = ['todas'];
+    }
+  } else {
+    e.rolesPermitidos = ['Docente', 'Estudiante'];
+    e.cohortesPermitidas = ['todas'];
+  }
+
   e.preguntas = (e.preguntas || []).map((p, i) => {
     const tituloEl = document.getElementById('formsQTitulo_' + i);
     const titulo = tituloEl ? (formsReadRich('formsQTitulo_' + i) || p.titulo) : p.titulo;
@@ -381,6 +715,11 @@ async function formsPintarEditor(id) {
   const e = _formsEditor;
   const mount = document.getElementById('mount-formularios');
   if (!mount || !e) return;
+  const cohortesDisponibles = await formsCargarCohortes();
+  const roles = Array.isArray(e.rolesPermitidos) ? e.rolesPermitidos : ['Docente', 'Estudiante'];
+  const cohortesPerm = Array.isArray(e.cohortesPermitidas) ? e.cohortesPermitidas : ['todas'];
+  const esTodasCohortes = cohortesPerm.includes('todas') || !cohortesPerm.length;
+  const cohorteSeleccionada = !esTodasCohortes ? cohortesPerm[0] : (cohortesDisponibles[0] || '');
   const historial = formsTieneHistorial();
   const link = e.slug ? formsLinkPublico(e.slug) : '';
   const lockedNote = historial
@@ -389,8 +728,9 @@ async function formsPintarEditor(id) {
   mount.innerHTML = `<div class="admin-panel-card p-5 sm:p-7">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-5 pb-4 border-b border-gray-100">
       <button type="button" onclick="_formsEditor=null; renderFormularios()" class="text-sm font-semibold text-slate2 hover:text-ink">Volver atrás</button>
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <button type="button" onclick="formsTogglePreview()" class="rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold">Vista previa</button>
+        <span id="wrapBtnFormatoPostulacion">${formsHtmlBtnFormatoPostulacion(e.estado, formsTieneFormatoPostulacion(e))}</span>
         ${e.id ? `<button type="button" onclick="formsVerRespuestas('${e.id}')" class="rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold">Respuestas</button>` : ''}
         ${e.id && _formsPermisos.crear ? `<button type="button" onclick="formsClonar('${e.id}')" class="rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold">Clonar</button>` : ''}
         ${_formsPermisos.editar || _formsPermisos.crear ? `<button type="button" onclick="formsGuardar()" class="btn-glow-primary rounded-xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white text-xs font-bold px-4 py-2">Guardar</button>` : ''}
@@ -402,14 +742,24 @@ async function formsPintarEditor(id) {
     <div class="grid sm:grid-cols-2 gap-4 mb-4">
       <div>
         <label class="text-[11px] font-semibold text-slate2">Estado</label>
-        <select id="formsEstado" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm">
+        <select id="formsEstado" onchange="formsOnCambioEstado(this.value)" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm">
           ${Object.entries(FORMS_ESTADO_LABEL).map(([k, v]) => `<option value="${k}" ${e.estado === k ? 'selected' : ''}>${v}</option>`).join('')}
         </select>
       </div>
       <div>
-        <label class="text-[11px] font-semibold text-slate2">Link</label>
+        <label class="text-[11px] font-semibold text-slate2">Link público</label>
         ${link
-          ? `<a id="formsLink" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" title="Abrir formulario publicado" class="mt-1 flex w-full items-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-mono text-morado hover:bg-morado/5 truncate" onclick="formsCopiarEnlace()">${escapeHtml(link)}</a>`
+          ? `<div class="mt-1 flex items-center gap-1.5">
+              <input type="text" readonly value="${escapeHtml(link)}" onclick="this.select()" class="flex-1 min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-mono text-morado truncate cursor-pointer" title="Haz clic para seleccionar" />
+              <button type="button" onclick="formsCopiarEnlace()" class="shrink-0 rounded-xl border border-gray-200 bg-white hover:bg-morado/10 hover:border-morado text-morado px-3 py-2 text-xs font-semibold flex items-center gap-1 transition" title="Copiar enlace al portapapeles">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                <span>Copiar</span>
+              </button>
+              <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" class="shrink-0 rounded-xl bg-morado text-white hover:bg-morado/90 px-3 py-2 text-xs font-semibold flex items-center gap-1 transition shadow-sm" title="Abrir en pestaña nueva">
+                <span>Abrir</span>
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+              </a>
+            </div>`
           : `<div class="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-slate2 select-none cursor-not-allowed">Se genera al guardar</div>`}
       </div>
       <div>
@@ -422,11 +772,51 @@ async function formsPintarEditor(id) {
       </div>
     </div>
     <textarea id="formsDescripcion" rows="2" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm mb-4" placeholder="Descripción interna / instrucciones">${escapeHtml(e.descripcion || '')}</textarea>
-    <div class="mb-5">
-      <p class="text-[11px] font-semibold text-slate2">Restricciones</p>
+    
+    <div id="formsAudienciaWrap" class="mb-5 ${e.estado === 'autenticados' ? '' : 'hidden'}">
+      <div class="rounded-2xl border border-morado/25 bg-morado/5 p-4 sm:p-5">
+        <div class="flex items-center gap-2 mb-1.5">
+          <svg class="w-4 h-4 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          <p class="text-xs font-bold uppercase tracking-wider text-morado">Audiencia permitida (Solo autenticados)</p>
+        </div>
+        <p class="text-xs text-slate2 mb-3">Indica qué usuarios institucionales con sesión iniciada pueden responder este formulario:</p>
+        
+        <div class="flex flex-wrap gap-5 text-sm font-medium text-ink mb-3">
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input id="formsRolDocente" type="checkbox" ${roles.includes('Docente') ? 'checked' : ''} class="rounded border-gray-300 text-morado focus:ring-morado"/>
+            <span>Profesores (Docentes)</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input id="formsRolEstudiante" type="checkbox" onchange="formsToggleCohortesWrap(this.checked)" ${roles.includes('Estudiante') ? 'checked' : ''} class="rounded border-gray-300 text-morado focus:ring-morado"/>
+            <span>Estudiantes</span>
+          </label>
+        </div>
+
+        <div id="formsCohortesWrap" class="${roles.includes('Estudiante') ? '' : 'hidden'} border-t border-morado/15 pt-3">
+          <p class="text-xs font-semibold text-ink mb-2">Cohortes de estudiantes con acceso:</p>
+          <div class="flex flex-col sm:flex-row sm:items-center gap-4 text-sm">
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input type="radio" name="formsCohortesOpt" id="formsCohortesTodas" value="todas" ${esTodasCohortes ? 'checked' : ''} onchange="formsToggleCohorteSelect(false)" class="text-morado focus:ring-morado"/>
+              <span>Todas las cohortes</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input type="radio" name="formsCohortesOpt" id="formsCohortesEspecificas" value="especifica" ${!esTodasCohortes ? 'checked' : ''} onchange="formsToggleCohorteSelect(true)" class="text-morado focus:ring-morado"/>
+              <span>Cohorte específica</span>
+            </label>
+            <div id="formsCohorteSelectWrap" class="${!esTodasCohortes ? '' : 'hidden'} flex-1 max-w-xs">
+              <select id="formsCohorteSelect" class="w-full rounded-xl border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-ink focus:border-morado focus:outline-none focus:ring-2 focus:ring-morado/20">
+                ${cohortesDisponibles.map(c => `<option value="${escapeHtml(c)}" ${cohorteSeleccionada === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="formsRestriccionesWrap" class="mb-5 ${e.estado === 'publico' ? 'hidden' : ''}">
+      <p class="text-[11px] font-semibold text-slate2">Restricciones de respuesta</p>
       <div class="mt-2 flex flex-wrap gap-4 text-sm">
-        <label class="flex items-center gap-2"><input id="formsLimiteUser" type="checkbox" ${e.limitePorUsuario ? 'checked' : ''} class="rounded border-gray-300 text-morado"/> Una respuesta por usuario/correo</label>
-        <label class="flex items-center gap-2"><input id="formsLimiteIp" type="checkbox" ${e.limitePorIp ? 'checked' : ''} class="rounded border-gray-300 text-morado"/> Una respuesta por IP</label>
+        <label class="flex items-center gap-2 cursor-pointer select-none"><input id="formsLimiteUser" type="checkbox" ${e.limitePorUsuario ? 'checked' : ''} class="rounded border-gray-300 text-morado"/> Limitar a una respuesta por usuario</label>
       </div>
     </div>
     <div id="formsPreguntas"></div>
@@ -448,6 +838,9 @@ function formsRenderPreguntas() {
   if (!box || !_formsEditor) return;
   (_formsEditor.preguntas || []).forEach((p, idx) => { p.orden = idx; });
   box.innerHTML = (_formsEditor.preguntas || []).map(formsCardPregunta).join('');
+  if (typeof formsActualizarBtnFormatoPostulacion === 'function') {
+    formsActualizarBtnFormatoPostulacion();
+  }
 }
 
 function formsScrollPregunta(i) {
@@ -581,10 +974,19 @@ async function formsCopiarEnlace() {
   if (!slug) return;
   const link = formsLinkPublico(slug);
   try {
-    await navigator.clipboard.writeText(link);
-    toast('Enlace copiado', 'ok');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(link);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = link;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    formsToast('Enlace copiado al portapapeles', 'ok');
   } catch (err) {
-    toast('No se pudo copiar el enlace', 'err');
+    formsToast('No se pudo copiar el enlace', 'err');
   }
 }
 
@@ -607,12 +1009,12 @@ async function formsGuardar() {
   try {
     const saved = await apiFetch('formularios', { method: 'POST', body: JSON.stringify(payload) });
     _formsEditor = saved;
-    if (saved.estado === 'publico') toast('Formulario publicado. El enlace ya está activo.', 'ok');
-    else if (saved.estado === 'autenticados') toast('Formulario publicado para usuarios con sesión.', 'ok');
-    else toast('Formulario guardado', 'ok');
+    if (saved.estado === 'publico') formsToast('Formulario publicado. El enlace ya está activo.', 'ok');
+    else if (saved.estado === 'autenticados') formsToast('Formulario publicado para usuarios con sesión.', 'ok');
+    else formsToast('Formulario guardado', 'ok');
     await formsPintarEditor(saved.id);
   } catch (err) {
-    toast(err.message || 'No se pudo guardar', 'err');
+    formsToast(err.message || 'No se pudo guardar', 'err');
   }
 }
 
@@ -630,21 +1032,21 @@ async function formsClonar(id) {
 async function formsArchivar(id) {
   if (!confirm('¿Archivar este formulario? Pasará a la papelera.')) return;
   await apiFetch('formularios', { method: 'POST', body: JSON.stringify({ accion: 'archivar', id }) });
-  toast('Enviado a la papelera', 'ok');
+  formsToast('Enviado a la papelera', 'ok');
   _formsEditor = null;
   renderFormularios();
 }
 
 async function formsRestaurar(id) {
   await apiFetch('formularios', { method: 'POST', body: JSON.stringify({ accion: 'restaurar', id }) });
-  toast('Restaurado como borrador', 'ok');
+  formsToast('Restaurado como borrador', 'ok');
   renderFormulariosPapelera();
 }
 
 async function formsDestruir(id) {
   if (!confirm('Esto borra el formulario y todas sus respuestas de forma permanente. ¿Continuar?')) return;
   await apiFetch('formularios', { method: 'POST', body: JSON.stringify({ accion: 'destruir', id }) });
-  toast('Eliminado definitivamente', 'ok');
+  formsToast('Eliminado definitivamente', 'ok');
   renderFormulariosPapelera();
 }
 
@@ -701,7 +1103,7 @@ async function formsDescargarCsv(id) {
     a.click();
     URL.revokeObjectURL(a.href);
   } catch (err) {
-    toast(err.message, 'err');
+    formsToast(err.message, 'err');
   }
 }
 
@@ -784,10 +1186,6 @@ function formsPubPaginaOk() {
   const def = _formsPubDef;
   const err = document.getElementById('formsPubError');
   const mostrar = (msg) => { if (err) { err.textContent = msg; err.classList.remove('hidden'); } return false; };
-  if (_formsPubPagina === 0) {
-    const emailEl = document.getElementById('formsPubEmail');
-    if (emailEl && !emailEl.value.trim()) return mostrar('Indica tu correo');
-  }
   const pags = formsPaginas(def.preguntas);
   const multi = formsHaySecciones(def.preguntas) && pags.length > 1;
   const lista = multi ? ((pags[_formsPubPagina] || {}).items || []) : (def.preguntas || []).map((p, i) => ({ p, i })).filter(({ p }) => p.tipo !== 'seccion');
@@ -812,8 +1210,6 @@ async function formsPubPaso(dir) {
 function formsPubRestaurarValores() {
   const def = _formsPubDef;
   if (!def) return;
-  const emailEl = document.getElementById('formsPubEmail');
-  if (emailEl && def._email) emailEl.value = def._email;
   const pags = formsPaginas(def.preguntas);
   const multi = formsHaySecciones(def.preguntas) && pags.length > 1;
   const lista = multi ? ((pags[_formsPubPagina] || {}).items || []) : [];
@@ -835,14 +1231,12 @@ function formsPubPintarCuerpo() {
   const def = _formsPubDef;
   const campos = document.getElementById('formsPubCampos');
   const nav = document.getElementById('formsPubNav');
-  const emailWrap = document.getElementById('formsPubEmailWrap');
   if (!def || !campos) return;
   const pags = formsPaginas(def.preguntas);
   const multi = formsHaySecciones(def.preguntas) && pags.length > 1;
   const idx = multi ? _formsPubPagina : 0;
   campos.innerHTML = formsRenderCampos(def, false, multi ? idx : null);
   formsPubRestaurarValores();
-  if (emailWrap) emailWrap.classList.toggle('hidden', multi && idx !== 0);
   const last = !multi || idx >= pags.length - 1;
   if (nav) {
     nav.innerHTML = `${multi && idx > 0 ? `<button type="button" class="rounded-2xl border border-gray-200 text-ink font-semibold py-3.5 px-6 min-w-[8.5rem]" onclick="formsPubPaso(-1)">Atrás</button>` : ''}
@@ -854,10 +1248,23 @@ function formsPubPintarCuerpo() {
 
 async function formsEnviarPublico(slug, def) {
   await formsPubLeerPagina();
-  if (!formsPubPaginaOk()) throw new Error(document.getElementById('formsPubError')?.textContent || 'Completa el formulario');
-  const emailEl = document.getElementById('formsPubEmail');
-  const body = { slug, email: (emailEl && emailEl.value) || def._email || '', respuestas: _formsPubRespuestas };
-  return apiFetch('formulario_publico', { method: 'POST', body: JSON.stringify(body) });
+  if (!formsPubPaginaOk()) throw new Error(document.getElementById('formsPubError')?.textContent || 'Completa los campos obligatorios del formulario');
+  let email = '';
+  if (def.estado === 'autenticados') {
+    // Para autenticados el backend toma la sesión
+  } else {
+    // Si el formulario es público, solo enviar correo si respondió una pregunta de correo del formulario
+    const qCorreo = (def.preguntas || []).find((p) => p.tipo === 'correo');
+    if (qCorreo && _formsPubRespuestas[qCorreo.id]) {
+      email = String(_formsPubRespuestas[qCorreo.id]).trim();
+    }
+  }
+  const body = { slug, email, respuestas: _formsPubRespuestas };
+  const fetchOpts = { method: 'POST', body: JSON.stringify(body) };
+  if (def.estado === 'publico') {
+    fetchOpts.headers = { 'Authorization': '' };
+  }
+  return apiFetch('formulario_publico', fetchOpts);
 }
 
 async function formsMostrarPublico(slug) {
@@ -885,15 +1292,16 @@ async function formsMostrarPublico(slug) {
       </div>`;
       return;
     }
-    const logged = typeof getAuthToken === 'function' && getAuthToken();
     _formsPubDef = def;
     _formsPubPagina = 0;
     _formsPubRespuestas = {};
-    card.innerHTML = `<div class="bg-white rounded-3xl shadow-soft p-6 sm:p-9">
+    card.innerHTML = `<div class="bg-white rounded-3xl shadow-soft p-6 sm:p-9 relative">
+      <button type="button" onclick="location.hash='#inicio'" class="absolute top-5 right-5 text-slate2 hover:text-ink text-xs font-semibold p-2 rounded-xl hover:bg-gray-100 flex items-center gap-1 transition" title="Cerrar y volver">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
       <p class="text-xs font-bold uppercase tracking-[0.2em] text-morado mb-2">Fundación A+</p>
       <h1 class="text-2xl font-extrabold text-ink mb-4">${formsHtml(def.titulo)}</h1>
       <form id="formsPubForm" class="space-y-1">
-        ${!logged ? `<div id="formsPubEmailWrap"><input id="formsPubEmail" type="email" inputmode="email" autocomplete="email" placeholder="nombre@correo.com" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm mb-4" /></div>` : '<div id="formsPubEmailWrap" class="hidden"></div>'}
         <div id="formsPubCampos"></div>
         <div id="formsPubNav" class="mt-10 flex items-stretch gap-5"></div>
       </form>
@@ -930,7 +1338,7 @@ function formsCerrarPublico() {
 }
 
 function formsRutaHash() {
-  const h = (location.hash || '').replace(/^#/, '');
+  const h = (location.hash || '').replace(/^#\/?/, '');
   const m = h.match(/^formulario\/([^/?]+)/);
   return m ? decodeURIComponent(m[1]) : null;
 }
@@ -941,17 +1349,27 @@ function formsOnHash() {
   else formsCerrarPublico();
 }
 
-window.addEventListener('hashchange', formsOnHash);
-window.addEventListener('DOMContentLoaded', () => {
+function formsInitOnLoad() {
   const pending = sessionStorage.getItem('formsReturnHash');
   if (pending && typeof getAuthToken === 'function' && getAuthToken()) {
     sessionStorage.removeItem('formsReturnHash');
     location.hash = pending;
   }
   formsOnHash();
-});
+}
 
-if (typeof RENDERERS === 'object' && RENDERERS) {
-  RENDERERS.formularios = renderFormularios;
-  RENDERERS.formulariosPapelera = renderFormulariosPapelera;
+window.addEventListener('hashchange', formsOnHash);
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', formsInitOnLoad);
+} else {
+  formsInitOnLoad();
+}
+
+window.renderFormularios = renderFormularios;
+window.renderFormulariosPapelera = renderFormulariosPapelera;
+
+const targetRenderers = typeof window !== 'undefined' ? window.RENDERERS : null;
+if (targetRenderers) {
+  targetRenderers.formularios = renderFormularios;
+  targetRenderers.formulariosPapelera = renderFormulariosPapelera;
 }

@@ -52,7 +52,6 @@ if (!in_array($entidad, $rutasPublicas, true)) {
         'pensum'                  => ['Superadmin', 'Coordinador'],
         'chat_voz_conocimiento'   => ['Superadmin', 'Coordinador'],
         'memorandos'              => ['Superadmin', 'Coordinador'],
-        'encuestas'               => ['Superadmin', 'Coordinador'],
         'formularios'             => ['Superadmin', 'Administrador', 'Coordinador'],
         'enviar_correo'           => ['Superadmin', 'Coordinador', 'Docente'],
         'horarios'                => ['Superadmin', 'Coordinador', 'Docente'],
@@ -130,9 +129,6 @@ switch ($entidad) {
     case 'memorandos_leidos':
         manejarMemorandosLeidos($pdo);
         break;
-    case 'encuestas':
-        manejarEncuestas($pdo);
-        break;
     case 'formularios':
         manejarFormularios($pdo);
         break;
@@ -191,14 +187,28 @@ switch ($entidad) {
  * en una sola consulta de ~150 bytes, sin exponer datos privados de usuarios
  * ni exigir autenticación.
  */
+function asegurarColumnaPostulacionSlug(PDO $pdo): void {
+    static $asegurado = false;
+    if ($asegurado) return;
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM configuracion")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('postulacion_slug', $cols, true)) {
+            $pdo->exec("ALTER TABLE configuracion ADD COLUMN postulacion_slug VARCHAR(120) DEFAULT 'postulaciones' AFTER postulacion_url");
+        }
+        $asegurado = true;
+    } catch (Throwable $e) {}
+}
+
 function manejarPublicInfo(PDO $pdo): void {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
         responderError('Método no permitido.', 405);
     }
 
+    asegurarColumnaPostulacionSlug($pdo);
+
     $fila = $pdo->query(
         "SELECT nombre, ciudad, direccion, correo, telefono,
-                postulacion_habilitada, postulacion_url
+                postulacion_habilitada, postulacion_url, postulacion_slug
          FROM configuracion WHERE id = 1"
     )->fetch();
 
@@ -210,6 +220,7 @@ function manejarPublicInfo(PDO $pdo): void {
         'telefono'              => $fila['telefono'] ?? '3214974708',
         'postulacionHabilitada' => !empty($fila['postulacion_habilitada']),
         'postulacionUrl'        => $fila['postulacion_url'] ?? '',
+        'postulacionSlug'       => $fila['postulacion_slug'] ?? ($fila['postulacion_url'] ? preg_replace('/^#formulario\//', '', $fila['postulacion_url']) : 'postulaciones'),
     ];
 
     $stmtCount = $pdo->query("SELECT COUNT(*) AS total FROM usuarios WHERE rol = 'Estudiante' AND (estado_registro IS NULL OR estado_registro != 'Pendiente')");
@@ -290,12 +301,14 @@ function manejarRegistroPublico(PDO $pdo): void {
 function manejarConfiguracion(PDO $pdo): void {
     $metodo = $_SERVER['REQUEST_METHOD'];
 
+    asegurarColumnaPostulacionSlug($pdo);
+
     if ($metodo === 'GET') {
         exigirSesion(['Superadmin']);
         $fila = $pdo->query(
             "SELECT nombre, ciudad, direccion, correo, telefono,
                     asistencia_minima, notificaciones_email, notificaciones_ia,
-                    postulacion_habilitada, postulacion_url,
+                    postulacion_habilitada, postulacion_url, postulacion_slug,
                     email_metodo, emailjs_public_key, emailjs_service_id, emailjs_template_id,
                     smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_secure
              FROM configuracion WHERE id = 1"
@@ -313,6 +326,7 @@ function manejarConfiguracion(PDO $pdo): void {
                 'notificacionesIA'       => true,
                 'postulacionHabilitada'  => false,
                 'postulacionUrl'         => '',
+                'postulacionSlug'        => 'postulaciones',
                 'emailMetodo'            => 'emailjs',
                 'emailjsPublicKey'       => 'elyshGVkR2fYZQJfO',
                 'emailjsServiceId'       => 'service_20mxfgu',
@@ -337,6 +351,7 @@ function manejarConfiguracion(PDO $pdo): void {
             'notificacionesIA'      => (bool) $fila['notificaciones_ia'],
             'postulacionHabilitada' => (bool) $fila['postulacion_habilitada'],
             'postulacionUrl'        => $fila['postulacion_url'],
+            'postulacionSlug'       => $fila['postulacion_slug'] ?? ($fila['postulacion_url'] ? preg_replace('/^#formulario\//', '', $fila['postulacion_url']) : 'postulaciones'),
             'emailMetodo'           => $fila['email_metodo'] ?? 'emailjs',
             'emailjsPublicKey'      => $fila['emailjs_public_key'] ?? 'elyshGVkR2fYZQJfO',
             'emailjsServiceId'      => $fila['emailjs_service_id'] ?? 'service_20mxfgu',
@@ -359,15 +374,24 @@ function manejarConfiguracion(PDO $pdo): void {
             responderError('Se esperaba un objeto de configuración en body.data.', 400);
         }
 
+        $postulacionSlug = trim($cfg['postulacionSlug'] ?? '');
+        if (!$postulacionSlug && !empty($cfg['postulacionUrl'])) {
+            $postulacionSlug = preg_replace('/^#formulario\//', '', $cfg['postulacionUrl']);
+        }
+        if (!$postulacionSlug) {
+            $postulacionSlug = 'postulaciones';
+        }
+        $postulacionUrl = '#formulario/' . $postulacionSlug;
+
         $stmt = $pdo->prepare(
             "INSERT INTO configuracion
                 (id, nombre, ciudad, direccion, correo, telefono, cupo_maximo,
                  notas_minima_aprobacion, asistencia_minima,
                  notificaciones_email, notificaciones_ia,
-                 postulacion_habilitada, postulacion_url,
+                 postulacion_habilitada, postulacion_url, postulacion_slug,
                  email_metodo, emailjs_public_key, emailjs_service_id, emailjs_template_id,
                  smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_secure)
-             VALUES (1, ?, ?, ?, ?, ?, 30, 6.0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (1, ?, ?, ?, ?, ?, 30, 6.0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                 nombre = VALUES(nombre), ciudad = VALUES(ciudad),
                 direccion = VALUES(direccion), correo = VALUES(correo),
@@ -377,6 +401,7 @@ function manejarConfiguracion(PDO $pdo): void {
                 notificaciones_ia = VALUES(notificaciones_ia),
                 postulacion_habilitada = VALUES(postulacion_habilitada),
                 postulacion_url = VALUES(postulacion_url),
+                postulacion_slug = VALUES(postulacion_slug),
                 email_metodo = VALUES(email_metodo),
                 emailjs_public_key = VALUES(emailjs_public_key),
                 emailjs_service_id = VALUES(emailjs_service_id),
@@ -398,7 +423,8 @@ function manejarConfiguracion(PDO $pdo): void {
             !empty($cfg['notificacionesEmail']) ? 1 : 0,
             !empty($cfg['notificacionesIA']) ? 1 : 0,
             !empty($cfg['postulacionHabilitada']) ? 1 : 0,
-            $cfg['postulacionUrl'] ?? '',
+            $postulacionUrl,
+            $postulacionSlug,
             $cfg['emailMetodo'] ?? 'emailjs',
             $cfg['emailjsPublicKey'] ?? 'elyshGVkR2fYZQJfO',
             $cfg['emailjsServiceId'] ?? 'service_20mxfgu',

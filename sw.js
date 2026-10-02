@@ -3,7 +3,7 @@
  * Optimización de velocidad, almacenamiento en caché y resiliencia offline.
  */
 
-const CACHE_NAME = 'fundacion-aplus-v3.4';
+const CACHE_NAME = 'fundacion-aplus-v4.0';
 const CORE_ASSETS = [
   './',
   './index.html',

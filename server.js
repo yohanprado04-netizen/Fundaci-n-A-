@@ -1,17 +1,25 @@
 const { spawn } = require('child_process');
 const os = require('os');
 
-// Obtener dirección IPv4 local activa de la red
+// Obtener dirección IPv4 local activa de la red (excluyendo adaptadores virtuales)
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
+  const candidates = [];
   for (const name of Object.keys(interfaces)) {
+    if (/virtual|vbox|vmware|wsl|loopback|docker|pseudo/i.test(name)) continue;
     for (const iface of interfaces[name]) {
       if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
+        if (iface.address.startsWith('192.168.56.')) continue;
+        if (iface.address.startsWith('169.254.')) continue;
+        candidates.push({ name, address: iface.address });
       }
     }
   }
-  return '127.0.0.1';
+  const wifi = candidates.find(c => /wi-?fi/i.test(c.name));
+  if (wifi) return wifi.address;
+  const eth = candidates.find(c => /ethernet/i.test(c.name));
+  if (eth) return eth.address;
+  return candidates[0]?.address || '127.0.0.1';
 }
 
 const PORT = process.env.PORT || 8000;

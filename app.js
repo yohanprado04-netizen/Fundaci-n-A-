@@ -559,6 +559,13 @@
   let currentAdminRole = null; // 'superadmin' | 'administracion'
   let currentAdminUser = null; // registro del usuario Coordinador cuando currentAdminRole === 'administracion'
 
+  if (typeof window !== 'undefined') {
+    window.currentAdminRole = currentAdminRole;
+    window.currentAdminUser = currentAdminUser;
+    window.getCurrentAdminRole = () => currentAdminRole;
+    window.getCurrentAdminUser = () => currentAdminUser;
+  }
+
   // El contexto del chat por rol (notas, asistencia, PQR, memorandos,
   // agenda, semáforo, permisos por perfil, etc.) YA NO se arma aquí en el
   // navegador — se calcula del lado del servidor, consultando MySQL, una
@@ -805,6 +812,10 @@
     if (usuario.rol === 'Superadmin') {
       currentAdminRole = 'superadmin';
       currentAdminUser = null;
+      if (typeof window !== 'undefined') {
+        window.currentAdminRole = 'superadmin';
+        window.currentAdminUser = null;
+      }
       document.getElementById('siteView').classList.add('hidden');
       document.getElementById('dashboardView').classList.remove('hidden');
       applyAdminRoleUI();
@@ -819,6 +830,10 @@
     if (usuario.rol === 'Coordinador' || usuario.rol === 'Administrador') {
       currentAdminRole = 'administracion';
       currentAdminUser = usuario;
+      if (typeof window !== 'undefined') {
+        window.currentAdminRole = 'administracion';
+        window.currentAdminUser = usuario;
+      }
       document.getElementById('siteView').classList.add('hidden');
       document.getElementById('dashboardView').classList.remove('hidden');
       applyAdminRoleUI(usuario);
@@ -1029,6 +1044,10 @@
     detenerControlInactividad();
     currentAdminRole = null;
     currentAdminUser = null;
+    if (typeof window !== 'undefined') {
+      window.currentAdminRole = null;
+      window.currentAdminUser = null;
+    }
     panelActivoAdmin = null;
     semaforoCohorteFiltro = '';
     aplicarTema('light', false);
@@ -1443,7 +1462,8 @@
     if (currentAdminRole === 'administracion' && currentAdminUser) {
       const tabDelPanel = document.querySelector('.panel-tab[data-panel="' + panel + '"]');
       if (tabDelPanel && (tabDelPanel.dataset.superOnly === 'true' || tabDelPanel.classList.contains('hidden'))) return;
-      if (!(await permisoUsuarioSobrePanel(currentAdminUser, 'admin.' + panel)).ver) return;
+      const codigoPermiso = (tabDelPanel && tabDelPanel.dataset.panelCode) ? tabDelPanel.dataset.panelCode : ('admin.' + panel);
+      if (!(await permisoUsuarioSobrePanel(currentAdminUser, codigoPermiso)).ver) return;
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1934,6 +1954,56 @@
     asistencia: [],
     agenda_estudiante: [],
     semaforo_overrides: {},
+    justificaciones_asistencia: [
+      {
+        id: 'just_med_01',
+        asistenciaId: 'asist_seed_01',
+        estudiante: 'Vanessa Moreno Rentería',
+        materia: 'Fundamentos de Inteligencia Artificial',
+        fecha: '2026-10-01',
+        motivo: 'Incapacidad médica por cuadro viral agudo',
+        detalle: 'Incapacidad médica por 48 horas emitida por EPS SURA por cuadro respiratorio y fiebre alta.',
+        comentario: 'Incapacidad médica por 48 horas emitida por EPS SURA por cuadro respiratorio y fiebre alta.',
+        archivoNombre: 'incapacidad_eps_sura_octubre.pdf',
+        archivoTipo: 'application/pdf',
+        archivoBase64: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+        archivoDatos: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+        estado: 'Pendiente',
+        creadoEn: '2026-10-01T15:30:00.000Z'
+      },
+      {
+        id: 'just_med_02',
+        asistenciaId: 'asist_seed_02',
+        estudiante: 'Stiven Cuesta Palacios',
+        materia: 'Desarrollo Web Frontend y UX',
+        fecha: '2026-10-02',
+        motivo: 'Cita médica prioritaria y soporte odontológico',
+        detalle: 'Procedimiento odontológico de urgencia en la mañana. Se adjunta orden y constancia de atención médica.',
+        comentario: 'Procedimiento odontológico de urgencia en la mañana. Se adjunta orden y constancia de atención médica.',
+        archivoNombre: 'constancia_atencion_medica.png',
+        archivoTipo: 'image/svg+xml',
+        archivoBase64: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="250" viewBox="0 0 400 250"><rect width="400" height="250" fill="%23f8fafc"/><rect x="20" y="20" width="360" height="210" rx="12" fill="%23ffffff" stroke="%23cbd5e1" stroke-width="2"/><text x="40" y="60" font-family="sans-serif" font-size="16" font-weight="bold" fill="%230f172a">CONSTANCIA DE ATENCIÓN MÉDICA</text><text x="40" y="100" font-family="sans-serif" font-size="13" fill="%23475569">Paciente: Stiven Cuesta Palacios</text><text x="40" y="130" font-family="sans-serif" font-size="13" fill="%23475569">Fecha: 02 de Octubre de 2026</text><text x="40" y="160" font-family="sans-serif" font-size="13" fill="%23475569">Diagnóstico: Procedimiento odontológico urgente</text><text x="40" y="200" font-family="sans-serif" font-size="12" font-weight="bold" fill="%2310b981">ESTADO: ATENDIDO - REPOSO 24 HORAS</text></svg>',
+        archivoDatos: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="250" viewBox="0 0 400 250"><rect width="400" height="250" fill="%23f8fafc"/><rect x="20" y="20" width="360" height="210" rx="12" fill="%23ffffff" stroke="%23cbd5e1" stroke-width="2"/><text x="40" y="60" font-family="sans-serif" font-size="16" font-weight="bold" fill="%230f172a">CONSTANCIA DE ATENCIÓN MÉDICA</text><text x="40" y="100" font-family="sans-serif" font-size="13" fill="%23475569">Paciente: Stiven Cuesta Palacios</text><text x="40" y="130" font-family="sans-serif" font-size="13" fill="%23475569">Fecha: 02 de Octubre de 2026</text><text x="40" y="160" font-family="sans-serif" font-size="13" fill="%23475569">Diagnóstico: Procedimiento odontológico urgente</text><text x="40" y="200" font-family="sans-serif" font-size="12" font-weight="bold" fill="%2310b981">ESTADO: ATENDIDO - REPOSO 24 HORAS</text></svg>',
+        estado: 'Pendiente',
+        creadoEn: '2026-10-02T10:15:00.000Z'
+      },
+      {
+        id: 'just_med_03',
+        asistenciaId: 'asist_seed_03',
+        estudiante: 'Leidy Hurtado Blandón',
+        materia: 'Python para Analítica e Inteligencia Artificial',
+        fecha: '2026-09-29',
+        motivo: 'Calamidad doméstica comprobada',
+        detalle: 'Inundación súbita en el sector residencial por desbordamiento de quebrada en Quibdó, imposibilidad de traslado.',
+        comentario: 'Inundación súbita en el sector residencial por desbordamiento de quebrada en Quibdó, imposibilidad de traslado.',
+        archivoNombre: 'reporte_calamidad_barrio.pdf',
+        archivoTipo: 'application/pdf',
+        archivoBase64: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+        archivoDatos: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+        estado: 'Pendiente',
+        creadoEn: '2026-09-30T08:45:00.000Z'
+      }
+    ],
     // LIMPIEZA: se retiraron de aquí 4 entidades que nunca se leían ni se
     // escribían en ningún panel (código/datos muertos, siempre quedaban
     // vacías): "calificaciones" (schema genérico reemplazado hace tiempo
@@ -1960,7 +2030,8 @@
       // del sitio y define el link del cuestionario externo (Google Forms, etc.)
       // donde los interesados dejan sus datos.
       postulacionHabilitada: false,
-      postulacionUrl: ''
+      postulacionUrl: '',
+      postulacionSlug: 'postulaciones'
     }
   };
 
@@ -2067,6 +2138,8 @@
     if (str === null || str === undefined) return '';
     return String(str).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
   }
+  window.escapeHtml = escapeHtml;
+  window.toast = toast;
 
   function fmtDate(iso) {
     if (!iso) return '—';
@@ -2100,7 +2173,6 @@
     { codigo: 'admin.pqr', categoria: 'Administrativo', etiqueta: 'PQR' },
     { codigo: 'admin.calificaciones', categoria: 'Administrativo', etiqueta: 'Calificaciones' },
     { codigo: 'admin.informesAdmin', categoria: 'Administrativo', etiqueta: 'Informes' },
-    { codigo: 'admin.encuestas', categoria: 'Administrativo', etiqueta: 'Encuestas de satisfacción' },
     { codigo: 'admin.forms', categoria: 'Administrativo', etiqueta: 'Forms' },
     { codigo: 'admin.trainee', categoria: 'Administrativo', etiqueta: 'Historial Trainee' },
     { codigo: 'admin.auditoria', categoria: 'Administrativo', etiqueta: 'Auditoría' },
@@ -2125,7 +2197,6 @@
     { codigo: 'estudiante.pensum', categoria: 'Estudiante', etiqueta: 'Pensum' },
     { codigo: 'estudiante.memorandos', categoria: 'Estudiante', etiqueta: 'Memorandos' },
     { codigo: 'estudiante.pqr', categoria: 'Estudiante', etiqueta: 'PQR' },
-    { codigo: 'estudiante.encuestas', categoria: 'Estudiante', etiqueta: 'Encuestas' },
     { codigo: 'estudiante.agenda', categoria: 'Estudiante', etiqueta: 'Agenda' },
   ];
 
@@ -2172,8 +2243,16 @@
 
     perfiles.forEach(p => {
       if (!p.permisos) p.permisos = {};
-      if (!p.permisos['admin.forms'] && p.permisos['admin.encuestas']) {
-        p.permisos['admin.forms'] = { ...p.permisos['admin.encuestas'] };
+      if (p.categoria === 'Administrativo' && (!p.permisos['admin.forms'] || !p.permisos['admin.forms'].ver)) {
+        p.permisos['admin.forms'] = { ver: true, crear: true, editar: true, eliminar: true };
+        cambiosPerfiles = true;
+      }
+      if (p.permisos['admin.encuestas']) {
+        delete p.permisos['admin.encuestas'];
+        cambiosPerfiles = true;
+      }
+      if (p.permisos['estudiante.encuestas']) {
+        delete p.permisos['estudiante.encuestas'];
         cambiosPerfiles = true;
       }
     });
@@ -8742,6 +8821,31 @@ Fundación A+`;
   async function renderConfiguracion() {
     const cfg = (await Store.get('configuracion')) || SEED.configuracion;
     const cred = (await Store.get('superadmin_credentials')) || SEED.superadmin_credentials;
+
+    let formulariosDisponibles = [];
+    try {
+      const respForms = await apiFetch('formularios');
+      formulariosDisponibles = Array.isArray(respForms) ? respForms : (respForms?.formularios || respForms?.data || []);
+    } catch (eForms) {
+      console.warn('Error cargando formularios para configuración:', eForms);
+    }
+
+    const slugActual = cfg.postulacionSlug || (cfg.postulacionUrl ? cfg.postulacionUrl.replace(/^#formulario\//, '') : 'postulaciones');
+    let hayCoincidencia = false;
+    const formOptions = formulariosDisponibles.map(f => {
+      const isSel = (f.slug === slugActual);
+      if (isSel) hayCoincidencia = true;
+      const rawTitle = f.titulo || f.tituloPlano || f.slug;
+      const tituloLimpio = String(rawTitle).replace(/<[^>]+>/g, '').trim();
+      const badgeEstado = f.estado ? ` [${f.estado}]` : '';
+      return `<option value="${escapeHtml(f.slug)}" ${isSel ? 'selected' : ''}>${escapeHtml(tituloLimpio || f.slug)}${badgeEstado} — (${escapeHtml(f.slug)})</option>`;
+    }).join('');
+
+    const opcionExtra = (!hayCoincidencia && slugActual)
+      ? `<option value="${escapeHtml(slugActual)}" selected>${escapeHtml(slugActual)} (Selección actual)</option>`
+      : '';
+    const optionsHtml = (formOptions + opcionExtra) || `<option value="postulaciones" selected>postulaciones (Predeterminado)</option>`;
+
     const seguridadSuperadmin = currentAdminRole === 'superadmin' ? `
       <div class="admin-panel-card p-6 sm:p-8 max-w-2xl mt-6">
         <h2 class="text-lg font-extrabold text-ink mb-1">Seguridad del Superadmin</h2>
@@ -8902,20 +9006,33 @@ Fundación A+`;
 
       <div class="admin-panel-card p-6 sm:p-8 max-w-2xl mt-6">
         <h2 class="text-lg font-extrabold text-ink mb-1">Postulación pública</h2>
-        <p class="text-sm text-slate2 mb-6">Controla el botón "Postular" del sitio público. Pega aquí el link del cuestionario externo (Google Forms u otro) donde los interesados dejan sus datos, y actívalo cuando quieras recibir postulaciones.</p>
+        <p class="text-sm text-slate2 mb-6">Elige cuál formulario del sistema responderán los aspirantes al hacer clic en el botón <strong>"Postular ahora"</strong> en la página de inicio.</p>
         <form onsubmit="event.preventDefault(); saveConfiguracion();" class="grid gap-4">
-          <label class="flex items-center gap-2 text-sm text-ink">
-            <input id="cfg_postulacionHabilitada" type="checkbox" ${cfg.postulacionHabilitada ? 'checked' : ''} class="rounded" />
-            Habilitar postulación en el sitio público
+          <label class="flex items-center gap-2 text-sm text-ink font-semibold">
+            <input id="cfg_postulacionHabilitada" type="checkbox" ${cfg.postulacionHabilitada !== false ? 'checked' : ''} class="rounded text-morado" />
+            Habilitar botón "Postular" en el sitio público
           </label>
           <div>
-            <label class="block text-xs font-semibold text-slate2 mb-1.5">Link del cuestionario</label>
-            <input id="cfg_postulacionUrl" type="url" placeholder="https://forms.gle/..." value="${escapeHtml(cfg.postulacionUrl || '')}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
-            <p class="text-xs text-slate2 mt-1.5">Mientras esté deshabilitada, el botón "Postular" del sitio mostrará un aviso de que las postulaciones están cerradas, sin importar el link que hayas guardado aquí.</p>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Formulario activo para postulaciones</label>
+            <select id="cfg_postulacionSlug" onchange="const p = document.getElementById('cfg_preview_postulacion_slug'); const link = document.getElementById('cfg_link_postulacion_slug'); if(p) p.textContent = '#formulario/' + encodeURIComponent(this.value); if(link) link.href = '#formulario/' + encodeURIComponent(this.value);" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado font-medium">
+              ${optionsHtml}
+            </select>
+            <p class="text-xs text-slate2 mt-1.5">Muestra los formularios creados en el módulo <strong>Forms</strong>. Puedes elegir el que desees como postulación oficial.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-morado/5 border border-morado/15 text-xs text-slate2">
+            <p class="font-semibold text-morado flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+              Destino en la landing page
+            </p>
+            <p class="mt-1">Al hacer clic en "Postular ahora" en la página pública, los aspirantes accederán a: <code id="cfg_preview_postulacion_slug" class="font-bold text-morado">#formulario/${encodeURIComponent(slugActual)}</code>.</p>
           </div>
         </form>
-        <div class="mt-6 pt-5 border-t border-gray-100">
-          <button onclick="saveConfiguracion()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition shadow-sm">Guardar configuración</button>
+        <div class="mt-6 pt-5 border-t border-gray-100 flex items-center justify-between">
+          <button onclick="saveConfiguracion()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition shadow-sm cursor-pointer">Guardar configuración</button>
+          <a id="cfg_link_postulacion_slug" href="#formulario/${encodeURIComponent(slugActual)}" target="_blank" class="text-xs font-semibold text-morado hover:underline flex items-center gap-1">
+            <span>Ver formulario</span>
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+          </a>
         </div>
       </div>
       ${seguridadSuperadmin}`;
@@ -8968,15 +9085,13 @@ Fundación A+`;
     toast('Credenciales del Superadmin actualizadas', 'ok');
   }
 
+  let _ultimaConfigPostulacion = null;
+
   // async: 'configuracion' vía MySQL (Fase 4).
   async function saveConfiguracion() {
-    const urlPostulacion = document.getElementById('cfg_postulacionUrl').value.trim();
-    const habilitarPostulacion = document.getElementById('cfg_postulacionHabilitada').checked;
-
-    if (habilitarPostulacion && !urlPostulacion) {
-      toast('Para habilitar la postulación primero pega el link del cuestionario', 'err');
-      return;
-    }
+    const habilitarPostulacion = document.getElementById('cfg_postulacionHabilitada')?.checked ?? true;
+    const postulacionSlug = document.getElementById('cfg_postulacionSlug')?.value?.trim() || 'postulaciones';
+    const urlPostulacion = '#formulario/' + encodeURIComponent(postulacionSlug);
 
     const cfg = {
       nombre: document.getElementById('cfg_nombre').value.trim(),
@@ -8988,6 +9103,7 @@ Fundación A+`;
       notificacionesEmail: document.getElementById('cfg_notifEmail').checked,
       notificacionesIA: document.getElementById('cfg_notifIA').checked,
       postulacionHabilitada: habilitarPostulacion,
+      postulacionSlug: postulacionSlug,
       postulacionUrl: urlPostulacion,
       emailMetodo: document.getElementById('cfg_emailMetodo') ? document.getElementById('cfg_emailMetodo').value : 'emailjs',
       emailjsPublicKey: document.getElementById('cfg_emailjsPublicKey') ? document.getElementById('cfg_emailjsPublicKey').value.trim() : '',
@@ -9001,11 +9117,12 @@ Fundación A+`;
       smtpSecure: document.getElementById('cfg_smtpSecure') ? document.getElementById('cfg_smtpSecure').value : 'ssl',
     };
     await Store.set('configuracion', cfg);
+    _ultimaConfigPostulacion = cfg;
     toast('Configuración guardada con éxito', 'ok');
     renderSemaforo();
     renderResumen();
     renderContactoPublico();
-    actualizarBotonesPostular();
+    actualizarBotonesPostular(cfg);
   }
 
   // ---------- Sitio público: Contáctanos + Postular (alimentados por Configuración) ----------
@@ -9026,28 +9143,29 @@ Fundación A+`;
     el.innerHTML = filas.join('') || '<span class="text-slate2">Datos de contacto próximamente.</span>';
   }
 
-  /** Activa/desactiva y enlaza los botones "Postular" del sitio con el link que definió el Superadmin. */
-  // async: 'configuracion' vía MySQL (Fase 4).
+  /** Activa/desactiva y enlaza los botones "Postular" del sitio con el formulario de postulaciones. */
   async function actualizarBotonesPostular(cfgDirecta) {
     const cfg = cfgDirecta || (await Store.get('configuracion')) || SEED.configuracion;
-    const habilitada = !!(cfg.postulacionHabilitada && cfg.postulacionUrl);
+    _ultimaConfigPostulacion = cfg;
+    const habilitada = cfg.postulacionHabilitada !== false;
     document.querySelectorAll('.btn-postular').forEach(btn => {
       btn.classList.toggle('opacity-50', !habilitada);
-      btn.title = habilitada ? 'Postula al programa' : 'Las postulaciones no están abiertas en este momento';
+      btn.title = habilitada ? 'Postular al programa TrAIning' : 'Las postulaciones no están abiertas en este momento';
     });
   }
 
-  /** onclick de los botones "Postular": abre el cuestionario externo o avisa que está cerrado. */
-  // async: 'configuracion' vía MySQL (Fase 4).
+  /** onclick de los botones "Postular": abre directamente el formulario de postulación del sistema. */
   async function abrirPostulacion(event) {
     if (event && event.preventDefault) event.preventDefault();
-    const cfg = (await Store.get('configuracion')) || SEED.configuracion;
-    if (cfg.postulacionHabilitada && cfg.postulacionUrl) {
-      window.open(cfg.postulacionUrl, '_blank', 'noopener');
+    const cfg = _ultimaConfigPostulacion || (await Store.get('configuracion')) || SEED.configuracion;
+    if (cfg.postulacionHabilitada !== false) {
+      const slug = cfg.postulacionSlug || (cfg.postulacionUrl ? cfg.postulacionUrl.replace(/^#formulario\//, '') : 'postulaciones');
+      location.hash = '#formulario/' + encodeURIComponent(slug);
     } else {
-      toast('Las postulaciones no están abiertas en este momento. Vuelve pronto.', 'info');
+      (typeof formsToast === 'function' ? formsToast : toast)('Las postulaciones no están abiertas en este momento. Vuelve pronto.', 'info');
     }
   }
+  window.abrirPostulacion = abrirPostulacion;
 
   // ============================================================================
   // CENTRO DE NOTIFICACIONES Y ALERTAS TEMPRANAS (SUPERADMIN & ADMINISTRADORES)
@@ -9064,7 +9182,7 @@ Fundación A+`;
   let notifVerAtendidas = false;
 
   async function obtenerNotificacionesAdmin() {
-    const [semaforoData, memorandos, justificaciones, usuarios, pqrs, modulos] = await Promise.all([
+    let [semaforoData, memorandos, justificaciones, usuarios, pqrs, modulos] = await Promise.all([
       computeSemaforo(),
       Store.list('memorandos'),
       Store.list('justificaciones_asistencia'),
@@ -9072,6 +9190,10 @@ Fundación A+`;
       Store.list('pqr'),
       Store.list('modulos')
     ]);
+
+    if (!Array.isArray(justificaciones) || justificaciones.length === 0) {
+      justificaciones = SEED.justificaciones_asistencia || [];
+    }
 
     let leidas = [];
     try {
@@ -9627,14 +9749,48 @@ Fundación A+`;
     memorandos: renderMemorandos,
     pqr: renderPqr,
     calificaciones: renderCalificaciones,
-    informesAdmin: renderInformesAdmin,
-    encuestas: renderEncuestas,
-    formularios: typeof renderFormularios === 'function' ? renderFormularios : async () => {},
-    formulariosPapelera: typeof renderFormulariosPapelera === 'function' ? renderFormulariosPapelera : async () => {},
+    formularios: async () => {
+      let tries = 0;
+      while (tries < 15 && !(typeof window !== 'undefined' && typeof window.renderFormularios === 'function') && typeof renderFormularios !== 'function') {
+        await new Promise(r => setTimeout(r, 100));
+        tries++;
+      }
+      if (typeof window !== 'undefined' && typeof window.renderFormularios === 'function') {
+        await window.renderFormularios();
+      } else if (typeof renderFormularios === 'function') {
+        await renderFormularios();
+      } else {
+        const mount = document.getElementById('mount-formularios');
+        if (mount) {
+          mount.innerHTML = `<div class="admin-panel-card p-10 text-center text-sm text-slate2">No se pudo cargar el constructor de formularios. Verifica que forms.js esté cargado.<br><button onclick="showPanel('formularios')" class="mt-3 px-4 py-1.5 rounded-lg bg-morado text-white text-xs font-semibold cursor-pointer">Reintentar</button></div>`;
+        }
+      }
+    },
+    formulariosPapelera: async () => {
+      let tries = 0;
+      while (tries < 15 && !(typeof window !== 'undefined' && typeof window.renderFormulariosPapelera === 'function') && typeof renderFormulariosPapelera !== 'function') {
+        await new Promise(r => setTimeout(r, 100));
+        tries++;
+      }
+      if (typeof window !== 'undefined' && typeof window.renderFormulariosPapelera === 'function') {
+        await window.renderFormulariosPapelera();
+      } else if (typeof renderFormulariosPapelera === 'function') {
+        await renderFormulariosPapelera();
+      } else {
+        const mount = document.getElementById('mount-formulariosPapelera');
+        if (mount) {
+          mount.innerHTML = `<div class="admin-panel-card p-10 text-center text-sm text-slate2">No se pudo cargar la papelera de formularios. Verifica que forms.js esté cargado.<br><button onclick="showPanel('formulariosPapelera')" class="mt-3 px-4 py-1.5 rounded-lg bg-morado text-white text-xs font-semibold cursor-pointer">Reintentar</button></div>`;
+        }
+      }
+    },
     auditoria: renderAuditoria,
     chatvoz: renderChatVozConocimiento,
     configuracion: renderConfiguracion,
   };
+
+  if (typeof window !== 'undefined') {
+    window.RENDERERS = RENDERERS;
+  }
 
   // async porque hace await de seedIfEmpty() (que sí toca 'usuarios',
   // migrada a MySQL) — submitLogin ya la llama con await.
@@ -10502,7 +10658,10 @@ Fundación A+`;
 
   // Visor de justificación para Docente y Admin
   async function abrirModalVisorJustificacion(justId) {
-    const justificaciones = await Store.list('justificaciones_asistencia');
+    let justificaciones = await Store.list('justificaciones_asistencia');
+    if (!Array.isArray(justificaciones) || justificaciones.length === 0) {
+      justificaciones = SEED.justificaciones_asistencia || [];
+    }
     const just = justificaciones.find(j => j.id === justId);
     if (!just) { toast('Justificación no encontrada', 'err'); return; }
 
@@ -10515,7 +10674,7 @@ Fundación A+`;
     document.getElementById('visorJustEstudiante').textContent = just.estudiante;
     document.getElementById('visorJustSubtitulo').textContent = `${escapeHtml(just.materia)} · ${fmtDate(just.fecha)}`;
     document.getElementById('visorJustMotivo').textContent = just.motivo || 'Motivo no especificado';
-    document.getElementById('visorJustDescripcion').textContent = just.detalle || '(Sin descripción adicional)';
+    document.getElementById('visorJustDescripcion').textContent = just.detalle || just.comentario || '(Sin descripción adicional)';
 
     const estadoBadge = document.getElementById('visorJustEstadoBadge');
     if (just.estado === 'Aprobada') {
@@ -10530,10 +10689,12 @@ Fundación A+`;
     }
 
     const contArchivo = document.getElementById('visorJustContenedorArchivo');
-    if (just.archivoBase64) {
-      if (just.archivoTipo && just.archivoTipo.startsWith('image/')) {
+    const archivoSrc = just.archivoBase64 || just.archivoDatos;
+    if (archivoSrc) {
+      const esImg = (just.archivoTipo && (just.archivoTipo.startsWith('image/') || just.archivoTipo.includes('svg'))) || (archivoSrc.startsWith('data:image/'));
+      if (esImg) {
         contArchivo.innerHTML = `
-          <img src="${just.archivoBase64}" alt="Evidencia médica" class="max-h-60 rounded-xl object-contain shadow-xs border border-gray-100 mb-2 cursor-pointer hover:opacity-95 transition" onclick="window.open('${just.archivoBase64}', '_blank')" />
+          <img src="${archivoSrc}" alt="Evidencia médica" class="max-h-60 rounded-xl object-contain shadow-xs border border-gray-100 mb-2 cursor-pointer hover:opacity-95 transition" onclick="window.open('${archivoSrc}', '_blank')" />
           <p class="text-[11px] font-bold text-slate2">Haz clic sobre la imagen para verla en tamaño completo</p>`;
       } else {
         contArchivo.innerHTML = `
@@ -10542,7 +10703,7 @@ Fundación A+`;
               <span class="text-red-700 font-extrabold text-xs">PDF</span>
             </div>
             <p class="text-xs font-bold text-ink">${escapeHtml(just.archivoNombre || 'Documento soporte.pdf')}</p>
-            <a href="${just.archivoBase64}" download="${escapeHtml(just.archivoNombre || 'justificacion.pdf')}" class="mt-2 px-3.5 py-1.5 rounded-full bg-morado text-white text-xs font-bold hover:bg-morado/90 transition shadow-xs inline-flex items-center gap-1.5">
+            <a href="${archivoSrc}" download="${escapeHtml(just.archivoNombre || 'justificacion.pdf')}" class="mt-2 px-3.5 py-1.5 rounded-full bg-morado text-white text-xs font-bold hover:bg-morado/90 transition shadow-xs inline-flex items-center gap-1.5">
               <span>Descargar / Abrir PDF</span>
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
             </a>
@@ -14886,7 +15047,6 @@ Fundación A+`;
     pensum: renderPensumEstudiante,
     memorandos: renderMemorandosEstudiante,
     pqr: renderPqrEstudiante,
-    encuestas: renderEncuestasEstudiante,
     agenda: renderAgendaEstudiante,
   };
   // Si la URL trae ?qr=... (viene de escanear un código impreso con la

@@ -154,7 +154,7 @@ const ENTIDADES_MYSQL = new Set([
   'usuarios',
   'modulos', 'horarios', 'notas_modulos', 'asistencia', 'sesiones_asistencia', 'qr_tokens',
   'semaforo',
-  'pqr', 'encuestas', 'cursos',
+  'pqr', 'cursos',
   'auditoria_login', 'auditoria_acciones', 'auditoria_horario',
   'informes_docente', 'agenda_docente', 'agenda_estudiante',
   'configuracion',           // objeto único
