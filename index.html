@@ -868,6 +868,24 @@
       </div>
 
       <div class="mb-6">
+        <p class="role-sidebar-section-title">Inventario y Recursos</p>
+        <nav class="flex flex-col gap-1 text-sm">
+          <button onclick="showPanel('recursos')" data-panel="recursos" data-panel-code="admin.recursos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+            Catálogo e Inventario
+          </button>
+          <button onclick="showPanel('solicitudes_recursos')" data-panel="solicitudes_recursos" data-panel-code="admin.solicitudes_recursos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Solicitudes Pendientes
+          </button>
+          <button onclick="showPanel('asignaciones_recursos')" data-panel="asignaciones_recursos" data-panel-code="admin.asignaciones_recursos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
+            Préstamos y Asignaciones
+          </button>
+        </nav>
+      </div>
+
+      <div class="mb-6">
         <p class="role-sidebar-section-title">Comunicación</p>
         <nav class="flex flex-col gap-1 text-sm">
           <button onclick="showPanel('memorandos')" data-panel="memorandos" data-panel-code="admin.memorandos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
@@ -980,6 +998,9 @@
       <div id="panel-encuestas" class="panel-content hidden"><div id="mount-encuestas"></div></div>
       <div id="panel-formularios" class="panel-content hidden min-w-0 max-w-full"><div id="mount-formularios" class="min-w-0 max-w-full"></div></div>
       <div id="panel-formulariosPapelera" class="panel-content hidden"><div id="mount-formulariosPapelera"></div></div>
+      <div id="panel-recursos" class="panel-content hidden min-w-0 max-w-full"><div id="mount-recursos" class="min-w-0 max-w-full"></div></div>
+      <div id="panel-solicitudes_recursos" class="panel-content hidden min-w-0 max-w-full"><div id="mount-solicitudes_recursos" class="min-w-0 max-w-full"></div></div>
+      <div id="panel-asignaciones_recursos" class="panel-content hidden min-w-0 max-w-full"><div id="mount-asignaciones_recursos" class="min-w-0 max-w-full"></div></div>
       <div id="panel-trainee" class="panel-content hidden"><div id="mount-trainee"></div></div>
       <div id="panel-chatvoz" class="panel-content hidden"><div id="mount-chatvoz"></div></div>
       <div id="panel-auditoria" class="panel-content hidden"><div id="mount-auditoria"></div></div>
@@ -1233,6 +1254,16 @@
           </button>
         </nav>
       </div>
+
+      <div class="mb-6">
+        <p class="role-sidebar-section-title">Recursos</p>
+        <nav class="flex flex-col gap-1 text-sm">
+          <button onclick="showPanelDocente('solicitar_equipo')" data-tpanel="solicitar_equipo" data-panel-code="docente.solicitar_equipo" class="panel-tab-t text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+            Solicitar equipo
+          </button>
+        </nav>
+      </div>
     </aside>
 
     <!-- Content -->
@@ -1258,6 +1289,7 @@
       <div id="panel-t-memorandos" class="panel-content-t hidden"><div id="mount-t-memorandos"></div></div>
       <div id="panel-t-pqr" class="panel-content-t hidden"><div id="mount-t-pqr"></div></div>
       <div id="panel-t-agenda" class="panel-content-t hidden"><div id="mount-t-agenda"></div></div>
+      <div id="panel-t-solicitar_equipo" class="panel-content-t hidden"><div id="mount-t-solicitar_equipo"></div></div>
     </main>
   </div>
 </div>
@@ -1406,6 +1438,16 @@
           </button>
         </nav>
       </div>
+
+      <div class="mb-6">
+        <p class="role-sidebar-section-title">Recursos</p>
+        <nav class="flex flex-col gap-1 text-sm">
+          <button onclick="showPanelEstudiante('solicitar_equipo')" data-spanel="solicitar_equipo" data-panel-code="estudiante.solicitar_equipo" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+            Solicitar equipo
+          </button>
+        </nav>
+      </div>
     </aside>
 
     <!-- Content -->
@@ -1439,6 +1481,7 @@
       <div id="panel-s-pqr" class="panel-content-s hidden"><div id="mount-s-pqr"></div></div>
       <div id="panel-s-encuestas" class="panel-content-s hidden"><div id="mount-s-encuestas"></div></div>
       <div id="panel-s-agenda" class="panel-content-s hidden"><div id="mount-s-agenda"></div></div>
+      <div id="panel-s-solicitar_equipo" class="panel-content-s hidden"><div id="mount-s-solicitar_equipo"></div></div>
     </main>
   </div>
 </div>
@@ -1772,7 +1815,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script defer src="db.js?v=20260926-v1"></script>
-<script defer src="app.js?v=20260927-v17"></script>
+<script defer src="app.js?v=1790991665137"></script>
 <script defer src="forms.js?v=20261002-forms15"></script>
 
 <!-- Registro de Service Worker para carga instantánea y caché inteligente -->
@@ -1805,3 +1848,11 @@
 
 </body>
 </html>
+
+
+
+
+
+
+
+

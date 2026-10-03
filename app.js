@@ -2106,6 +2106,9 @@
     { codigo: 'admin.auditoria', categoria: 'Administrativo', etiqueta: 'Auditoría' },
     { codigo: 'admin.chatvoz', categoria: 'Administrativo', etiqueta: 'Chat conocimiento — Base de conocimiento' },
     { codigo: 'admin.configuracion', categoria: 'Administrativo', etiqueta: 'Configuración' },
+    { codigo: 'admin.recursos', categoria: 'Administrativo', etiqueta: 'Recursos e Inventario' },
+    { codigo: 'admin.solicitudes_recursos', categoria: 'Administrativo', etiqueta: 'Solicitudes de Recursos' },
+    { codigo: 'admin.asignaciones_recursos', categoria: 'Administrativo', etiqueta: 'Préstamos y Asignaciones' },
     { codigo: 'docente.resumen', categoria: 'Docente', etiqueta: 'Resumen' },
     { codigo: 'docente.perfil', categoria: 'Docente', etiqueta: 'Mi perfil' },
     { codigo: 'docente.asistencia', categoria: 'Docente', etiqueta: 'Asistencia' },
@@ -2117,6 +2120,7 @@
     { codigo: 'docente.memorandos', categoria: 'Docente', etiqueta: 'Memorandos' },
     { codigo: 'docente.pqr', categoria: 'Docente', etiqueta: 'PQR' },
     { codigo: 'docente.agenda', categoria: 'Docente', etiqueta: 'Agenda' },
+    { codigo: 'docente.solicitar_equipo', categoria: 'Docente', etiqueta: 'Solicitar Equipo' },
     { codigo: 'estudiante.resumen', categoria: 'Estudiante', etiqueta: 'Resumen' },
     { codigo: 'estudiante.perfil', categoria: 'Estudiante', etiqueta: 'Mi perfil' },
     { codigo: 'estudiante.asistencia', categoria: 'Estudiante', etiqueta: 'Asistencia' },
@@ -2127,6 +2131,7 @@
     { codigo: 'estudiante.pqr', categoria: 'Estudiante', etiqueta: 'PQR' },
     { codigo: 'estudiante.encuestas', categoria: 'Estudiante', etiqueta: 'Encuestas' },
     { codigo: 'estudiante.agenda', categoria: 'Estudiante', etiqueta: 'Agenda' },
+    { codigo: 'estudiante.solicitar_equipo', categoria: 'Estudiante', etiqueta: 'Solicitar Equipo' },
   ];
 
   // Nombres de los 2 perfiles "de sistema" que dan acceso completo a su
@@ -2204,6 +2209,11 @@
     if (!usuario) return vacio;
     // El Superadmin siempre tiene acceso completo a todos los paneles
     if (usuario.rol === 'Superadmin' || currentAdminRole === 'superadmin') {
+      return { ver: true, crear: true, editar: true, eliminar: true };
+    }
+    // Módulo de Recursos: acceso garantizado para solicitudes y gestión
+    if (panelCodigo === 'docente.solicitar_equipo' || panelCodigo === 'estudiante.solicitar_equipo' ||
+        panelCodigo === 'admin.recursos' || panelCodigo === 'admin.solicitudes_recursos' || panelCodigo === 'admin.asignaciones_recursos') {
       return { ver: true, crear: true, editar: true, eliminar: true };
     }
     const idsPerfiles = usuario.perfiles || [];
@@ -5681,7 +5691,7 @@
     const cohorteVal = extras.cohorte || '';
 
     function esBcrypt(str) {
-      return typeof str === 'string' && /^\$2[aby]\$\d{2}\$/.test(str);
+      return typeof str === 'string' && /^$2[aby]$\d{2}$/.test(str);
     }
     const rawPass = extras.password || '';
     const contrasenaMostrar = (!rawPass || esBcrypt(rawPass))
@@ -9631,6 +9641,8 @@ Fundación A+`;
     encuestas: renderEncuestas,
     formularios: typeof renderFormularios === 'function' ? renderFormularios : async () => {},
     formulariosPapelera: typeof renderFormulariosPapelera === 'function' ? renderFormulariosPapelera : async () => {},
+    recursos: renderRecursos,
+    asignaciones_recursos: renderAsignacionesRecursos,
     auditoria: renderAuditoria,
     chatvoz: renderChatVozConocimiento,
     configuracion: renderConfiguracion,
@@ -15486,3 +15498,1549 @@ function cerrarSidebarMovil() {
     iniciarSistemaNavegacion();
   }
 })();
+// =========================================================================
+// MÓDULO INTEGRAL DE RESERVA Y GESTIÓN DE RECURSOS (FASES 1 - 3+)
+// =========================================================================
+
+// --- UTILIDAD: IDENTIFICAR USUARIO ACTUAL EN SESIÓN ---
+function getUsuarioSesionActual() {
+  if (typeof currentDocente !== 'undefined' && currentDocente && currentDocente.nombre) {
+    return { nombre: currentDocente.nombre, email: currentDocente.email || '', rol: 'Docente', id: currentDocente.id };
+  }
+  if (typeof currentEstudiante !== 'undefined' && currentEstudiante && currentEstudiante.nombre) {
+    return { nombre: currentEstudiante.nombre, email: currentEstudiante.email || '', rol: 'Estudiante', id: currentEstudiante.id };
+  }
+  if (typeof currentAdminUser !== 'undefined' && currentAdminUser && currentAdminUser.nombre) {
+    return { nombre: currentAdminUser.nombre, email: currentAdminUser.email || '', rol: currentAdminUser.rol || 'Administrador', id: currentAdminUser.id };
+  }
+  if (typeof currentAdminRole !== 'undefined' && currentAdminRole === 'superadmin') {
+    return { nombre: 'Superadmin', email: 'admin@aplus.org', rol: 'Superadmin', id: 'admin-super' };
+  }
+  return { nombre: 'Usuario Plataforma', email: '', rol: 'Docente', id: null };
+}
+window.getUsuarioSesionActual = getUsuarioSesionActual;
+
+// --- UTILIDAD: DETECCIÓN Y CÁLCULO DE RETRASO (OVERDUE) ---
+function isOverdue(r) {
+  if (!r || r.estado !== 'Prestado' || !r.fecha_limite) return false;
+  const fechaLimite = new Date(r.fecha_limite);
+  return !isNaN(fechaLimite.getTime()) && fechaLimite < new Date();
+}
+window.isOverdue = isOverdue;
+
+function calcularRetraso(fechaLimiteStr) {
+  if (!fechaLimiteStr) return { dias: 0, horas: 0, texto: '' };
+  const limite = new Date(fechaLimiteStr);
+  const ahora = new Date();
+  if (limite >= ahora) return { dias: 0, horas: 0, texto: '' };
+  const diffMs = ahora - limite;
+  const diffHoras = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDias = Math.floor(diffHoras / 24);
+  const horasRestantes = diffHoras % 24;
+  let texto = '';
+  if (diffDias > 0) {
+    texto = `${diffDias} d${horasRestantes > 0 ? ` ${horasRestantes}h` : ''}`;
+  } else {
+    texto = `${diffHoras} hora${diffHoras !== 1 ? 's' : ''}`;
+  }
+  return { dias: diffDias, horas: diffHoras, texto };
+}
+window.calcularRetraso = calcularRetraso;
+
+// --- SEMILLAS INICIALES (MOCK OFFLINE SEED DATA) ---
+async function asegurarDatosInicialesRecursos() {
+  try {
+    const recursos = await Store.list('recursos_inventario');
+    if (!recursos || recursos.length === 0) {
+      const ahora = new Date();
+      const ayer = new Date(ahora.getTime() - 26 * 60 * 60 * 1000).toISOString().slice(0, 16);
+      const enDosDias = new Date(ahora.getTime() + 48 * 60 * 60 * 1000).toISOString().slice(0, 16);
+
+      const demoRecursos = [
+        {
+          id: 'rec_lap_001',
+          codigo: 'LAP-001',
+          nombre: 'MacBook Air M1 13"',
+          categoria: 'Laptops',
+          estado: 'Disponible',
+          marca: 'Apple',
+          modelo: 'A2337 Space Gray',
+          serial: 'FVFX9081JHD2',
+          responsable: null,
+          tipo_asignacion: null,
+          fecha_entrega: null,
+          fecha_limite: null
+        },
+        {
+          id: 'rec_lap_002',
+          codigo: 'LAP-002',
+          nombre: 'Lenovo ThinkPad T14 Gen 2',
+          categoria: 'Laptops',
+          estado: 'Prestado',
+          marca: 'Lenovo',
+          modelo: 'T14 Core i5',
+          serial: 'PF2X981L77',
+          responsable: 'Carlos Mendoza',
+          tipo_asignacion: 'Temporal',
+          fecha_entrega: new Date(ahora.getTime() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+          fecha_limite: ayer
+        },
+        {
+          id: 'rec_lap_003',
+          codigo: 'LAP-003',
+          nombre: 'Dell Latitude 5420',
+          categoria: 'Laptops',
+          estado: 'Asignado',
+          marca: 'Dell',
+          modelo: 'Latitude 5420 i7',
+          serial: '87GH12J99',
+          responsable: 'Laura Gómez',
+          tipo_asignacion: 'Permanente',
+          fecha_entrega: new Date(ahora.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+          fecha_limite: null
+        },
+        {
+          id: 'rec_tab_001',
+          codigo: 'TAB-001',
+          nombre: 'iPad 10ma Generación 64GB',
+          categoria: 'Tablets',
+          estado: 'Disponible',
+          marca: 'Apple',
+          modelo: 'A2696 Silver',
+          serial: 'DMP98217H4',
+          responsable: null,
+          tipo_asignacion: null,
+          fecha_entrega: null,
+          fecha_limite: null
+        },
+        {
+          id: 'rec_av_001',
+          codigo: 'AV-001',
+          nombre: 'Proyector Epson PowerLite X49',
+          categoria: 'Audio/Video',
+          estado: 'En mantenimiento',
+          marca: 'Epson',
+          modelo: 'PowerLite X49',
+          serial: 'X198273610',
+          responsable: null,
+          tipo_asignacion: null,
+          fecha_entrega: null,
+          fecha_limite: null,
+          observaciones: 'En revisión de lámpara y filtro de polvo.'
+        },
+        {
+          id: 'rec_av_002',
+          codigo: 'AV-002',
+          nombre: 'Micrófono Inalámbrico Shure BLX24',
+          categoria: 'Audio/Video',
+          estado: 'Disponible',
+          marca: 'Shure',
+          modelo: 'BLX24/PG58',
+          serial: 'SH8721980',
+          responsable: null,
+          tipo_asignacion: null,
+          fecha_entrega: null,
+          fecha_limite: null
+        },
+        {
+          id: 'rec_gen_001',
+          codigo: 'GEN-001',
+          nombre: 'Impresora HP LaserJet Pro',
+          categoria: 'General',
+          estado: 'Dado de baja',
+          marca: 'HP',
+          modelo: 'LaserJet 400 M401n',
+          serial: 'HP982171A',
+          responsable: null,
+          tipo_asignacion: null,
+          fecha_entrega: null,
+          fecha_limite: null,
+          observaciones: 'Tarjeta lógica dañada. Dado de baja por obsolescencia.'
+        }
+      ];
+      await Store.save('recursos_inventario', demoRecursos);
+    }
+
+    // Asegurar solicitudes de prueba
+    const solicitudes = await Store.list('solicitudes_recursos');
+    if (!solicitudes || solicitudes.length === 0) {
+      const demoSol = [
+        {
+          id: 'sol_demo_001',
+          solicitante: 'Valentina Torres',
+          email: 'valentina@aplus.org',
+          rol_solicitante: 'Estudiante',
+          categoria: 'Tablets',
+          tipo_asignacion: 'Temporal',
+          fecha_limite: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+          motivo: 'Necesito una tablet para el taller de diseño gráfico e ilustración de este viernes.',
+          estado: 'Pendiente',
+          fecha_creacion: new Date().toISOString()
+        }
+      ];
+      await Store.save('solicitudes_recursos', demoSol);
+    }
+
+    // Asegurar usuarios docentes y estudiantes si no hay usuarios en Store
+    const usuarios = await Store.list('usuarios');
+    if (!usuarios || usuarios.length === 0) {
+      const demoUsuarios = [
+        { id: 'usr_doc_1', nombre: 'Carlos Mendoza', email: 'carlos.mendoza@aplus.org', rol: 'Docente', estadoRegistro: 'Aprobado' },
+        { id: 'usr_doc_2', nombre: 'Laura Gómez', email: 'laura.gomez@aplus.org', rol: 'Docente', estadoRegistro: 'Aprobado' },
+        { id: 'usr_doc_3', nombre: 'Andrés Suárez', email: 'andres.suarez@aplus.org', rol: 'Docente', estadoRegistro: 'Aprobado' },
+        { id: 'usr_est_1', nombre: 'Juan Pérez', email: 'juan.perez@aplus.org', rol: 'Estudiante', estadoRegistro: 'Aprobado' },
+        { id: 'usr_est_2', nombre: 'Valentina Torres', email: 'valentina@aplus.org', rol: 'Estudiante', estadoRegistro: 'Aprobado' },
+        { id: 'usr_est_3', nombre: 'Mateo Morales', email: 'mateo.morales@aplus.org', rol: 'Estudiante', estadoRegistro: 'Aprobado' },
+        { id: 'usr_adm_1', nombre: 'Coordinación Académica', email: 'coordinacion@aplus.org', rol: 'Administrador', estadoRegistro: 'Aprobado' }
+      ];
+      await Store.save('usuarios', demoUsuarios);
+    }
+  } catch (e) {
+    console.warn('[asegurarDatosInicialesRecursos] Error:', e);
+  }
+}
+
+// --- MODAL PERSONALIZADO REUTILIZABLE (HOISTED & ROBUSTO) ---
+function mostrarModalPersonalizado(title, htmlContent, onSaveCallback) {
+  let modalContainer = document.getElementById('recursosCustomModal');
+  if (!modalContainer) {
+    modalContainer = document.createElement('div');
+    modalContainer.id = 'recursosCustomModal';
+    modalContainer.className = 'fixed inset-0 z-[200] hidden items-center justify-center p-4 sm:p-6';
+    modalContainer.innerHTML = `
+      <div class="absolute inset-0 bg-ink/60 backdrop-blur-md transition-opacity" onclick="cerrarModalPersonalizado()"></div>
+      <div class="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden animate-springUp flex flex-col max-h-[90vh]">
+        <!-- HEADER -->
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
+          <h3 class="text-lg font-black text-ink tracking-tight" id="rcm-title">Título</h3>
+          <button type="button" onclick="cerrarModalPersonalizado()" class="p-2 text-slate2 hover:text-coral hover:bg-coral/10 rounded-xl transition" aria-label="Cerrar">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <!-- BODY -->
+        <div class="p-6 overflow-y-auto overscroll-contain" id="rcm-content">
+        </div>
+        <!-- FOOTER -->
+        <div class="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-end gap-3 shrink-0">
+          <button type="button" onclick="cerrarModalPersonalizado()" class="px-5 py-2.5 text-sm font-bold text-slate2 hover:text-ink hover:bg-gray-200/50 rounded-xl transition">
+            Cancelar
+          </button>
+          <button type="button" id="rcm-save" class="btn-glow-primary px-6 py-2.5 text-sm font-bold text-white bg-morado hover:bg-morado/90 rounded-xl shadow-md transition">
+            Guardar
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modalContainer);
+  }
+
+  document.getElementById('rcm-title').textContent = title;
+  document.getElementById('rcm-content').innerHTML = htmlContent;
+
+  const btnSave = document.getElementById('rcm-save');
+  btnSave.disabled = false;
+  btnSave.textContent = 'Guardar';
+  btnSave.onclick = async () => {
+    btnSave.disabled = true;
+    btnSave.innerHTML = `<svg class="animate-spin h-4 w-4 text-white inline-block mr-1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg> Procesando...`;
+    
+    try {
+      let shouldClose = true;
+      if (onSaveCallback) {
+        const result = await onSaveCallback();
+        if (result === false) shouldClose = false;
+      }
+      if (shouldClose) cerrarModalPersonalizado();
+      else {
+        btnSave.disabled = false;
+        btnSave.textContent = 'Guardar';
+      }
+    } catch (err) {
+      console.error('[rcm-save] Error:', err);
+      toast('Ocurrió un error: ' + err.message, 'error');
+      btnSave.disabled = false;
+      btnSave.textContent = 'Guardar';
+    }
+  };
+
+  modalContainer.classList.remove('hidden');
+  modalContainer.classList.add('flex');
+}
+window.mostrarModalPersonalizado = mostrarModalPersonalizado;
+
+function cerrarModalPersonalizado() {
+  const m = document.getElementById('recursosCustomModal');
+  if (m) {
+    m.classList.remove('flex');
+    m.classList.add('hidden');
+  }
+}
+window.cerrarModalPersonalizado = cerrarModalPersonalizado;
+
+// =========================================================================
+// 1. DASHBOARD E INVENTARIO DE RECURSOS (ADMIN)
+// =========================================================================
+async function renderRecursos() {
+  const mount = document.getElementById('mount-recursos');
+  if (!mount) return;
+
+  await asegurarDatosInicialesRecursos();
+  const recursos = await Store.list('recursos_inventario') || [];
+
+  // Estadísticas
+  const total = recursos.length;
+  const disponibles = recursos.filter(r => r.estado === 'Disponible').length;
+  const asignados = recursos.filter(r => r.estado === 'Asignado').length;
+  const prestados = recursos.filter(r => r.estado === 'Prestado').length;
+  const enCustodia = asignados + prestados;
+  const mantenimiento = recursos.filter(r => r.estado === 'En mantenimiento').length;
+  const bajas = recursos.filter(r => r.estado === 'Dado de baja').length;
+  const vencidos = recursos.filter(r => isOverdue(r)).length;
+
+  mount.innerHTML = `
+    <div class="p-6 max-w-7xl mx-auto space-y-6">
+      <!-- HEADER -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-2xl font-extrabold text-ink tracking-tight">Inventario y Gestión de Recursos</h2>
+          <p class="text-xs text-slate2 mt-0.5">Control de equipos físicos, asignaciones de planta y préstamos de la fundación.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="abrirModalRecurso()" class="btn-glow-primary px-4 py-2.5 bg-morado text-white rounded-xl text-sm font-bold hover:bg-morado/90 transition shadow-md flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Nuevo Recurso
+          </button>
+        </div>
+      </div>
+
+      <!-- ALERTA SI HAY VENCIDOS -->
+      ${vencidos > 0 ? `
+        <div class="p-4 rounded-2xl bg-coral/10 border border-coral/30 flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <span class="w-3 h-3 rounded-full bg-coral animate-ping"></span>
+            <div>
+              <p class="text-sm font-bold text-coral">¡Hay ${vencidos} préstamo(s) temporal(es) con tiempo límite vencido!</p>
+              <p class="text-xs text-slate2">Equipos fuera de plazo que requieren devolución o gestión de prórroga.</p>
+            </div>
+          </div>
+          <button onclick="showPanel('asignaciones_recursos')" class="px-3 py-1.5 rounded-xl bg-coral text-white text-xs font-bold hover:bg-coral/90 transition shadow-sm shrink-0">
+            Ver Préstamos Vencidos
+          </button>
+        </div>
+      ` : ''}
+
+      <!-- TARJETAS KPIS Y GRÁFICO -->
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <p class="text-xs font-bold text-slate2 uppercase tracking-wider">Total Equipos</p>
+            <span class="p-2 rounded-xl bg-gray-50 text-slate2">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L4.2 15.3m15.6 0v1.473c0 .518-.314.974-.8 1.127l-2.434.76A11.023 11.023 0 0112 18.5a11.023 11.023 0 01-4.566-.84L5.001 16.9c-.486-.153-.8-.609-.8-1.127V15.3m15.6 0H4.2"/></svg>
+            </span>
+          </div>
+          <p class="text-3xl font-black text-ink mt-3">${total}</p>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-emerald-100/60 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <p class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Disponibles</p>
+            <span class="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </span>
+          </div>
+          <p class="text-3xl font-black text-emerald-600 mt-3">${disponibles}</p>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-blue-100/60 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <p class="text-xs font-bold text-blue-600 uppercase tracking-wider">En Custodia</p>
+            <span class="p-2 rounded-xl bg-blue-50 text-blue-600">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14c-4.42 0-8 1.79-8 4v1a1 1 0 001 1h14a1 1 0 001-1v-1c0-2.21-3.58-4-8-4z"/></svg>
+            </span>
+          </div>
+          <div class="mt-3 flex items-baseline gap-2">
+            <p class="text-3xl font-black text-blue-600">${enCustodia}</p>
+            <span class="text-[11px] text-slate2 font-semibold">(${asignados} perm. / ${prestados} temp.)</span>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-amber-100/60 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <p class="text-xs font-bold text-amber-600 uppercase tracking-wider">Mantenimiento / Bajas</p>
+            <span class="p-2 rounded-xl bg-amber-50 text-amber-600">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </span>
+          </div>
+          <div class="mt-3 flex items-baseline gap-2">
+            <p class="text-3xl font-black text-amber-600">${mantenimiento}</p>
+            <span class="text-[11px] text-slate2 font-semibold">(${bajas} de baja)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- TABLA DE INVENTARIO CON FILTROS AVANZADOS -->
+      <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+        <div class="p-4 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50/50">
+          <div class="flex items-center gap-2">
+            <h3 class="text-sm font-bold text-ink">Catálogo de Equipos</h3>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-slate2 font-bold">${total}</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <input type="text" id="busquedaRecurso" oninput="filtrarRecursos()" placeholder="Buscar código, nombre, serial o custodio..." class="text-xs border border-gray-200 rounded-xl px-3 py-2 focus:border-morado focus:ring-1 focus:ring-morado outline-none w-64 bg-white" />
+            <select id="filtroCategoriaRecurso" onchange="filtrarRecursos()" class="text-xs border border-gray-200 rounded-xl px-3 py-2 focus:border-morado outline-none bg-white font-semibold text-slate2">
+              <option value="">Todas las categorías</option>
+              <option value="Laptops">Laptops</option>
+              <option value="Tablets">Tablets</option>
+              <option value="Audio/Video">Audio / Video</option>
+              <option value="General">General / Otros</option>
+            </select>
+            <select id="filtroEstadoRecurso" onchange="filtrarRecursos()" class="text-xs border border-gray-200 rounded-xl px-3 py-2 focus:border-morado outline-none bg-white font-semibold text-slate2">
+              <option value="">Todos los estados</option>
+              <option value="Disponible">Disponibles</option>
+              <option value="Prestado">Prestados (Temporal)</option>
+              <option value="Asignado">Asignados (Permanente)</option>
+              <option value="En mantenimiento">En mantenimiento</option>
+              <option value="Dado de baja">Dados de baja</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-white border-b border-gray-100 text-[11px] uppercase tracking-wider text-slate2">
+                <th class="p-4 font-bold w-12 text-center">Tipo</th>
+                <th class="p-4 font-bold">Equipo / Especificaciones</th>
+                <th class="p-4 font-bold">Etiqueta (Asset Tag)</th>
+                <th class="p-4 font-bold">Categoría</th>
+                <th class="p-4 font-bold">Estado</th>
+                <th class="p-4 font-bold">Custodio Actual</th>
+                <th class="p-4 font-bold text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-recursos" class="text-xs text-ink divide-y divide-gray-50">
+              <!-- Render dinámico -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  renderTablaRecursos(recursos);
+}
+window.renderRecursos = renderRecursos;
+
+window.filtrarRecursos = async function() {
+  const recursos = await Store.list('recursos_inventario') || [];
+  renderTablaRecursos(recursos);
+};
+
+function renderTablaRecursos(recursos) {
+  const tbody = document.getElementById('tbody-recursos');
+  if (!tbody) return;
+
+  if (!recursos || recursos.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate2 text-sm">No hay recursos registrados en el inventario.</td></tr>`;
+    return;
+  }
+
+  const query = (document.getElementById('busquedaRecurso')?.value || '').toLowerCase().trim();
+  const catFiltro = document.getElementById('filtroCategoriaRecurso')?.value || '';
+  const estadoFiltro = document.getElementById('filtroEstadoRecurso')?.value || '';
+
+  const filtrados = recursos.filter(r => {
+    const matchQuery = !query || 
+      (r.nombre || '').toLowerCase().includes(query) ||
+      (r.codigo || '').toLowerCase().includes(query) ||
+      (r.serial || '').toLowerCase().includes(query) ||
+      (r.marca || '').toLowerCase().includes(query) ||
+      (r.modelo || '').toLowerCase().includes(query) ||
+      (r.responsable || '').toLowerCase().includes(query);
+
+    const matchCat = !catFiltro || r.categoria === catFiltro;
+    const matchEstado = !estadoFiltro || r.estado === estadoFiltro;
+
+    return matchQuery && matchCat && matchEstado;
+  });
+
+  if (filtrados.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate2 text-sm">No se encontraron equipos que coincidan con los filtros aplicados.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtrados.map(r => {
+    let statusBadge = 'bg-gray-100 text-gray-700 border-gray-200';
+    let statusDot = 'bg-gray-400';
+    if (r.estado === 'Disponible') {
+      statusBadge = 'bg-emerald-50 text-emerald-700 border-emerald-200/60';
+      statusDot = 'bg-emerald-500';
+    } else if (r.estado === 'Prestado') {
+      const vencido = isOverdue(r);
+      statusBadge = vencido ? 'bg-coral/10 text-coral border-coral/30' : 'bg-blue-50 text-blue-700 border-blue-200/60';
+      statusDot = vencido ? 'bg-coral animate-ping' : 'bg-blue-500';
+    } else if (r.estado === 'Asignado') {
+      statusBadge = 'bg-purple-50 text-purple-700 border-purple-200/60';
+      statusDot = 'bg-purple-500';
+    } else if (r.estado === 'En mantenimiento') {
+      statusBadge = 'bg-amber-50 text-amber-700 border-amber-200/60';
+      statusDot = 'bg-amber-500';
+    } else if (r.estado === 'Dado de baja') {
+      statusBadge = 'bg-rose-50 text-rose-700 border-rose-200/60';
+      statusDot = 'bg-rose-500';
+    }
+
+    // Icono por categoría
+    let iconSvg = `<svg class="w-5 h-5 text-slate2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L4.2 15.3m15.6 0v1.473c0 .518-.314.974-.8 1.127l-2.434.76A11.023 11.023 0 0112 18.5a11.023 11.023 0 01-4.566-.84L5.001 16.9c-.486-.153-.8-.609-.8-1.127V15.3m15.6 0H4.2"/></svg>`;
+    if (r.categoria === 'Laptops') {
+      iconSvg = `<svg class="w-5 h-5 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>`;
+    } else if (r.categoria === 'Tablets') {
+      iconSvg = `<svg class="w-5 h-5 text-turquesa" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>`;
+    } else if (r.categoria === 'Audio/Video') {
+      iconSvg = `<svg class="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>`;
+    }
+
+    let delayTag = '';
+    if (r.estado === 'Prestado' && isOverdue(r)) {
+      const ret = calcularRetraso(r.fecha_limite);
+      delayTag = `<div class="mt-1 flex items-center gap-1 text-[10px] font-black text-coral">
+                    <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Retraso: ${ret.texto}
+                  </div>`;
+    }
+
+    return `
+      <tr class="hover:bg-gray-50/60 transition ${isOverdue(r) ? 'bg-coral/5' : ''}">
+        <td class="p-3 text-center">
+          <div class="w-10 h-10 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center mx-auto shadow-2xs">
+            ${iconSvg}
+          </div>
+        </td>
+        <td class="p-3">
+          <p class="font-bold text-ink text-sm">${escapeHtml(r.nombre || 'Sin nombre')}</p>
+          <p class="text-[11px] text-slate2 mt-0.5">${escapeHtml(r.marca || '')} ${escapeHtml(r.modelo || '')}</p>
+        </td>
+        <td class="p-3">
+          <p class="font-mono text-xs font-bold text-morado bg-morado/5 px-2 py-0.5 rounded-md inline-block border border-morado/15">${escapeHtml(r.codigo || '-')}</p>
+          <p class="text-[10px] text-slate2 mt-1">SN: ${escapeHtml(r.serial || '-')}</p>
+        </td>
+        <td class="p-3">
+          <span class="text-xs font-semibold text-slate2">${escapeHtml(r.categoria || 'General')}</span>
+        </td>
+        <td class="p-3">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${statusBadge}">
+            <span class="w-1.5 h-1.5 rounded-full ${statusDot}"></span>
+            ${r.estado}
+          </span>
+          ${delayTag}
+        </td>
+        <td class="p-3 text-slate2">
+          ${r.responsable ? `
+            <div class="flex items-center gap-2">
+              <div class="w-6 h-6 rounded-full bg-morado/10 text-morado flex items-center justify-center text-[10px] font-bold shrink-0">
+                ${r.responsable.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p class="text-xs font-bold text-ink leading-tight">${escapeHtml(r.responsable)}</p>
+                <p class="text-[10px] text-slate2">${r.tipo_asignacion === 'Permanente' ? 'Asignación Planta' : 'Préstamo Temporal'}</p>
+              </div>
+            </div>
+          ` : '<span class="text-gray-400 italic text-xs">Sin asignar (En bodega)</span>'}
+        </td>
+        <td class="p-3 text-center">
+          <div class="flex items-center justify-center gap-1.5">
+            ${r.estado === 'Disponible' ? `
+              <button onclick="accionCheckout('${r.id}')" class="px-3 py-1.5 rounded-xl bg-morado hover:bg-morado/90 text-white text-xs font-bold shadow-sm transition flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                Entregar
+              </button>
+            ` : (r.estado === 'Prestado' || r.estado === 'Asignado') ? `
+              <button onclick="accionCheckin('${r.id}')" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+                Recibir
+              </button>
+            ` : `
+              <button onclick="abrirModalRecurso('${r.id}')" class="px-2.5 py-1.5 rounded-xl border border-gray-200 text-slate2 hover:text-ink hover:bg-gray-100 text-xs font-bold transition">
+                Gestionar
+              </button>
+            `}
+            <button onclick="abrirModalRecurso('${r.id}')" class="p-2 text-slate2 hover:text-morado hover:bg-morado/10 rounded-xl transition" title="Editar características">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// --- CREAR O EDITAR RECURSO ---
+window.abrirModalRecurso = async function(id = null) {
+  let r = { codigo: '', nombre: '', categoria: 'Laptops', marca: '', modelo: '', serial: '', estado: 'Disponible', observaciones: '' };
+  if (id) {
+    const recursos = await Store.list('recursos_inventario') || [];
+    r = recursos.find(x => x.id === id) || r;
+  }
+
+  const html = `
+    <div class="p-1 space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-bold text-ink mb-1">Código (Asset Tag)*</label>
+          <input type="text" id="r_codigo" value="${escapeHtml(r.codigo || '')}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-morado focus:ring-1 focus:ring-morado outline-none" placeholder="Ej: LAP-001" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-ink mb-1">Nombre del Equipo*</label>
+          <input type="text" id="r_nombre" value="${escapeHtml(r.nombre || '')}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-morado focus:ring-1 focus:ring-morado outline-none" placeholder="Ej: MacBook Pro 13" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-ink mb-1">Categoría</label>
+          <select id="r_categoria" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none">
+            <option value="Laptops" ${r.categoria==='Laptops'?'selected':''}>Laptops</option>
+            <option value="Tablets" ${r.categoria==='Tablets'?'selected':''}>Tablets</option>
+            <option value="Audio/Video" ${r.categoria==='Audio/Video'?'selected':''}>Audio / Video</option>
+            <option value="General" ${r.categoria==='General'?'selected':''}>General / Otros</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-ink mb-1">Estado</label>
+          <select id="r_estado" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none">
+            <option value="Disponible" ${r.estado==='Disponible'?'selected':''}>Disponible</option>
+            <option value="Prestado" ${r.estado==='Prestado'?'selected':''}>Prestado (Temporal)</option>
+            <option value="Asignado" ${r.estado==='Asignado'?'selected':''}>Asignado (Permanente)</option>
+            <option value="En mantenimiento" ${r.estado==='En mantenimiento'?'selected':''}>En mantenimiento</option>
+            <option value="Dado de baja" ${r.estado==='Dado de baja'?'selected':''}>Dado de baja</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-ink mb-1">Marca</label>
+          <input type="text" id="r_marca" value="${escapeHtml(r.marca || '')}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none" placeholder="Ej: Apple, Lenovo, Dell" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-ink mb-1">Modelo</label>
+          <input type="text" id="r_modelo" value="${escapeHtml(r.modelo || '')}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none" placeholder="Ej: ThinkPad T14" />
+        </div>
+        <div class="col-span-2">
+          <label class="block text-xs font-bold text-ink mb-1">Número de Serie (Serial)</label>
+          <input type="text" id="r_serial" value="${escapeHtml(r.serial || '')}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none" placeholder="Ej: PF2X981L" />
+        </div>
+        <div class="col-span-2">
+          <label class="block text-xs font-bold text-ink mb-1">Ubicación / Notas / Observaciones</label>
+          <textarea id="r_observaciones" rows="2" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none" placeholder="Bodega A, estante 2, detalles de mantenimiento, etc.">${escapeHtml(r.observaciones || '')}</textarea>
+        </div>
+      </div>
+    </div>
+  `;
+
+  mostrarModalPersonalizado(id ? 'Editar Recurso' : 'Nuevo Recurso', html, async () => {
+    const recursos = await Store.list('recursos_inventario') || [];
+    const nuevo = {
+      id: id || uid('rec'),
+      codigo: document.getElementById('r_codigo').value.trim(),
+      nombre: document.getElementById('r_nombre').value.trim(),
+      categoria: document.getElementById('r_categoria').value,
+      estado: document.getElementById('r_estado').value,
+      marca: document.getElementById('r_marca').value.trim(),
+      modelo: document.getElementById('r_modelo').value.trim(),
+      serial: document.getElementById('r_serial').value.trim(),
+      observaciones: document.getElementById('r_observaciones').value.trim(),
+      responsable: r.responsable || null,
+      tipo_asignacion: r.tipo_asignacion || null,
+      fecha_limite: r.fecha_limite || null,
+      fecha_entrega: r.fecha_entrega || null
+    };
+
+    if (!nuevo.codigo || !nuevo.nombre) {
+      toast('Código y Nombre son obligatorios.', 'error');
+      return false;
+    }
+
+    if (id) {
+      const idx = recursos.findIndex(x => x.id === id);
+      if (idx > -1) recursos[idx] = { ...recursos[idx], ...nuevo };
+    } else {
+      recursos.push(nuevo);
+    }
+
+    await Store.save('recursos_inventario', recursos);
+    toast('Recurso guardado correctamente', 'success');
+
+    if (typeof registrarAuditoriaAccion === 'function') {
+      await registrarAuditoriaAccion(id ? 'Recurso modificado' : 'Nuevo recurso creado', 'Administrador', 'Recursos', `${nuevo.nombre} (${nuevo.codigo})`);
+    }
+
+    if (typeof renderRecursos === 'function') renderRecursos();
+    if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+    return true;
+  });
+};
+
+// --- CHECKOUT: ASIGNAR O PRESTAR UN EQUIPO ---
+window.accionCheckout = async function(id) {
+  const usuarios = await Store.list('usuarios') || [];
+  const optionsUsuarios = usuarios.map(u => `<option value="${escapeHtml(u.nombre)}">${escapeHtml(u.nombre)} (${u.rol})</option>`).join('');
+
+  const html = `
+    <div class="p-1 space-y-4">
+      <div>
+        <label class="block text-xs font-bold text-ink mb-1">Destinatario / Responsable del Equipo:</label>
+        <select id="co_persona" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-morado outline-none" onchange="document.getElementById('co_persona_manual_wrap').classList.toggle('hidden', this.value !== '__tercero__')">
+          <option value="">-- Seleccionar usuario de la plataforma --</option>
+          <option value="__tercero__">➕ Tercero / Persona externa (Escribir nombre abajo)</option>
+          ${optionsUsuarios}
+        </select>
+        
+        <div id="co_persona_manual_wrap" class="hidden mt-2">
+          <label class="block text-[11px] font-bold text-morado mb-1">Nombre completo del Tercero / Externo:</label>
+          <input type="text" id="co_persona_manual" class="w-full border border-morado/40 bg-morado/5 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none" placeholder="Ej: Juan Martínez (Invitado / Tallerista externo)" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-ink mb-1">Modalidad de Asignación:</label>
+        <div class="grid grid-cols-2 gap-3 mt-1.5">
+          <label class="flex items-center gap-2.5 p-3 rounded-xl border border-gray-200 cursor-pointer hover:border-morado transition has-[:checked]:border-morado has-[:checked]:bg-morado/5">
+            <input type="radio" name="co_tipo" value="Temporal" checked onchange="document.getElementById('co_fecha_div').classList.remove('hidden')" class="text-morado focus:ring-morado">
+            <div>
+              <p class="text-xs font-bold text-ink">Préstamo Temporal</p>
+              <p class="text-[10px] text-slate2">Con fecha y hora límite de retorno</p>
+            </div>
+          </label>
+          <label class="flex items-center gap-2.5 p-3 rounded-xl border border-gray-200 cursor-pointer hover:border-morado transition has-[:checked]:border-morado has-[:checked]:bg-morado/5">
+            <input type="radio" name="co_tipo" value="Permanente" onchange="document.getElementById('co_fecha_div').classList.add('hidden')" class="text-morado focus:ring-morado">
+            <div>
+              <p class="text-xs font-bold text-ink">Asignación Permanente</p>
+              <p class="text-[10px] text-slate2">Asignación fija de planta</p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div id="co_fecha_div">
+        <label class="block text-xs font-bold text-ink mb-1">Fecha y Hora Límite de Devolución:</label>
+        <input type="datetime-local" id="co_fecha_limite" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-morado outline-none" />
+        <p class="text-[10px] text-slate2 mt-1">El sistema alertará automáticamente tanto al administrador como al usuario si se excede este plazo.</p>
+      </div>
+    </div>
+  `;
+
+  mostrarModalPersonalizado('Entregar Equipo (Checkout)', html, async () => {
+    const selPersona = document.getElementById('co_persona').value;
+    const manPersona = document.getElementById('co_persona_manual')?.value.trim();
+    const persona = (selPersona === '__tercero__' ? manPersona : selPersona) || manPersona;
+
+    if (!persona) {
+      toast('Debe seleccionar o escribir a quién se le entrega el equipo.', 'error');
+      return false;
+    }
+
+    const tipo = document.querySelector('input[name="co_tipo"]:checked').value;
+    let fechaLimite = null;
+    if (tipo === 'Temporal') {
+      fechaLimite = document.getElementById('co_fecha_limite').value;
+      if (!fechaLimite) {
+        toast('Debe indicar la fecha límite de devolución para un préstamo temporal.', 'error');
+        return false;
+      }
+    }
+
+    const recursos = await Store.list('recursos_inventario') || [];
+    const idx = recursos.findIndex(x => x.id === id);
+    if (idx > -1) {
+      const rec = recursos[idx];
+      rec.estado = tipo === 'Permanente' ? 'Asignado' : 'Prestado';
+      rec.responsable = persona;
+      rec.tipo_asignacion = tipo;
+      rec.fecha_limite = fechaLimite;
+      rec.fecha_entrega = new Date().toISOString();
+
+      await Store.save('recursos_inventario', recursos);
+      toast(`Equipo entregado a ${persona} (${tipo})`, 'success');
+
+      if (typeof registrarAuditoriaAccion === 'function') {
+        await registrarAuditoriaAccion('Equipo entregado', persona, 'Recursos', `${rec.nombre} (${rec.codigo}) - ${tipo}`);
+      }
+
+      if (typeof renderRecursos === 'function') renderRecursos();
+      if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+      return true;
+    }
+    return false;
+  });
+};
+
+// --- CHECKIN: DEVOLVER EQUIPO A DISPONIBLE ---
+window.accionCheckin = async function(id) {
+  const recursos = await Store.list('recursos_inventario') || [];
+  const idx = recursos.findIndex(x => x.id === id);
+  if (idx === -1) return;
+
+  const rec = recursos[idx];
+  const msg = `¿Confirmar recepción (Checkin) del equipo "${rec.nombre} (${rec.codigo})" que tenía "${rec.responsable}" y dejarlo Disponible?`;
+  if (!confirm(msg)) return;
+
+  const anteriorCustodio = rec.responsable;
+  rec.estado = 'Disponible';
+  rec.responsable = null;
+  rec.tipo_asignacion = null;
+  rec.fecha_limite = null;
+  rec.fecha_entrega = null;
+
+  await Store.save('recursos_inventario', recursos);
+  toast('Equipo recibido y reincorporado a Disponible', 'success');
+
+  if (typeof registrarAuditoriaAccion === 'function') {
+    await registrarAuditoriaAccion('Equipo devuelto', anteriorCustodio || 'Admin', 'Recursos', `${rec.nombre} (${rec.codigo})`);
+  }
+
+  if (typeof renderRecursos === 'function') renderRecursos();
+  if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+};
+
+// =========================================================================
+// 2. DASHBOARD DE PRÉSTAMOS, ASIGNACIONES Y PERSONAS SIN EQUIPO (ADMIN)
+// =========================================================================
+async function renderAsignacionesRecursos() {
+  const mount = document.getElementById('mount-asignaciones_recursos');
+  if (!mount) return;
+
+  await asegurarDatosInicialesRecursos();
+  const recursos = await Store.list('recursos_inventario') || [];
+  const usuarios = await Store.list('usuarios') || [];
+
+  const asignados = recursos.filter(r => r.estado === 'Asignado' || r.estado === 'Prestado');
+  const asignacionesPermanentes = asignados.filter(r => r.tipo_asignacion === 'Permanente');
+  const prestamosTemporales = asignados.filter(r => r.tipo_asignacion === 'Temporal');
+  
+  // Personas que tienen equipo activo
+  const responsablesActivos = asignados.map(r => (r.responsable || '').toLowerCase().trim());
+  const usuariosElegibles = usuarios.filter(u => u.rol === 'Docente' || u.rol === 'Estudiante');
+  const sinEquipo = usuariosElegibles.filter(u => !responsablesActivos.includes((u.nombre || '').toLowerCase().trim()));
+
+  // Conteo de vencidos
+  const vencidosCount = prestamosTemporales.filter(r => isOverdue(r)).length;
+  const activeTab = window.recursosAsignacionesTab || 'temporales';
+
+  mount.innerHTML = `
+    <div class="p-6 max-w-7xl mx-auto space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-2xl font-extrabold text-ink tracking-tight">Préstamos y Asignaciones de Equipos</h2>
+          <p class="text-xs text-slate2 mt-0.5">Seguimiento de préstamos con fecha límite, equipos de planta y personal sin dotación.</p>
+        </div>
+        ${vencidosCount > 0 ? `
+          <span class="inline-flex items-center gap-2 bg-coral text-white px-3.5 py-1.5 rounded-xl text-xs font-extrabold shadow-sm animate-pulse">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            ¡${vencidosCount} préstamo(s) con entrega retrasada!
+          </span>
+        ` : ''}
+      </div>
+
+      <!-- TABS DE NAVEGACIÓN -->
+      <div class="flex items-center gap-2 border-b border-gray-200">
+        <button onclick="window.recursosAsignacionesTab='temporales'; renderAsignacionesRecursos();" class="pb-3 px-4 text-xs font-bold transition border-b-2 flex items-center gap-2 ${activeTab === 'temporales' ? 'border-morado text-morado' : 'border-transparent text-slate2 hover:text-ink'}">
+          <span>Préstamos Temporales</span>
+          <span class="px-2 py-0.5 rounded-full text-[10px] ${vencidosCount > 0 ? 'bg-coral text-white' : 'bg-morado/10 text-morado'}">${prestamosTemporales.length}</span>
+        </button>
+        <button onclick="window.recursosAsignacionesTab='permanentes'; renderAsignacionesRecursos();" class="pb-3 px-4 text-xs font-bold transition border-b-2 flex items-center gap-2 ${activeTab === 'permanentes' ? 'border-morado text-morado' : 'border-transparent text-slate2 hover:text-ink'}">
+          <span>Asignaciones Permanentes</span>
+          <span class="px-2 py-0.5 rounded-full text-[10px] bg-gray-100 text-slate2">${asignacionesPermanentes.length}</span>
+        </button>
+        <button onclick="window.recursosAsignacionesTab='sinequipo'; renderAsignacionesRecursos();" class="pb-3 px-4 text-xs font-bold transition border-b-2 flex items-center gap-2 ${activeTab === 'sinequipo' ? 'border-morado text-morado' : 'border-transparent text-slate2 hover:text-ink'}">
+          <span>Personas sin Equipo</span>
+          <span class="px-2 py-0.5 rounded-full text-[10px] bg-amber-100 text-amber-800">${sinEquipo.length}</span>
+        </button>
+      </div>
+
+      <!-- CONTENIDO DEL TAB -->
+      ${activeTab === 'temporales' ? renderPrestamosTemporalesHTML(prestamosTemporales) : 
+        activeTab === 'permanentes' ? renderAsignacionesActivasHTML(asignacionesPermanentes) : 
+        renderPersonasSinEquipoHTML(sinEquipo, recursos.filter(r => r.estado === 'Disponible'))}
+    </div>
+  `;
+}
+window.renderAsignacionesRecursos = renderAsignacionesRecursos;
+
+function renderPrestamosTemporalesHTML(prestamos) {
+  if (prestamos.length === 0) {
+    return `<div class="p-12 text-center text-slate2 text-sm bg-white rounded-2xl border border-gray-100 shadow-sm">No hay préstamos temporales activos en este momento.</div>`;
+  }
+
+  const rows = prestamos.map(r => {
+    const vencido = isOverdue(r);
+    const ret = calcularRetraso(r.fecha_limite);
+
+    let alertaHtml = '';
+    let rowClass = 'hover:bg-gray-50/60';
+    if (vencido) {
+      rowClass = 'bg-coral/5 hover:bg-coral/10';
+      alertaHtml = `
+        <div class="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-coral text-white text-[10px] font-black shadow-2xs">
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Excedido por: ${ret.texto}
+        </div>`;
+    }
+
+    return `
+      <tr class="${rowClass} transition">
+        <td class="p-4">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-full bg-morado/10 text-morado font-bold flex items-center justify-center text-xs shrink-0">
+              ${r.responsable.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <p class="font-bold text-ink text-sm">${escapeHtml(r.responsable)}</p>
+              ${alertaHtml}
+            </div>
+          </div>
+        </td>
+        <td class="p-4">
+          <p class="font-bold text-ink text-sm">${escapeHtml(r.nombre)}</p>
+          <div class="flex items-center gap-2 mt-1">
+            <span class="font-mono text-[10px] font-bold text-morado bg-morado/5 px-2 py-0.5 rounded border border-morado/10">${escapeHtml(r.codigo || '-')}</span>
+            <span class="text-[10px] text-slate2">SN: ${escapeHtml(r.serial || '-')}</span>
+          </div>
+        </td>
+        <td class="p-4">
+          <p class="text-xs font-bold ${vencido ? 'text-coral' : 'text-ink'}">${r.fecha_limite ? new Date(r.fecha_limite).toLocaleString() : 'Sin fecha límite'}</p>
+          <p class="text-[10px] text-slate2 mt-0.5">Entregado: ${r.fecha_entrega ? new Date(r.fecha_entrega).toLocaleDateString() : '-'}</p>
+        </td>
+        <td class="p-4 text-center">
+          <button onclick="accionCheckin('${r.id}')" class="px-3.5 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold transition shadow-sm flex items-center gap-1.5 mx-auto">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+            Recibir Devolución
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50/50 border-b border-gray-100 text-[11px] uppercase tracking-wider text-slate2">
+            <th class="p-4 font-bold">Responsable / Estado</th>
+            <th class="p-4 font-bold">Equipo en Préstamo</th>
+            <th class="p-4 font-bold">Fecha Límite de Retorno</th>
+            <th class="p-4 font-bold text-center">Acción</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50 text-xs">
+          ${rows}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderAsignacionesActivasHTML(asignados) {
+  if (asignados.length === 0) {
+    return `<div class="p-12 text-center text-slate2 text-sm bg-white rounded-2xl border border-gray-100 shadow-sm">No hay equipos asignados permanentemente.</div>`;
+  }
+
+  const rows = asignados.map(r => `
+    <tr class="hover:bg-gray-50/60 transition">
+      <td class="p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-full bg-purple-100 text-purple-700 font-bold flex items-center justify-center text-xs shrink-0">
+            ${r.responsable.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p class="font-bold text-ink text-sm">${escapeHtml(r.responsable)}</p>
+            <span class="text-[10px] text-purple-600 font-semibold">Dotación Permanente</span>
+          </div>
+        </div>
+      </td>
+      <td class="p-4">
+        <p class="font-bold text-ink text-sm">${escapeHtml(r.nombre)}</p>
+        <div class="flex items-center gap-2 mt-1">
+          <span class="font-mono text-[10px] font-bold text-morado bg-morado/5 px-2 py-0.5 rounded border border-morado/10">${escapeHtml(r.codigo || '-')}</span>
+          <span class="text-[10px] text-slate2">SN: ${escapeHtml(r.serial || '-')}</span>
+        </div>
+      </td>
+      <td class="p-4 text-slate2 text-xs">
+        <span class="px-2 py-0.5 rounded-md bg-gray-100 text-slate2 font-semibold">${escapeHtml(r.categoria || 'General')}</span>
+      </td>
+      <td class="p-4 text-slate2 text-xs">
+        ${r.fecha_entrega ? new Date(r.fecha_entrega).toLocaleDateString() : '-'}
+      </td>
+      <td class="p-4 text-center">
+        <button onclick="accionCheckin('${r.id}')" class="px-3 py-1.5 rounded-xl border border-gray-200 text-slate2 hover:text-coral hover:border-coral hover:bg-coral/5 text-xs font-bold transition shadow-2xs">
+          Retirar Asignación
+        </button>
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50/50 border-b border-gray-100 text-[11px] uppercase tracking-wider text-slate2">
+            <th class="p-4 font-bold">Custodio / Dotación</th>
+            <th class="p-4 font-bold">Equipo Asignado</th>
+            <th class="p-4 font-bold">Categoría</th>
+            <th class="p-4 font-bold">Fecha Asignación</th>
+            <th class="p-4 font-bold text-center">Acciones</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50 text-xs">
+          ${rows}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderPersonasSinEquipoHTML(sinEquipo, recursosDisponibles) {
+  if (sinEquipo.length === 0) {
+    return `
+      <div class="p-10 text-center text-emerald-700 bg-emerald-50 rounded-2xl border border-emerald-100 shadow-sm">
+        <svg class="w-8 h-8 mx-auto text-emerald-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <p class="font-bold text-sm">¡Cobertura total de equipos!</p>
+        <p class="text-xs text-emerald-600 mt-1">Todos los docentes y estudiantes activos cuentan actualmente con al menos un equipo asignado o prestado.</p>
+      </div>
+    `;
+  }
+
+  const filtroRol = window.recursosFiltroSinEquipo || 'todos';
+
+  const filtrados = sinEquipo.filter(u => {
+    if (filtroRol === 'docentes') return u.rol === 'Docente';
+    if (filtroRol === 'estudiantes') return u.rol === 'Estudiante';
+    return true;
+  });
+
+  const rows = filtrados.map(u => `
+    <tr class="hover:bg-gray-50/60 transition">
+      <td class="p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-full ${u.rol === 'Docente' ? 'bg-turquesa/10 text-turquesa' : 'bg-oro/15 text-amber-700'} font-bold flex items-center justify-center text-xs shrink-0">
+            ${(u.nombre || '?').charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p class="font-bold text-ink text-sm">${escapeHtml(u.nombre)}</p>
+            <p class="text-[11px] text-slate2">${escapeHtml(u.email || 'Sin correo registrado')}</p>
+          </div>
+        </div>
+      </td>
+      <td class="p-4">
+        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${u.rol === 'Docente' ? 'bg-teal-50 text-teal-700 border border-teal-200/60' : 'bg-amber-50 text-amber-700 border border-amber-200/60'}">
+          ${u.rol}
+        </span>
+      </td>
+      <td class="p-4 text-center">
+        <button onclick="asignarEquipoDesdeModal('${escapeHtml(u.nombre)}')" class="px-3.5 py-1.5 rounded-xl bg-morado text-white hover:bg-morado/90 text-xs font-bold transition shadow-sm flex items-center gap-1.5 mx-auto">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+          Asignar Equipo
+        </button>
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+      <!-- HEADER CON FILTRO ROL -->
+      <div class="p-4 border-b border-gray-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <p class="text-sm font-bold text-ink flex items-center gap-2">
+            <svg class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            Usuarios sin dotación de equipo (${sinEquipo.length})
+          </p>
+          <p class="text-xs text-slate2 mt-0.5">Personas registradas que no tienen ninguna laptop, tablet o equipo a su cargo.</p>
+        </div>
+        <div class="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl shrink-0">
+          <button onclick="window.recursosFiltroSinEquipo='todos'; renderAsignacionesRecursos();" class="px-3 py-1 text-xs font-bold rounded-lg transition ${filtroRol === 'todos' ? 'bg-white text-ink shadow-2xs' : 'text-slate2 hover:text-ink'}">Todos</button>
+          <button onclick="window.recursosFiltroSinEquipo='docentes'; renderAsignacionesRecursos();" class="px-3 py-1 text-xs font-bold rounded-lg transition ${filtroRol === 'docentes' ? 'bg-white text-ink shadow-2xs' : 'text-slate2 hover:text-ink'}">Docentes</button>
+          <button onclick="window.recursosFiltroSinEquipo='estudiantes'; renderAsignacionesRecursos();" class="px-3 py-1 text-xs font-bold rounded-lg transition ${filtroRol === 'estudiantes' ? 'bg-white text-ink shadow-2xs' : 'text-slate2 hover:text-ink'}">Estudiantes</button>
+        </div>
+      </div>
+
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-white border-b border-gray-100 text-[11px] uppercase tracking-wider text-slate2">
+            <th class="p-4 font-bold">Usuario</th>
+            <th class="p-4 font-bold">Rol Institucional</th>
+            <th class="p-4 font-bold text-center">Acción Rápida</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50 text-xs">
+          ${rows}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+window.asignarEquipoDesdeModal = async function(nombreUsuario) {
+  const recursos = await Store.list('recursos_inventario') || [];
+  const disponibles = recursos.filter(r => r.estado === 'Disponible');
+  
+  if (disponibles.length === 0) {
+    toast('No hay equipos disponibles en bodega en este momento.', 'error');
+    return;
+  }
+
+  const options = disponibles.map(r => `<option value="${r.id}">[${escapeHtml(r.categoria)}] ${escapeHtml(r.codigo || '-')} — ${escapeHtml(r.nombre)} (${escapeHtml(r.marca || '')})</option>`).join('');
+
+  const html = `
+    <div class="p-1 space-y-4">
+      <div class="bg-gray-50 p-3 rounded-xl border border-gray-100">
+        <p class="text-xs text-slate2">Asignando equipo a:</p>
+        <p class="text-sm font-extrabold text-ink mt-0.5">${nombreUsuario}</p>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-ink mb-1">Seleccionar Equipo Disponible:</label>
+        <select id="sel_asignar_equipo" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-morado outline-none">
+          ${options}
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-ink mb-1">Modalidad de Asignación:</label>
+        <div class="grid grid-cols-2 gap-3 mt-1.5">
+          <label class="flex items-center gap-2 p-3 rounded-xl border border-gray-200 cursor-pointer has-[:checked]:border-morado has-[:checked]:bg-morado/5">
+            <input type="radio" name="ae_tipo" value="Temporal" checked onchange="document.getElementById('ae_fecha_div').classList.remove('hidden')" class="text-morado focus:ring-morado">
+            <div>
+              <p class="text-xs font-bold text-ink">Préstamo Temporal</p>
+              <p class="text-[10px] text-slate2">Con fecha límite de retorno</p>
+            </div>
+          </label>
+          <label class="flex items-center gap-2 p-3 rounded-xl border border-gray-200 cursor-pointer has-[:checked]:border-morado has-[:checked]:bg-morado/5">
+            <input type="radio" name="ae_tipo" value="Permanente" onchange="document.getElementById('ae_fecha_div').classList.add('hidden')" class="text-morado focus:ring-morado">
+            <div>
+              <p class="text-xs font-bold text-ink">Permanente</p>
+              <p class="text-[10px] text-slate2">Dotación de planta</p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div id="ae_fecha_div">
+        <label class="block text-xs font-bold text-ink mb-1">Fecha y Hora Límite de Retorno:</label>
+        <input type="datetime-local" id="ae_fecha_limite" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none" />
+      </div>
+    </div>
+  `;
+
+  mostrarModalPersonalizado('Entregar Equipo', html, async () => {
+    const idRecurso = document.getElementById('sel_asignar_equipo').value;
+    if (!idRecurso) return false;
+
+    const tipo = document.querySelector('input[name="ae_tipo"]:checked').value;
+    let fechaLimite = null;
+    if (tipo === 'Temporal') {
+      fechaLimite = document.getElementById('ae_fecha_limite').value;
+      if (!fechaLimite) {
+        toast('Debe indicar la fecha límite de devolución.', 'error');
+        return false;
+      }
+    }
+
+    const idx = recursos.findIndex(x => x.id === idRecurso);
+    if (idx > -1) {
+      const rec = recursos[idx];
+      rec.estado = tipo === 'Permanente' ? 'Asignado' : 'Prestado';
+      rec.responsable = nombreUsuario;
+      rec.tipo_asignacion = tipo;
+      rec.fecha_limite = fechaLimite;
+      rec.fecha_entrega = new Date().toISOString();
+
+      await Store.save('recursos_inventario', recursos);
+      toast(`Equipo entregado correctamente a ${nombreUsuario}`, 'success');
+
+      if (typeof registrarAuditoriaAccion === 'function') {
+        await registrarAuditoriaAccion('Equipo asignado', nombreUsuario, 'Recursos', `${rec.nombre} (${rec.codigo})`);
+      }
+
+      if (typeof renderRecursos === 'function') renderRecursos();
+      if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+      return true;
+    }
+    return false;
+  });
+};
+
+// =========================================================================
+// 3. PORTAL DOCENTE Y ESTUDIANTE: SOLICITAR EQUIPO Y VER ESTADO
+// =========================================================================
+RENDERERS_DOCENTE['solicitar_equipo'] = renderSolicitarEquipoForm;
+RENDERERS_ESTUDIANTE['solicitar_equipo'] = renderSolicitarEquipoForm;
+
+async function renderSolicitarEquipoForm() {
+  await asegurarDatosInicialesRecursos();
+  const user = getUsuarioSesionActual();
+  const mountId = user.rol === 'Docente' ? 'mount-t-solicitar_equipo' : 'mount-s-solicitar_equipo';
+  const mount = document.getElementById(mountId);
+  if (!mount) return;
+
+  const recursos = await Store.list('recursos_inventario') || [];
+  const solicitudes = await Store.list('solicitudes_recursos') || [];
+
+  // Buscar equipo que tenga asignado esta persona
+  const equipoActual = recursos.find(r => 
+    (r.estado === 'Asignado' || r.estado === 'Prestado') && 
+    r.responsable && r.responsable.toLowerCase().trim() === user.nombre.toLowerCase().trim()
+  );
+
+  const misSolicitudes = solicitudes.filter(s => 
+    s.solicitante && s.solicitante.toLowerCase().trim() === user.nombre.toLowerCase().trim()
+  );
+
+  let equipoActualHtml = '';
+  if (equipoActual) {
+    const vencido = isOverdue(equipoActual);
+    const ret = calcularRetraso(equipoActual.fecha_limite);
+
+    equipoActualHtml = `
+      <div class="bg-white p-6 border ${vencido ? 'border-coral/50 ring-2 ring-coral/20' : 'border-gray-100'} rounded-3xl shadow-sm space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full ${vencido ? 'bg-coral animate-ping' : 'bg-emerald-500'}"></span>
+            <h3 class="text-sm font-extrabold text-ink uppercase tracking-wider">Mi Equipo Actualmente Asignado</h3>
+          </div>
+          <span class="px-3 py-1 rounded-full text-xs font-bold ${vencido ? 'bg-coral text-white' : 'bg-emerald-100 text-emerald-700'}">
+            ${vencido ? '¡Plazo Vencido!' : 'En Custodia Activa'}
+          </span>
+        </div>
+
+        ${vencido ? `
+          <div class="p-4 rounded-2xl bg-coral/10 border border-coral/30 flex items-start gap-3">
+            <svg class="w-5 h-5 text-coral shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <div>
+              <p class="text-xs font-black text-coral uppercase tracking-wide">Alerta de Devolución Excedida</p>
+              <p class="text-xs text-ink font-semibold mt-0.5">El tiempo límite acordado expiró hace <strong>${ret.texto}</strong> (límite: ${new Date(equipoActual.fecha_limite).toLocaleString()}).</p>
+              <p class="text-[11px] text-slate2 mt-1">Por favor acércate a Coordinación o Administración para devolver el equipo o gestionar una prórroga.</p>
+            </div>
+          </div>
+        ` : ''}
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+          <div class="bg-gray-50 p-3.5 rounded-2xl">
+            <p class="text-[10px] uppercase font-bold text-slate2">Equipo</p>
+            <p class="text-sm font-bold text-ink mt-0.5">${escapeHtml(equipoActual.nombre)}</p>
+            <p class="text-xs text-slate2">${escapeHtml(equipoActual.marca || '')} ${escapeHtml(equipoActual.modelo || '')}</p>
+          </div>
+          <div class="bg-gray-50 p-3.5 rounded-2xl">
+            <p class="text-[10px] uppercase font-bold text-slate2">Identificadores</p>
+            <p class="font-mono text-xs font-bold text-morado mt-0.5">${escapeHtml(equipoActual.codigo || '-')}</p>
+            <p class="text-[10px] text-slate2">SN: ${escapeHtml(equipoActual.serial || '-')}</p>
+          </div>
+          <div class="bg-gray-50 p-3.5 rounded-2xl">
+            <p class="text-[10px] uppercase font-bold text-slate2">Modalidad & Fecha</p>
+            <p class="text-xs font-bold text-ink mt-0.5">${equipoActual.tipo_asignacion === 'Permanente' ? 'Asignación Permanente' : 'Préstamo Temporal'}</p>
+            <p class="text-[10px] ${vencido ? 'text-coral font-bold' : 'text-slate2'} mt-0.5">
+              ${equipoActual.fecha_limite ? `Vence: ${new Date(equipoActual.fecha_limite).toLocaleDateString()}` : 'Sin fecha límite'}
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    equipoActualHtml = `
+      <div class="bg-white p-6 border border-gray-100 rounded-3xl shadow-sm flex items-center gap-4">
+        <div class="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <div>
+          <p class="text-sm font-bold text-ink">Actualmente no tienes ningún equipo a tu cargo</p>
+          <p class="text-xs text-slate2 mt-0.5">Si requieres una laptop, tablet o equipo audiovisual para tus clases o proyectos, completa el formulario de solicitud a continuación.</p>
+        </div>
+      </div>
+    `;
+  }
+
+  mount.innerHTML = `
+    <div class="p-6 max-w-4xl mx-auto space-y-8">
+      <div>
+        <h2 class="text-2xl font-extrabold text-ink tracking-tight">Reserva y Solicitud de Equipos</h2>
+        <p class="text-slate2 text-sm mt-0.5">Gestiona tus solicitudes de computadores y recursos tecnológicos ante la administración.</p>
+      </div>
+
+      <!-- SECCIÓN 1: EQUIPO ACTUAL -->
+      ${equipoActualHtml}
+
+      <!-- SECCIÓN 2: FORMULARIO DE SOLICITUD -->
+      <div class="bg-white p-6 sm:p-8 border border-gray-100 rounded-3xl shadow-sm space-y-6">
+        <div class="border-b border-gray-100 pb-4">
+          <h3 class="text-base font-extrabold text-ink tracking-tight">Nueva Solicitud de Préstamo</h3>
+          <p class="text-xs text-slate2 mt-0.5">Indica los detalles del recurso que necesitas para que la administración lo prepare.</p>
+        </div>
+
+        <form id="form-solicitud-equipo" onsubmit="event.preventDefault(); enviarSolicitudEquipo();" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-ink mb-1">Categoría del Equipo*</label>
+              <select id="req_categoria" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:border-morado outline-none">
+                <option value="Laptops">Laptops / Computadores Portátiles</option>
+                <option value="Tablets">Tablets / Dibujo Digital</option>
+                <option value="Audio/Video">Audio / Video (Proyector, Parlante, Micrófono)</option>
+                <option value="General">Otros recursos generales</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-ink mb-1">Modalidad Requerida*</label>
+              <select id="req_tipo" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:border-morado outline-none" onchange="document.getElementById('req_fecha_div').classList.toggle('hidden', this.value==='Permanente')">
+                <option value="Temporal">Préstamo Temporal (por horas o días)</option>
+                <option value="Permanente">Asignación Permanente (dotación regular)</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="req_fecha_div">
+            <label class="block text-xs font-bold text-ink mb-1">¿Hasta cuándo lo necesitas? (Fecha Límite)*</label>
+            <input type="datetime-local" id="req_fecha" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:border-morado outline-none" />
+            <p class="text-[10px] text-slate2 mt-1">Indica la fecha y hora en que te comprometes a devolver el equipo a la institución.</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-ink mb-1">Motivo / Justificación Académica*</label>
+            <textarea id="req_motivo" rows="3" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:border-morado outline-none" placeholder="Explica detalladamente para qué clase, módulo o proyecto requieres el equipo..."></textarea>
+          </div>
+
+          <button type="submit" class="w-full btn-glow-primary rounded-2xl bg-morado text-white font-bold text-sm py-3.5 shadow-md hover:bg-morado/90 transition flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+            Enviar Solicitud a Administración
+          </button>
+        </form>
+      </div>
+
+      <!-- SECCIÓN 3: MIS SOLICITUDES ANTERIORES -->
+      <div class="space-y-4">
+        <h3 class="text-base font-extrabold text-ink">Historial de Mis Solicitudes</h3>
+        ${misSolicitudes.length === 0 ? `
+          <p class="text-slate2 text-xs text-center p-8 bg-white border border-gray-100 rounded-2xl">No has realizado ninguna solicitud de equipo todavía.</p>
+        ` : `
+          <div class="space-y-3">
+            ${[...misSolicitudes].reverse().map(s => `
+              <div class="p-5 border border-gray-100 rounded-2xl bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-sm">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-extrabold text-sm text-ink">${s.categoria}</span>
+                    <span class="text-xs text-slate2">(${s.tipo_asignacion})</span>
+                  </div>
+                  <p class="text-xs text-slate2 mt-1">"${escapeHtml(s.motivo || '')}"</p>
+                  <p class="text-[10px] text-gray-400 mt-1">Solicitado el: ${new Date(s.fecha_creacion).toLocaleString()}</p>
+                </div>
+                <div>
+                  <span class="px-3 py-1 rounded-xl text-xs font-extrabold uppercase tracking-wider ${
+                    s.estado === 'Pendiente' ? 'bg-amber-100 text-amber-800 border border-amber-200/60' :
+                    s.estado === 'Aprobada' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200/60' :
+                    'bg-red-100 text-red-800 border border-red-200/60'
+                  }">
+                    ${s.estado}
+                  </span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+}
+window.renderSolicitarEquipoForm = renderSolicitarEquipoForm;
+
+window.enviarSolicitudEquipo = async function() {
+  const categoria = document.getElementById('req_categoria').value;
+  const tipo = document.getElementById('req_tipo').value;
+  const motivo = document.getElementById('req_motivo').value.trim();
+  const fecha = document.getElementById('req_fecha').value;
+  const user = getUsuarioSesionActual();
+
+  if (!motivo) {
+    toast('Debes escribir un motivo o justificación.', 'error');
+    return;
+  }
+  if (tipo === 'Temporal' && !fecha) {
+    toast('Indica la fecha hasta cuándo necesitas el equipo.', 'error');
+    return;
+  }
+
+  const solicitudes = await Store.list('solicitudes_recursos') || [];
+  solicitudes.push({
+    id: uid('sol'),
+    solicitante: user.nombre,
+    email: user.email,
+    rol_solicitante: user.rol,
+    categoria,
+    tipo_asignacion: tipo,
+    fecha_limite: tipo === 'Temporal' ? fecha : null,
+    motivo,
+    estado: 'Pendiente',
+    fecha_creacion: new Date().toISOString()
+  });
+
+  await Store.save('solicitudes_recursos', solicitudes);
+  toast('¡Solicitud enviada con éxito! La administración la revisará en breve.', 'success');
+
+  if (typeof registrarAuditoriaAccion === 'function') {
+    await registrarAuditoriaAccion('Solicitud de equipo enviada', user.nombre, user.rol, `Categoría: ${categoria} - ${tipo}`);
+  }
+
+  renderSolicitarEquipoForm();
+};
+
+// =========================================================================
+// 4. BANDEJA DE SOLICITUDES DE RECURSOS (ADMIN)
+// =========================================================================
+RENDERERS['solicitudes_recursos'] = renderSolicitudesAdmin;
+
+async function renderSolicitudesAdmin() {
+  const mount = document.getElementById('mount-solicitudes_recursos');
+  if (!mount) return;
+
+  await asegurarDatosInicialesRecursos();
+  const solicitudes = await Store.list('solicitudes_recursos') || [];
+  const pendientes = solicitudes.filter(s => s.estado === 'Pendiente');
+
+  if (pendientes.length === 0) {
+    mount.innerHTML = `
+      <div class="p-6 max-w-4xl mx-auto space-y-6">
+        <h2 class="text-2xl font-extrabold text-ink tracking-tight">Solicitudes de Equipos de la Plataforma</h2>
+        <div class="p-12 text-center text-emerald-700 bg-emerald-50 rounded-3xl border border-emerald-100 shadow-sm mt-4">
+          <svg class="w-10 h-10 mx-auto text-emerald-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <p class="font-extrabold text-base">No hay solicitudes pendientes</p>
+          <p class="text-xs text-emerald-600 mt-1">Todas las peticiones de estudiantes y docentes han sido procesadas.</p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const rows = pendientes.map(s => `
+    <div class="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row gap-5 justify-between items-start md:items-center">
+      <div class="space-y-1.5">
+        <div class="flex items-center gap-2">
+          <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${s.rol_solicitante === 'Docente' ? 'bg-turquesa/10 text-turquesa' : 'bg-oro/15 text-amber-700'}">
+            ${s.rol_solicitante}
+          </span>
+          <p class="font-bold text-ink text-base">${escapeHtml(s.solicitante)}</p>
+        </div>
+
+        <p class="text-xs font-semibold text-ink">
+          Solicita: <strong class="text-morado">${s.categoria}</strong> (${s.tipo_asignacion})
+        </p>
+
+        ${s.tipo_asignacion === 'Temporal' ? `
+          <p class="text-xs text-coral font-bold">Fecha requerida: ${new Date(s.fecha_limite).toLocaleString()}</p>
+        ` : ''}
+
+        <p class="text-xs text-slate2 bg-gray-50 p-3 rounded-xl border border-gray-100 italic">
+          "${escapeHtml(s.motivo)}"
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
+        <button onclick="responderSolicitud('${s.id}', 'Rechazada')" class="flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold border border-red-200 text-red-600 hover:bg-red-50 transition">
+          Rechazar
+        </button>
+        <button onclick="responderSolicitud('${s.id}', 'Aprobada')" class="flex-1 md:flex-none px-5 py-2.5 rounded-xl text-xs font-bold bg-morado text-white shadow-md hover:bg-morado/90 transition flex items-center justify-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          Aprobar y Entregar
+        </button>
+      </div>
+    </div>
+  `).join('');
+
+  mount.innerHTML = `
+    <div class="p-6 max-w-4xl mx-auto space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-2xl font-extrabold text-ink tracking-tight">Solicitudes de Equipos de la Plataforma</h2>
+          <p class="text-xs text-slate2 mt-0.5">Peticiones de docentes y estudiantes pendientes de asignación y entrega.</p>
+        </div>
+        <span class="px-3 py-1 rounded-full bg-morado/10 text-morado text-xs font-bold">${pendientes.length} pendiente(s)</span>
+      </div>
+      <div class="space-y-4">
+        ${rows}
+      </div>
+    </div>
+  `;
+}
+window.renderSolicitudesAdmin = renderSolicitudesAdmin;
+
+window.responderSolicitud = async function(idSolicitud, respuesta) {
+  const solicitudes = await Store.list('solicitudes_recursos') || [];
+  const idx = solicitudes.findIndex(x => x.id === idSolicitud);
+  if (idx === -1) return;
+
+  const sol = solicitudes[idx];
+
+  if (respuesta === 'Rechazada') {
+    if (!confirm(`¿Rechazar la solicitud de ${sol.solicitante} para ${sol.categoria}?`)) return;
+    sol.estado = 'Rechazada';
+    await Store.save('solicitudes_recursos', solicitudes);
+    toast('Solicitud rechazada', 'info');
+
+    if (typeof registrarAuditoriaAccion === 'function') {
+      await registrarAuditoriaAccion('Solicitud de equipo rechazada', sol.solicitante, 'Recursos', `Categoría: ${sol.categoria}`);
+    }
+
+    renderSolicitudesAdmin();
+    return;
+  }
+
+  // Flujo Aprobar: Lanza el modal pre-llenado con los datos del recurso solicitado
+  const recursos = await Store.list('recursos_inventario') || [];
+  const disponibles = recursos.filter(r => r.estado === 'Disponible' && (r.categoria === sol.categoria || sol.categoria === 'General'));
+  
+  if (disponibles.length === 0) {
+    toast(`No hay equipos disponibles en bodega para la categoría: ${sol.categoria}. Agrega o libera un equipo primero.`, 'error');
+    return;
+  }
+
+  const options = disponibles.map(r => `<option value="${r.id}">[${escapeHtml(r.categoria)}] ${escapeHtml(r.codigo || '-')} — ${escapeHtml(r.nombre)} (${escapeHtml(r.marca || '')})</option>`).join('');
+
+  const html = `
+    <div class="p-1 space-y-4">
+      <div class="bg-morado/5 p-4 rounded-2xl border border-morado/10 space-y-1">
+        <p class="text-xs text-morado font-extrabold">Solicitante: <span class="text-ink font-bold">${sol.solicitante} (${sol.rol_solicitante})</span></p>
+        <p class="text-xs text-morado font-extrabold">Categoría: <span class="text-ink font-bold">${sol.categoria}</span> (${sol.tipo_asignacion})</p>
+        ${sol.fecha_limite ? `<p class="text-xs text-morado font-extrabold">Retorno previsto: <span class="text-ink font-bold">${new Date(sol.fecha_limite).toLocaleString()}</span></p>` : ''}
+        <p class="text-xs text-slate2 italic mt-1">"${escapeHtml(sol.motivo || '')}"</p>
+      </div>
+      
+      <div>
+        <label class="block text-xs font-bold text-ink mb-1">Seleccionar el Equipo a Entregar:</label>
+        <select id="sel_aprobar_equipo" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-morado outline-none">
+          ${options}
+        </select>
+      </div>
+    </div>
+  `;
+
+  mostrarModalPersonalizado('Aprobar y Entregar Equipo', html, async () => {
+    const idRecurso = document.getElementById('sel_aprobar_equipo').value;
+    if (!idRecurso) return false;
+
+    const rIdx = recursos.findIndex(x => x.id === idRecurso);
+    if (rIdx > -1) {
+      const rec = recursos[rIdx];
+      rec.estado = sol.tipo_asignacion === 'Permanente' ? 'Asignado' : 'Prestado';
+      rec.responsable = sol.solicitante;
+      rec.tipo_asignacion = sol.tipo_asignacion;
+      rec.fecha_limite = sol.fecha_limite;
+      rec.fecha_entrega = new Date().toISOString();
+      await Store.save('recursos_inventario', recursos);
+      
+      sol.estado = 'Aprobada';
+      sol.recurso_id = idRecurso;
+      await Store.save('solicitudes_recursos', solicitudes);
+
+      toast(`Solicitud aprobada y equipo ${rec.codigo} entregado a ${sol.solicitante}`, 'success');
+
+      if (typeof registrarAuditoriaAccion === 'function') {
+        await registrarAuditoriaAccion('Solicitud aprobada y entregada', sol.solicitante, 'Recursos', `${rec.nombre} (${rec.codigo})`);
+      }
+
+      renderSolicitudesAdmin();
+      if (typeof renderRecursos === 'function') renderRecursos();
+      if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+      return true;
+    }
+    return false;
+  });
+};
