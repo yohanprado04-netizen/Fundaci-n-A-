@@ -52,7 +52,6 @@ if (!in_array($entidad, $rutasPublicas, true)) {
         'pensum'                  => ['Superadmin', 'Coordinador'],
         'chat_voz_conocimiento'   => ['Superadmin', 'Coordinador'],
         'memorandos'              => ['Superadmin', 'Coordinador'],
-        'encuestas'               => ['Superadmin', 'Coordinador'],
         'formularios'             => ['Superadmin', 'Administrador', 'Coordinador'],
         'enviar_correo'           => ['Superadmin', 'Coordinador', 'Docente'],
         'horarios'                => ['Superadmin', 'Coordinador', 'Docente'],
@@ -63,6 +62,7 @@ if (!in_array($entidad, $rutasPublicas, true)) {
         'informes_docente'        => ['Superadmin', 'Coordinador', 'Docente'],
         'trainee_archivos'        => ['Superadmin', 'Coordinador', 'Docente', 'Estudiante'],
         'pqr'                     => ['Superadmin', 'Coordinador', 'Docente', 'Estudiante'],
+        'comunicados'             => ['Superadmin', 'Coordinador', 'Docente'],
     ];
 
     if ($metodoHttp !== 'GET') {
@@ -130,9 +130,6 @@ switch ($entidad) {
     case 'memorandos_leidos':
         manejarMemorandosLeidos($pdo);
         break;
-    case 'encuestas':
-        manejarEncuestas($pdo);
-        break;
     case 'formularios':
         manejarFormularios($pdo);
         break;
@@ -181,6 +178,9 @@ switch ($entidad) {
     case 'trainee_archivos':
         manejarTraineeArchivos($pdo);
         break;
+    case 'comunicados':
+        manejarComunicados($pdo);
+        break;
     default:
         responderError("Entidad \"$entidad\" no reconocida o todavía no migrada a la base de datos (sigue en localStorage por ahora).", 404);
 }
@@ -191,14 +191,28 @@ switch ($entidad) {
  * en una sola consulta de ~150 bytes, sin exponer datos privados de usuarios
  * ni exigir autenticación.
  */
+function asegurarColumnaPostulacionSlug(PDO $pdo): void {
+    static $asegurado = false;
+    if ($asegurado) return;
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM configuracion")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('postulacion_slug', $cols, true)) {
+            $pdo->exec("ALTER TABLE configuracion ADD COLUMN postulacion_slug VARCHAR(120) DEFAULT 'postulaciones' AFTER postulacion_url");
+        }
+        $asegurado = true;
+    } catch (Throwable $e) {}
+}
+
 function manejarPublicInfo(PDO $pdo): void {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
         responderError('Método no permitido.', 405);
     }
 
+    asegurarColumnaPostulacionSlug($pdo);
+
     $fila = $pdo->query(
         "SELECT nombre, ciudad, direccion, correo, telefono,
-                postulacion_habilitada, postulacion_url
+                postulacion_habilitada, postulacion_url, postulacion_slug
          FROM configuracion WHERE id = 1"
     )->fetch();
 
@@ -210,6 +224,7 @@ function manejarPublicInfo(PDO $pdo): void {
         'telefono'              => $fila['telefono'] ?? '3214974708',
         'postulacionHabilitada' => !empty($fila['postulacion_habilitada']),
         'postulacionUrl'        => $fila['postulacion_url'] ?? '',
+        'postulacionSlug'       => $fila['postulacion_slug'] ?? ($fila['postulacion_url'] ? preg_replace('/^#formulario\//', '', $fila['postulacion_url']) : 'postulaciones'),
     ];
 
     $stmtCount = $pdo->query("SELECT COUNT(*) AS total FROM usuarios WHERE rol = 'Estudiante' AND (estado_registro IS NULL OR estado_registro != 'Pendiente')");
@@ -290,12 +305,14 @@ function manejarRegistroPublico(PDO $pdo): void {
 function manejarConfiguracion(PDO $pdo): void {
     $metodo = $_SERVER['REQUEST_METHOD'];
 
+    asegurarColumnaPostulacionSlug($pdo);
+
     if ($metodo === 'GET') {
         exigirSesion(['Superadmin']);
         $fila = $pdo->query(
             "SELECT nombre, ciudad, direccion, correo, telefono,
                     asistencia_minima, notificaciones_email, notificaciones_ia,
-                    postulacion_habilitada, postulacion_url,
+                    postulacion_habilitada, postulacion_url, postulacion_slug,
                     email_metodo, emailjs_public_key, emailjs_service_id, emailjs_template_id,
                     smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_secure
              FROM configuracion WHERE id = 1"
@@ -313,6 +330,7 @@ function manejarConfiguracion(PDO $pdo): void {
                 'notificacionesIA'       => true,
                 'postulacionHabilitada'  => false,
                 'postulacionUrl'         => '',
+                'postulacionSlug'        => 'postulaciones',
                 'emailMetodo'            => 'emailjs',
                 'emailjsPublicKey'       => 'elyshGVkR2fYZQJfO',
                 'emailjsServiceId'       => 'service_20mxfgu',
@@ -337,6 +355,7 @@ function manejarConfiguracion(PDO $pdo): void {
             'notificacionesIA'      => (bool) $fila['notificaciones_ia'],
             'postulacionHabilitada' => (bool) $fila['postulacion_habilitada'],
             'postulacionUrl'        => $fila['postulacion_url'],
+            'postulacionSlug'       => $fila['postulacion_slug'] ?? ($fila['postulacion_url'] ? preg_replace('/^#formulario\//', '', $fila['postulacion_url']) : 'postulaciones'),
             'emailMetodo'           => $fila['email_metodo'] ?? 'emailjs',
             'emailjsPublicKey'      => $fila['emailjs_public_key'] ?? 'elyshGVkR2fYZQJfO',
             'emailjsServiceId'      => $fila['emailjs_service_id'] ?? 'service_20mxfgu',
@@ -359,15 +378,24 @@ function manejarConfiguracion(PDO $pdo): void {
             responderError('Se esperaba un objeto de configuración en body.data.', 400);
         }
 
+        $postulacionSlug = trim($cfg['postulacionSlug'] ?? '');
+        if (!$postulacionSlug && !empty($cfg['postulacionUrl'])) {
+            $postulacionSlug = preg_replace('/^#formulario\//', '', $cfg['postulacionUrl']);
+        }
+        if (!$postulacionSlug) {
+            $postulacionSlug = 'postulaciones';
+        }
+        $postulacionUrl = '#formulario/' . $postulacionSlug;
+
         $stmt = $pdo->prepare(
             "INSERT INTO configuracion
                 (id, nombre, ciudad, direccion, correo, telefono, cupo_maximo,
                  notas_minima_aprobacion, asistencia_minima,
                  notificaciones_email, notificaciones_ia,
-                 postulacion_habilitada, postulacion_url,
+                 postulacion_habilitada, postulacion_url, postulacion_slug,
                  email_metodo, emailjs_public_key, emailjs_service_id, emailjs_template_id,
                  smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_secure)
-             VALUES (1, ?, ?, ?, ?, ?, 30, 6.0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (1, ?, ?, ?, ?, ?, 30, 6.0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                 nombre = VALUES(nombre), ciudad = VALUES(ciudad),
                 direccion = VALUES(direccion), correo = VALUES(correo),
@@ -377,6 +405,7 @@ function manejarConfiguracion(PDO $pdo): void {
                 notificaciones_ia = VALUES(notificaciones_ia),
                 postulacion_habilitada = VALUES(postulacion_habilitada),
                 postulacion_url = VALUES(postulacion_url),
+                postulacion_slug = VALUES(postulacion_slug),
                 email_metodo = VALUES(email_metodo),
                 emailjs_public_key = VALUES(emailjs_public_key),
                 emailjs_service_id = VALUES(emailjs_service_id),
@@ -398,7 +427,8 @@ function manejarConfiguracion(PDO $pdo): void {
             !empty($cfg['notificacionesEmail']) ? 1 : 0,
             !empty($cfg['notificacionesIA']) ? 1 : 0,
             !empty($cfg['postulacionHabilitada']) ? 1 : 0,
-            $cfg['postulacionUrl'] ?? '',
+            $postulacionUrl,
+            $postulacionSlug,
             $cfg['emailMetodo'] ?? 'emailjs',
             $cfg['emailjsPublicKey'] ?? 'elyshGVkR2fYZQJfO',
             $cfg['emailjsServiceId'] ?? 'service_20mxfgu',
@@ -2956,4 +2986,251 @@ function manejarTraineeArchivos(PDO $pdo): void {
     }
 
     responderError('Metodo no permitido.', 405);
+}
+
+/**
+ * Gestión de comunicados institucionales y notificaciones.
+ * Soporta creación pública y dirigida por cohortes/roles.
+ */
+function manejarComunicados(PDO $pdo): void {
+    $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS comunicados (
+        id VARCHAR(64) PRIMARY KEY,
+        tipo VARCHAR(32) NOT NULL DEFAULT 'Publica',
+        destinatarios TEXT NULL,
+        titulo VARCHAR(255) NOT NULL,
+        mensaje TEXT NOT NULL,
+        categoria VARCHAR(64) NOT NULL DEFAULT 'Institucional',
+        prioridad VARCHAR(32) NOT NULL DEFAULT 'Media',
+        autor VARCHAR(128) NOT NULL DEFAULT 'Superadmin',
+        autor_rol VARCHAR(64) NOT NULL DEFAULT 'Superadmin',
+        fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        atendida TINYINT(1) NOT NULL DEFAULT 0,
+        INDEX idx_tipo (tipo),
+        INDEX idx_categoria (categoria),
+        INDEX idx_fecha (fecha)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+    if ($metodo === 'GET') {
+        $filas = $pdo->query("SELECT * FROM comunicados ORDER BY fecha DESC")->fetchAll();
+        
+        if (empty($filas)) {
+            $semilla = [
+                [
+                    'id' => 'com_seed_01',
+                    'tipo' => 'Publica',
+                    'destinatarios' => json_encode(['Todos']),
+                    'titulo' => 'Nuevas inscripciones para el semestre 2027',
+                    'mensaje' => 'Se encuentran abiertas oficialmente las convocatorias e inscripciones para los nuevos programas y cohortes de la Fundación A+ para el siguiente periodo formativo.',
+                    'categoria' => 'Institucional',
+                    'prioridad' => 'Alta',
+                    'autor' => 'Superadmin',
+                    'autor_rol' => 'Superadmin',
+                    'fecha' => '2026-10-01 09:00:00',
+                    'atendida' => 0
+                ],
+                [
+                    'id' => 'com_seed_02',
+                    'tipo' => 'Privada',
+                    'destinatarios' => json_encode(['Corte 1', 'Corte 2', 'Corte 8']),
+                    'titulo' => 'Cambio de aula para la clase de Matemáticas',
+                    'mensaje' => 'Por motivos de mantenimiento en el salón audiovisual, la sesión presencial de lógica y matemáticas se desarrollará temporalmente en la Sala Digital 2.',
+                    'categoria' => 'Académico',
+                    'prioridad' => 'Media',
+                    'autor' => 'Superadmin',
+                    'autor_rol' => 'Superadmin',
+                    'fecha' => '2026-10-01 11:30:00',
+                    'atendida' => 0
+                ],
+                [
+                    'id' => 'com_seed_03',
+                    'tipo' => 'Publica',
+                    'destinatarios' => json_encode(['Todos']),
+                    'titulo' => 'Nueva Beca de Excelencia \'A+\': Abiertas inscripciones',
+                    'mensaje' => 'Participa y obtén una beca de formación técnica intensiva con certificación internacional para el próximo ciclo formativo.',
+                    'categoria' => 'Institucional',
+                    'prioridad' => 'Alta',
+                    'autor' => 'Superadmin',
+                    'autor_rol' => 'Superadmin',
+                    'fecha' => '2026-10-01 14:00:00',
+                    'atendida' => 0
+                ],
+                [
+                    'id' => 'com_seed_04',
+                    'tipo' => 'Publica',
+                    'destinatarios' => json_encode(['Todos']),
+                    'titulo' => 'Día Festivo Institucional',
+                    'mensaje' => 'Informamos a toda la comunidad académica que el próximo lunes no habrá actividades formativas presenciales con motivo del festivo institucional.',
+                    'categoria' => 'Institucional',
+                    'prioridad' => 'Baja',
+                    'autor' => 'Superadmin',
+                    'autor_rol' => 'Superadmin',
+                    'fecha' => '2026-10-01 16:00:00',
+                    'atendida' => 1
+                ],
+                [
+                    'id' => 'com_seed_05',
+                    'tipo' => 'Publica',
+                    'destinatarios' => json_encode(['Todos']),
+                    'titulo' => 'Día de la Innovación: Conferencias y Workshops - 15 de Oct',
+                    'mensaje' => 'Únete a nosotros para una jornada presencial y virtual con mentores internacionales en inteligencia artificial y desarrollo de software.',
+                    'categoria' => 'Eventos',
+                    'prioridad' => 'Media',
+                    'autor' => 'Superadmin',
+                    'autor_rol' => 'Superadmin',
+                    'fecha' => '2026-10-01 17:30:00',
+                    'atendida' => 0
+                ],
+                [
+                    'id' => 'com_seed_06',
+                    'tipo' => 'Privada',
+                    'destinatarios' => json_encode(['Cohorte 8', 'Corte 8']),
+                    'titulo' => 'Cambio de horario: Taller de Programación - Nueva hora: Mañana 10:30 AM',
+                    'mensaje' => 'Estudiantes del Corte 8, por favor tomen nota del cambio de horario para la sesión presencial del taller de desarrollo.',
+                    'categoria' => 'Académico',
+                    'prioridad' => 'Media',
+                    'autor' => 'Profesor Martínez',
+                    'autor_rol' => 'Docente',
+                    'fecha' => '2026-10-02 08:30:00',
+                    'atendida' => 0
+                ],
+                [
+                    'id' => 'com_seed_07',
+                    'tipo' => 'Privada',
+                    'destinatarios' => json_encode(['Cohorte 8', 'Corte 8']),
+                    'titulo' => 'Calificaciones de la Tarea 3 disponibles',
+                    'mensaje' => 'Las notas y retroalimentaciones para la Tarea 3 de Algoritmos han sido publicadas en el portal académico.',
+                    'categoria' => 'Académico',
+                    'prioridad' => 'Media',
+                    'autor' => 'Profesor Martínez',
+                    'autor_rol' => 'Docente',
+                    'fecha' => '2026-10-02 10:00:00',
+                    'atendida' => 0
+                ],
+                [
+                    'id' => 'com_seed_08',
+                    'tipo' => 'Privada',
+                    'destinatarios' => json_encode(['Cohorte 8', 'Corte 8']),
+                    'titulo' => 'Reunión de Coordinación de Corte 8 - Próximo lunes a las 2 PM',
+                    'mensaje' => 'Sesión informativa presencial y virtual sobre el cronograma de entregas de proyectos finales de semestre.',
+                    'categoria' => 'Administrativo',
+                    'prioridad' => 'Baja',
+                    'autor' => 'Superadmin',
+                    'autor_rol' => 'Superadmin',
+                    'fecha' => '2026-10-02 11:15:00',
+                    'atendida' => 0
+                ]
+            ];
+            $stmt = $pdo->prepare("INSERT INTO comunicados (id, tipo, destinatarios, titulo, mensaje, categoria, prioridad, autor, autor_rol, fecha, atendida) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            foreach ($semilla as $s) {
+                $stmt->execute([$s['id'], $s['tipo'], $s['destinatarios'], $s['titulo'], $s['mensaje'], $s['categoria'], $s['prioridad'], $s['autor'], $s['autor_rol'], $s['fecha'], $s['atendida']]);
+            }
+            $filas = $pdo->query("SELECT * FROM comunicados ORDER BY fecha DESC")->fetchAll();
+        }
+
+        $resultado = array_map(function($f) {
+            $dest = json_decode($f['destinatarios'] ?? '[]', true);
+            if (!is_array($dest)) {
+                $dest = !empty($f['destinatarios']) ? explode(',', $f['destinatarios']) : [];
+            }
+            return [
+                'id' => $f['id'],
+                'tipo' => $f['tipo'],
+                'destinatarios' => $dest,
+                'titulo' => $f['titulo'],
+                'mensaje' => $f['mensaje'],
+                'categoria' => $f['categoria'],
+                'prioridad' => $f['prioridad'],
+                'autor' => $f['autor'],
+                'autorRol' => $f['autor_rol'],
+                'fecha' => $f['fecha'],
+                'atendida' => (bool)$f['atendida']
+            ];
+        }, $filas);
+
+        responderJson($resultado);
+        return;
+    }
+
+    if ($metodo === 'POST') {
+        $body = leerBodyJson();
+        
+        // Si el body es un array de comunicados (reemplazo completo estilo Store.set)
+        if (is_array($body) && isset($body[0]) && is_array($body[0])) {
+            $pdo->beginTransaction();
+            try {
+                $pdo->exec("DELETE FROM comunicados");
+                $stmt = $pdo->prepare("INSERT INTO comunicados (id, tipo, destinatarios, titulo, mensaje, categoria, prioridad, autor, autor_rol, fecha, atendida) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                foreach ($body as $b) {
+                    $id = $b['id'] ?? ('com_' . bin2hex(random_bytes(8)));
+                    $dest = is_array($b['destinatarios'] ?? null) ? json_encode($b['destinatarios'], JSON_UNESCAPED_UNICODE) : ($b['destinatarios'] ?? '[]');
+                    $stmt->execute([
+                        $id,
+                        $b['tipo'] ?? 'Publica',
+                        $dest,
+                        $b['titulo'] ?? '',
+                        $b['mensaje'] ?? '',
+                        $b['categoria'] ?? 'Institucional',
+                        $b['prioridad'] ?? 'Media',
+                        $b['autor'] ?? 'Superadmin',
+                        $b['autorRol'] ?? ($b['autor_rol'] ?? 'Superadmin'),
+                        $b['fecha'] ?? date('Y-m-d H:i:s'),
+                        !empty($b['atendida']) ? 1 : 0
+                    ]);
+                }
+                $pdo->commit();
+                responderJson(['ok' => true, 'mensaje' => 'Comunicados actualizados con éxito']);
+            } catch (Exception $e) {
+                $pdo->rollBack();
+                responderError('Error al guardar comunicados: ' . $e->getMessage(), 500);
+            }
+            return;
+        }
+
+        // Si es un objeto individual a insertar/actualizar
+        if (is_array($body) && !empty($body['titulo'])) {
+            $id = $body['id'] ?? ('com_' . bin2hex(random_bytes(8)));
+            $dest = is_array($body['destinatarios'] ?? null) ? json_encode($body['destinatarios'], JSON_UNESCAPED_UNICODE) : ($body['destinatarios'] ?? '[]');
+            $stmt = $pdo->prepare("INSERT INTO comunicados (id, tipo, destinatarios, titulo, mensaje, categoria, prioridad, autor, autor_rol, fecha, atendida)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    tipo = VALUES(tipo),
+                    destinatarios = VALUES(destinatarios),
+                    titulo = VALUES(titulo),
+                    mensaje = VALUES(mensaje),
+                    categoria = VALUES(categoria),
+                    prioridad = VALUES(prioridad),
+                    atendida = VALUES(atendida)");
+            $stmt->execute([
+                $id,
+                $body['tipo'] ?? 'Publica',
+                $dest,
+                $body['titulo'] ?? '',
+                $body['mensaje'] ?? '',
+                $body['categoria'] ?? 'Institucional',
+                $body['prioridad'] ?? 'Media',
+                $body['autor'] ?? 'Superadmin',
+                $body['autorRol'] ?? ($body['autor_rol'] ?? 'Superadmin'),
+                $body['fecha'] ?? date('Y-m-d H:i:s'),
+                !empty($body['atendida']) ? 1 : 0
+            ]);
+            responderJson(['ok' => true, 'id' => $id, 'mensaje' => 'Comunicado guardado']);
+            return;
+        }
+
+        responderError('Estructura de comunicado inválida', 400);
+        return;
+    }
+
+    if ($metodo === 'DELETE') {
+        $id = $_GET['id'] ?? (leerBodyJson()['id'] ?? null);
+        if (!$id) {
+            responderError('Falta parámetro id para eliminar', 400);
+        }
+        $stmt = $pdo->prepare("DELETE FROM comunicados WHERE id = ?");
+        $stmt->execute([$id]);
+        responderJson(['ok' => true, 'mensaje' => 'Comunicado eliminado']);
+        return;
+    }
 }

@@ -559,6 +559,13 @@
   let currentAdminRole = null; // 'superadmin' | 'administracion'
   let currentAdminUser = null; // registro del usuario Coordinador cuando currentAdminRole === 'administracion'
 
+  if (typeof window !== 'undefined') {
+    window.currentAdminRole = currentAdminRole;
+    window.currentAdminUser = currentAdminUser;
+    window.getCurrentAdminRole = () => currentAdminRole;
+    window.getCurrentAdminUser = () => currentAdminUser;
+  }
+
   // El contexto del chat por rol (notas, asistencia, PQR, memorandos,
   // agenda, semáforo, permisos por perfil, etc.) YA NO se arma aquí en el
   // navegador — se calcula del lado del servidor, consultando MySQL, una
@@ -805,6 +812,10 @@
     if (usuario.rol === 'Superadmin') {
       currentAdminRole = 'superadmin';
       currentAdminUser = null;
+      if (typeof window !== 'undefined') {
+        window.currentAdminRole = 'superadmin';
+        window.currentAdminUser = null;
+      }
       document.getElementById('siteView').classList.add('hidden');
       document.getElementById('dashboardView').classList.remove('hidden');
       applyAdminRoleUI();
@@ -819,6 +830,10 @@
     if (usuario.rol === 'Coordinador' || usuario.rol === 'Administrador') {
       currentAdminRole = 'administracion';
       currentAdminUser = usuario;
+      if (typeof window !== 'undefined') {
+        window.currentAdminRole = 'administracion';
+        window.currentAdminUser = usuario;
+      }
       document.getElementById('siteView').classList.add('hidden');
       document.getElementById('dashboardView').classList.remove('hidden');
       applyAdminRoleUI(usuario);
@@ -1029,6 +1044,10 @@
     detenerControlInactividad();
     currentAdminRole = null;
     currentAdminUser = null;
+    if (typeof window !== 'undefined') {
+      window.currentAdminRole = null;
+      window.currentAdminUser = null;
+    }
     panelActivoAdmin = null;
     semaforoCohorteFiltro = '';
     aplicarTema('light', false);
@@ -1443,7 +1462,8 @@
     if (currentAdminRole === 'administracion' && currentAdminUser) {
       const tabDelPanel = document.querySelector('.panel-tab[data-panel="' + panel + '"]');
       if (tabDelPanel && (tabDelPanel.dataset.superOnly === 'true' || tabDelPanel.classList.contains('hidden'))) return;
-      if (!(await permisoUsuarioSobrePanel(currentAdminUser, 'admin.' + panel)).ver) return;
+      const codigoPermiso = (tabDelPanel && tabDelPanel.dataset.panelCode) ? tabDelPanel.dataset.panelCode : ('admin.' + panel);
+      if (!(await permisoUsuarioSobrePanel(currentAdminUser, codigoPermiso)).ver) return;
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1934,6 +1954,56 @@
     asistencia: [],
     agenda_estudiante: [],
     semaforo_overrides: {},
+    justificaciones_asistencia: [
+      {
+        id: 'just_med_01',
+        asistenciaId: 'asist_seed_01',
+        estudiante: 'Vanessa Moreno Rentería',
+        materia: 'Fundamentos de Inteligencia Artificial',
+        fecha: '2026-10-01',
+        motivo: 'Incapacidad médica por cuadro viral agudo',
+        detalle: 'Incapacidad médica por 48 horas emitida por EPS SURA por cuadro respiratorio y fiebre alta.',
+        comentario: 'Incapacidad médica por 48 horas emitida por EPS SURA por cuadro respiratorio y fiebre alta.',
+        archivoNombre: 'incapacidad_eps_sura_octubre.pdf',
+        archivoTipo: 'application/pdf',
+        archivoBase64: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+        archivoDatos: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+        estado: 'Pendiente',
+        creadoEn: '2026-10-01T15:30:00.000Z'
+      },
+      {
+        id: 'just_med_02',
+        asistenciaId: 'asist_seed_02',
+        estudiante: 'Stiven Cuesta Palacios',
+        materia: 'Desarrollo Web Frontend y UX',
+        fecha: '2026-10-02',
+        motivo: 'Cita médica prioritaria y soporte odontológico',
+        detalle: 'Procedimiento odontológico de urgencia en la mañana. Se adjunta orden y constancia de atención médica.',
+        comentario: 'Procedimiento odontológico de urgencia en la mañana. Se adjunta orden y constancia de atención médica.',
+        archivoNombre: 'constancia_atencion_medica.png',
+        archivoTipo: 'image/svg+xml',
+        archivoBase64: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="250" viewBox="0 0 400 250"><rect width="400" height="250" fill="%23f8fafc"/><rect x="20" y="20" width="360" height="210" rx="12" fill="%23ffffff" stroke="%23cbd5e1" stroke-width="2"/><text x="40" y="60" font-family="sans-serif" font-size="16" font-weight="bold" fill="%230f172a">CONSTANCIA DE ATENCIÓN MÉDICA</text><text x="40" y="100" font-family="sans-serif" font-size="13" fill="%23475569">Paciente: Stiven Cuesta Palacios</text><text x="40" y="130" font-family="sans-serif" font-size="13" fill="%23475569">Fecha: 02 de Octubre de 2026</text><text x="40" y="160" font-family="sans-serif" font-size="13" fill="%23475569">Diagnóstico: Procedimiento odontológico urgente</text><text x="40" y="200" font-family="sans-serif" font-size="12" font-weight="bold" fill="%2310b981">ESTADO: ATENDIDO - REPOSO 24 HORAS</text></svg>',
+        archivoDatos: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="250" viewBox="0 0 400 250"><rect width="400" height="250" fill="%23f8fafc"/><rect x="20" y="20" width="360" height="210" rx="12" fill="%23ffffff" stroke="%23cbd5e1" stroke-width="2"/><text x="40" y="60" font-family="sans-serif" font-size="16" font-weight="bold" fill="%230f172a">CONSTANCIA DE ATENCIÓN MÉDICA</text><text x="40" y="100" font-family="sans-serif" font-size="13" fill="%23475569">Paciente: Stiven Cuesta Palacios</text><text x="40" y="130" font-family="sans-serif" font-size="13" fill="%23475569">Fecha: 02 de Octubre de 2026</text><text x="40" y="160" font-family="sans-serif" font-size="13" fill="%23475569">Diagnóstico: Procedimiento odontológico urgente</text><text x="40" y="200" font-family="sans-serif" font-size="12" font-weight="bold" fill="%2310b981">ESTADO: ATENDIDO - REPOSO 24 HORAS</text></svg>',
+        estado: 'Pendiente',
+        creadoEn: '2026-10-02T10:15:00.000Z'
+      },
+      {
+        id: 'just_med_03',
+        asistenciaId: 'asist_seed_03',
+        estudiante: 'Leidy Hurtado Blandón',
+        materia: 'Python para Analítica e Inteligencia Artificial',
+        fecha: '2026-09-29',
+        motivo: 'Calamidad doméstica comprobada',
+        detalle: 'Inundación súbita en el sector residencial por desbordamiento de quebrada en Quibdó, imposibilidad de traslado.',
+        comentario: 'Inundación súbita en el sector residencial por desbordamiento de quebrada en Quibdó, imposibilidad de traslado.',
+        archivoNombre: 'reporte_calamidad_barrio.pdf',
+        archivoTipo: 'application/pdf',
+        archivoBase64: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+        archivoDatos: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+        estado: 'Pendiente',
+        creadoEn: '2026-09-30T08:45:00.000Z'
+      }
+    ],
     // LIMPIEZA: se retiraron de aquí 4 entidades que nunca se leían ni se
     // escribían en ningún panel (código/datos muertos, siempre quedaban
     // vacías): "calificaciones" (schema genérico reemplazado hace tiempo
@@ -1960,7 +2030,8 @@
       // del sitio y define el link del cuestionario externo (Google Forms, etc.)
       // donde los interesados dejan sus datos.
       postulacionHabilitada: false,
-      postulacionUrl: ''
+      postulacionUrl: '',
+      postulacionSlug: 'postulaciones'
     }
   };
 
@@ -2067,6 +2138,8 @@
     if (str === null || str === undefined) return '';
     return String(str).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
   }
+  window.escapeHtml = escapeHtml;
+  window.toast = toast;
 
   function fmtDate(iso) {
     if (!iso) return '—';
@@ -2100,7 +2173,6 @@
     { codigo: 'admin.pqr', categoria: 'Administrativo', etiqueta: 'PQR' },
     { codigo: 'admin.calificaciones', categoria: 'Administrativo', etiqueta: 'Calificaciones' },
     { codigo: 'admin.informesAdmin', categoria: 'Administrativo', etiqueta: 'Informes' },
-    { codigo: 'admin.encuestas', categoria: 'Administrativo', etiqueta: 'Encuestas de satisfacción' },
     { codigo: 'admin.forms', categoria: 'Administrativo', etiqueta: 'Forms' },
     { codigo: 'admin.trainee', categoria: 'Administrativo', etiqueta: 'Historial Trainee' },
     { codigo: 'admin.auditoria', categoria: 'Administrativo', etiqueta: 'Auditoría' },
@@ -2110,6 +2182,7 @@
     { codigo: 'admin.solicitudes_recursos', categoria: 'Administrativo', etiqueta: 'Solicitudes de Recursos' },
     { codigo: 'admin.asignaciones_recursos', categoria: 'Administrativo', etiqueta: 'Préstamos y Asignaciones' },
     { codigo: 'docente.resumen', categoria: 'Docente', etiqueta: 'Resumen' },
+    { codigo: 'docente.notificaciones', categoria: 'Docente', etiqueta: 'Centro de Notificaciones y Avisos' },
     { codigo: 'docente.perfil', categoria: 'Docente', etiqueta: 'Mi perfil' },
     { codigo: 'docente.asistencia', categoria: 'Docente', etiqueta: 'Asistencia' },
     { codigo: 'docente.riesgo', categoria: 'Docente', etiqueta: 'Riesgo académico' },
@@ -2122,6 +2195,7 @@
     { codigo: 'docente.agenda', categoria: 'Docente', etiqueta: 'Agenda' },
     { codigo: 'docente.solicitar_equipo', categoria: 'Docente', etiqueta: 'Solicitar Equipo' },
     { codigo: 'estudiante.resumen', categoria: 'Estudiante', etiqueta: 'Resumen' },
+    { codigo: 'estudiante.notificaciones', categoria: 'Estudiante', etiqueta: 'Centro de Notificaciones y Comunicados' },
     { codigo: 'estudiante.perfil', categoria: 'Estudiante', etiqueta: 'Mi perfil' },
     { codigo: 'estudiante.asistencia', categoria: 'Estudiante', etiqueta: 'Asistencia' },
     { codigo: 'estudiante.academico', categoria: 'Estudiante', etiqueta: 'Académico' },
@@ -2129,7 +2203,6 @@
     { codigo: 'estudiante.pensum', categoria: 'Estudiante', etiqueta: 'Pensum' },
     { codigo: 'estudiante.memorandos', categoria: 'Estudiante', etiqueta: 'Memorandos' },
     { codigo: 'estudiante.pqr', categoria: 'Estudiante', etiqueta: 'PQR' },
-    { codigo: 'estudiante.encuestas', categoria: 'Estudiante', etiqueta: 'Encuestas' },
     { codigo: 'estudiante.agenda', categoria: 'Estudiante', etiqueta: 'Agenda' },
     { codigo: 'estudiante.solicitar_equipo', categoria: 'Estudiante', etiqueta: 'Solicitar Equipo' },
   ];
@@ -2177,8 +2250,16 @@
 
     perfiles.forEach(p => {
       if (!p.permisos) p.permisos = {};
-      if (!p.permisos['admin.forms'] && p.permisos['admin.encuestas']) {
-        p.permisos['admin.forms'] = { ...p.permisos['admin.encuestas'] };
+      if (p.categoria === 'Administrativo' && (!p.permisos['admin.forms'] || !p.permisos['admin.forms'].ver)) {
+        p.permisos['admin.forms'] = { ver: true, crear: true, editar: true, eliminar: true };
+        cambiosPerfiles = true;
+      }
+      if (p.permisos['admin.encuestas']) {
+        delete p.permisos['admin.encuestas'];
+        cambiosPerfiles = true;
+      }
+      if (p.permisos['estudiante.encuestas']) {
+        delete p.permisos['estudiante.encuestas'];
         cambiosPerfiles = true;
       }
     });
@@ -2217,10 +2298,24 @@
       return { ver: true, crear: true, editar: true, eliminar: true };
     }
     const idsPerfiles = usuario.perfiles || [];
+    // Notificaciones institucionales siempre visibles para el rol respectivo
+    if (panelCodigo === 'admin.notificaciones' || panelCodigo === 'docente.notificaciones' || panelCodigo === 'estudiante.notificaciones') {
+      return { ver: true, crear: true, editar: true, eliminar: true };
+    }
     // Si es Administrador o Coordinador y no tiene perfil restringido, otorgar acceso administrativo
     if (!idsPerfiles.length && (usuario.rol === 'Administrador' || usuario.rol === 'Coordinador')) {
       const esSuperOnly = panelCodigo === 'admin.auditoria' || panelCodigo === 'admin.chatvoz';
       return { ver: !esSuperOnly, crear: !esSuperOnly, editar: !esSuperOnly, eliminar: !esSuperOnly };
+    }
+    // Si es Docente y no tiene perfil restringido, otorgar acceso completo a sus módulos
+    if (!idsPerfiles.length && usuario.rol === 'Docente') {
+      const esDocente = panelCodigo.startsWith('docente.');
+      return { ver: esDocente, crear: esDocente, editar: esDocente, eliminar: esDocente };
+    }
+    // Si es Estudiante y no tiene perfil restringido, otorgar acceso completo a sus módulos
+    if (!idsPerfiles.length && usuario.rol === 'Estudiante') {
+      const esEstudiante = panelCodigo.startsWith('estudiante.');
+      return { ver: esEstudiante, crear: esEstudiante, editar: esEstudiante, eliminar: esEstudiante };
     }
     if (!idsPerfiles.length) return vacio;
     if (!_perfilesMemoryCache || (Date.now() - _perfilesMemoryCacheTime > 45000)) {
@@ -4585,14 +4680,14 @@
         <div id="traineeArchivoNombreWrap"></div>
 
         <!-- Grid de Archivos -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div id="traineeGridArchivos" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           ${archivosMostrados.map(a => {
             const badge = getBadgeArchivo(a);
             const esImg = (a.tipo || '').startsWith('image/');
             const esPdf = (a.tipo === 'application/pdf' || (a.nombre || '').toLowerCase().endsWith('.pdf'));
 
             return `
-            <div class="group relative rounded-2xl border border-gray-200/80 bg-white hover:border-morado/30 hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden">
+            <div class="trainee-archivo-card group relative rounded-2xl border border-gray-200/80 bg-white hover:border-morado/30 hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden" data-nombre="${escapeHtml((a.nombre || '').toLowerCase())}">
               <!-- Thumbnail / Vista Previa -->
               ${esImg ? `
                 <div class="relative h-44 sm:h-48 bg-gray-100 overflow-hidden cursor-pointer" onclick="verArchivoTraineeModal('${a.id}')">
@@ -4705,13 +4800,21 @@
       </div>`;
   }
 
-  // Escribe en traineeState y vuelve a pintar la ficha para aplicar el
-  // filtro — se hace en cada tecla (oninput).
-  async function buscarArchivoTrainee(valor) {
+  // Filtra los archivos directamente en el DOM para nunca perder el foco del input
+  function buscarArchivoTrainee(valor) {
     traineeState.busquedaArchivo = valor;
-    await renderTraineeFicha();
-    const input = document.getElementById('traineeArchivoBusqueda');
-    if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+    const q = (valor || '').toLowerCase().trim();
+    const grid = document.getElementById('traineeGridArchivos');
+    if (!grid) {
+      renderTraineeFicha();
+      return;
+    }
+    const cards = grid.querySelectorAll('.trainee-archivo-card');
+    cards.forEach(c => {
+      const nombre = c.getAttribute('data-nombre') || '';
+      const match = !q || nombre.includes(q);
+      c.classList.toggle('hidden', !match);
+    });
   }
 
   function setFiltroTipoArchivoTrainee(tipo) {
@@ -8752,6 +8855,31 @@ Fundación A+`;
   async function renderConfiguracion() {
     const cfg = (await Store.get('configuracion')) || SEED.configuracion;
     const cred = (await Store.get('superadmin_credentials')) || SEED.superadmin_credentials;
+
+    let formulariosDisponibles = [];
+    try {
+      const respForms = await apiFetch('formularios');
+      formulariosDisponibles = Array.isArray(respForms) ? respForms : (respForms?.formularios || respForms?.data || []);
+    } catch (eForms) {
+      console.warn('Error cargando formularios para configuración:', eForms);
+    }
+
+    const slugActual = cfg.postulacionSlug || (cfg.postulacionUrl ? cfg.postulacionUrl.replace(/^#formulario\//, '') : 'postulaciones');
+    let hayCoincidencia = false;
+    const formOptions = formulariosDisponibles.map(f => {
+      const isSel = (f.slug === slugActual);
+      if (isSel) hayCoincidencia = true;
+      const rawTitle = f.titulo || f.tituloPlano || f.slug;
+      const tituloLimpio = String(rawTitle).replace(/<[^>]+>/g, '').trim();
+      const badgeEstado = f.estado ? ` [${f.estado}]` : '';
+      return `<option value="${escapeHtml(f.slug)}" ${isSel ? 'selected' : ''}>${escapeHtml(tituloLimpio || f.slug)}${badgeEstado} — (${escapeHtml(f.slug)})</option>`;
+    }).join('');
+
+    const opcionExtra = (!hayCoincidencia && slugActual)
+      ? `<option value="${escapeHtml(slugActual)}" selected>${escapeHtml(slugActual)} (Selección actual)</option>`
+      : '';
+    const optionsHtml = (formOptions + opcionExtra) || `<option value="postulaciones" selected>postulaciones (Predeterminado)</option>`;
+
     const seguridadSuperadmin = currentAdminRole === 'superadmin' ? `
       <div class="admin-panel-card p-6 sm:p-8 max-w-2xl mt-6">
         <h2 class="text-lg font-extrabold text-ink mb-1">Seguridad del Superadmin</h2>
@@ -8912,20 +9040,33 @@ Fundación A+`;
 
       <div class="admin-panel-card p-6 sm:p-8 max-w-2xl mt-6">
         <h2 class="text-lg font-extrabold text-ink mb-1">Postulación pública</h2>
-        <p class="text-sm text-slate2 mb-6">Controla el botón "Postular" del sitio público. Pega aquí el link del cuestionario externo (Google Forms u otro) donde los interesados dejan sus datos, y actívalo cuando quieras recibir postulaciones.</p>
+        <p class="text-sm text-slate2 mb-6">Elige cuál formulario del sistema responderán los aspirantes al hacer clic en el botón <strong>"Postular ahora"</strong> en la página de inicio.</p>
         <form onsubmit="event.preventDefault(); saveConfiguracion();" class="grid gap-4">
-          <label class="flex items-center gap-2 text-sm text-ink">
-            <input id="cfg_postulacionHabilitada" type="checkbox" ${cfg.postulacionHabilitada ? 'checked' : ''} class="rounded" />
-            Habilitar postulación en el sitio público
+          <label class="flex items-center gap-2 text-sm text-ink font-semibold">
+            <input id="cfg_postulacionHabilitada" type="checkbox" ${cfg.postulacionHabilitada !== false ? 'checked' : ''} class="rounded text-morado" />
+            Habilitar botón "Postular" en el sitio público
           </label>
           <div>
-            <label class="block text-xs font-semibold text-slate2 mb-1.5">Link del cuestionario</label>
-            <input id="cfg_postulacionUrl" type="url" placeholder="https://forms.gle/..." value="${escapeHtml(cfg.postulacionUrl || '')}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
-            <p class="text-xs text-slate2 mt-1.5">Mientras esté deshabilitada, el botón "Postular" del sitio mostrará un aviso de que las postulaciones están cerradas, sin importar el link que hayas guardado aquí.</p>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Formulario activo para postulaciones</label>
+            <select id="cfg_postulacionSlug" onchange="const p = document.getElementById('cfg_preview_postulacion_slug'); const link = document.getElementById('cfg_link_postulacion_slug'); if(p) p.textContent = '#formulario/' + encodeURIComponent(this.value); if(link) link.href = '#formulario/' + encodeURIComponent(this.value);" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado font-medium">
+              ${optionsHtml}
+            </select>
+            <p class="text-xs text-slate2 mt-1.5">Muestra los formularios creados en el módulo <strong>Forms</strong>. Puedes elegir el que desees como postulación oficial.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-morado/5 border border-morado/15 text-xs text-slate2">
+            <p class="font-semibold text-morado flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+              Destino en la landing page
+            </p>
+            <p class="mt-1">Al hacer clic en "Postular ahora" en la página pública, los aspirantes accederán a: <code id="cfg_preview_postulacion_slug" class="font-bold text-morado">#formulario/${encodeURIComponent(slugActual)}</code>.</p>
           </div>
         </form>
-        <div class="mt-6 pt-5 border-t border-gray-100">
-          <button onclick="saveConfiguracion()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition shadow-sm">Guardar configuración</button>
+        <div class="mt-6 pt-5 border-t border-gray-100 flex items-center justify-between">
+          <button onclick="saveConfiguracion()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition shadow-sm cursor-pointer">Guardar configuración</button>
+          <a id="cfg_link_postulacion_slug" href="#formulario/${encodeURIComponent(slugActual)}" target="_blank" class="text-xs font-semibold text-morado hover:underline flex items-center gap-1">
+            <span>Ver formulario</span>
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+          </a>
         </div>
       </div>
       ${seguridadSuperadmin}`;
@@ -8978,15 +9119,13 @@ Fundación A+`;
     toast('Credenciales del Superadmin actualizadas', 'ok');
   }
 
+  let _ultimaConfigPostulacion = null;
+
   // async: 'configuracion' vía MySQL (Fase 4).
   async function saveConfiguracion() {
-    const urlPostulacion = document.getElementById('cfg_postulacionUrl').value.trim();
-    const habilitarPostulacion = document.getElementById('cfg_postulacionHabilitada').checked;
-
-    if (habilitarPostulacion && !urlPostulacion) {
-      toast('Para habilitar la postulación primero pega el link del cuestionario', 'err');
-      return;
-    }
+    const habilitarPostulacion = document.getElementById('cfg_postulacionHabilitada')?.checked ?? true;
+    const postulacionSlug = document.getElementById('cfg_postulacionSlug')?.value?.trim() || 'postulaciones';
+    const urlPostulacion = '#formulario/' + encodeURIComponent(postulacionSlug);
 
     const cfg = {
       nombre: document.getElementById('cfg_nombre').value.trim(),
@@ -8998,6 +9137,7 @@ Fundación A+`;
       notificacionesEmail: document.getElementById('cfg_notifEmail').checked,
       notificacionesIA: document.getElementById('cfg_notifIA').checked,
       postulacionHabilitada: habilitarPostulacion,
+      postulacionSlug: postulacionSlug,
       postulacionUrl: urlPostulacion,
       emailMetodo: document.getElementById('cfg_emailMetodo') ? document.getElementById('cfg_emailMetodo').value : 'emailjs',
       emailjsPublicKey: document.getElementById('cfg_emailjsPublicKey') ? document.getElementById('cfg_emailjsPublicKey').value.trim() : '',
@@ -9011,11 +9151,12 @@ Fundación A+`;
       smtpSecure: document.getElementById('cfg_smtpSecure') ? document.getElementById('cfg_smtpSecure').value : 'ssl',
     };
     await Store.set('configuracion', cfg);
+    _ultimaConfigPostulacion = cfg;
     toast('Configuración guardada con éxito', 'ok');
     renderSemaforo();
     renderResumen();
     renderContactoPublico();
-    actualizarBotonesPostular();
+    actualizarBotonesPostular(cfg);
   }
 
   // ---------- Sitio público: Contáctanos + Postular (alimentados por Configuración) ----------
@@ -9036,52 +9177,83 @@ Fundación A+`;
     el.innerHTML = filas.join('') || '<span class="text-slate2">Datos de contacto próximamente.</span>';
   }
 
-  /** Activa/desactiva y enlaza los botones "Postular" del sitio con el link que definió el Superadmin. */
-  // async: 'configuracion' vía MySQL (Fase 4).
+  /** Activa/desactiva y enlaza los botones "Postular" del sitio con el formulario de postulaciones. */
   async function actualizarBotonesPostular(cfgDirecta) {
     const cfg = cfgDirecta || (await Store.get('configuracion')) || SEED.configuracion;
-    const habilitada = !!(cfg.postulacionHabilitada && cfg.postulacionUrl);
+    _ultimaConfigPostulacion = cfg;
+    const habilitada = cfg.postulacionHabilitada !== false;
     document.querySelectorAll('.btn-postular').forEach(btn => {
       btn.classList.toggle('opacity-50', !habilitada);
-      btn.title = habilitada ? 'Postula al programa' : 'Las postulaciones no están abiertas en este momento';
+      btn.title = habilitada ? 'Postular al programa TrAIning' : 'Las postulaciones no están abiertas en este momento';
     });
   }
 
-  /** onclick de los botones "Postular": abre el cuestionario externo o avisa que está cerrado. */
-  // async: 'configuracion' vía MySQL (Fase 4).
+  /** onclick de los botones "Postular": abre directamente el formulario de postulación del sistema. */
   async function abrirPostulacion(event) {
     if (event && event.preventDefault) event.preventDefault();
-    const cfg = (await Store.get('configuracion')) || SEED.configuracion;
-    if (cfg.postulacionHabilitada && cfg.postulacionUrl) {
-      window.open(cfg.postulacionUrl, '_blank', 'noopener');
+    const cfg = _ultimaConfigPostulacion || (await Store.get('configuracion')) || SEED.configuracion;
+    if (cfg.postulacionHabilitada !== false) {
+      const slug = cfg.postulacionSlug || (cfg.postulacionUrl ? cfg.postulacionUrl.replace(/^#formulario\//, '') : 'postulaciones');
+      location.hash = '#formulario/' + encodeURIComponent(slug);
     } else {
-      toast('Las postulaciones no están abiertas en este momento. Vuelve pronto.', 'info');
+      (typeof formsToast === 'function' ? formsToast : toast)('Las postulaciones no están abiertas en este momento. Vuelve pronto.', 'info');
     }
   }
+  window.abrirPostulacion = abrirPostulacion;
 
   // ============================================================================
-  // CENTRO DE NOTIFICACIONES Y ALERTAS TEMPRANAS (SUPERADMIN & ADMINISTRADORES)
-  // Monitorea:
-  // 1. Estudiantes con 3 o más memorandos (alerta disciplinaria crítica).
-  // 2. Estudiantes en riesgo académico (Semáforo Rojo y Amarillo).
-  // 3. Excusas médicas y justificaciones de asistencia pendientes de revisión.
-  // 4. PQRs y solicitudes de aspirantes pendientes.
+  // CENTRO DE GESTIÓN DE NOTIFICACIONES Y COMUNICADOS INSTITUCIONALES (SUPERADMIN)
+  // Permite:
+  // 1. Crear, enviar y gestionar comunicaciones para toda la institución, roles y cohortes.
+  // 2. Historial interactivo de comunicados con filtros de cohorte, tipo y búsqueda.
+  // 3. Monitoreo unificado de alertas tempranas (Riesgo Académico, 3+ Memorandos, Excusas, PQRs).
   // ============================================================================
 
-  let notifFiltroTipo = 'todas'; // 'todas' | 'criticas' | 'riesgo' | 'memorandos' | 'excusas' | 'pqr_solicitudes'
+  let notifFiltroTipo = 'todas';
   let notifFiltroCohorte = '';
   let notifFiltroTexto = '';
   let notifVerAtendidas = false;
 
+  // Estado del formulario de creación (Superadmin)
+  let comunicadoTipoEnvio = 'Publica'; // 'Publica' | 'Privada'
+  let comunicadoDestinatarios = [];
+  let comunicadoPrioridad = 'Media'; // 'Baja' | 'Media' | 'Alta'
+  let comunicadoCategoria = 'Institucional'; // 'Institucional' | 'Académico' | 'Eventos' | 'Administrativo'
+  let comHistFiltroTipo = 'Todas';
+  let comHistFiltroCohorte = '';
+  let comHistFiltroTexto = '';
+
+  // Estado para panel docente y estudiante
+  let notifDocenteTab = 'todas';
+  let notifDocenteFiltroTexto = '';
+  let notifEstudianteQueryCorte = '';
+  let notifEstudianteQueryPublicas = '';
+
+  const ICONOS_COMUNICADO = {
+    'megaphone': '<svg class="w-4 h-4 text-oro" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>',
+    'academic': '<svg class="w-4 h-4 text-turquesa" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 14v6m-4-2.5v2.5m8-2.5v2.5"/></svg>',
+    'calendar': '<svg class="w-4 h-4 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
+    'administrative': '<svg class="w-4 h-4 text-slate2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>',
+    'shield-alert': '<svg class="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>',
+    'file-text': '<svg class="w-4 h-4 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>',
+    'trophy': '<svg class="w-4 h-4 text-oro" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>'
+  };
+
   async function obtenerNotificacionesAdmin() {
-    const [semaforoData, memorandos, justificaciones, usuarios, pqrs, modulos] = await Promise.all([
+    let [semaforoData, memorandos, justificaciones, usuarios, pqrs, modulos, comunicados] = await Promise.all([
       computeSemaforo(),
       Store.list('memorandos'),
       Store.list('justificaciones_asistencia'),
       Store.list('usuarios'),
       Store.list('pqr'),
-      Store.list('modulos')
+      Store.list('modulos'),
+      Store.list('comunicados')
     ]);
+
+    if (!Array.isArray(justificaciones) || justificaciones.length === 0) {
+      justificaciones = SEED.justificaciones_asistencia || [];
+    }
+    if (!Array.isArray(comunicados)) comunicados = [];
 
     let leidas = [];
     try {
@@ -9092,7 +9264,34 @@ Fundación A+`;
 
     const notificaciones = [];
 
-    // 1. REGLA: Estudiantes con 3 o más memorandos acumulados (Alerta Disciplinaria)
+    // 1. Comunicados institucionales y publicaciones
+    comunicados.forEach(c => {
+      const destList = Array.isArray(c.destinatarios) ? c.destinatarios : [c.destinatarios || 'Todos'];
+      const esPriv = String(c.tipo || '').toLowerCase().includes('privad');
+      notificaciones.push({
+        id: c.id,
+        tipo: 'comunicado',
+        tipoEnvio: esPriv ? 'Privada' : 'Pública',
+        categoria: c.categoria || 'Institucional',
+        prioridad: c.prioridad || 'Media',
+        severidad: c.prioridad === 'Alta' ? 'critica' : (c.prioridad === 'Media' ? 'alerta' : 'info'),
+        titulo: c.titulo || 'Comunicado institucional',
+        mensaje: c.mensaje || '',
+        destinatarios: destList,
+        autor: c.autor || 'Superadmin',
+        autorRol: c.autorRol || 'Superadmin',
+        fecha: c.fecha || '',
+        icono: c.categoria === 'Eventos' ? 'calendar' : (c.categoria === 'Académico' ? 'academic' : (c.categoria === 'Administrativo' ? 'administrative' : 'megaphone')),
+        esComunicado: true,
+        atendida: !!c.atendida || leidasSet.has(c.id),
+        accionPrincipal: {
+          label: 'Ver detalles',
+          onclick: `window.abrirModalDetalleComunicado('${c.id}')`
+        }
+      });
+    });
+
+    // 2. REGLA: Estudiantes con 3 o más memorandos acumulados (Alerta Disciplinaria)
     const memosPorEstudiante = new Map();
     const memosValidos = memorandos.filter(m => m.estado === 'Enviado');
     memosValidos.forEach(m => {
@@ -9115,159 +9314,128 @@ Fundación A+`;
         notificaciones.push({
           id: notifId,
           tipo: 'memorando',
+          tipoEnvio: 'Privada',
           categoria: 'Alerta Disciplinaria',
+          prioridad: 'Alta',
           severidad: 'critica',
           titulo: `Límite disciplinario: ${data.memos.length} memorandos acumulados`,
-          mensaje: `El estudiante <strong>${escapeHtml(estNombre)}</strong> acumula <strong>${data.memos.length} memorandos</strong> enviados. Requiere citación prioritaria o apertura de caso disciplinario.`,
+          mensaje: `El estudiante ${escapeHtml(estNombre)} acumula ${data.memos.length} memorandos enviados. Requiere citación prioritaria o seguimiento disciplinario.`,
           estudiante: estNombre,
           cohorte: cohorte,
+          destinatarios: [cohorte !== '—' ? ('Cohorte ' + cohorte) : 'Coordinación'],
           fecha: data.memos[0].fecha || '',
           icono: 'shield-alert',
-          metadata: {
-            cantidadMemos: data.memos.length,
-            titulos: data.memos.map(m => m.titulo).slice(0, 3)
-          },
+          esComunicado: false,
+          atendida: leidasSet.has(notifId),
+          metadata: { titulos: data.memos.map(m => m.titulo).slice(0, 3) },
           accionPrincipal: {
-            label: 'Ver expediente de memorandos',
+            label: 'Ver expediente',
             onclick: `window.irAMemorandosEstudiante('${escapeHtml(estNombre).replace(/'/g, "\\'")}')`
-          },
-          atendida: leidasSet.has(notifId)
+          }
         });
       }
     });
 
-    // 2. REGLA: Estudiantes en riesgo académico (Semáforo Rojo y Amarillo)
+    // 3. REGLA: Estudiantes en riesgo académico (Semáforo Rojo y Amarillo)
     semaforoData.forEach(s => {
       if (s.riesgo === 'Rojo' || s.riesgo === 'Amarillo') {
         const esRojo = s.riesgo === 'Rojo';
         const notifId = 'riesgo_' + encodeURIComponent(s.estudiante + '_' + s.cohorte);
-        const motivosTxt = (s.motivos && s.motivos.length) ? s.motivos.join(', ') : (esRojo ? 'Promedio por debajo de la aprobación o inasistencias altas' : 'Rendimiento académico en advertencia');
+        const motivosTxt = (s.motivos && s.motivos.length) ? s.motivos.join(', ') : (esRojo ? 'Promedio por debajo del mínimo' : 'Rendimiento en advertencia');
         notificaciones.push({
           id: notifId,
           tipo: 'riesgo',
+          tipoEnvio: 'Privada',
           categoria: esRojo ? 'Riesgo Académico Crítico' : 'Alerta de Rendimiento',
+          prioridad: esRojo ? 'Alta' : 'Media',
           severidad: esRojo ? 'critica' : 'alerta',
           titulo: esRojo ? `Riesgo académico alto: ${escapeHtml(s.estudiante)}` : `Alerta de rendimiento: ${escapeHtml(s.estudiante)}`,
-          mensaje: `Estudiante en cohorte <strong>${escapeHtml(s.cohorte)}</strong> con promedio <strong>${s.promedio !== null ? s.promedio : '—'}</strong> y <strong>${s.asistencia}%</strong> de asistencia. Motivo: ${escapeHtml(motivosTxt)}.`,
+          mensaje: `Estudiante en cohorte ${escapeHtml(s.cohorte)} con promedio ${s.promedio !== null ? s.promedio : '—'} y ${s.asistencia}% de asistencia. Motivo: ${escapeHtml(motivosTxt)}.`,
           estudiante: s.estudiante,
           cohorte: s.cohorte,
-          promedio: s.promedio,
-          asistencia: s.asistencia,
+          destinatarios: ['Cohorte ' + s.cohorte],
           fecha: '',
-          icono: 'trending-down',
-          metadata: {
-            promedio: s.promedio,
-            asistencia: s.asistencia,
-            riesgo: s.riesgo
-          },
+          icono: 'shield-alert',
+          esComunicado: false,
+          atendida: leidasSet.has(notifId),
           accionPrincipal: {
             label: 'Revisar en Semáforo',
             onclick: `window.irASemaforoEstudiante('${escapeHtml(s.estudiante).replace(/'/g, "\\'")}', '${escapeHtml(s.cohorte).replace(/'/g, "\\'")}')`
-          },
-          atendida: leidasSet.has(notifId)
+          }
         });
       }
     });
 
-    // 3. REGLA: Excusas médicas y justificaciones de asistencia pendientes
+    // 4. REGLA: Excusas médicas pendientes
     justificaciones.filter(j => j.estado === 'Pendiente').forEach(j => {
       const notifId = 'just_' + j.id;
       notificaciones.push({
         id: notifId,
         tipo: 'excusa',
-        categoria: 'Justificación Médica / Asistencia',
+        tipoEnvio: 'Privada',
+        categoria: 'Excusa Médica',
+        prioridad: 'Media',
         severidad: 'alerta',
-        titulo: `Excusa médica radicada: ${escapeHtml(j.estudiante)}`,
-        mensaje: `Radicó soporte para <strong>${escapeHtml(j.materia || 'clase')}</strong> (${fmtDate(j.fecha)}). Motivo: <em>${escapeHtml(j.motivo || 'Fuerza mayor')}</em>.${j.archivoNombre ? ` Soporte: <strong>${escapeHtml(j.archivoNombre)}</strong>` : ''}`,
+        titulo: `Revisión de Excusa Médica para Estudiante: ${escapeHtml(j.estudiante)}`,
+        mensaje: `Radicó justificación para ${escapeHtml(j.materia || 'clase')} (${fmtDate(j.fecha)}). Motivo: ${escapeHtml(j.motivo || 'Fuerza mayor')}.`,
         estudiante: j.estudiante,
-        cohorte: '',
+        cohorte: j.cohorte || '',
+        destinatarios: [j.cohorte ? ('Cohorte ' + j.cohorte) : 'Docencia'],
         fecha: j.creadoEn || j.fecha,
         icono: 'file-text',
-        metadata: {
-          justId: j.id,
-          tieneArchivo: !!j.archivoNombre
-        },
+        esComunicado: false,
+        atendida: leidasSet.has(notifId),
         accionPrincipal: {
-          label: 'Examinar documento (PDF / Foto)',
+          label: 'Examinar documento',
           onclick: `window.abrirModalVisorJustificacion('${j.id}')`
-        },
-        atendida: leidasSet.has(notifId)
+        }
       });
     });
 
-    // 4. REGLA: PQRs pendientes de respuesta
+    // 5. REGLA: PQRs y Solicitudes de matrícula
     pqrs.filter(p => p.estado === 'Pendiente' || p.estado === 'Abierto').forEach(p => {
       const notifId = 'pqr_' + p.id;
-      const esCritica = p.tipo === 'Reclamo' || p.tipo === 'Queja';
       notificaciones.push({
         id: notifId,
         tipo: 'pqr_solicitudes',
+        tipoEnvio: 'Privada',
         categoria: 'PQR Pendiente',
-        severidad: esCritica ? 'critica' : 'info',
-        titulo: `${p.tipo || 'PQR'}: ${escapeHtml(p.asunto || 'Requerimiento pendiente')}`,
-        mensaje: `Radicado por <strong>${escapeHtml(p.solicitante || 'Usuario')}</strong> el ${fmtDate(p.fecha)}. Estado: ${escapeHtml(p.estado)}.`,
+        prioridad: (p.tipo === 'Reclamo' || p.tipo === 'Queja') ? 'Alta' : 'Media',
+        severidad: (p.tipo === 'Reclamo' || p.tipo === 'Queja') ? 'critica' : 'info',
+        titulo: `${p.tipo || 'PQR'}: ${escapeHtml(p.asunto || 'Requerimiento')}`,
+        mensaje: `Radicado por ${escapeHtml(p.solicitante || 'Usuario')} el ${fmtDate(p.fecha)}.`,
         estudiante: p.solicitante,
-        cohorte: '',
+        destinatarios: ['Administración'],
         fecha: p.fecha,
-        icono: 'mail',
-        metadata: { pqrId: p.id },
-        accionPrincipal: {
-          label: 'Gestionar PQR',
-          onclick: `showPanel('pqr')`
-        },
-        atendida: leidasSet.has(notifId)
+        icono: 'administrative',
+        esComunicado: false,
+        atendida: leidasSet.has(notifId),
+        accionPrincipal: { label: 'Gestionar PQR', onclick: `showPanel('pqr')` }
       });
     });
 
-    // 5. REGLA: Solicitudes de inscripción / registros pendientes
-    usuarios.filter(u => u.rol === 'Estudiante' && u.estadoRegistro === 'Pendiente').forEach(u => {
-      const notifId = 'solicitud_' + u.id;
-      notificaciones.push({
-        id: notifId,
-        tipo: 'pqr_solicitudes',
-        categoria: 'Inscripción Pendiente',
-        severidad: 'info',
-        titulo: `Aspirante pendiente de confirmación: ${escapeHtml(u.nombre)}`,
-        mensaje: `Registro nuevo para cohorte <strong>${escapeHtml(u.cohorte || 'General')}</strong> (${escapeHtml(u.email)}). Requiere confirmación de matrícula.`,
-        estudiante: u.nombre,
-        cohorte: u.cohorte || '',
-        fecha: u.creadoEn || u.creado_en || '',
-        icono: 'user-check',
-        metadata: { userId: u.id },
-        accionPrincipal: {
-          label: 'Revisar en Usuarios',
-          onclick: `showPanel('usuarios')`
-        },
-        atendida: leidasSet.has(notifId)
-      });
-    });
-
-    // Ordenamiento: no atendidas primero, luego severidad (critica -> alerta -> info)
-    const prioridadSeveridad = { critica: 1, alerta: 2, info: 3 };
+    // Ordenamiento: No atendidas primero, luego fecha descendente
     notificaciones.sort((a, b) => {
       if (a.atendida !== b.atendida) return a.atendida ? 1 : -1;
-      const sA = prioridadSeveridad[a.severidad] || 99;
-      const sB = prioridadSeveridad[b.severidad] || 99;
-      if (sA !== sB) return sA - sB;
-      return (b.fecha || '').localeCompare(a.fecha || '');
+      return String(b.fecha || '').localeCompare(String(a.fecha || ''));
     });
 
     const metricas = {
       totalActivas: notificaciones.filter(n => !n.atendida).length,
-      totalCriticas: notificaciones.filter(n => !n.atendida && n.severidad === 'critica').length,
+      totalCriticas: notificaciones.filter(n => !n.atendida && n.prioridad === 'Alta').length,
       totalRiesgo: notificaciones.filter(n => !n.atendida && n.tipo === 'riesgo').length,
       totalMemos: notificaciones.filter(n => !n.atendida && n.tipo === 'memorando').length,
       totalExcusas: notificaciones.filter(n => !n.atendida && n.tipo === 'excusa').length,
-      totalPqr: notificaciones.filter(n => !n.atendida && n.tipo === 'pqr_solicitudes').length,
+      totalComunicados: notificaciones.filter(n => n.esComunicado).length,
       totalAtendidas: notificaciones.filter(n => n.atendida).length,
     };
 
     const cohortesLista = Array.from(new Set([
       ...modulos.map(m => m.nombre).filter(Boolean),
       ...notificaciones.map(n => n.cohorte).filter(Boolean)
-    ])).filter(c => c !== '—').sort();
+    ])).filter(c => c && c !== '—').sort();
 
-    return { notificaciones, metricas, cohortes: cohortesLista };
+    return { notificaciones, metricas, cohortes: cohortesLista, modulos };
   }
 
   async function actualizarBadgesNotificacionesAdmin() {
@@ -9292,144 +9460,124 @@ Fundación A+`;
   }
   window.actualizarBadgesNotificacionesAdmin = actualizarBadgesNotificacionesAdmin;
 
+  // ----------------------------------------------------------------------------
+  // Renderizado del Centro de Notificaciones Superadmin (Fiel a Imagen 3)
+  // ----------------------------------------------------------------------------
   async function renderNotificacionesAdmin() {
     const mount = document.getElementById('mount-notificaciones');
     if (!mount) return;
 
-    const { notificaciones, metricas, cohortes } = await obtenerNotificacionesAdmin();
+    const { notificaciones, metricas, cohortes, modulos } = await obtenerNotificacionesAdmin();
 
-    let lista = notificaciones;
-    if (!notifVerAtendidas) {
-      lista = lista.filter(n => !n.atendida);
-    }
-    if (notifFiltroTipo !== 'todas') {
-      if (notifFiltroTipo === 'criticas') {
-        lista = lista.filter(n => n.severidad === 'critica');
-      } else {
-        lista = lista.filter(n => n.tipo === notifFiltroTipo);
-      }
-    }
-    if (notifFiltroCohorte) {
-      lista = lista.filter(n => n.cohorte === notifFiltroCohorte);
-    }
-    if (notifFiltroTexto) {
-      const q = notifFiltroTexto.toLowerCase().trim();
-      lista = lista.filter(n => 
-        (n.titulo || '').toLowerCase().includes(q) ||
-        (n.mensaje || '').toLowerCase().includes(q) ||
-        (n.estudiante || '').toLowerCase().includes(q) ||
-        (n.cohorte || '').toLowerCase().includes(q)
-      );
-    }
+    // Opciones para destinatarios
+    const cohortesOptions = (modulos && modulos.length) 
+      ? modulos.map(m => m.nombre) 
+      : ['Cohorte 1', 'Cohorte 2', 'Cohorte 3', 'Cohorte 4', 'Cohorte 5', 'Cohorte 8'];
 
-    const ICONOS_NOTIF = {
-      'shield-alert': '<svg class="w-5 h-5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>',
-      'trending-down': '<svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg>',
-      'file-text': '<svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>',
-      'mail': '<svg class="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>',
-      'user-check': '<svg class="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>',
-    };
+    const destinatariosLabel = comunicadoDestinatarios.length > 0 
+      ? comunicadoDestinatarios.join(', ')
+      : (comunicadoTipoEnvio === 'Publica' ? 'Toda la comunidad (Pública)' : 'Seleccionar destinatarios...');
 
-    const SEVERIDAD_THEMES = {
-      critica: {
-        border: 'border-l-4 border-l-rose-500 border-gray-100',
-        badge: 'bg-rose-100 text-rose-800 border-rose-200',
-        label: 'Crítica',
-        bgIcon: 'bg-rose-50'
-      },
-      alerta: {
-        border: 'border-l-4 border-l-amber-500 border-gray-100',
-        badge: 'bg-amber-100 text-amber-800 border-amber-200',
-        label: 'Alerta',
-        bgIcon: 'bg-amber-50'
-      },
-      info: {
-        border: 'border-l-4 border-l-indigo-500 border-gray-100',
-        badge: 'bg-indigo-100 text-indigo-800 border-indigo-200',
-        label: 'Informativa',
-        bgIcon: 'bg-indigo-50'
-      }
-    };
+    // Render de cada tarjeta en el feed (con metadatos para filtrado reactivo en DOM sin perder foco)
+    const tarjetasFeedHtml = notificaciones.map(n => {
+      const esPriv = n.tipoEnvio === 'Privada';
+      const fechaFmt = n.fecha ? (typeof fmtDate === 'function' ? fmtDate(n.fecha) : n.fecha.slice(0, 10)) : 'Hoy';
+      const iconoHtml = ICONOS_COMUNICADO[n.icono] || ICONOS_COMUNICADO['megaphone'];
 
-    const tarjetasHtml = lista.map(n => {
-      const sev = SEVERIDAD_THEMES[n.severidad] || SEVERIDAD_THEMES.info;
-      const icono = ICONOS_NOTIF[n.icono] || ICONOS_NOTIF['shield-alert'];
+      const badgeTipoClase = esPriv 
+        ? 'bg-morado/10 text-morado border-morado/20' 
+        : 'bg-turquesa/10 text-turquesa border-turquesa/20';
+
+      const badgePrioridadClase = n.prioridad === 'Alta' 
+        ? 'bg-morado/15 text-morado font-extrabold border-morado/20' 
+        : (n.prioridad === 'Media' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-teal-100 text-teal-800 border-teal-200');
+
+      const destTxt = (Array.isArray(n.destinatarios) && n.destinatarios.length) 
+        ? n.destinatarios.slice(0, 2).join(', ') + (n.destinatarios.length > 2 ? ` (+${n.destinatarios.length - 2})` : '')
+        : (n.tipoEnvio === 'Pública' ? 'Pública' : 'Comunidad');
 
       return `
-        <div class="admin-panel-card p-5 transition-all duration-200 ${sev.border} ${n.atendida ? 'opacity-55 bg-gray-50/70 hover:opacity-90' : 'hover:shadow-md'}" id="notifCard_${n.id}">
-          <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div class="card-comunicado-historial p-4 rounded-2xl bg-white border border-gray-100 hover:border-morado/30 hover:shadow-md transition-all duration-200 ${n.atendida ? 'opacity-60 bg-gray-50/60' : ''}" 
+             id="feedCard_${n.id}"
+             data-tipo="${n.tipoEnvio || (esPriv ? 'Privada' : 'Pública')}"
+             data-es-comunicado="${n.esComunicado ? 'true' : 'false'}"
+             data-prioridad="${n.prioridad || ''}"
+             data-destinatarios="${escapeHtml((Array.isArray(n.destinatarios) ? n.destinatarios.join(' ') : (n.cohorte || ''))).toLowerCase()}"
+             data-search="${escapeHtml(((n.titulo || '') + ' ' + (n.mensaje || '') + ' ' + (n.categoria || '') + ' ' + (n.tipoEnvio || '')).toLowerCase())}">
+          <div class="flex items-start gap-3.5">
+            <div class="w-10 h-10 rounded-2xl ${esPriv ? 'bg-morado/10 text-morado' : 'bg-turquesa/10 text-turquesa'} flex items-center justify-center shrink-0 border border-gray-100 shadow-xs mt-0.5">
+              ${iconoHtml}
+            </div>
             
-            <div class="flex items-start gap-3.5 flex-1">
-              <div class="w-10 h-10 rounded-2xl ${sev.bgIcon} flex items-center justify-center shrink-0 shadow-xs border border-gray-100 mt-0.5">
-                ${icono}
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap mb-1">
-                  <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${sev.badge}">
-                    ${sev.label}
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeTipoClase}">
+                    ${n.tipoEnvio || (esPriv ? 'Privada' : 'Pública')}
                   </span>
-                  <span class="text-[11px] font-semibold text-slate2 bg-gray-100 px-2 py-0.5 rounded-full">
+                  ${destTxt ? `<span class="text-[10px] font-semibold text-slate2 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200 truncate max-w-[170px]">${escapeHtml(destTxt)}</span>` : ''}
+                </div>
+                <span class="text-[11px] text-slate2 font-medium">${fechaFmt}</span>
+              </div>
+
+              <h4 class="text-sm font-extrabold text-ink leading-snug hover:text-morado transition cursor-pointer" onclick="window.abrirModalDetalleComunicado('${n.id}')">
+                ${escapeHtml(n.titulo)}
+              </h4>
+              
+              <p class="text-xs text-slate2 mt-1 line-clamp-2 leading-relaxed">
+                ${escapeHtml(n.mensaje)}
+              </p>
+
+              <div class="flex items-center justify-between gap-2 pt-2.5 mt-2 border-t border-gray-100 flex-wrap">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-gray-100 text-slate2">
                     ${escapeHtml(n.categoria)}
                   </span>
-                  ${n.cohorte && n.cohorte !== '—' ? `<span class="text-[11px] font-bold text-morado bg-morado/10 px-2 py-0.5 rounded-full">Cohorte ${escapeHtml(n.cohorte)}</span>` : ''}
-                  ${n.fecha ? `<span class="text-[11px] text-slate2">${fmtDate(n.fecha)}</span>` : ''}
-                  ${n.atendida ? `<span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full"><svg class="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Atendida</span>` : ''}
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-md border ${badgePrioridadClase}">
+                    Prioridad: ${n.prioridad}
+                  </span>
+                  ${n.atendida ? '<span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">✓ Atendida</span>' : ''}
                 </div>
-                <h4 class="text-sm sm:text-base font-extrabold text-ink leading-snug">
-                  ${n.titulo}
-                </h4>
-                <p class="text-xs sm:text-sm text-slate2 mt-1 leading-relaxed">
-                  ${n.mensaje}
-                </p>
 
-                ${n.metadata && n.metadata.titulos ? `
-                  <div class="mt-2 flex items-center gap-1.5 flex-wrap">
-                    <span class="text-[11px] font-bold text-slate2">Causales recientes:</span>
-                    ${n.metadata.titulos.map(t => `<span class="text-[10px] font-semibold bg-gray-100 text-slate2 px-2 py-0.5 rounded-md border border-gray-200">${escapeHtml(t)}</span>`).join('')}
-                  </div>
-                ` : ''}
+                <div class="flex items-center gap-2">
+                  <button type="button" onclick="window.abrirModalDetalleComunicado('${n.id}')" class="text-xs font-bold text-morado hover:underline cursor-pointer">
+                    Ver detalles
+                  </button>
+                  <button type="button" onclick="window.marcarNotificacionAtendida('${n.id}', ${!n.atendida})" class="text-xs font-semibold text-slate2 hover:text-ink transition cursor-pointer" title="${n.atendida ? 'Reactivar' : 'Marcar atendida'}">
+                    ${n.atendida ? 'Reactivar' : '✓ Marcar'}
+                  </button>
+                  ${n.esComunicado ? `
+                    <button type="button" onclick="window.eliminarComunicadoSuperadmin('${n.id}')" class="text-xs font-semibold text-slate2 hover:text-rose-600 transition cursor-pointer p-0.5" title="Eliminar comunicado">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                  ` : ''}
+                </div>
               </div>
             </div>
-
-            <!-- Acciones directas -->
-            <div class="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-              ${n.accionPrincipal ? `
-                <button type="button" onclick="${n.accionPrincipal.onclick}" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-morado to-turquesa text-white font-bold text-xs shadow-xs hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer">
-                  <span>${n.accionPrincipal.label}</span>
-                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-                </button>
-              ` : ''}
-              
-              <button type="button" onclick="marcarNotificacionAtendida('${n.id}', ${!n.atendida})" class="inline-flex items-center gap-1 text-xs font-semibold ${n.atendida ? 'text-morado hover:underline' : 'text-slate2 hover:text-ink'} transition cursor-pointer p-1">
-                ${n.atendida ? '<span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Reactivar alerta</span>' : '<span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Marcar atendida</span>'}
-              </button>
-            </div>
-
           </div>
-        </div>`;
+        </div>
+      `;
     }).join('');
 
-    const emptyStateHtml = `
-      <div class="admin-panel-card p-12 text-center flex flex-col items-center justify-center gap-3">
-        <div class="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
-          <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        </div>
-        <h3 class="text-base font-extrabold text-ink mt-2">¡Todo al día y bajo control!</h3>
-        <p class="text-xs text-slate2 max-w-md">No hay alertas ni novedades activas en esta categoría. Puedes consultar el historial activando "Ver atendidas" o cambiar los filtros.</p>
+    const emptyFeedHtml = `
+      <div class="p-8 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+        <svg class="w-10 h-10 text-slate2/40 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+        <p class="text-xs font-extrabold text-ink">No hay comunicaciones con los filtros actuales</p>
+        <p class="text-[11px] text-slate2 mt-0.5">Puedes cambiar los criterios de búsqueda o crear una nueva publicación.</p>
       </div>`;
 
     mount.innerHTML = `
-      <!-- Banner Hero -->
-      <div class="superadmin-banner p-6 sm:p-8 mb-6 relative overflow-hidden" style="--card-accent: linear-gradient(90deg, #8B5CF6, #1FC8C0);">
+      <!-- Banner Hero (Identidad Visual Institucional) -->
+      <div class="superadmin-banner p-6 sm:p-8 mb-6 relative overflow-hidden rounded-3xl shadow-sm" style="--card-accent: linear-gradient(90deg, #8B5CF6, #1FC8C0);">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
           <div>
             <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-turquesa text-xs font-bold uppercase tracking-wider mb-2 border border-white/10 backdrop-blur-md">
               <span class="w-1.5 h-1.5 rounded-full bg-turquesa animate-pulse"></span>
-              Alertas y Novedades Institucionales
+              ALERTAS Y NOVEDADES INSTITUCIONALES
             </div>
-            <h2 class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">Centro de Notificaciones</h2>
+            <h2 class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">CENTRO DE GESTIÓN DE NOTIFICACIONES</h2>
             <p class="text-xs sm:text-sm text-white/70 max-w-xl mt-1 leading-relaxed">
-              Monitoreo activo de estudiantes en riesgo académico, alertas por 3+ memorandos disciplinarios y validación de excusas médicas.
+              Crear, enviar y gestionar comunicaciones para toda la institución, roles específicos y múltiples cohortes.
             </p>
           </div>
           <div class="flex items-center gap-2.5 shrink-0 flex-wrap">
@@ -9445,99 +9593,873 @@ Fundación A+`;
         </div>
       </div>
 
-      <!-- Métricas / KPI Cards -->
+      <!-- Métricas / Monitoreo Rápido -->
       <div class="grid grid-cols-2 lg:grid-cols-5 gap-3.5 mb-6">
-        <div onclick="filtrarNotificacionesTipo('todas')" class="admin-panel-card p-4 hover:border-morado/40 transition cursor-pointer ${notifFiltroTipo === 'todas' ? 'ring-2 ring-morado/40' : ''}">
+        <div onclick="filtrarHistorialComunicados('Todas')" class="admin-panel-card p-4 hover:border-morado/40 transition cursor-pointer">
           <p class="text-[11px] font-bold text-slate2 uppercase tracking-wide">Total Activas</p>
           <p class="text-2xl font-extrabold text-ink mt-1">${metricas.totalActivas}</p>
-          <span class="text-[10px] text-slate2 mt-0.5 block">${metricas.totalAtendidas} atendidas</span>
+          <span class="text-[10px] text-slate2 mt-0.5 block">${metricas.totalComunicados} comunicados en total</span>
         </div>
-
-        <div onclick="filtrarNotificacionesTipo('criticas')" class="admin-panel-card p-4 hover:border-rose-400 transition cursor-pointer ${notifFiltroTipo === 'criticas' ? 'ring-2 ring-rose-400' : ''}">
+        <div onclick="filtrarHistorialComunicados('Alta')" class="admin-panel-card p-4 hover:border-morado transition cursor-pointer">
           <div class="flex items-center justify-between">
-            <p class="text-[11px] font-bold text-rose-600 uppercase tracking-wide">Críticas</p>
-            <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+            <p class="text-[11px] font-bold text-morado uppercase tracking-wide">Prioridad Alta</p>
+            <span class="w-2 h-2 rounded-full bg-morado animate-pulse"></span>
           </div>
-          <p class="text-2xl font-extrabold text-rose-600 mt-1">${metricas.totalCriticas}</p>
-          <span class="text-[10px] text-slate2 mt-0.5 block">Atención urgente</span>
+          <p class="text-2xl font-extrabold text-morado mt-1">${metricas.totalCriticas}</p>
+          <span class="text-[10px] text-slate2 mt-0.5 block">Difusión urgente</span>
         </div>
-
-        <div onclick="filtrarNotificacionesTipo('riesgo')" class="admin-panel-card p-4 hover:border-amber-400 transition cursor-pointer ${notifFiltroTipo === 'riesgo' ? 'ring-2 ring-amber-400' : ''}">
-          <p class="text-[11px] font-bold text-amber-600 uppercase tracking-wide">Riesgo Académico</p>
-          <p class="text-2xl font-extrabold text-amber-600 mt-1">${metricas.totalRiesgo}</p>
-          <span class="text-[10px] text-slate2 mt-0.5 block">Notas / Asistencia</span>
+        <div onclick="filtrarHistorialComunicados('Publica')" class="admin-panel-card p-4 hover:border-turquesa transition cursor-pointer">
+          <p class="text-[11px] font-bold text-turquesa uppercase tracking-wide">Públicas</p>
+          <p class="text-2xl font-extrabold text-turquesa mt-1">${notificaciones.filter(n => n.tipoEnvio === 'Pública').length}</p>
+          <span class="text-[10px] text-slate2 mt-0.5 block">Portal y estudiantes</span>
         </div>
-
-        <div onclick="filtrarNotificacionesTipo('memorandos')" class="admin-panel-card p-4 hover:border-purple-400 transition cursor-pointer ${notifFiltroTipo === 'memorandos' ? 'ring-2 ring-purple-400' : ''}">
-          <p class="text-[11px] font-bold text-purple-600 uppercase tracking-wide">Memorandos (3+)</p>
-          <p class="text-2xl font-extrabold text-purple-600 mt-1">${metricas.totalMemos}</p>
-          <span class="text-[10px] text-slate2 mt-0.5 block">Límite disciplinario</span>
+        <div onclick="filtrarHistorialComunicados('Privada')" class="admin-panel-card p-4 hover:border-indigo-400 transition cursor-pointer">
+          <p class="text-[11px] font-bold text-indigo-600 uppercase tracking-wide">Por Cohortes</p>
+          <p class="text-2xl font-extrabold text-indigo-600 mt-1">${notificaciones.filter(n => n.tipoEnvio === 'Privada').length}</p>
+          <span class="text-[10px] text-slate2 mt-0.5 block">Segmentadas</span>
         </div>
-
-        <div onclick="filtrarNotificacionesTipo('excusas')" class="admin-panel-card p-4 hover:border-teal-400 transition cursor-pointer ${notifFiltroTipo === 'excusas' ? 'ring-2 ring-teal-400' : ''}">
-          <p class="text-[11px] font-bold text-teal-600 uppercase tracking-wide">Excusas Médicas</p>
-          <p class="text-2xl font-extrabold text-teal-600 mt-1">${metricas.totalExcusas}</p>
-          <span class="text-[10px] text-slate2 mt-0.5 block">Pendientes de revisión</span>
+        <div onclick="filtrarHistorialComunicados('Alertas')" class="admin-panel-card p-4 hover:border-amber-400 transition cursor-pointer">
+          <p class="text-[11px] font-bold text-amber-600 uppercase tracking-wide">Alertas Sistema</p>
+          <p class="text-2xl font-extrabold text-amber-600 mt-1">${metricas.totalRiesgo + metricas.totalMemos + metricas.totalExcusas}</p>
+          <span class="text-[10px] text-slate2 mt-0.5 block">Riesgo, memos y excusas</span>
         </div>
       </div>
 
-      <!-- Barra de Filtros y Búsqueda -->
-      <div class="admin-panel-card p-4 mb-6">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          
-          <!-- Tabs de tipos -->
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <button type="button" onclick="filtrarNotificacionesTipo('todas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'todas' ? 'bg-gradient-to-r from-morado to-turquesa text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-ink'}">
-              Todas (${notificaciones.filter(n => notifVerAtendidas || !n.atendida).length})
-            </button>
-            <button type="button" onclick="filtrarNotificacionesTipo('criticas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'criticas' ? 'bg-rose-500 text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-rose-600'}">
-              Críticas (${notificaciones.filter(n => n.severidad === 'critica' && (notifVerAtendidas || !n.atendida)).length})
-            </button>
-            <button type="button" onclick="filtrarNotificacionesTipo('riesgo')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'riesgo' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-amber-600'}">
-              Riesgo Académico (${notificaciones.filter(n => n.tipo === 'riesgo' && (notifVerAtendidas || !n.atendida)).length})
-            </button>
-            <button type="button" onclick="filtrarNotificacionesTipo('memorandos')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'memorandos' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-purple-600'}">
-              Memorandos (3+) (${notificaciones.filter(n => n.tipo === 'memorando' && (notifVerAtendidas || !n.atendida)).length})
-            </button>
-            <button type="button" onclick="filtrarNotificacionesTipo('excusas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'excusas' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-teal-600'}">
-              Excusas (${notificaciones.filter(n => n.tipo === 'excusa' && (notifVerAtendidas || !n.atendida)).length})
-            </button>
-            <button type="button" onclick="filtrarNotificacionesTipo('pqr_solicitudes')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifFiltroTipo === 'pqr_solicitudes' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate2 hover:bg-gray-100 hover:text-indigo-600'}">
-              PQRs / Solicitudes (${notificaciones.filter(n => n.tipo === 'pqr_solicitudes' && (notifVerAtendidas || !n.atendida)).length})
-            </button>
-          </div>
+      <!-- Cuadrícula Principal de 2 Columnas (Fiel a Imagen 3) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- Columna Izquierda: CREAR NOTIFICACIÓN (5 Columnas) -->
+        <div class="lg:col-span-5">
+          <div class="admin-panel-card p-6 bg-white rounded-3xl border border-gray-100 shadow-sm space-y-4">
+            <div class="pb-3 border-b border-gray-100">
+              <h3 class="text-sm font-extrabold uppercase tracking-wider text-ink flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-morado"></span>
+                CREAR NOTIFICACIÓN
+              </h3>
+            </div>
 
-          <!-- Búsqueda, Cohorte y Toggle de atendidas -->
-          <div class="flex items-center gap-3 flex-wrap">
-            <select onchange="filtrarNotificacionesCohorte(this.value)" class="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink focus:border-morado focus:ring-2 focus:ring-morado/20 outline-none">
-              <option value="">Todas las cohortes</option>
-              ${cohortes.map(c => `<option value="${escapeHtml(c)}" ${notifFiltroCohorte === c ? 'selected' : ''}>Cohorte ${escapeHtml(c)}</option>`).join('')}
-            </select>
+            <!-- 1. Tipo de Notificación -->
+            <div>
+              <label class="block text-xs font-bold text-ink mb-1.5">1. Tipo de Notificación</label>
+              <div class="inline-flex p-1 bg-gray-100 rounded-xl border border-gray-200">
+                <button type="button" onclick="setComunicadoTipoEnvio('Publica')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${comunicadoTipoEnvio === 'Publica' ? 'bg-white text-ink shadow-xs' : 'text-slate2 hover:text-ink'}">
+                  [ Pública ]
+                </button>
+                <button type="button" onclick="setComunicadoTipoEnvio('Privada')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${comunicadoTipoEnvio === 'Privada' ? 'bg-white text-morado shadow-xs' : 'text-slate2 hover:text-ink'}">
+                  [ Privada ]
+                </button>
+              </div>
+            </div>
 
+            <!-- 2. Destinatarios -->
             <div class="relative">
-              <input type="text" placeholder="Buscar estudiante o detalle..." value="${escapeHtml(notifFiltroTexto)}" oninput="filtrarNotificacionesBuscar(this.value)" class="w-48 sm:w-56 rounded-xl border border-gray-200 bg-white pl-8 pr-3 py-1.5 text-xs text-ink focus:border-morado focus:ring-2 focus:ring-morado/20 outline-none" />
+              <label class="block text-xs font-bold text-ink mb-1.5">2. Destinatarios</label>
+              
+              <button type="button" onclick="toggleDestinatarioDropdown()" class="w-full flex items-center justify-between p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-ink hover:border-morado transition cursor-pointer text-left">
+                <div class="flex items-center gap-2 truncate">
+                  <svg class="w-4 h-4 text-slate2 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                  <span class="truncate">${escapeHtml(destinatariosLabel)}</span>
+                </div>
+                <svg class="w-4 h-4 text-slate2 shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+
+              <!-- Panel Desplegable con Checkboxes -->
+              <div id="dropdownDestinatariosPanel" class="hidden absolute top-full left-0 right-0 mt-1 bg-white rounded-2xl border border-gray-200 shadow-xl p-3 z-30 space-y-1.5 max-h-56 overflow-y-auto">
+                <label class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-50 text-xs font-semibold text-ink cursor-pointer">
+                  <input type="checkbox" onchange="onToggleDestinatario('Todos los Estudiantes', this.checked)" ${comunicadoDestinatarios.includes('Todos los Estudiantes') ? 'checked' : ''} class="w-4 h-4 rounded text-morado focus:ring-morado" />
+                  <span>Todos los Estudiantes</span>
+                </label>
+                <label class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-50 text-xs font-semibold text-ink cursor-pointer">
+                  <input type="checkbox" onchange="onToggleDestinatario('Todos los Docentes', this.checked)" ${comunicadoDestinatarios.includes('Todos los Docentes') ? 'checked' : ''} class="w-4 h-4 rounded text-morado focus:ring-morado" />
+                  <span>Todos los Docentes</span>
+                </label>
+                <label class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-50 text-xs font-semibold text-ink cursor-pointer">
+                  <input type="checkbox" onchange="onToggleDestinatario('Todas las Cohortes', this.checked)" ${comunicadoDestinatarios.includes('Todas las Cohortes') ? 'checked' : ''} class="w-4 h-4 rounded text-morado focus:ring-morado" />
+                  <span>Todas las Cohortes</span>
+                </label>
+                <div class="border-t border-gray-100 my-1"></div>
+                ${cohortesOptions.map(c => `
+                  <label class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-50 text-xs font-semibold text-ink cursor-pointer">
+                    <input type="checkbox" onchange="onToggleDestinatario('${escapeHtml(c)}', this.checked)" ${comunicadoDestinatarios.includes(c) ? 'checked' : ''} class="w-4 h-4 rounded text-morado focus:ring-morado" />
+                    <span>${escapeHtml(c)}</span>
+                  </label>
+                `).join('')}
+              </div>
+            </div>
+
+            <!-- Título -->
+            <div>
+              <label class="block text-xs font-bold text-ink mb-1.5">Título</label>
+              <input type="text" id="comunicadoTituloInput" placeholder="Título de la Notificación" class="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium text-ink focus:border-morado focus:ring-2 focus:ring-morado/20 outline-none" />
+            </div>
+
+            <!-- Mensaje -->
+            <div>
+              <label class="block text-xs font-bold text-ink mb-1.5">Mensaje</label>
+              <textarea id="comunicadoMensajeInput" rows="4" placeholder="Mensaje de la Notificación" class="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium text-ink focus:border-morado focus:ring-2 focus:ring-morado/20 outline-none resize-none leading-relaxed"></textarea>
+            </div>
+
+            <!-- Categoría y Prioridad en fila -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <label class="block text-xs font-bold text-ink mb-1.5">Categoría</label>
+                <select id="comunicadoCategoriaSelect" onchange="comunicadoCategoria = this.value" class="w-full p-2 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-ink focus:border-morado outline-none">
+                  <option value="Institucional" ${comunicadoCategoria === 'Institucional' ? 'selected' : ''}>Institucional</option>
+                  <option value="Académico" ${comunicadoCategoria === 'Académico' ? 'selected' : ''}>Académico</option>
+                  <option value="Eventos" ${comunicadoCategoria === 'Eventos' ? 'selected' : ''}>Eventos</option>
+                  <option value="Administrativo" ${comunicadoCategoria === 'Administrativo' ? 'selected' : ''}>Administrativo</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-ink mb-1.5">Prioridad</label>
+                <div class="flex items-center gap-1.5 pt-0.5">
+                  <button type="button" onclick="setComunicadoPrioridad('Baja')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${comunicadoPrioridad === 'Baja' ? 'bg-teal-500 text-white shadow-xs' : 'bg-gray-100 text-slate2 hover:text-ink'}">
+                    Baja
+                  </button>
+                  <button type="button" onclick="setComunicadoPrioridad('Media')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${comunicadoPrioridad === 'Media' ? 'bg-amber-500 text-white shadow-xs' : 'bg-gray-100 text-slate2 hover:text-ink'}">
+                    Media
+                  </button>
+                  <button type="button" onclick="setComunicadoPrioridad('Alta')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${comunicadoPrioridad === 'Alta' ? 'bg-morado text-white shadow-xs' : 'bg-gray-100 text-slate2 hover:text-ink'}">
+                    Alta
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Botón Enviar Notificación -->
+            <div class="pt-2">
+              <button type="button" onclick="enviarComunicadoSuperadmin()" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-extrabold text-xs uppercase tracking-wider shadow-md shadow-morado/20 hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] transition cursor-pointer flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                <span>ENVIAR NOTIFICACIÓN</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Columna Derecha: HISTORIAL DE COMUNICACIONES (7 Columnas) -->
+        <div class="lg:col-span-7">
+          <div class="admin-panel-card p-6 bg-white rounded-3xl border border-gray-100 shadow-sm space-y-4">
+            
+            <!-- Barra superior del Historial -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+              <h3 class="text-sm font-extrabold uppercase tracking-wider text-ink flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-turquesa"></span>
+                HISTORIAL DE COMUNICACIONES
+              </h3>
+
+              <div class="flex items-center gap-2 flex-wrap">
+                <button type="button" data-tipo="Todas" onclick="filtrarHistorialComunicados('Todas')" class="btn-historial-filtro-tipo px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${comHistFiltroTipo === 'Todas' ? 'bg-morado text-white' : 'bg-gray-100 text-slate2 hover:text-ink'}">
+                  Todas
+                </button>
+                <button type="button" data-tipo="Publica" onclick="filtrarHistorialComunicados('Publica')" class="btn-historial-filtro-tipo px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${comHistFiltroTipo === 'Publica' ? 'bg-turquesa text-white' : 'bg-gray-100 text-slate2 hover:text-ink'}">
+                  Públicas
+                </button>
+                <button type="button" data-tipo="Privada" onclick="filtrarHistorialComunicados('Privada')" class="btn-historial-filtro-tipo px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${comHistFiltroTipo === 'Privada' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-slate2 hover:text-ink'}">
+                  Privadas
+                </button>
+
+                <!-- Selector de Cohortes -->
+                <select id="selectFiltroHistorialCohorte" onchange="filtrarHistorialCohorte(this.value)" class="p-1 rounded-lg border border-gray-200 bg-white text-[11px] font-bold text-ink outline-none">
+                  <option value="">Cohortes ▾</option>
+                  ${cohortesOptions.map(c => `<option value="${escapeHtml(c)}" ${comHistFiltroCohorte === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+
+            <!-- Buscador en tiempo real dentro del historial -->
+            <div class="relative">
+              <input type="text" id="buscadorHistorialAdmin" value="${escapeHtml(comHistFiltroTexto)}" oninput="filtrarHistorialTexto(this.value)" placeholder="Buscar por título, contenido o etiqueta..." class="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-medium text-ink focus:border-morado outline-none" />
               <svg class="w-3.5 h-3.5 text-slate2 absolute left-2.5 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
 
-            <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate2 hover:text-ink cursor-pointer select-none">
-              <input type="checkbox" ${notifVerAtendidas ? 'checked' : ''} onchange="toggleVerNotificacionesAtendidas()" class="w-4 h-4 rounded text-morado focus:ring-morado/30" />
-              <span>Ver atendidas</span>
-            </label>
+            <!-- Feed de Tarjetas -->
+            <div class="space-y-3" id="feed-comunicados-admin">
+              ${tarjetasFeedHtml || emptyFeedHtml}
+              <div id="feed-comunicados-admin-empty" class="hidden p-8 text-center bg-gray-50 rounded-2xl border border-gray-100">
+                <p class="text-xs text-slate2 font-medium">No se encontraron notificaciones con este criterio.</p>
+              </div>
+            </div>
+
           </div>
-
         </div>
-      </div>
 
-      <!-- Lista de Notificaciones -->
-      <div class="space-y-3.5">
-        ${tarjetasHtml || emptyStateHtml}
       </div>
     `;
 
+    aplicarFiltrosHistorialAdmin();
     actualizarBadgesNotificacionesAdmin();
   }
 
-  window.marcarNotificacionAtendida = function(id, marcarLeida) {
+  // ----------------------------------------------------------------------------
+  // Funciones de Creación, Guardado y Acciones de Notificaciones Superadmin
+  // ----------------------------------------------------------------------------
+  window.setComunicadoTipoEnvio = function(tipo) {
+    comunicadoTipoEnvio = tipo;
+    if (tipo === 'Publica') {
+      comunicadoDestinatarios = ['Todos'];
+    } else {
+      if (comunicadoDestinatarios.length === 1 && comunicadoDestinatarios[0] === 'Todos') {
+        comunicadoDestinatarios = [];
+      }
+    }
+    renderNotificacionesAdmin();
+  };
+
+  window.toggleDestinatarioDropdown = function() {
+    const panel = document.getElementById('dropdownDestinatariosPanel');
+    if (panel) panel.classList.toggle('hidden');
+  };
+
+  window.onToggleDestinatario = function(dest, checked) {
+    if (checked) {
+      if (!comunicadoDestinatarios.includes(dest)) {
+        comunicadoDestinatarios.push(dest);
+      }
+    } else {
+      comunicadoDestinatarios = comunicadoDestinatarios.filter(d => d !== dest);
+    }
+    // Si deseleccionó todo y es privada, dejar vacío para que el botón lo indique
+    renderNotificacionesAdmin();
+    // Mantener abierto el dropdown para poder marcar varios
+    setTimeout(() => {
+      const panel = document.getElementById('dropdownDestinatariosPanel');
+      if (panel) panel.classList.remove('hidden');
+    }, 50);
+  };
+
+  window.setComunicadoPrioridad = function(p) {
+    comunicadoPrioridad = p;
+    renderNotificacionesAdmin();
+  };
+
+  window.enviarComunicadoSuperadmin = async function() {
+    const inputTitulo = document.getElementById('comunicadoTituloInput');
+    const inputMensaje = document.getElementById('comunicadoMensajeInput');
+    const selCat = document.getElementById('comunicadoCategoriaSelect');
+
+    const titulo = inputTitulo ? inputTitulo.value.trim() : '';
+    const mensaje = inputMensaje ? inputMensaje.value.trim() : '';
+    const categoria = selCat ? selCat.value : comunicadoCategoria;
+
+    if (!titulo) {
+      toast('Por favor escribe el título de la notificación', 'err');
+      if (inputTitulo) inputTitulo.focus();
+      return;
+    }
+    if (!mensaje) {
+      toast('Por favor escribe el mensaje de la notificación', 'err');
+      if (inputMensaje) inputMensaje.focus();
+      return;
+    }
+
+    const destFinal = (comunicadoTipoEnvio === 'Publica' || comunicadoDestinatarios.length === 0)
+      ? ['Todos']
+      : [...comunicadoDestinatarios];
+
+    const ahora = new Date();
+    const fechaSql = ahora.toISOString().slice(0, 19).replace('T', ' ');
+
+    const nuevo = {
+      id: 'com_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+      tipo: comunicadoTipoEnvio,
+      destinatarios: destFinal,
+      titulo: titulo,
+      mensaje: mensaje,
+      categoria: categoria,
+      prioridad: comunicadoPrioridad,
+      autor: (currentAdmin && currentAdmin.nombre) ? currentAdmin.nombre : 'Superadmin',
+      autorRol: 'Superadmin',
+      fecha: fechaSql,
+      atendida: false
+    };
+
+    try {
+      let lista = await Store.list('comunicados');
+      if (!Array.isArray(lista)) lista = [];
+      lista.unshift(nuevo);
+      await Store.set('comunicados', lista);
+
+      toast('¡Notificación enviada con éxito!', 'ok');
+      // Reset campos
+      comunicadoDestinatarios = [];
+      renderNotificacionesAdmin();
+    } catch (e) {
+      console.error('[enviarComunicadoSuperadmin]', e);
+      toast('Error al guardar la notificación: ' + (e.message || ''), 'err');
+    }
+  };
+
+  window.eliminarComunicadoSuperadmin = async function(id) {
+    if (!confirm('¿Deseas eliminar este comunicado? Dejará de ser visible para los estudiantes y docentes.')) return;
+    try {
+      let lista = await Store.list('comunicados');
+      if (Array.isArray(lista)) {
+        lista = lista.filter(c => c.id !== id);
+        await Store.set('comunicados', lista);
+      }
+      toast('Comunicado eliminado', 'ok');
+      renderNotificacionesAdmin();
+    } catch (e) {
+      toast('No se pudo eliminar el comunicado', 'err');
+    }
+  };
+
+  function aplicarFiltrosHistorialAdmin() {
+    const container = document.getElementById('feed-comunicados-admin');
+    if (!container) return;
+    const cards = container.querySelectorAll('.card-comunicado-historial');
+    const qT = (comHistFiltroTexto || '').toLowerCase().trim();
+    const qC = (comHistFiltroCohorte || '').toLowerCase().trim();
+    let visibles = 0;
+
+    cards.forEach(card => {
+      const search = card.getAttribute('data-search') || '';
+      const tipo = card.getAttribute('data-tipo') || '';
+      const esCom = card.getAttribute('data-es-comunicado') === 'true';
+      const prioridad = card.getAttribute('data-prioridad') || '';
+      const dest = card.getAttribute('data-destinatarios') || '';
+
+      let matchTipo = true;
+      if (comHistFiltroTipo === 'Publica') matchTipo = (tipo === 'Pública' || tipo === 'Publica');
+      else if (comHistFiltroTipo === 'Privada') matchTipo = (tipo === 'Privada');
+      else if (comHistFiltroTipo === 'Alertas') matchTipo = !esCom;
+      else if (comHistFiltroTipo === 'Alta') matchTipo = (prioridad === 'Alta');
+
+      let matchCohorte = true;
+      if (qC) matchCohorte = dest.includes(qC);
+
+      let matchTexto = true;
+      if (qT) matchTexto = search.includes(qT);
+
+      const visible = matchTipo && matchCohorte && matchTexto;
+      card.classList.toggle('hidden', !visible);
+      if (visible) visibles++;
+    });
+
+    const emptyMsg = document.getElementById('feed-comunicados-admin-empty');
+    if (emptyMsg) emptyMsg.classList.toggle('hidden', visibles > 0);
+  }
+  window.aplicarFiltrosHistorialAdmin = aplicarFiltrosHistorialAdmin;
+
+  window.filtrarHistorialComunicados = function(tipo) {
+    comHistFiltroTipo = tipo;
+    document.querySelectorAll('.btn-historial-filtro-tipo').forEach(btn => {
+      const bTipo = btn.getAttribute('data-tipo');
+      if (bTipo === tipo) {
+        btn.className = 'btn-historial-filtro-tipo px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ' + 
+          (tipo === 'Todas' ? 'bg-morado text-white' : (tipo === 'Publica' ? 'bg-turquesa text-white' : (tipo === 'Privada' ? 'bg-indigo-600 text-white' : 'bg-amber-500 text-white')));
+      } else {
+        btn.className = 'btn-historial-filtro-tipo px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer bg-gray-100 text-slate2 hover:text-ink';
+      }
+    });
+    aplicarFiltrosHistorialAdmin();
+  };
+
+  window.filtrarHistorialCohorte = function(c) {
+    comHistFiltroCohorte = c;
+    aplicarFiltrosHistorialAdmin();
+  };
+
+  window.filtrarHistorialTexto = function(t) {
+    comHistFiltroTexto = t;
+    aplicarFiltrosHistorialAdmin();
+  };
+
+  // ----------------------------------------------------------------------------
+  // Modal de Detalle Completo de Notificación / Comunicado
+  // ----------------------------------------------------------------------------
+  window.abrirModalDetalleComunicado = async function(id) {
+    const modal = document.getElementById('modalDetalleComunicado');
+    if (!modal) return;
+
+    let encontrado = null;
+    const comunicados = await Store.list('comunicados');
+    if (Array.isArray(comunicados)) {
+      encontrado = comunicados.find(c => c.id === id);
+    }
+    if (!encontrado) {
+      const { notificaciones } = await obtenerNotificacionesAdmin();
+      encontrado = notificaciones.find(n => n.id === id);
+    }
+    if (!encontrado) {
+      toast('No se pudo cargar el detalle del comunicado', 'err');
+      return;
+    }
+
+    const tituloEl = document.getElementById('modalComTitulo');
+    const autorEl = document.getElementById('modalComAutor');
+    const fechaEl = document.getElementById('modalComFecha');
+    const destEl = document.getElementById('modalComDestinatarios');
+    const mensajeEl = document.getElementById('modalComMensaje');
+    const badgesEl = document.getElementById('modalComBadges');
+
+    if (tituloEl) tituloEl.textContent = encontrado.titulo || '';
+    if (autorEl) autorEl.textContent = encontrado.autor || 'Fundación A+';
+    if (fechaEl) fechaEl.textContent = encontrado.fecha ? (typeof fmtDate === 'function' ? fmtDate(encontrado.fecha) : encontrado.fecha) : 'Reciente';
+    
+    const destArr = Array.isArray(encontrado.destinatarios) ? encontrado.destinatarios : [encontrado.destinatarios || 'Toda la institución'];
+    if (destEl) destEl.textContent = destArr.join(', ') || 'Toda la institución';
+    if (mensajeEl) mensajeEl.textContent = encontrado.mensaje || '';
+
+    if (badgesEl) {
+      const esPriv = String(encontrado.tipo || encontrado.tipoEnvio || '').toLowerCase().includes('privad');
+      badgesEl.innerHTML = `
+        <span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${esPriv ? 'bg-morado/10 text-morado border border-morado/20' : 'bg-turquesa/10 text-turquesa border border-turquesa/20'}">
+          ${esPriv ? 'Privada' : 'Pública'}
+        </span>
+        <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-gray-100 text-slate2 border border-gray-200">
+          ${escapeHtml(encontrado.categoria || 'Institucional')}
+        </span>
+        <span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${encontrado.prioridad === 'Alta' ? 'bg-morado/15 text-morado' : 'bg-amber-100 text-amber-800'} border border-gray-200">
+          Prioridad ${encontrado.prioridad || 'Media'}
+        </span>
+      `;
+    }
+
+    modal.classList.remove('hidden');
+  };
+
+  window.cerrarModalDetalleComunicado = function() {
+    const modal = document.getElementById('modalDetalleComunicado');
+    if (modal) modal.classList.add('hidden');
+  };
+
+  window.filtrarNotificacionesDocenteTab = function(tab) {
+    notifDocenteTab = tab;
+    renderNotificacionesDocente();
+  };
+
+  // ----------------------------------------------------------------------------
+  // PANEL DOCENTE: CENTRO DE NOTIFICACIONES Y PUBLICACIONES (Fiel a Imagen 1)
+  // ----------------------------------------------------------------------------
+  async function renderNotificacionesDocente() {
+    const mount = document.getElementById('mount-t-notificaciones');
+    if (!mount) return;
+
+    const doc = currentDocente || {};
+    const [comunicados, justificaciones, semaforoData, memorandos, usuarios, modulos] = await Promise.all([
+      Store.list('comunicados'),
+      Store.list('justificaciones_asistencia'),
+      computeSemaforo(),
+      Store.list('memorandos'),
+      Store.list('usuarios'),
+      Store.list('modulos')
+    ]);
+
+    // Cohortes asignadas al docente
+    const asignadas = (doc.cohortes && Array.isArray(doc.cohortes) && doc.cohortes.length)
+      ? doc.cohortes
+      : (modulos ? modulos.slice(0, 3).map(m => m.nombre) : ['Cohorte 1', 'Cohorte 5', 'Cohorte 8']);
+
+    const asignadasData = asignadas.map(cName => {
+      const cMod = (modulos || []).find(m => m.nombre === cName);
+      const estCount = (usuarios || []).filter(u => u.rol === 'Estudiante' && u.cohorte === cName).length;
+      return { nombre: cName, count: estCount || 28 };
+    });
+
+    // Notificaciones relevantes para el docente (de sus cohortes o públicas)
+    const relevantes = [];
+    (comunicados || []).forEach(c => {
+      const esPub = String(c.tipo || '').toLowerCase().includes('publi');
+      const dest = Array.isArray(c.destinatarios) ? c.destinatarios : [c.destinatarios || ''];
+      const tocaCohorte = dest.some(d => asignadas.some(a => d.toLowerCase().includes(a.toLowerCase())) || d === 'Todos' || d === 'Todos los Docentes');
+      if (esPub || tocaCohorte) {
+        relevantes.push({
+          id: c.id,
+          tipo: 'comunicado',
+          titulo: c.titulo,
+          mensaje: c.mensaje,
+          categoria: c.categoria,
+          prioridad: c.prioridad,
+          fecha: c.fecha,
+          esPropia: c.autor === doc.nombre
+        });
+      }
+    });
+
+    // Excusas médicas de sus cohortes
+    const excusasDoc = (justificaciones || []).filter(j => j.estado === 'Pendiente');
+    excusasDoc.forEach(j => {
+      relevantes.push({
+        id: 'j_' + j.id,
+        tipo: 'excusa',
+        titulo: `Revisión de Excusa Médica para Estudiante: ${escapeHtml(j.estudiante)}`,
+        mensaje: `Soporte médico para ${escapeHtml(j.materia || 'clase')} (${fmtDate(j.fecha)}). Motivo: ${escapeHtml(j.motivo || 'Fuerza mayor')}.`,
+        categoria: 'Excusas',
+        prioridad: 'Media',
+        fecha: j.fecha
+      });
+    });
+
+    // Riesgo académico en sus cohortes
+    const riesgoDoc = (semaforoData || []).filter(s => s.riesgo === 'Rojo' && asignadas.some(a => s.cohorte.includes(a)));
+    riesgoDoc.forEach(s => {
+      relevantes.push({
+        id: 'r_' + s.estudiante,
+        tipo: 'riesgo',
+        titulo: `Alerta de Riesgo Académico en ${escapeHtml(s.cohorte)}: ${escapeHtml(s.estudiante)}`,
+        mensaje: `Promedio actual: ${s.promedio} · Asistencia: ${s.asistencia}%.`,
+        categoria: 'Riesgo',
+        prioridad: 'Alta',
+        fecha: ''
+      });
+    });
+
+    const totalCount = relevantes.length;
+    const criticasCount = relevantes.filter(r => r.prioridad === 'Alta').length;
+    const cortesCount = relevantes.filter(r => r.tipo === 'comunicado').length;
+    const excusasCount = excusasDoc.length;
+
+    let filtradas = relevantes;
+    if (notifDocenteTab === 'criticas') {
+      filtradas = relevantes.filter(r => r.prioridad === 'Alta');
+    } else if (notifDocenteTab === 'mis_cortes') {
+      filtradas = relevantes.filter(r => r.tipo === 'comunicado');
+    } else if (notifDocenteTab === 'excusas') {
+      filtradas = relevantes.filter(r => r.tipo === 'excusa');
+    }
+
+    mount.innerHTML = `
+      <!-- Banner Hero Docente -->
+      <div class="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-morado via-indigo-700 to-morado text-white mb-6 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-white text-xs font-bold uppercase tracking-wider mb-2 border border-white/15">
+              <span class="w-1.5 h-1.5 rounded-full bg-turquesa animate-pulse"></span>
+              ALERTAS Y NOVEDADES INSTITUCIONALES
+            </div>
+            <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight">Centro de Notificaciones</h2>
+            <p class="text-xs sm:text-sm text-white/70 max-w-xl mt-1 leading-relaxed">
+              Monitoreo activo de estudiantes en riesgo académico, alertas por 3+ disciplinarios y validación de excusas médicas.
+            </p>
+          </div>
+          <div class="flex items-center gap-2.5 shrink-0 flex-wrap">
+            <button type="button" onclick="renderNotificacionesDocente()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white text-ink hover:bg-gray-100 transition shadow-sm cursor-pointer">
+              <svg class="w-3.5 h-3.5 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Actualizar
+            </button>
+          </div>
+        </div>
+
+        <!-- Contadores en el Banner -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6 pt-5 border-t border-white/10">
+          <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-md">
+            <p class="text-[10px] uppercase font-bold text-white/70">TOTAL ACTIVAS</p>
+            <p class="text-xl font-extrabold text-white mt-0.5">${totalCount}</p>
+          </div>
+          <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-md">
+            <p class="text-[10px] uppercase font-bold text-white/70">CRÍTICAS</p>
+            <p class="text-xl font-extrabold text-white mt-0.5">${criticasCount}</p>
+          </div>
+          <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-md">
+            <p class="text-[10px] uppercase font-bold text-white/70">RIESGO</p>
+            <p class="text-xl font-extrabold text-white mt-0.5">${riesgoDoc.length}</p>
+          </div>
+          <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-md">
+            <p class="text-[10px] uppercase font-bold text-white/70">MEMORANDOS</p>
+            <p class="text-xl font-extrabold text-white mt-0.5">1</p>
+          </div>
+          <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-md">
+            <p class="text-[10px] uppercase font-bold text-white/70">EXCUSAS</p>
+            <p class="text-xl font-extrabold text-white mt-0.5">${excusasCount}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gestor de Comunicación y Publicación Docente -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start mb-6">
+        
+        <!-- Izquierda: Mis Cortes Asignadas y Filtros -->
+        <div class="lg:col-span-6 space-y-4">
+          <div class="admin-panel-card p-6 bg-white rounded-3xl border border-gray-100 shadow-sm">
+            <h3 class="text-sm font-extrabold text-ink mb-3">Gestor de Comunicación para Mis Cortes</h3>
+            <p class="text-[11px] font-bold text-slate2 uppercase tracking-wide mb-2">MIS CORTES ASIGNADAS</p>
+            
+            <div class="flex items-center gap-2.5 flex-wrap">
+              ${asignadasData.map((c, i) => `
+                <div class="flex items-center gap-2 px-3 py-2 rounded-2xl ${i === 0 ? 'bg-morado/10 border-morado/30 text-morado' : (i === 1 ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-turquesa/10 border-turquesa/30 text-turquesa')} border">
+                  <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                  <div>
+                    <p class="text-xs font-extrabold leading-tight">${escapeHtml(c.nombre)}</p>
+                    <p class="text-[10px] opacity-80 leading-tight">👥 ${c.count} estudiantes</p>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+
+            <!-- Tabs de navegación -->
+            <div class="flex items-center gap-1.5 flex-wrap mt-5 pt-4 border-t border-gray-100">
+              <button type="button" onclick="filtrarNotificacionesDocenteTab('todas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifDocenteTab === 'todas' ? 'bg-morado text-white shadow-xs' : 'text-slate2 hover:bg-gray-100'}">Todas (${totalCount})</button>
+              <button type="button" onclick="filtrarNotificacionesDocenteTab('criticas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifDocenteTab === 'criticas' ? 'bg-morado text-white shadow-xs' : 'text-slate2 hover:bg-gray-100'}">Críticas (${criticasCount})</button>
+              <button type="button" onclick="filtrarNotificacionesDocenteTab('mis_cortes')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifDocenteTab === 'mis_cortes' ? 'bg-morado text-white shadow-xs' : 'text-slate2 hover:bg-gray-100'}">Por mis Cortes (${cortesCount})</button>
+              <button type="button" onclick="filtrarNotificacionesDocenteTab('excusas')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${notifDocenteTab === 'excusas' ? 'bg-morado text-white shadow-xs' : 'text-slate2 hover:bg-gray-100'}">Excusas (${excusasCount})</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Derecha: Formulario Nueva Publicación Docente -->
+        <div class="lg:col-span-6">
+          <div class="admin-panel-card p-6 bg-white rounded-3xl border border-gray-100 shadow-sm space-y-3.5">
+            <h3 class="text-xs font-extrabold uppercase tracking-wide text-ink">NUEVA PUBLICACIÓN DOCENTE</h3>
+            
+            <div>
+              <label class="block text-xs font-bold text-slate2 mb-1">Destinatarios:</label>
+              <select id="docentePublicarCohorteSelect" class="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-ink focus:border-morado outline-none">
+                <option value="">Seleccionar Cohortes...</option>
+                ${asignadas.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate2 mb-1">Título:</label>
+              <input type="text" id="docentePublicarTituloInput" placeholder="Ej. Cambio de horario o entrega de proyecto" class="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium text-ink focus:border-morado outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate2 mb-1">Mensaje:</label>
+              <textarea id="docentePublicarMensajeInput" rows="3" placeholder="Escribe el mensaje para tus estudiantes..." class="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium text-ink focus:border-morado outline-none resize-none"></textarea>
+            </div>
+
+            <button type="button" onclick="publicarEnMisCortesDocente()" class="w-full py-2.5 px-4 rounded-xl bg-morado hover:bg-morado/90 text-white font-extrabold text-xs transition cursor-pointer shadow-xs">
+              Publicar en mis Cortes
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Feed de Alertas Docente -->
+      <div class="space-y-3">
+        ${filtradas.length === 0 ? `
+          <div class="p-8 text-center bg-white rounded-2xl border border-gray-100">
+            <p class="text-xs font-bold text-slate2">No hay notificaciones en este filtro.</p>
+          </div>
+        ` : filtradas.map(r => `
+          <div class="p-4 rounded-2xl bg-white border border-gray-100 hover:shadow-xs transition flex items-start gap-3.5">
+            <div class="w-9 h-9 rounded-xl ${r.prioridad === 'Alta' ? 'bg-morado/10 text-morado border-morado/20' : (r.tipo === 'excusa' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-gray-50 text-morado border-gray-200')} flex items-center justify-center shrink-0 border">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1 flex-wrap">
+                <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-morado/10 text-morado border border-morado/20">${escapeHtml(r.categoria || 'Aviso')}</span>
+                ${r.prioridad === 'Alta' ? `<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-morado text-white">Crítica</span>` : ''}
+                ${r.fecha ? `<span class="text-[10px] text-slate2 font-medium">${fmtDate(r.fecha)}</span>` : ''}
+              </div>
+              <h4 class="text-xs sm:text-sm font-extrabold text-ink">${escapeHtml(r.titulo)}</h4>
+              <p class="text-xs text-slate2 mt-0.5 leading-relaxed">${escapeHtml(r.mensaje)}</p>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    // Actualizar badge
+    const bDoc = document.getElementById('notifBadgeDocente');
+    if (bDoc) {
+      bDoc.textContent = totalCount;
+      bDoc.classList.toggle('hidden', totalCount === 0);
+    }
+  }
+
+  window.publicarEnMisCortesDocente = async function() {
+    const sel = document.getElementById('docentePublicarCohorteSelect');
+    const inpT = document.getElementById('docentePublicarTituloInput');
+    const inpM = document.getElementById('docentePublicarMensajeInput');
+
+    const cohorte = sel ? sel.value : '';
+    const titulo = inpT ? inpT.value.trim() : '';
+    const mensaje = inpM ? inpM.value.trim() : '';
+
+    if (!cohorte) { toast('Por favor selecciona una de tus cohortes', 'err'); return; }
+    if (!titulo) { toast('Por favor ingresa el título del aviso', 'err'); return; }
+    if (!mensaje) { toast('Por favor ingresa el mensaje para los estudiantes', 'err'); return; }
+
+    const doc = currentDocente || {};
+    const nuevo = {
+      id: 'com_doc_' + Date.now(),
+      tipo: 'Privada',
+      destinatarios: [cohorte],
+      titulo: titulo,
+      mensaje: mensaje,
+      categoria: 'Académico',
+      prioridad: 'Media',
+      autor: doc.nombre || 'Docente',
+      autorRol: 'Docente',
+      fecha: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      atendida: false
+    };
+
+    let lista = await Store.list('comunicados');
+    if (!Array.isArray(lista)) lista = [];
+    lista.unshift(nuevo);
+    await Store.set('comunicados', lista);
+
+    toast('Aviso publicado con éxito para ' + cohorte, 'ok');
+    renderNotificacionesDocente();
+  };
+
+  // ----------------------------------------------------------------------------
+  // PANEL ESTUDIANTE: CENTRO DE NOTIFICACIONES EN 2 COLUMNAS (Fiel a Imagen 2)
+  // ----------------------------------------------------------------------------
+  async function renderNotificacionesEstudiante() {
+    const mount = document.getElementById('mount-s-notificaciones');
+    if (!mount) return;
+
+    const est = currentEstudiante || {};
+    const miCohorte = est.cohorte || 'Cohorte 8';
+    const comunicados = await Store.list('comunicados');
+
+    // Columna 1: Notificaciones de su Cohorte
+    const notifsCorte = (comunicados || []).filter(c => {
+      const dest = Array.isArray(c.destinatarios) ? c.destinatarios : [c.destinatarios || ''];
+      const tocaMiCohorte = dest.some(d => String(d).toLowerCase().includes(miCohorte.toLowerCase()) || d === 'Todos los Estudiantes');
+      const esPriv = String(c.tipo || '').toLowerCase().includes('privad');
+      return tocaMiCohorte || (esPriv && dest.includes('Todos los Estudiantes'));
+    });
+
+    // Columna 2: Mensajes Públicos y Fundación A+
+    const notifsPublicas = (comunicados || []).filter(c => {
+      const esPub = String(c.tipo || '').toLowerCase().includes('publi');
+      return esPub;
+    });
+
+    const renderCardEstudiante = (n, tipo) => `
+      <div class="card-notif-estudiante card-notif-est-${tipo} p-5 rounded-2xl bg-white border border-gray-100 hover:border-morado/30 hover:shadow-md transition-all duration-200" data-search="${escapeHtml(((n.titulo || '') + ' ' + (n.mensaje || '') + ' ' + (n.categoria || '')).toLowerCase())}">
+        <div class="flex items-start gap-3.5">
+          <div class="w-10 h-10 rounded-2xl bg-morado/10 text-morado flex items-center justify-center shrink-0 border border-gray-100">
+            ${ICONOS_COMUNICADO[n.categoria === 'Eventos' ? 'calendar' : (n.categoria === 'Académico' ? 'academic' : 'megaphone')]}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+              <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full ${n.categoria === 'Institucional' ? 'bg-amber-100 text-amber-800' : 'bg-morado/10 text-morado'}">
+                ${escapeHtml(n.categoria || 'Académica')}
+              </span>
+              <span class="text-[11px] text-slate2">${n.fecha ? (typeof fmtDate === 'function' ? fmtDate(n.fecha) : n.fecha.slice(0, 10)) : '02 de oct 2026'}</span>
+            </div>
+            
+            <h4 class="text-sm font-extrabold text-ink leading-snug mt-1">
+              ${escapeHtml(n.titulo)}
+            </h4>
+            
+            <p class="text-xs text-slate2 mt-1 line-clamp-2 leading-relaxed">
+              ${escapeHtml(n.mensaje)}
+            </p>
+
+            <div class="flex items-center justify-end mt-3 pt-2 border-t border-gray-50">
+              <button type="button" onclick="window.abrirModalDetalleComunicado('${n.id}')" class="text-xs font-bold text-morado hover:underline cursor-pointer">
+                Ver detalles
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    mount.innerHTML = `
+      <!-- Header Banner Estudiante -->
+      <div class="p-6 sm:p-7 rounded-3xl bg-slate-900 text-white mb-6 shadow-sm border border-slate-800" style="background: linear-gradient(115deg, #181E2A 0%, #2A1F4D 55%, #5B21B6 100%);">
+        <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight">Centro de Notificaciones - Panel del Estudiante</h2>
+        <p class="text-xs text-white/70 mt-1">Mantente al tanto de los avisos de tu cohorte, fechas importantes y anuncios de la Fundación A+.</p>
+      </div>
+
+      <!-- Cuadrícula 2 Columnas Estudiante (Fiel a Imagen 2) -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        
+        <!-- Columna 1: Notificaciones de su Cohorte -->
+        <div class="admin-panel-card p-6 bg-white rounded-3xl border border-gray-100 shadow-sm space-y-4">
+          <div class="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
+            <h3 class="text-xs sm:text-sm font-extrabold text-ink">
+              Notificaciones de ${escapeHtml(miCohorte)} <span class="text-morado">(${notifsCorte.length} nuevas)</span>
+            </h3>
+            <div class="relative w-36 sm:w-44">
+              <input type="text" id="buscadorNotifEstudianteCorte" value="${escapeHtml(notifEstudianteQueryCorte)}" placeholder="Buscar..." oninput="filtrarNotifsEstudianteCorteLive(this.value)" class="w-full pl-7 pr-2.5 py-1.5 rounded-xl border border-gray-200 text-xs text-ink outline-none focus:border-morado" />
+              <svg class="w-3.5 h-3.5 text-slate2 absolute left-2 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+          </div>
+
+          <div class="space-y-3.5" id="feed-notifs-estudiante-corte">
+            ${notifsCorte.map(n => renderCardEstudiante(n, 'corte')).join('') || '<p class="text-xs text-slate2 text-center py-6">No hay avisos recientes para tu cohorte.</p>'}
+            <div id="empty-notifs-estudiante-corte" class="hidden p-6 text-center text-xs text-slate2 bg-gray-50 rounded-2xl">No se encontraron avisos para tu búsqueda.</div>
+          </div>
+        </div>
+
+        <!-- Columna 2: Mensajes Públicos y Fundación A+ -->
+        <div class="admin-panel-card p-6 bg-white rounded-3xl border border-gray-100 shadow-sm space-y-4">
+          <div class="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
+            <h3 class="text-xs sm:text-sm font-extrabold text-ink">
+              Mensajes Públicos y Fundación A+ <span class="text-turquesa">(${notifsPublicas.length} nuevas)</span>
+            </h3>
+            <div class="relative w-36 sm:w-44">
+              <input type="text" id="buscadorNotifEstudiantePublicas" value="${escapeHtml(notifEstudianteQueryPublicas)}" placeholder="Buscar..." oninput="filtrarNotifsEstudiantePublicasLive(this.value)" class="w-full pl-7 pr-2.5 py-1.5 rounded-xl border border-gray-200 text-xs text-ink outline-none focus:border-turquesa" />
+              <svg class="w-3.5 h-3.5 text-slate2 absolute left-2 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+          </div>
+
+          <div class="space-y-3.5" id="feed-notifs-estudiante-publicas">
+            ${notifsPublicas.map(n => renderCardEstudiante(n, 'publicas')).join('') || '<p class="text-xs text-slate2 text-center py-6">No hay anuncios públicos en este momento.</p>'}
+            <div id="empty-notifs-estudiante-publicas" class="hidden p-6 text-center text-xs text-slate2 bg-gray-50 rounded-2xl">No se encontraron anuncios para tu búsqueda.</div>
+          </div>
+        </div>
+
+      </div>
+    `;
+
+    if (notifEstudianteQueryCorte) filtrarNotifsEstudianteCorteLive(notifEstudianteQueryCorte);
+    if (notifEstudianteQueryPublicas) filtrarNotifsEstudiantePublicasLive(notifEstudianteQueryPublicas);
+
+    // Actualizar badges
+    const totalEst = notifsCorte.length + notifsPublicas.length;
+    const bEst = document.getElementById('notifBadgeEstudiante');
+    if (bEst) {
+      bEst.textContent = totalEst;
+      bEst.classList.toggle('hidden', totalEst === 0);
+    }
+    const bHead = document.getElementById('notifBadgeHeader-estudiante');
+    if (bHead) {
+      bHead.classList.toggle('hidden', totalEst === 0);
+    }
+  }
+
+  window.filtrarNotifsEstudianteCorteLive = function(texto) {
+    notifEstudianteQueryCorte = texto;
+    const q = (texto || '').toLowerCase().trim();
+    const container = document.getElementById('feed-notifs-estudiante-corte');
+    if (!container) return;
+    const cards = container.querySelectorAll('.card-notif-est-corte');
+    let visibles = 0;
+    cards.forEach(card => {
+      const s = card.getAttribute('data-search') || '';
+      const match = !q || s.includes(q);
+      card.classList.toggle('hidden', !match);
+      if (match) visibles++;
+    });
+    const empty = document.getElementById('empty-notifs-estudiante-corte');
+    if (empty) empty.classList.toggle('hidden', visibles > 0);
+  };
+
+  window.filtrarNotifsEstudiantePublicasLive = function(texto) {
+    notifEstudianteQueryPublicas = texto;
+    const q = (texto || '').toLowerCase().trim();
+    const container = document.getElementById('feed-notifs-estudiante-publicas');
+    if (!container) return;
+    const cards = container.querySelectorAll('.card-notif-est-publicas');
+    let visibles = 0;
+    cards.forEach(card => {
+      const s = card.getAttribute('data-search') || '';
+      const match = !q || s.includes(q);
+      card.classList.toggle('hidden', !match);
+      if (match) visibles++;
+    });
+    const empty = document.getElementById('empty-notifs-estudiante-publicas');
+    if (empty) empty.classList.toggle('hidden', visibles > 0);
+  };
+
+  // ----------------------------------------------------------------------------
+  // Utilidades Compartidas y Marcado de Estado
+  // ----------------------------------------------------------------------------
+  window.marcarNotificacionAtendida = async function(id, marcarLeida) {
     let leidas = [];
     try {
       leidas = JSON.parse(localStorage.getItem('aplus_admin_notificaciones_leidas') || '[]');
@@ -9547,12 +10469,25 @@ Fundación A+`;
     const set = new Set(leidas);
     if (marcarLeida) {
       set.add(id);
-      toast('Alerta marcada como atendida', 'ok');
+      toast('Marcada como atendida', 'ok');
     } else {
       set.delete(id);
-      toast('Alerta reactivada', 'info');
+      toast('Reactivada', 'info');
     }
     localStorage.setItem('aplus_admin_notificaciones_leidas', JSON.stringify(Array.from(set)));
+
+    // Si es un comunicado en MySQL / Store, persistirlo también
+    try {
+      let coms = await Store.list('comunicados');
+      if (Array.isArray(coms)) {
+        const item = coms.find(c => c.id === id);
+        if (item) {
+          item.atendida = marcarLeida;
+          await Store.set('comunicados', coms);
+        }
+      }
+    } catch (e) {}
+
     renderNotificacionesAdmin();
   };
 
@@ -9567,27 +10502,16 @@ Fundación A+`;
     const set = new Set(leidas);
     notificaciones.forEach(n => set.add(n.id));
     localStorage.setItem('aplus_admin_notificaciones_leidas', JSON.stringify(Array.from(set)));
-    toast('Todas las alertas actuales han sido marcadas como atendidas', 'ok');
-    renderNotificacionesAdmin();
-  };
 
-  window.filtrarNotificacionesTipo = function(tipo) {
-    notifFiltroTipo = tipo;
-    renderNotificacionesAdmin();
-  };
+    try {
+      let coms = await Store.list('comunicados');
+      if (Array.isArray(coms)) {
+        coms.forEach(c => c.atendida = true);
+        await Store.set('comunicados', coms);
+      }
+    } catch (e) {}
 
-  window.filtrarNotificacionesCohorte = function(cohorte) {
-    notifFiltroCohorte = cohorte;
-    renderNotificacionesAdmin();
-  };
-
-  window.filtrarNotificacionesBuscar = function(texto) {
-    notifFiltroTexto = texto;
-    renderNotificacionesAdmin();
-  };
-
-  window.toggleVerNotificacionesAtendidas = function() {
-    notifVerAtendidas = !notifVerAtendidas;
+    toast('Todas las comunicaciones han sido marcadas como atendidas', 'ok');
     renderNotificacionesAdmin();
   };
 
@@ -9639,14 +10563,50 @@ Fundación A+`;
     calificaciones: renderCalificaciones,
     informesAdmin: renderInformesAdmin,
     encuestas: renderEncuestas,
-    formularios: typeof renderFormularios === 'function' ? renderFormularios : async () => {},
-    formulariosPapelera: typeof renderFormulariosPapelera === 'function' ? renderFormulariosPapelera : async () => {},
+    formularios: async () => {
+      let tries = 0;
+      while (tries < 15 && !(typeof window !== 'undefined' && typeof window.renderFormularios === 'function') && typeof renderFormularios !== 'function') {
+        await new Promise(r => setTimeout(r, 100));
+        tries++;
+      }
+      if (typeof window !== 'undefined' && typeof window.renderFormularios === 'function') {
+        await window.renderFormularios();
+      } else if (typeof renderFormularios === 'function') {
+        await renderFormularios();
+      } else {
+        const mount = document.getElementById('mount-formularios');
+        if (mount) {
+          mount.innerHTML = `<div class="admin-panel-card p-10 text-center text-sm text-slate2">No se pudo cargar el constructor de formularios. Verifica que forms.js esté cargado.<br><button onclick="showPanel('formularios')" class="mt-3 px-4 py-1.5 rounded-lg bg-morado text-white text-xs font-semibold cursor-pointer">Reintentar</button></div>`;
+        }
+      }
+    },
+    formulariosPapelera: async () => {
+      let tries = 0;
+      while (tries < 15 && !(typeof window !== 'undefined' && typeof window.renderFormulariosPapelera === 'function') && typeof renderFormulariosPapelera !== 'function') {
+        await new Promise(r => setTimeout(r, 100));
+        tries++;
+      }
+      if (typeof window !== 'undefined' && typeof window.renderFormulariosPapelera === 'function') {
+        await window.renderFormulariosPapelera();
+      } else if (typeof renderFormulariosPapelera === 'function') {
+        await renderFormulariosPapelera();
+      } else {
+        const mount = document.getElementById('mount-formulariosPapelera');
+        if (mount) {
+          mount.innerHTML = `<div class="admin-panel-card p-10 text-center text-sm text-slate2">No se pudo cargar la papelera de formularios. Verifica que forms.js esté cargado.<br><button onclick="showPanel('formulariosPapelera')" class="mt-3 px-4 py-1.5 rounded-lg bg-morado text-white text-xs font-semibold cursor-pointer">Reintentar</button></div>`;
+        }
+      }
+    },
     recursos: renderRecursos,
     asignaciones_recursos: renderAsignacionesRecursos,
     auditoria: renderAuditoria,
     chatvoz: renderChatVozConocimiento,
     configuracion: renderConfiguracion,
   };
+
+  if (typeof window !== 'undefined') {
+    window.RENDERERS = RENDERERS;
+  }
 
   // async porque hace await de seedIfEmpty() (que sí toca 'usuarios',
   // migrada a MySQL) — submitLogin ya la llama con await.
@@ -10514,7 +11474,10 @@ Fundación A+`;
 
   // Visor de justificación para Docente y Admin
   async function abrirModalVisorJustificacion(justId) {
-    const justificaciones = await Store.list('justificaciones_asistencia');
+    let justificaciones = await Store.list('justificaciones_asistencia');
+    if (!Array.isArray(justificaciones) || justificaciones.length === 0) {
+      justificaciones = SEED.justificaciones_asistencia || [];
+    }
     const just = justificaciones.find(j => j.id === justId);
     if (!just) { toast('Justificación no encontrada', 'err'); return; }
 
@@ -10527,7 +11490,7 @@ Fundación A+`;
     document.getElementById('visorJustEstudiante').textContent = just.estudiante;
     document.getElementById('visorJustSubtitulo').textContent = `${escapeHtml(just.materia)} · ${fmtDate(just.fecha)}`;
     document.getElementById('visorJustMotivo').textContent = just.motivo || 'Motivo no especificado';
-    document.getElementById('visorJustDescripcion').textContent = just.detalle || '(Sin descripción adicional)';
+    document.getElementById('visorJustDescripcion').textContent = just.detalle || just.comentario || '(Sin descripción adicional)';
 
     const estadoBadge = document.getElementById('visorJustEstadoBadge');
     if (just.estado === 'Aprobada') {
@@ -10542,10 +11505,12 @@ Fundación A+`;
     }
 
     const contArchivo = document.getElementById('visorJustContenedorArchivo');
-    if (just.archivoBase64) {
-      if (just.archivoTipo && just.archivoTipo.startsWith('image/')) {
+    const archivoSrc = just.archivoBase64 || just.archivoDatos;
+    if (archivoSrc) {
+      const esImg = (just.archivoTipo && (just.archivoTipo.startsWith('image/') || just.archivoTipo.includes('svg'))) || (archivoSrc.startsWith('data:image/'));
+      if (esImg) {
         contArchivo.innerHTML = `
-          <img src="${just.archivoBase64}" alt="Evidencia médica" class="max-h-60 rounded-xl object-contain shadow-xs border border-gray-100 mb-2 cursor-pointer hover:opacity-95 transition" onclick="window.open('${just.archivoBase64}', '_blank')" />
+          <img src="${archivoSrc}" alt="Evidencia médica" class="max-h-60 rounded-xl object-contain shadow-xs border border-gray-100 mb-2 cursor-pointer hover:opacity-95 transition" onclick="window.open('${archivoSrc}', '_blank')" />
           <p class="text-[11px] font-bold text-slate2">Haz clic sobre la imagen para verla en tamaño completo</p>`;
       } else {
         contArchivo.innerHTML = `
@@ -10554,7 +11519,7 @@ Fundación A+`;
               <span class="text-red-700 font-extrabold text-xs">PDF</span>
             </div>
             <p class="text-xs font-bold text-ink">${escapeHtml(just.archivoNombre || 'Documento soporte.pdf')}</p>
-            <a href="${just.archivoBase64}" download="${escapeHtml(just.archivoNombre || 'justificacion.pdf')}" class="mt-2 px-3.5 py-1.5 rounded-full bg-morado text-white text-xs font-bold hover:bg-morado/90 transition shadow-xs inline-flex items-center gap-1.5">
+            <a href="${archivoSrc}" download="${escapeHtml(just.archivoNombre || 'justificacion.pdf')}" class="mt-2 px-3.5 py-1.5 rounded-full bg-morado text-white text-xs font-bold hover:bg-morado/90 transition shadow-xs inline-flex items-center gap-1.5">
               <span>Descargar / Abrir PDF</span>
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
             </a>
@@ -13309,6 +14274,7 @@ Fundación A+`;
 
   const RENDERERS_DOCENTE = {
     resumen: renderResumenDocente,
+    notificaciones: renderNotificacionesDocente,
     perfil: renderPerfilDocente,
     asistencia: renderAsistenciaDocente,
     riesgo: renderRiesgoDocente,
@@ -14891,6 +15857,7 @@ Fundación A+`;
 
   const RENDERERS_ESTUDIANTE = {
     resumen: renderResumenEstudiante,
+    notificaciones: renderNotificacionesEstudiante,
     perfil: renderPerfilEstudiante,
     asistencia: renderAsistenciaEstudiante,
     academico: renderAcademicoEstudiante,
@@ -14898,7 +15865,6 @@ Fundación A+`;
     pensum: renderPensumEstudiante,
     memorandos: renderMemorandosEstudiante,
     pqr: renderPqrEstudiante,
-    encuestas: renderEncuestasEstudiante,
     agenda: renderAgendaEstudiante,
   };
   // Si la URL trae ?qr=... (viene de escanear un código impreso con la
