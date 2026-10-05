@@ -106,6 +106,14 @@ fundacion-api/
 - El panel administrativo permite redactar temas en la base de conocimiento (`chat_voz_conocimiento`).
 - El asistente de IA responde de forma contextualizada reconociendo quién pregunta (Estudiante, Docente, Admin o Visitante) y personalizando las respuestas con datos reales de notas, asistencias u horarios.
 
+### F. Módulo de Seguimiento y Alertas Académicas Inteligentes (A+)
+- Ubicado en `/modulo_seguimiento_alertas`.
+- **Frontend SPA**: Vite + TypeScript + Tailwind CSS + Chart.js con la identidad visual institucional de la Fundación A+.
+- **Motor Determinista de Reglas**: Parametrización y edición de umbrales en tiempo real exclusivo para Administradores.
+- **Aislamiento Estricto por Rol**: Privacidad total para Estudiantes (únicamente ven sus alertas y acuerdos) y gestión focalizada para Docentes.
+- **Intervenciones Pedagógicas**: Selección de estudiante destinatario en formulario de acompañamiento, con envío simulado de correo institucional y notificaciones en campana.
+- **Backend API & MongoDB**: Microservicio en Node.js/Express (`modulo_seguimiento_alertas/server/`) con persistencia en MongoDB.
+
 ---
 
 ## 4. Guía de Instalación y Puesta en Marcha (Entorno Local)
