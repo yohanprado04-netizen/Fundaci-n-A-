@@ -2514,6 +2514,7 @@ if (window.top !== window.self) {
     { codigo: 'admin.recursos', categoria: 'Administrativo', etiqueta: 'Recursos e Inventario' },
     { codigo: 'admin.solicitudes_recursos', categoria: 'Administrativo', etiqueta: 'Solicitudes de Recursos' },
     { codigo: 'admin.asignaciones_recursos', categoria: 'Administrativo', etiqueta: 'Préstamos y Asignaciones' },
+    { codigo: 'admin.historial_prestamos', categoria: 'Administrativo', etiqueta: 'Historial de Préstamos' },
     { codigo: 'docente.resumen', categoria: 'Docente', etiqueta: 'Resumen' },
     { codigo: 'docente.notificaciones', categoria: 'Docente', etiqueta: 'Centro de Notificaciones y Avisos' },
     { codigo: 'docente.perfil', categoria: 'Docente', etiqueta: 'Mi perfil' },
@@ -15431,6 +15432,7 @@ Fundación A+`;
     recursos: async () => { if (typeof renderRecursos === 'function') await renderRecursos(); },
     solicitudes_recursos: async () => { if (typeof renderSolicitudesAdmin === 'function') await renderSolicitudesAdmin(); },
     asignaciones_recursos: async () => { if (typeof renderAsignacionesRecursos === 'function') await renderAsignacionesRecursos(); },
+    historial_prestamos: async () => { if (typeof renderHistorialPrestamosAdmin === 'function') await renderHistorialPrestamosAdmin(); },
     formularios: async () => {
       let tries = 0;
       while (tries < 15 && !(typeof window !== 'undefined' && typeof window.renderFormularios === 'function') && typeof renderFormularios !== 'function') {
@@ -22531,6 +22533,106 @@ window.accionCheckout = async function(id) {
     </div>
   `;
 
+// --- TRAZABILIDAD Y REGISTRO EN HISTORIAL DE PRESTAMOS ---
+async function registrarPrestamoEnHistorial({ recurso, persona, tipo = 'Temporal', fechaLimite = null, motivo = '', observaciones = '', entregadoPor = null }) {
+  try {
+    const usuarios = await Store.list('usuarios') || [];
+    const pTrim = (persona || '').trim().toLowerCase();
+    const uMatch = usuarios.find(u => (u.nombre || '').trim().toLowerCase() === pTrim || (u.email || '').trim().toLowerCase() === pTrim);
+    const sesion = typeof getUsuarioSesionActual === 'function' ? getUsuarioSesionActual() : null;
+
+    const item = {
+      id: typeof uid === 'function' ? uid('prest') : ('prest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
+      recurso_id: recurso.id,
+      recurso_codigo: recurso.codigo || '',
+      recurso_nombre: recurso.nombre || '',
+      recurso_categoria: recurso.categoria || 'General',
+      recurso_serial: recurso.serial || '',
+      usuario_id: uMatch ? uMatch.id : null,
+      usuario_nombre: uMatch ? uMatch.nombre : persona,
+      usuario_email: uMatch ? (uMatch.email || '') : (persona.includes('@') ? persona : ''),
+      usuario_rol: uMatch ? (uMatch.rol || 'Estudiante') : 'Estudiante',
+      cohorte: uMatch ? (uMatch.cohorte || '') : '',
+      tipo_asignacion: tipo,
+      fecha_prestamo: new Date().toISOString(),
+      fecha_limite: fechaLimite || null,
+      fecha_devolucion: null,
+      estado: 'Activo',
+      motivo: motivo || (tipo === 'Permanente' ? 'Asignacion fija institucional' : 'Prestamo para actividades formativas'),
+      observaciones_entrega: observaciones || 'Equipo entregado en optimas condiciones operativas y fisicas.',
+      observaciones_devolucion: null,
+      entregado_por: entregadoPor || sesion?.nombre || 'Administracion',
+      recibido_por: null
+    };
+
+    if (typeof apiFetch === 'function') {
+      await apiFetch('historial_prestamos', {
+        method: 'POST',
+        body: JSON.stringify([item])
+      }).catch(err => console.warn('[registrarPrestamoEnHistorial] Error API:', err.message));
+    }
+
+    if (typeof Store !== 'undefined' && Store.clearCache) {
+      Store.clearCache('historial_prestamos');
+    }
+    return item;
+  } catch (e) {
+    console.error('[registrarPrestamoEnHistorial] Error:', e);
+    return null;
+  }
+}
+window.registrarPrestamoEnHistorial = registrarPrestamoEnHistorial;
+
+async function cerrarPrestamoEnHistorial({ recursoId, anteriorCustodio, observaciones = '', recibidoPor = null }) {
+  try {
+    const sesion = typeof getUsuarioSesionActual === 'function' ? getUsuarioSesionActual() : null;
+    const adminNombre = recibidoPor || sesion?.nombre || 'Administracion';
+
+    let prestamos = [];
+    try {
+      prestamos = await Store.list('historial_prestamos', { forceRefresh: true }) || [];
+    } catch (e) {
+      prestamos = [];
+    }
+
+    const cTrim = (anteriorCustodio || '').trim().toLowerCase();
+    const prestamoActivo = prestamos.find(p => 
+      p.recurso_id === recursoId && 
+      (p.estado === 'Activo' || p.estado === 'Retrasado') &&
+      (!cTrim || (p.usuario_nombre || '').trim().toLowerCase() === cTrim || (p.usuario_email || '').trim().toLowerCase() === cTrim)
+    ) || prestamos.find(p => p.recurso_id === recursoId && (p.estado === 'Activo' || p.estado === 'Retrasado'));
+
+    const ahora = new Date();
+    let nuevoEstado = 'Devuelto';
+    if (prestamoActivo && prestamoActivo.fecha_limite) {
+      const fLim = new Date(prestamoActivo.fecha_limite);
+      if (ahora > fLim) {
+        nuevoEstado = 'Devuelto con retraso';
+      }
+    }
+
+    if (prestamoActivo && typeof apiFetch === 'function') {
+      await apiFetch('historial_prestamos', {
+        method: 'PUT',
+        body: JSON.stringify({
+          id: prestamoActivo.id,
+          estado: nuevoEstado,
+          fecha_devolucion: ahora.toISOString(),
+          recibido_por: adminNombre,
+          observaciones_devolucion: observaciones || 'Devolucion verificada en bodega.'
+        })
+      }).catch(err => console.warn('[cerrarPrestamoEnHistorial] Error PUT api:', err.message));
+    }
+
+    if (typeof Store !== 'undefined' && Store.clearCache) {
+      Store.clearCache('historial_prestamos');
+    }
+  } catch (e) {
+    console.error('[cerrarPrestamoEnHistorial] Error:', e);
+  }
+}
+window.cerrarPrestamoEnHistorial = cerrarPrestamoEnHistorial;
+
   mostrarModalPersonalizado('Entregar Equipo (Checkout)', html, async () => {
     const selPersona = document.getElementById('co_persona').value;
     const manPersona = document.getElementById('co_persona_manual')?.value.trim();
@@ -22562,6 +22664,16 @@ window.accionCheckout = async function(id) {
       rec.fecha_entrega = new Date().toISOString();
 
       await Store.save('recursos_inventario', recursos);
+
+      // Guardar en historial permanente
+      await registrarPrestamoEnHistorial({
+        recurso: rec,
+        persona: persona,
+        tipo: tipo,
+        fechaLimite: fechaLimite,
+        motivo: tipo === 'Permanente' ? 'Asignacion fija institucional' : 'Prestamo temporal para actividades formativas'
+      });
+
       toast(`Equipo entregado a ${persona} (${tipo})`, 'success');
 
       if (typeof registrarAuditoriaAccion === 'function') {
@@ -22570,38 +22682,84 @@ window.accionCheckout = async function(id) {
 
       if (typeof renderRecursos === 'function') renderRecursos();
       if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+      if (typeof renderHistorialPrestamosAdmin === 'function') renderHistorialPrestamosAdmin();
       return true;
     }
     return false;
   });
 };
 
-// --- CHECKIN: DEVOLVER EQUIPO A DISPONIBLE ---
+// --- CHECKIN: DEVOLVER EQUIPO A DISPONIBLE CON REGISTRO HISTORICO ---
 window.accionCheckin = async function(id) {
   const recursos = await Store.list('recursos_inventario') || [];
   const idx = recursos.findIndex(x => x.id === id);
   if (idx === -1) return;
 
   const rec = recursos[idx];
-  const msg = `¿Confirmar recepción (Checkin) del equipo "${rec.nombre} (${rec.codigo})" que tenía "${rec.responsable}" y dejarlo Disponible?`;
-  if (!confirm(msg)) return;
+  const anteriorCustodio = rec.responsable || 'Usuario no registrado';
+  const vencido = isOverdue(rec);
+  const retraso = calcularRetraso(rec.fecha_limite);
 
-  const anteriorCustodio = rec.responsable;
-  rec.estado = 'Disponible';
-  rec.responsable = null;
-  rec.tipo_asignacion = null;
-  rec.fecha_limite = null;
-  rec.fecha_entrega = null;
+  const html = `
+    <div class="space-y-4 text-xs">
+      <div class="p-3.5 bg-gray-50 border border-gray-100 rounded-2xl space-y-1.5">
+        <div class="flex items-center justify-between">
+          <p class="font-extrabold text-ink text-sm">${escapeHtml(rec.nombre)}</p>
+          <span class="font-mono text-[11px] font-bold text-morado bg-morado/10 px-2 py-0.5 rounded-lg">${escapeHtml(rec.codigo || '-')}</span>
+        </div>
+        <p class="text-slate2">Custodio actual: <strong class="text-ink">${escapeHtml(anteriorCustodio)}</strong></p>
+        <p class="text-slate2">Modalidad: <span class="font-bold text-ink">${escapeHtml(rec.tipo_asignacion || 'Temporal')}</span></p>
+        ${rec.fecha_limite ? `<p class="text-slate2">Fecha limite pactada: <span class="font-bold">${new Date(rec.fecha_limite).toLocaleString()}</span></p>` : ''}
+      </div>
 
-  await Store.save('recursos_inventario', recursos);
-  toast('Equipo recibido y reincorporado a Disponible', 'success');
+      ${vencido ? `
+        <div class="p-3 rounded-xl bg-coral/10 border border-coral/30 text-coral flex items-center gap-2">
+          <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <p class="font-bold">Devolucion con retraso de ${retraso.texto}. Se registrara en la auditoria de cumplimiento.</p>
+        </div>
+      ` : `
+        <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-2">
+          <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          <p class="font-bold">Devolucion a tiempo dentro del plazo convenido.</p>
+        </div>
+      `}
 
-  if (typeof registrarAuditoriaAccion === 'function') {
-    await registrarAuditoriaAccion('Equipo devuelto', anteriorCustodio || 'Admin', 'Recursos', `${rec.nombre} (${rec.codigo})`);
-  }
+      <div>
+        <label class="block text-xs font-bold text-ink mb-1">Estado fisico y observaciones de recepcion:</label>
+        <textarea id="checkin_obs" rows="3" class="w-full border border-gray-200 rounded-xl p-2.5 text-xs focus:border-morado outline-none" placeholder="Indica el estado del equipo al recibirlo...">Devolucion verificada en bodega. Equipo recibido en optimas condiciones fisicas y operativas con accesorios completos.</textarea>
+      </div>
+    </div>
+  `;
 
-  if (typeof renderRecursos === 'function') renderRecursos();
-  if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+  mostrarModalPersonalizado('Recibir Equipo (Checkin)', html, async () => {
+    const obs = document.getElementById('checkin_obs')?.value.trim() || 'Devolucion verificada en bodega.';
+
+    rec.estado = 'Disponible';
+    rec.responsable = null;
+    rec.tipo_asignacion = null;
+    rec.fecha_limite = null;
+    rec.fecha_entrega = null;
+
+    await Store.save('recursos_inventario', recursos);
+
+    // Cerrar prestamo en historial permanente
+    await cerrarPrestamoEnHistorial({
+      recursoId: rec.id,
+      anteriorCustodio: anteriorCustodio,
+      observaciones: obs
+    });
+
+    toast('Equipo recibido y reincorporado a Disponible', 'success');
+
+    if (typeof registrarAuditoriaAccion === 'function') {
+      await registrarAuditoriaAccion('Equipo devuelto', anteriorCustodio || 'Admin', 'Recursos', `${rec.nombre} (${rec.codigo})`);
+    }
+
+    if (typeof renderRecursos === 'function') renderRecursos();
+    if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+    if (typeof renderHistorialPrestamosAdmin === 'function') renderHistorialPrestamosAdmin();
+    return true;
+  });
 };
 
 // =========================================================================
@@ -23066,6 +23224,16 @@ window.asignarEquipoDesdeModal = async function(nombreUsuario) {
       rec.fecha_entrega = new Date().toISOString();
 
       await Store.save('recursos_inventario', recursos);
+
+      // Registrar en historial permanente
+      await registrarPrestamoEnHistorial({
+        recurso: rec,
+        persona: nombreUsuario,
+        tipo: tipo,
+        fechaLimite: fechaLimite,
+        motivo: tipo === 'Permanente' ? 'Dotacion de planta' : 'Prestamo temporal para actividades formativas'
+      });
+
       toast(`Equipo entregado correctamente a ${nombreUsuario}`, 'success');
 
       if (typeof registrarAuditoriaAccion === 'function') {
@@ -23074,6 +23242,7 @@ window.asignarEquipoDesdeModal = async function(nombreUsuario) {
 
       if (typeof renderRecursos === 'function') renderRecursos();
       if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+      if (typeof renderHistorialPrestamosAdmin === 'function') renderHistorialPrestamosAdmin();
       return true;
     }
     return false;
@@ -23095,6 +23264,7 @@ async function renderSolicitarEquipoForm() {
 
   const recursos = await Store.list('recursos_inventario') || [];
   const solicitudes = await Store.list('solicitudes_recursos') || [];
+  const miHistorial = await Store.list('historial_prestamos') || [];
 
   // Buscar equipo que tenga asignado esta persona
   const equipoActual = recursos.find(r => 
@@ -23172,8 +23342,8 @@ async function renderSolicitarEquipoForm() {
   mount.innerHTML = `
     <div class="p-6 max-w-4xl mx-auto space-y-8">
       <div>
-        <h2 class="text-2xl font-extrabold text-ink tracking-tight">Reserva y Solicitud de Equipos</h2>
-        <p class="text-slate2 text-sm mt-0.5">Gestiona tus solicitudes de computadores y recursos tecnológicos ante la administración.</p>
+        <h2 class="text-2xl font-extrabold text-ink tracking-tight">Reserva y Préstamos de Equipos</h2>
+        <p class="text-slate2 text-sm mt-0.5">Consulta el estado de tus equipos, gestiona solicitudes y revisa tu historial oficial de préstamos.</p>
       </div>
 
       <!-- SECCIÓN 1: EQUIPO ACTUAL -->
@@ -23252,6 +23422,80 @@ async function renderSolicitarEquipoForm() {
                 </div>
               </div>
             `).join('')}
+          </div>
+        `}
+      </div>
+
+      <!-- SECCIÓN 4: MI HISTORIAL DE PRÉSTAMOS DE EQUIPOS (TRAZABILIDAD Y ACTAS) -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-extrabold text-ink">Mi Historial de Préstamos y Custodias</h3>
+            <p class="text-xs text-slate2 mt-0.5">Trazabilidad oficial de equipos entregados, plazos de devolución y actas digitales de custodia.</p>
+          </div>
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-morado/10 text-morado">${miHistorial.length} registro(s)</span>
+        </div>
+
+        ${miHistorial.length === 0 ? `
+          <div class="text-center p-8 bg-white border border-gray-100 rounded-2xl">
+            <svg class="w-8 h-8 mx-auto text-slate-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            <p class="text-sm font-bold text-ink">No tienes registros históricos de préstamos</p>
+            <p class="text-xs text-slate2 mt-0.5">Cuando te sea asignado un equipo o realices una solicitud aprobada, su trazabilidad aparecerá aquí.</p>
+          </div>
+        ` : `
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-2xs overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-gray-100 text-[11px] uppercase tracking-wider text-slate2">
+                    <th class="p-3.5 font-bold">Equipo Asignado</th>
+                    <th class="p-3.5 font-bold">Modalidad</th>
+                    <th class="p-3.5 font-bold">Fecha Entrega</th>
+                    <th class="p-3.5 font-bold">Plazo Límite</th>
+                    <th class="p-3.5 font-bold">Devolución</th>
+                    <th class="p-3.5 font-bold text-center">Estado</th>
+                    <th class="p-3.5 font-bold text-center">Comprobante</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50 text-xs">
+                  ${miHistorial.map(p => {
+                    const ahora = new Date();
+                    let estado = p.estado;
+                    if (estado === 'Activo' && p.fecha_limite && new Date(p.fecha_limite) < ahora) {
+                      estado = 'Retrasado';
+                    }
+                    const badge = 
+                      estado === 'Activo' ? '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">Activo</span>' :
+                      estado === 'Retrasado' ? '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-coral text-white shadow-2xs">Retrasado</span>' :
+                      estado === 'Devuelto con retraso' ? '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">Devuelto con retraso</span>' :
+                      '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Devuelto</span>';
+
+                    return `
+                      <tr class="hover:bg-gray-50/60 transition">
+                        <td class="p-3.5">
+                          <p class="font-bold text-ink">${escapeHtml(p.recurso_nombre)}</p>
+                          <div class="flex items-center gap-1.5 mt-0.5">
+                            <span class="font-mono text-[10px] font-bold text-morado bg-morado/5 px-1 py-0.5 rounded">${escapeHtml(p.recurso_codigo || '-')}</span>
+                            <span class="text-[10px] text-slate2">${escapeHtml(p.recurso_categoria || 'General')}</span>
+                          </div>
+                        </td>
+                        <td class="p-3.5 font-medium text-slate2">${escapeHtml(p.tipo_asignacion)}</td>
+                        <td class="p-3.5 font-medium text-ink">${p.fecha_prestamo ? new Date(p.fecha_prestamo).toLocaleDateString() : '-'}</td>
+                        <td class="p-3.5 font-medium ${estado === 'Retrasado' ? 'text-coral font-bold' : 'text-slate2'}">${p.fecha_limite ? new Date(p.fecha_limite).toLocaleDateString() : 'Sin límite'}</td>
+                        <td class="p-3.5 font-medium text-slate2">${p.fecha_devolucion ? new Date(p.fecha_devolucion).toLocaleDateString() : 'Pendiente'}</td>
+                        <td class="p-3.5 text-center">${badge}</td>
+                        <td class="p-3.5 text-center">
+                          <button type="button" onclick="verComprobantePrestamo('${p.id}')" class="px-2.5 py-1 rounded-xl bg-morado/10 hover:bg-morado hover:text-white text-morado text-[11px] font-bold transition cursor-pointer flex items-center gap-1 mx-auto shadow-2xs">
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            <span>Ver Acta</span>
+                          </button>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
           </div>
         `}
       </div>
@@ -23471,6 +23715,15 @@ window.responderSolicitud = async function(idSolicitud, respuesta) {
       sol.recurso_id = idRecurso;
       await Store.save('solicitudes_recursos', solicitudes);
 
+      // Registrar en historial permanente
+      await registrarPrestamoEnHistorial({
+        recurso: rec,
+        persona: sol.solicitante,
+        tipo: sol.tipo_asignacion,
+        fechaLimite: sol.fecha_limite,
+        motivo: sol.motivo || 'Solicitud de equipo aprobada por Coordinacion'
+      });
+
       toast(`Solicitud aprobada y equipo ${rec.codigo} entregado a ${sol.solicitante}`, 'success');
 
       // Notificación por correo al estudiante/docente (EmailJS principal + SMTP backend)
@@ -23494,8 +23747,463 @@ window.responderSolicitud = async function(idSolicitud, respuesta) {
       renderSolicitudesAdmin();
       if (typeof renderRecursos === 'function') renderRecursos();
       if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+      if (typeof renderHistorialPrestamosAdmin === 'function') renderHistorialPrestamosAdmin();
       return true;
     }
     return false;
   });
+};
+
+// =========================================================================
+// 5. HISTORIAL Y TRAZABILIDAD INSTITUCIONAL DE PRESTAMOS (ADMIN)
+// =========================================================================
+async function renderHistorialPrestamosAdmin() {
+  const mount = document.getElementById('mount-historial_prestamos');
+  if (!mount) return;
+
+  let prestamos = [];
+  try {
+    prestamos = await Store.list('historial_prestamos', { forceRefresh: true }) || [];
+  } catch (e) {
+    prestamos = [];
+  }
+
+  // Actualizar estado dinámico de retrasados si el préstamo sigue Activo pero su fecha límite expiró
+  const ahora = new Date();
+  prestamos.forEach(p => {
+    if (p.estado === 'Activo' && p.fecha_limite && new Date(p.fecha_limite) < ahora) {
+      p.estado = 'Retrasado';
+    }
+  });
+
+  window._ultimaListaHistorialPrestamos = prestamos;
+
+  // Métricas estadísticas
+  const total = prestamos.length;
+  const activos = prestamos.filter(p => p.estado === 'Activo').length;
+  const retrasados = prestamos.filter(p => p.estado === 'Retrasado').length;
+  const devueltos = prestamos.filter(p => p.estado === 'Devuelto' || p.estado === 'Devuelto con retraso').length;
+
+  const fEstado = window.historialPrestamosFiltroEstado || 'todos';
+  const fTipo = window.historialPrestamosFiltroTipo || 'todos';
+  const busqueda = (window.historialPrestamosBusqueda || '').toLowerCase().trim();
+
+  const filtrados = prestamos.filter(p => {
+    if (fEstado !== 'todos' && p.estado !== fEstado) return false;
+    if (fTipo !== 'todos' && p.tipo_asignacion !== fTipo) return false;
+    if (busqueda) {
+      const matchUsuario = (p.usuario_nombre || '').toLowerCase().includes(busqueda);
+      const matchEmail = (p.usuario_email || '').toLowerCase().includes(busqueda);
+      const matchRecurso = (p.recurso_nombre || '').toLowerCase().includes(busqueda);
+      const matchCodigo = (p.recurso_codigo || '').toLowerCase().includes(busqueda);
+      const matchSerial = (p.recurso_serial || '').toLowerCase().includes(busqueda);
+      if (!matchUsuario && !matchEmail && !matchRecurso && !matchCodigo && !matchSerial) return false;
+    }
+    return true;
+  });
+
+  const rows = filtrados.length > 0 ? filtrados.map(p => {
+    const estadoBadge = 
+      p.estado === 'Activo' ? '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">Activo</span>' :
+      p.estado === 'Retrasado' ? '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-coral text-white shadow-2xs animate-pulse">Retrasado</span>' :
+      p.estado === 'Devuelto con retraso' ? '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">Devuelto con retraso</span>' :
+      '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Devuelto</span>';
+
+    return `
+      <tr class="hover:bg-gray-50/60 transition">
+        <td class="p-4">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-morado/10 text-morado font-extrabold flex items-center justify-center text-xs shrink-0">
+              ${escapeHtml(p.recurso_categoria ? p.recurso_categoria.charAt(0).toUpperCase() : 'E')}
+            </div>
+            <div>
+              <p class="font-bold text-ink text-sm">${escapeHtml(p.recurso_nombre)}</p>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <span class="font-mono text-[10px] font-bold text-morado bg-morado/5 px-1.5 py-0.5 rounded">${escapeHtml(p.recurso_codigo || '-')}</span>
+                <span class="text-[10px] text-slate2">${escapeHtml(p.recurso_categoria || 'General')}</span>
+              </div>
+            </div>
+          </div>
+        </td>
+        <td class="p-4">
+          <div>
+            <p class="font-bold text-ink text-sm">${escapeHtml(p.usuario_nombre)}</p>
+            <p class="text-[11px] text-slate2">${escapeHtml(p.usuario_email || 'Sin correo')}</p>
+            <span class="inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-slate2">${escapeHtml(p.usuario_rol)}${p.cohorte ? ' - ' + escapeHtml(p.cohorte) : ''}</span>
+          </div>
+        </td>
+        <td class="p-4">
+          <span class="text-xs font-semibold ${p.tipo_asignacion === 'Permanente' ? 'text-indigo-600' : 'text-slate2'}">
+            ${escapeHtml(p.tipo_asignacion || 'Temporal')}
+          </span>
+        </td>
+        <td class="p-4">
+          <p class="text-xs font-semibold text-ink">${p.fecha_prestamo ? new Date(p.fecha_prestamo).toLocaleDateString() : '-'}</p>
+          <p class="text-[10px] text-slate2">${p.fecha_prestamo ? new Date(p.fecha_prestamo).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+        </td>
+        <td class="p-4">
+          <p class="text-xs font-semibold ${p.estado === 'Retrasado' ? 'text-coral font-bold' : 'text-ink'}">${p.fecha_limite ? new Date(p.fecha_limite).toLocaleDateString() : 'Sin limite'}</p>
+          <p class="text-[10px] text-slate2">${p.fecha_limite ? new Date(p.fecha_limite).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+        </td>
+        <td class="p-4">
+          <p class="text-xs font-semibold text-ink">${p.fecha_devolucion ? new Date(p.fecha_devolucion).toLocaleDateString() : 'Pendiente'}</p>
+          <p class="text-[10px] text-slate2">${p.fecha_devolucion ? new Date(p.fecha_devolucion).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</p>
+        </td>
+        <td class="p-4 text-center">
+          ${estadoBadge}
+        </td>
+        <td class="p-4 text-center">
+          <div class="flex items-center justify-center gap-1.5">
+            <button onclick="verComprobantePrestamo('${p.id}')" title="Ver Comprobante Digital" class="p-2 rounded-xl bg-gray-100 hover:bg-morado hover:text-white text-slate2 transition cursor-pointer shadow-2xs">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </button>
+            ${(p.estado === 'Activo' || p.estado === 'Retrasado') ? `
+              <button onclick="accionCheckin('${p.recurso_id}')" title="Recibir Equipo en Bodega (Checkin)" class="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                <span>Recibir</span>
+              </button>
+            ` : ''}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('') : `
+    <tr>
+      <td colspan="8" class="p-12 text-center text-slate2 text-xs">
+        <svg class="w-8 h-8 mx-auto text-slate-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        <p class="font-bold text-sm text-ink">No se encontraron registros de prestamos</p>
+        <p class="text-slate2 mt-0.5">Prueba cambiando los filtros o el termino de busqueda.</p>
+      </td>
+    </tr>
+  `;
+
+  mount.innerHTML = `
+    <div class="p-6 max-w-7xl mx-auto space-y-6">
+      <!-- HEADER CON TITULO Y BOTON EXPORTAR -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-2xl font-extrabold text-ink tracking-tight">Historial y Trazabilidad de Prestamos de Equipos</h2>
+          <p class="text-xs text-slate2 mt-0.5">Registro institucional y trazabilidad completa de cada asignacion, entrega y devolucion de activos tecnologicos.</p>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <button onclick="exportarHistorialPrestamosCSV()" class="px-4 py-2.5 rounded-xl bg-ink text-white hover:bg-black text-xs font-bold transition shadow-sm flex items-center gap-2 cursor-pointer">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            Exportar Reporte CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- METRICAS DE RESUMEN -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs">
+          <p class="text-[10px] uppercase font-bold text-slate2">Total Prestamos</p>
+          <p class="text-2xl font-black text-ink mt-1">${total}</p>
+          <p class="text-[10px] text-slate2 mt-0.5">Historico acumulado</p>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs">
+          <p class="text-[10px] uppercase font-bold text-blue-600">Activos en Custodia</p>
+          <p class="text-2xl font-black text-blue-700 mt-1">${activos}</p>
+          <p class="text-[10px] text-slate2 mt-0.5">Equipos prestados ahora</p>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs ${retrasados > 0 ? 'border-coral/40 bg-coral/5' : ''}">
+          <p class="text-[10px] uppercase font-bold ${retrasados > 0 ? 'text-coral' : 'text-slate2'}">Con Retraso</p>
+          <p class="text-2xl font-black ${retrasados > 0 ? 'text-coral' : 'text-ink'} mt-1">${retrasados}</p>
+          <p class="text-[10px] text-slate2 mt-0.5">Fecha limite vencida</p>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs">
+          <p class="text-[10px] uppercase font-bold text-emerald-600">Devueltos</p>
+          <p class="text-2xl font-black text-emerald-700 mt-1">${devueltos}</p>
+          <p class="text-[10px] text-slate2 mt-0.5">Reingresados a bodega</p>
+        </div>
+      </div>
+
+      <!-- BARRA DE FILTROS Y BUSQUEDA -->
+      <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs space-y-3">
+        <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <div class="relative flex-1">
+            <input type="text" id="busquedaHistorialPrestamos" value="${escapeHtml(window.historialPrestamosBusqueda || '')}" oninput="filtrarHistorialPrestamosLive(this.value)" placeholder="Buscar por custodio, correo, recurso, codigo o serial..." class="w-full text-xs border border-gray-200 rounded-xl pl-9 pr-8 py-2.5 focus:border-morado outline-none bg-white font-medium" />
+            <svg class="w-4 h-4 text-slate2 absolute left-3 top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <button type="button" id="btnLimpiarBusquedaHistorial" onclick="limpiarBusquedaHistorialPrestamos()" class="${window.historialPrestamosBusqueda ? '' : 'hidden'} absolute right-3 top-3 text-slate-400 hover:text-ink cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <select onchange="window.historialPrestamosFiltroEstado=this.value; renderHistorialPrestamosAdmin();" class="text-xs border border-gray-200 rounded-xl px-3 py-2 bg-white text-ink font-semibold outline-none focus:border-morado">
+              <option value="todos" ${fEstado === 'todos' ? 'selected' : ''}>Todos los Estados</option>
+              <option value="Activo" ${fEstado === 'Activo' ? 'selected' : ''}>Activos</option>
+              <option value="Retrasado" ${fEstado === 'Retrasado' ? 'selected' : ''}>Retrasados</option>
+              <option value="Devuelto" ${fEstado === 'Devuelto' ? 'selected' : ''}>Devueltos</option>
+              <option value="Devuelto con retraso" ${fEstado === 'Devuelto con retraso' ? 'selected' : ''}>Devueltos con retraso</option>
+            </select>
+
+            <select onchange="window.historialPrestamosFiltroTipo=this.value; renderHistorialPrestamosAdmin();" class="text-xs border border-gray-200 rounded-xl px-3 py-2 bg-white text-ink font-semibold outline-none focus:border-morado">
+              <option value="todos" ${fTipo === 'todos' ? 'selected' : ''}>Todas las Modalidades</option>
+              <option value="Temporal" ${fTipo === 'Temporal' ? 'selected' : ''}>Temporal</option>
+              <option value="Permanente" ${fTipo === 'Permanente' ? 'selected' : ''}>Permanente</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- TABLA PRINCIPAL DE HISTORIAL -->
+      <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50/70 border-b border-gray-100 text-[11px] uppercase tracking-wider text-slate2">
+                <th class="p-4 font-bold">Dispositivo / Recurso</th>
+                <th class="p-4 font-bold">Custodio / Usuario</th>
+                <th class="p-4 font-bold">Modalidad</th>
+                <th class="p-4 font-bold">Prestamo</th>
+                <th class="p-4 font-bold">Limite</th>
+                <th class="p-4 font-bold">Devolucion</th>
+                <th class="p-4 font-bold text-center">Estado</th>
+                <th class="p-4 font-bold text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-historial-prestamos" class="divide-y divide-gray-50 text-xs">
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+window.renderHistorialPrestamosAdmin = renderHistorialPrestamosAdmin;
+
+window.filtrarHistorialPrestamosLive = function(texto) {
+  window.historialPrestamosBusqueda = texto;
+  const btnLimpiar = document.getElementById('btnLimpiarBusquedaHistorial');
+  if (btnLimpiar) btnLimpiar.classList.toggle('hidden', !texto);
+  renderHistorialPrestamosAdmin();
+};
+
+window.limpiarBusquedaHistorialPrestamos = function() {
+  window.historialPrestamosBusqueda = '';
+  const input = document.getElementById('busquedaHistorialPrestamos');
+  if (input) {
+    input.value = '';
+    input.focus();
+  }
+  renderHistorialPrestamosAdmin();
+};
+
+window.exportarHistorialPrestamosCSV = async function() {
+  const lista = window._ultimaListaHistorialPrestamos || await Store.list('historial_prestamos') || [];
+  if (lista.length === 0) {
+    toast('No hay registros de prestamos para exportar.', 'info');
+    return;
+  }
+
+  const encabezados = [
+    'ID Prestamo',
+    'Codigo Recurso',
+    'Nombre Recurso',
+    'Categoria',
+    'Serial',
+    'Custodio',
+    'Rol',
+    'Email',
+    'Cohorte',
+    'Modalidad',
+    'Fecha Prestamo',
+    'Fecha Limite',
+    'Fecha Devolucion',
+    'Estado',
+    'Entregado Por',
+    'Recibido Por',
+    'Motivo',
+    'Observaciones Entrega',
+    'Observaciones Devolucion'
+  ];
+
+  const escapeCSV = (val) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const filas = lista.map(p => [
+    escapeCSV(p.id),
+    escapeCSV(p.recurso_codigo),
+    escapeCSV(p.recurso_nombre),
+    escapeCSV(p.recurso_categoria),
+    escapeCSV(p.recurso_serial),
+    escapeCSV(p.usuario_nombre),
+    escapeCSV(p.usuario_rol),
+    escapeCSV(p.usuario_email),
+    escapeCSV(p.cohorte),
+    escapeCSV(p.tipo_asignacion),
+    escapeCSV(p.fecha_prestamo ? new Date(p.fecha_prestamo).toLocaleString() : ''),
+    escapeCSV(p.fecha_limite ? new Date(p.fecha_limite).toLocaleString() : ''),
+    escapeCSV(p.fecha_devolucion ? new Date(p.fecha_devolucion).toLocaleString() : ''),
+    escapeCSV(p.estado),
+    escapeCSV(p.entregado_por),
+    escapeCSV(p.recibido_por || 'N/A'),
+    escapeCSV(p.motivo),
+    escapeCSV(p.observaciones_entrega),
+    escapeCSV(p.observaciones_devolucion)
+  ].join(','));
+
+  const csvContent = '\uFEFF' + [encabezados.join(','), ...filas].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const hoy = new Date().toISOString().slice(0, 10);
+  a.download = `historial_prestamos_fundacion_${hoy}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Reporte CSV exportado exitosamente', 'success');
+};
+
+window.verComprobantePrestamo = async function(idPrestamo) {
+  const lista = await Store.list('historial_prestamos') || [];
+  const p = lista.find(x => x.id === idPrestamo);
+  if (!p) {
+    toast('No se encontro el registro del prestamo.', 'error');
+    return;
+  }
+
+  const fechaP = p.fecha_prestamo ? new Date(p.fecha_prestamo).toLocaleString() : 'No registrada';
+  const fechaL = p.fecha_limite ? new Date(p.fecha_limite).toLocaleString() : 'Sin limite (Permanente)';
+  const fechaD = p.fecha_devolucion ? new Date(p.fecha_devolucion).toLocaleString() : 'Pendiente de devolucion';
+
+  const estadoBadgeClass = 
+    p.estado === 'Activo' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+    p.estado === 'Retrasado' ? 'bg-coral text-white border-coral' :
+    p.estado === 'Devuelto con retraso' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+    'bg-emerald-100 text-emerald-800 border-emerald-200';
+
+  const html = `
+    <div id="comprobante-imprimible" class="p-2 space-y-5 text-ink">
+      <!-- HEADER INSTITUCIONAL -->
+      <div class="border-b border-gray-200 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-morado text-white flex items-center justify-center font-extrabold text-base shadow-sm">
+            A+
+          </div>
+          <div>
+            <h4 class="text-base font-black text-ink tracking-tight uppercase">Fundacion A+</h4>
+            <p class="text-[11px] text-slate2 font-medium">Nit: 901.810.053-1 | Sistema de Gestion de Activos Tecnologicos</p>
+          </div>
+        </div>
+        <div class="text-left sm:text-right">
+          <span class="inline-block px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${estadoBadgeClass}">
+            ${escapeHtml(p.estado)}
+          </span>
+          <p class="font-mono text-[11px] text-slate2 mt-1">Folio: ${escapeHtml(p.id)}</p>
+        </div>
+      </div>
+
+      <div class="text-center bg-slate-50 py-2.5 px-4 rounded-xl border border-gray-200">
+        <p class="text-xs font-black uppercase tracking-widest text-slate2">Acta y Comprobante Digital de Custodia de Equipo</p>
+      </div>
+
+      <!-- SECCION 1: BENEFICIARIO / CUSTODIO -->
+      <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs space-y-2">
+        <p class="text-xs font-black uppercase tracking-wider text-morado flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+          Informacion del Custodio / Beneficiario
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div>
+            <p class="text-[10px] uppercase font-bold text-slate2">Nombre Completo</p>
+            <p class="font-bold text-ink mt-0.5">${escapeHtml(p.usuario_nombre)}</p>
+          </div>
+          <div>
+            <p class="text-[10px] uppercase font-bold text-slate2">Rol Institucional</p>
+            <p class="font-semibold text-ink mt-0.5">${escapeHtml(p.usuario_rol)}${p.cohorte ? ' — Cohorte ' + escapeHtml(p.cohorte) : ''}</p>
+          </div>
+          <div class="sm:col-span-2">
+            <p class="text-[10px] uppercase font-bold text-slate2">Correo Electronico</p>
+            <p class="font-mono text-ink mt-0.5">${escapeHtml(p.usuario_email || 'Sin correo registrado')}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECCION 2: DATOS DEL EQUIPO -->
+      <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs space-y-2">
+        <p class="text-xs font-black uppercase tracking-wider text-turquesa flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          Especificaciones del Dispositivo
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div>
+            <p class="text-[10px] uppercase font-bold text-slate2">Dispositivo / Equipo</p>
+            <p class="font-bold text-ink mt-0.5">${escapeHtml(p.recurso_nombre)}</p>
+          </div>
+          <div>
+            <p class="text-[10px] uppercase font-bold text-slate2">Codigo Institucional</p>
+            <p class="font-mono font-bold text-morado mt-0.5">${escapeHtml(p.recurso_codigo || '-')}</p>
+          </div>
+          <div>
+            <p class="text-[10px] uppercase font-bold text-slate2">Categoria</p>
+            <p class="font-semibold text-ink mt-0.5">${escapeHtml(p.recurso_categoria || 'General')}</p>
+          </div>
+          <div>
+            <p class="text-[10px] uppercase font-bold text-slate2">Numero de Serie (SN)</p>
+            <p class="font-mono text-ink mt-0.5">${escapeHtml(p.recurso_serial || 'No especificado')}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECCION 3: CRONOGRAMA Y AUDITORIA -->
+      <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs space-y-2">
+        <p class="text-xs font-black uppercase tracking-wider text-ink flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          Tiempos y Responsables de Entrega / Recepcion
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div>
+            <p class="text-[10px] uppercase font-bold text-slate2">Fecha de Prestamo</p>
+            <p class="font-bold text-ink mt-0.5">${fechaP}</p>
+            <p class="text-[10px] text-slate2">Entregado por: ${escapeHtml(p.entregado_por || 'Administracion')}</p>
+          </div>
+          <div>
+            <p class="text-[10px] uppercase font-bold text-slate2">Plazo Limite</p>
+            <p class="font-bold text-ink mt-0.5">${fechaL}</p>
+            <p class="text-[10px] text-slate2">Modalidad: ${escapeHtml(p.tipo_asignacion)}</p>
+          </div>
+          <div>
+            <p class="text-[10px] uppercase font-bold text-slate2">Fecha de Devolucion</p>
+            <p class="font-bold text-ink mt-0.5">${fechaD}</p>
+            <p class="text-[10px] text-slate2">Recibido por: ${escapeHtml(p.recibido_por || 'N/A')}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECCION 4: OBSERVACIONES -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div class="p-3 bg-gray-50 rounded-xl border border-gray-200">
+          <p class="text-[10px] uppercase font-bold text-slate2 mb-1">Observaciones en la Entrega:</p>
+          <p class="italic text-ink">${escapeHtml(p.observaciones_entrega || 'Sin observaciones registradas.')}</p>
+        </div>
+        <div class="p-3 bg-gray-50 rounded-xl border border-gray-200">
+          <p class="text-[10px] uppercase font-bold text-slate2 mb-1">Observaciones en la Devolucion:</p>
+          <p class="italic text-ink">${escapeHtml(p.observaciones_devolucion || 'Pendiente de recepcion final.')}</p>
+        </div>
+      </div>
+
+      <!-- CLAUSULA LEGAL INSTITUCIONAL -->
+      <div class="p-3 rounded-xl bg-slate-50 border border-gray-200 text-[10px] text-slate2 space-y-1">
+        <p class="font-bold text-ink uppercase">Compromiso y Responsabilidad Institucional:</p>
+        <p>El custodio declara recibir el equipo antes descrito a entera satisfaccion para su uso exclusivo en actividades de formacion de la Fundacion A+. Se compromete a cuidar el hardware y software, no instalar software no autorizado, y reintegrarlo en la fecha establecida en el mismo estado en que fue entregado.</p>
+      </div>
+
+      <!-- ACCIONES DEL COMPROBANTE -->
+      <div class="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+        <button type="button" onclick="window.print()" class="px-4 py-2 rounded-xl bg-ink text-white text-xs font-bold hover:bg-black transition flex items-center gap-2 cursor-pointer shadow-sm">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+          Imprimir Comprobante Oficial
+        </button>
+      </div>
+    </div>
+  `;
+
+  mostrarModalPersonalizado(`Comprobante Oficial de Prestamo #${p.id}`, html);
 };

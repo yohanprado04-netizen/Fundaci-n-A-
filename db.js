@@ -171,6 +171,7 @@ const ENTIDADES_MYSQL = new Set([
   'justificaciones_asistencia', // excusas médicas / laborales de asistencia en MySQL
   'proyectos_fundacion',     // portafolio de proyectos e iniciativas A+ de la Fundación
   'proyectos_estudiantes',   // proyectos de desarrollo creados por estudiantes
+  'historial_prestamos',     // trazabilidad e historial de préstamos y custodias de equipos
 ]);
 
 // Entidades que son objetos únicos (no arrays).
