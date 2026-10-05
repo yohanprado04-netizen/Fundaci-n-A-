@@ -1443,3 +1443,62 @@ def contexto_superadmin(texto_ultimo_mensaje: str = "", historial: Optional[list
         f"{bloque_persona}\n"
         f"{postulacion}"
     )
+
+
+def contexto_aliado_donante(email: str, nombre: str, rol: str, cohortes_permitidas: Optional[str] = None, texto_ultimo_mensaje: str = "", historial: Optional[list] = None) -> str:
+    with get_connection() as conn, conn.cursor() as cur:
+        # Conteos reales de usuarios
+        cur.execute("SELECT rol, COUNT(*) AS n FROM usuarios GROUP BY rol")
+        conteos = {r["rol"]: r["n"] for r in cur.fetchall()}
+        total_usuarios = sum(conteos.values())
+        trainees = conteos.get("Estudiante", 0)
+        docentes = conteos.get("Docente", 0)
+        aliados = conteos.get("Aliado", 0)
+        donantes = conteos.get("Donante", 0)
+        coordinadores = conteos.get("Coordinador", 0) + conteos.get("Administrador", 0)
+
+        # Cohortes reales
+        cur.execute("SELECT nombre FROM modulos ORDER BY nombre ASC")
+        todas_cohortes = [r["nombre"] for r in cur.fetchall()]
+        total_cohortes = len(todas_cohortes)
+
+        # Proyectos estudiantiles reales
+        cur.execute("SELECT titulo, estudiante_nombre, cohorte, categoria FROM proyectos_estudiantes ORDER BY creado_en DESC LIMIT 10")
+        proyectos_est = cur.fetchall()
+
+        # Proyectos institucionales de la fundación reales con visibilidad inversores
+        cur.execute("SELECT id, nombre, categoria, estado, sroi, inversion FROM proyectos_fundacion WHERE visible_inversores = 1 ORDER BY nombre ASC LIMIT 10")
+        proyectos_fund = cur.fetchall()
+
+    resumen_proy_est = ""
+    if proyectos_est:
+        resumen_proy_est = "\nProyectos de estudiantes registrados actualmente:\n" + "\n".join(
+            f"- '{p['titulo']}' por {p['estudiante_nombre']} ({p['cohorte']} - {p['categoria']})"
+            for p in proyectos_est
+        )
+    else:
+        resumen_proy_est = "\nActualmente no hay proyectos estudiantiles publicados en el sistema."
+
+    resumen_proy_fund = ""
+    if proyectos_fund:
+        resumen_proy_fund = "\nIniciativas de la Fundación A+ en cartera:\n" + "\n".join(
+            f"- [{p['id']}] {p['nombre']} ({p['categoria']}) - Estado: {p['estado']} - SROI: +{p['sroi']}%"
+            for p in proyectos_fund
+        )
+    else:
+        resumen_proy_fund = "\nActualmente la cartera de iniciativas de la Fundación A+ se encuentra en consolidación y no hay iniciativas de prueba cargadas."
+
+    return (
+        f"El usuario actual ha iniciado sesión como {rol.upper()} en la plataforma de la Fundación A+ "
+        f"(Nombre: {nombre}, Correo: {email}).\n"
+        "DATOS OFICIALES Y REALES EN TIEMPO REAL DEL SISTEMA:\n"
+        f"- Total real de usuarios registrados en el sistema: {total_usuarios} usuarios "
+        f"({trainees} estudiantes/trainees, {docentes} docentes, {aliados} aliados, {donantes} donantes y {coordinadores} administradores).\n"
+        f"- Cohortes registradas en el programa TrAIning: {total_cohortes} ({', '.join(todas_cohortes) if todas_cohortes else 'Ninguna'}).\n"
+        f"{resumen_proy_est}\n"
+        f"{resumen_proy_fund}\n"
+        "INSTRUCCIONES CRÍTICAS PARA ESTE ROL:\n"
+        "1. El único programa formativo tecnológico activo es el 'TrAIning de 100 a 1000+'. NUNCA inventes programas como 'Cimentación Académica', 'Desarrollo Territorial Sostenible' ni 'Desarrollo Territorial Endógeno'.\n"
+        "2. NUNCA digas que hay más de 1000 usuarios en la plataforma. La cifra real de usuarios registrados es la indicada arriba.\n"
+        "3. Trata al usuario con cortesía reconociendo su rol institucional y responde a sus consultas sobre impacto, estudiantes y proyectos con estos datos reales.\n"
+    )

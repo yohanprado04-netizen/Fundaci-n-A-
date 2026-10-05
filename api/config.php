@@ -71,7 +71,23 @@ header('Access-Control-Max-Age: 86400');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 header('Referrer-Policy: strict-origin-when-cross-origin');
-header('Permissions-Policy: camera=(self), microphone=(), geolocation=()');
+header('Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=()');
+header('Cross-Origin-Opener-Policy: same-origin-allow-popups');
+header('Cross-Origin-Resource-Policy: cross-origin');
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: blob: https:; connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 https://api.anthropic.com; media-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self';");
+
+// Enforce HSTS en conexiones HTTPS seguras
+$esHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
+           (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ||
+           (!empty($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443);
+if ($esHttps) {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
+}
+
+// Ocultar huellas de tecnología del servidor
+header_remove('X-Powered-By');
+@ini_set('expose_php', '0');
+
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
@@ -147,6 +163,12 @@ function responderErrorDb(Exception $e, string $accion = 'procesar la solicitud'
 function leerBodyJson(): array {
     $crudo = file_get_contents('php://input');
     if ($crudo === '' || $crudo === false) return [];
+
+    $cType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+    if ($cType !== '' && stripos($cType, 'application/json') === false && stripos($cType, 'multipart/form-data') === false) {
+        responderError('Content-Type no soportado. Debe ser application/json.', 415);
+    }
+
     $datos = json_decode($crudo, true);
     if (json_last_error() !== JSON_ERROR_NONE) {
         responderError('El cuerpo de la petición no es JSON válido.', 400);

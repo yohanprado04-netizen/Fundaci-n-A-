@@ -70,62 +70,7 @@ function passwordValidaConMigracion(PDO $pdo, string $password, string $hashGuar
     return false;
 }
 
-// ── Rate Limiting contra ataques de fuerza bruta ──────────────────────
-function inicializarTablaRateLimit(PDO $pdo): void {
-    static $hecho = false;
-    if ($hecho) return;
-    try {
-        $pdo->exec("CREATE TABLE IF NOT EXISTS rate_limits (
-            clave VARCHAR(128) PRIMARY KEY,
-            intentos INT NOT NULL DEFAULT 1,
-            bloqueado_hasta INT NOT NULL DEFAULT 0,
-            ultimo_intento INT NOT NULL DEFAULT 0
-        ) ENGINE=InnoDB");
-        $hecho = true;
-    } catch (Exception $e) {}
-}
-
-function verificarRateLimit(PDO $pdo, string $clave, int $maxIntentos = 5, int $segundosVentana = 300): void {
-    inicializarTablaRateLimit($pdo);
-    $ahora = time();
-    try {
-        $stmt = $pdo->prepare("SELECT intentos, bloqueado_hasta, ultimo_intento FROM rate_limits WHERE clave = ? LIMIT 1");
-        $stmt->execute([$clave]);
-        $row = $stmt->fetch();
-        if ($row) {
-            if ($row['bloqueado_hasta'] > $ahora) {
-                $minutos = ceil(($row['bloqueado_hasta'] - $ahora) / 60);
-                responderError("Demasiados intentos fallidos. Tu acceso está temporalmente bloqueado por $minutos minuto(s).", 429);
-            }
-            if (($ahora - $row['ultimo_intento']) > $segundosVentana) {
-                $stmtReset = $pdo->prepare("UPDATE rate_limits SET intentos = 0, bloqueado_hasta = 0, ultimo_intento = ? WHERE clave = ?");
-                $stmtReset->execute([$ahora, $clave]);
-            }
-        }
-    } catch (Exception $e) {}
-}
-
-function registrarIntentoFallido(PDO $pdo, string $clave, int $maxIntentos = 5, int $segundosBloqueo = 600): void {
-    inicializarTablaRateLimit($pdo);
-    $ahora = time();
-    try {
-        $stmt = $pdo->prepare("INSERT INTO rate_limits (clave, intentos, bloqueado_hasta, ultimo_intento)
-            VALUES (?, 1, 0, ?)
-            ON DUPLICATE KEY UPDATE
-                intentos = intentos + 1,
-                bloqueado_hasta = IF(intentos >= ?, ? + ?, bloqueado_hasta),
-                ultimo_intento = ?");
-        $stmt->execute([$clave, $ahora, $maxIntentos, $ahora, $segundosBloqueo, $ahora]);
-    } catch (Exception $e) {}
-}
-
-function limpiarRateLimit(PDO $pdo, string $clave): void {
-    try {
-        $stmt = $pdo->prepare("DELETE FROM rate_limits WHERE clave = ?");
-        $stmt->execute([$clave]);
-    } catch (Exception $e) {}
-}
-
+// ── Rate Limiting contra ataques de fuerza bruta (definido centralmente en middleware.php) ──
 $ipCliente = obtenerIpCliente();
 $claveIp = 'ip:' . $ipCliente;
 $claveEmail = 'email:' . $email;
@@ -135,7 +80,7 @@ verificarRateLimit($pdo, $claveIp);
 verificarRateLimit($pdo, $claveEmail);
 
 // ── 1) Superadmin (tabla de una sola fila, sin relación con `usuarios`) ──
-$stmt = $pdo->prepare('SELECT id, email, password FROM superadmin_credentials WHERE LOWER(email) = ? LIMIT 1');
+$stmt = $pdo->prepare('SELECT id, email, password, token_version FROM superadmin_credentials WHERE LOWER(email) = ? LIMIT 1');
 $stmt->execute([$email]);
 $superadmin = $stmt->fetch();
 
@@ -143,7 +88,11 @@ if ($superadmin) {
     if (passwordValidaConMigracion($pdo, $password, $superadmin['password'], 'superadmin_credentials', 'id', $superadmin['id'])) {
         limpiarRateLimit($pdo, $claveIp);
         limpiarRateLimit($pdo, $claveEmail);
-        $token = generarToken(['email' => $superadmin['email'], 'rol' => 'Superadmin']);
+        $token = generarToken([
+            'email' => $superadmin['email'],
+            'rol' => 'Superadmin',
+            'v' => (int)($superadmin['token_version'] ?? 1),
+        ]);
         establecerCookieAuth($token);
         registrarAuditoriaLogin($pdo, 'Exitoso', $email, 'Superadmin');
         responderJson(['token' => $token, 'usuario' => ['email' => $superadmin['email'], 'nombre' => 'Superadmin', 'rol' => 'Superadmin']]);
@@ -159,7 +108,7 @@ if ($superadmin) {
 // siguen 'Pendiente' de aprobación — mismo bloqueo que hacía
 // submitLogin() en app.js antes de revisar el rol.
 $stmt = $pdo->prepare(
-    "SELECT id, nombre, email, password, rol, cohorte, estado, estado_registro, foto_url, descripcion
+    "SELECT id, nombre, email, password, rol, cohorte, cohortes_permitidas, estado, estado_registro, foto_url, descripcion, telefono, documento, habilidades, token_version
      FROM usuarios WHERE LOWER(email) = ? LIMIT 1"
 );
 $stmt->execute([$email]);
@@ -191,33 +140,39 @@ limpiarRateLimit($pdo, $claveIp);
 limpiarRateLimit($pdo, $claveEmail);
 registrarAuditoriaLogin($pdo, 'Exitoso', $email, $usuario['rol']);
 
-// Los perfiles asignados (usuario_perfiles) NO estaban en el objeto que
-// devuelve el login — solo los devolvía el GET de /usuarios. Como
-// currentDocente/currentEstudiante/currentAdminUser se llenan con ESTA
-// respuesta de login (no con el GET de /usuarios), permisoUsuarioSobrePanel()
-// siempre veía perfiles=[] sin importar lo que se asignara desde el panel
-// de Usuarios, y por eso el aviso "no tiene ningún perfil asignado" nunca
-// se iba aunque el perfil estuviera bien guardado en la base de datos.
 $stmtPerfiles = $pdo->prepare('SELECT perfil_id FROM usuario_perfiles WHERE usuario_id = ?');
 $stmtPerfiles->execute([$usuario['id']]);
 $perfilesUsuario = array_column($stmtPerfiles->fetchAll(), 'perfil_id');
 
+$cohortesPermitidas = ['todas'];
+if (!empty($usuario['cohortes_permitidas'])) {
+    $dec = json_decode($usuario['cohortes_permitidas'], true);
+    $cohortesPermitidas = is_array($dec) ? $dec : array_map('trim', explode(',', $usuario['cohortes_permitidas']));
+}
+
+$habilidadesUsuario = [];
+if (!empty($usuario['habilidades'])) {
+    $decHab = json_decode($usuario['habilidades'], true);
+    $habilidadesUsuario = is_array($decHab) ? $decHab : array_values(array_filter(array_map('trim', explode(',', $usuario['habilidades']))));
+}
+
 $token = generarToken([
     'id' => $usuario['id'], 'email' => $usuario['email'], 'rol' => $usuario['rol'],
     'cohorte' => $usuario['cohorte'],
+    'cohortes_permitidas' => $cohortesPermitidas,
+    'v' => (int)($usuario['token_version'] ?? 1),
 ]);
 establecerCookieAuth($token);
+
 responderJson([
     'token' => $token,
     'usuario' => [
         'id' => $usuario['id'], 'nombre' => $usuario['nombre'], 'email' => $usuario['email'],
         'rol' => $usuario['rol'], 'cohorte' => $usuario['cohorte'],
-        // CORREGIDO: faltaban estos dos campos aquí — currentEstudiante/
-        // currentDocente en app.js se llenan directo con esta respuesta
-        // del login (no siempre se refrescan con GET /api/usuarios), así
-        // que aunque foto_url/descripcion ya estuvieran guardados en
-        // MySQL, no se veían al entrar hasta que algo más disparara una
-        // recarga completa de usuarios.
+        'cohortesPermitidas' => $cohortesPermitidas,
+        'telefono' => $usuario['telefono'] ?? '',
+        'documento' => $usuario['documento'] ?? '',
+        'habilidades' => $habilidadesUsuario,
         'fotoUrl' => $usuario['foto_url'] ?? '',
         'descripcion' => $usuario['descripcion'] ?? '',
         'perfiles' => $perfilesUsuario,
@@ -225,14 +180,27 @@ responderJson([
 ]);
 
 /**
- * Registra el intento en auditoria_login — mismo propósito que
- * registrarAuditoriaLogin() en app.js (visible en Configuración >
- * Auditoría para el Superadmin), ahora persistido en MySQL en vez de
- * localStorage.
+ * Registra el intento en auditoria_login con encadenamiento criptografico (HMAC-SHA256)
+ * para detectar e impedir la alteracion o eliminacion fraudulenta de trazas de auditoria.
  */
 function registrarAuditoriaLogin(PDO $pdo, string $resultado, string $email, string $rol): void {
+    $id = bin2hex(random_bytes(16));
+    $fecha = date('Y-m-d');
+    $hora = date('H:i:s');
+
+    $ultimoHash = 'GENESIS';
+    try {
+        $stmtH = $pdo->query('SELECT hash_integridad FROM auditoria_login WHERE hash_integridad IS NOT NULL ORDER BY fecha DESC, hora DESC LIMIT 1');
+        $filaH = $stmtH ? $stmtH->fetch(PDO::FETCH_ASSOC) : null;
+        if ($filaH && !empty($filaH['hash_integridad'])) {
+            $ultimoHash = $filaH['hash_integridad'];
+        }
+    } catch (Exception $e) {}
+
+    $hashIntegridad = hash_hmac('sha256', "$id|$fecha|$hora|$resultado|$email|$rol|$ultimoHash", JWT_SECRET);
+
     $stmt = $pdo->prepare(
-        'INSERT INTO auditoria_login (id, fecha, hora, resultado, email, rol) VALUES (?, CURDATE(), ?, ?, ?, ?)'
+        'INSERT INTO auditoria_login (id, fecha, hora, resultado, email, rol, hash_integridad) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
-    $stmt->execute([bin2hex(random_bytes(16)), date('H:i:s'), $resultado, $email, $rol]);
+    $stmt->execute([$id, $fecha, $hora, $resultado, $email, $rol, $hashIntegridad]);
 }

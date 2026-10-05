@@ -726,25 +726,82 @@ function publicarDefinicionPublica(array $f, array $preguntas, array $vigencia):
 
 function validarArchivoFormulario(array $archivo): void
 {
-    $nombre = (string) ($archivo['nombre'] ?? '');
-    $mime = (string) ($archivo['mime'] ?? '');
+    $nombre = trim((string) ($archivo['nombre'] ?? ''));
+    $mime = trim(strtolower((string) ($archivo['mime'] ?? '')));
     $datos = (string) ($archivo['datos'] ?? '');
+
     if ($datos === '' || $nombre === '') {
         responderError('Archivo incompleto.', 400);
     }
-    if (!preg_match('#^data:[^;]+;base64,#', $datos)) {
-        responderError('El archivo debe enviarse como data URL.', 400);
+
+    // Mitigacion de Path Traversal y Null Byte Injection
+    if (strpos($nombre, "\0") !== false || preg_match('/[\/\\\\]|\.\./', $nombre)) {
+        responderError('Nombre de archivo inválido o sospechoso.', 400);
     }
+
+    // Mitigacion de ataques con extensiones dobles ejecutables (ej. payload.php.png)
+    if (preg_match('/\.(php|phtml|phar|sh|pl|py|cgi|exe|bat|cmd|vbs|js)\./i', $nombre)) {
+        responderError('Nombre de archivo no permitido por razones de seguridad.', 400);
+    }
+
+    // Extension estrictamente permitida (SVG prohibido explicitamente por riesgo XSS almacenado)
+    $okExt = preg_match('/\.(pdf|png|jpe?g|gif|webp|docx?|xlsx?)$/i', $nombre);
+    if (!$okExt) {
+        responderError('Extensión no permitida. Solo se admiten archivos PDF, imágenes (PNG, JPG, GIF, WEBP), Word o Excel.', 400);
+    }
+
+    if (!preg_match('#^data:[^;]+;base64,#', $datos)) {
+        responderError('El archivo debe enviarse como data URL en base64.', 400);
+    }
+
     $raw = base64_decode(substr($datos, strpos($datos, ',') + 1), true);
     if ($raw === false) {
-        responderError('Archivo corrupto.', 400);
+        responderError('El archivo enviado está corrupto o mal codificado.', 400);
     }
+
     if (strlen($raw) > FORM_ARCHIVO_MAX) {
         responderError('El archivo no puede superar 8 MB.', 400);
     }
-    $okExt = preg_match('/\.(pdf|png|jpe?g|gif|webp|docx?|xlsx?)$/i', $nombre);
-    if (!$okExt && $mime && !in_array($mime, FORM_ARCHIVO_MIMES, true)) {
-        responderError('Tipo de archivo no permitido. Usa PDF, imagen, Word o Excel.', 400);
+
+    // Validacion estricta de Content-Type MIME declarado
+    if (!$mime || !in_array($mime, FORM_ARCHIVO_MIMES, true)) {
+        responderError('Tipo MIME declarado no permitido. Usa PDF, imagen, Word o Excel.', 400);
+    }
+
+    // Validacion criptografica/binaria de Magic Bytes para neutralizar archivos políglotas y Web Shells
+    $mimesRealesPermitidos = [
+        'application/pdf',
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/zip', // DOCX y XLSX son tecnicamente contenedores ZIP
+        'application/octet-stream',
+    ];
+
+    if (function_exists('finfo_open')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo) {
+            $mimeDetectado = strtolower(finfo_buffer($finfo, $raw) ?: '');
+            finfo_close($finfo);
+
+            // Bloqueo inmediato si los magic bytes detectan scripts, ejecutables o SVG
+            $mimesPeligrosos = ['text/x-php', 'text/html', 'application/x-dosexec', 'application/x-sh', 'image/svg+xml', 'application/javascript'];
+            if (in_array($mimeDetectado, $mimesPeligrosos, true)) {
+                responderError('Contenido binario no seguro detectado en el archivo.', 400);
+            }
+
+            if ($mimeDetectado !== '' && !in_array($mimeDetectado, $mimesRealesPermitidos, true)) {
+                responderError('El contenido real del archivo no coincide con un formato permitido.', 400);
+            }
+        }
+    }
+
+    // Inspeccion preventiva de firmas de script en cabecera
+    $primerosBytes = substr($raw, 0, 1024);
+    if (stripos($primerosBytes, '<?php') !== false || stripos($primerosBytes, '<script') !== false) {
+        responderError('Contenido no permitido en el archivo.', 400);
     }
 }
 
@@ -786,6 +843,9 @@ function manejarFormularioPublico(PDO $pdo): void
     if ($metodo !== 'POST') {
         responderError('Método no permitido.', 405);
     }
+
+    $ipCliente = obtenerIpCliente();
+    verificarRateLimit($pdo, 'form_pub:' . $ipCliente, 15, 600);
 
     $body = leerBodyJson();
     $slug = $body['slug'] ?? $slug;
@@ -912,9 +972,316 @@ function manejarFormularioPublico(PDO $pdo): void
             $insV->execute([formNuevoId('fv'), $respuestaId, $p['id'], $texto, $json, $archNom, $archMime, $archDatos]);
         }
         $pdo->commit();
+        $notificacion = notificarNuevaPostulacionPorCorreo($pdo, $f, $respuestaId, $preguntas, $valoresIn, $email);
     } catch (Exception $e) {
         $pdo->rollBack();
         responderError($e->getMessage() ?: 'No se pudo guardar la respuesta.', 400);
     }
-    responderJson(['ok' => true, 'id' => $respuestaId]);
+    responderJson([
+        'ok' => true,
+        'id' => $respuestaId,
+        'notificacion' => $notificacion,
+    ]);
+}
+
+function notificarNuevaPostulacionPorCorreo(PDO $pdo, array $f, string $respuestaId, array $preguntas, array $valoresIn, string $emailAspirante): ?array
+{
+    try {
+        $stmtCfg = $pdo->query('SELECT * FROM configuracion WHERE id = 1');
+        $cfg = $stmtCfg ? $stmtCfg->fetch(PDO::FETCH_ASSOC) : null;
+        if (!$cfg) return null;
+
+        // El correo institucional público de la Fundación es $cfg['correo'] (info@fundacionamas.org.co).
+        // Las alertas de nuevas postulaciones se envían a yohanprado04@gmail.com sin alterar el contacto del sitio web.
+        $destinatario = !empty($cfg['correo_postulaciones']) ? trim($cfg['correo_postulaciones']) : 'yohanprado04@gmail.com';
+        
+        $nombreAspirante = '';
+        $documento = '';
+        $whatsapp = '';
+        $direccion = '';
+        $edad = '';
+        $educacion = '';
+        $motivacion = '';
+        $correoAspirante = $emailAspirante;
+
+        $detallesPreguntas = [];
+
+        foreach ($preguntas as $p) {
+            if ($p['tipo'] === 'seccion') continue;
+            $val = $valoresIn[$p['id']] ?? '';
+            $textoVal = '';
+            if (is_array($val)) {
+                if (!empty($val['nombre'])) {
+                    $textoVal = '[Archivo: ' . $val['nombre'] . ']';
+                } else {
+                    $textoVal = implode(', ', array_map('strval', $val));
+                }
+            } else {
+                $textoVal = trim((string)$val);
+            }
+
+            $tituloPlano = textoPlanoTitulo($p['titulo']);
+            $tLower = mb_strtolower($tituloPlano);
+
+            if (!$nombreAspirante && (strpos($tLower, 'nombre') !== false || strpos($tLower, 'aspirante') !== false)) {
+                $nombreAspirante = $textoVal;
+            } elseif (!$documento && strpos($tLower, 'documento') !== false) {
+                $documento = $textoVal;
+            } elseif (!$correoAspirante && ($p['tipo'] === 'correo' || strpos($tLower, 'correo') !== false || strpos($tLower, 'email') !== false)) {
+                $correoAspirante = $textoVal;
+            } elseif (!$whatsapp && (strpos($tLower, 'whatsapp') !== false || strpos($tLower, 'teléfono') !== false || strpos($tLower, 'telefono') !== false || strpos($tLower, 'celular') !== false)) {
+                $whatsapp = $textoVal;
+            } elseif (!$direccion && (strpos($tLower, 'dirección') !== false || strpos($tLower, 'direccion') !== false || strpos($tLower, 'municipio') !== false || strpos($tLower, 'barrio') !== false)) {
+                $direccion = $textoVal;
+            } elseif (!$edad && (strpos($tLower, 'años') !== false || strpos($tLower, 'edad') !== false)) {
+                $edad = $textoVal;
+            } elseif (!$educacion && (strpos($tLower, 'educativo') !== false || strpos($tLower, 'escolaridad') !== false)) {
+                $educacion = $textoVal;
+            } elseif (!$motivacion && (strpos($tLower, 'por qué') !== false || strpos($tLower, 'motivación') !== false || strpos($tLower, 'motiva') !== false || strpos($tLower, 'postular') !== false)) {
+                $motivacion = $textoVal;
+            }
+
+            $detallesPreguntas[] = [
+                'pregunta' => $tituloPlano,
+                'respuesta' => $textoVal ?: '—'
+            ];
+        }
+
+        if (!$nombreAspirante) {
+            $nombreAspirante = $correoAspirante ? explode('@', $correoAspirante)[0] : 'Nuevo Aspirante';
+        }
+
+        $tituloFormulario = textoPlanoTitulo($f['titulo'] ?? 'Postulaciones');
+        $asunto = "Fundación A+ | Nueva postulación recibida: {$nombreAspirante} - {$tituloFormulario}";
+        $fechaHora = date('d/m/Y h:i A');
+
+        // Construir mensaje en texto plano
+        $mensajeTexto = "Nueva postulación recibida en tiempo real\n\n";
+        $mensajeTexto .= "Formulario: {$tituloFormulario}\n";
+        $mensajeTexto .= "Fecha: {$fechaHora}\n\n";
+        $mensajeTexto .= "DATOS DEL ASPIRANTE:\n";
+        $mensajeTexto .= "- Nombre: {$nombreAspirante}\n";
+        if ($documento) $mensajeTexto .= "- Documento: {$documento}\n";
+        if ($correoAspirante) $mensajeTexto .= "- Correo: {$correoAspirante}\n";
+        if ($whatsapp) $mensajeTexto .= "- WhatsApp/Teléfono: {$whatsapp}\n";
+        if ($direccion) $mensajeTexto .= "- Dirección: {$direccion}\n";
+        if ($edad) $mensajeTexto .= "- Edad: {$edad}\n";
+        if ($educacion) $mensajeTexto .= "- Nivel Educativo: {$educacion}\n\n";
+        $mensajeTexto .= "RESPUESTAS DETALLADAS:\n";
+        foreach ($detallesPreguntas as $item) {
+            $mensajeTexto .= "- {$item['pregunta']}: {$item['respuesta']}\n";
+        }
+        $mensajeTexto .= "\nPuedes gestionar esta postulación ingresando al panel de administración de la Fundación A+.\n\nFundación A+ - Quibdó, Chocó - info@fundacionamas.org.co";
+
+        // Construir mensaje en HTML profesional
+        $filasRespuestas = '';
+        foreach ($detallesPreguntas as $item) {
+            $pregEsc = htmlspecialchars($item['pregunta'], ENT_QUOTES, 'UTF-8');
+            $respEsc = nl2br(htmlspecialchars($item['respuesta'], ENT_QUOTES, 'UTF-8'));
+            $filasRespuestas .= "
+            <div style='background: #F8F9FA; border-radius: 10px; padding: 12px 16px; margin-bottom: 10px;'>
+              <p style='margin: 0 0 4px 0; font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase;'>{$pregEsc}</p>
+              <p style='margin: 0; font-size: 14px; color: #0E1726; font-weight: 500;'>{$respEsc}</p>
+            </div>";
+        }
+
+        $waLink = '—';
+        if ($whatsapp) {
+            $soloNum = preg_replace('/[^\d]/', '', $whatsapp);
+            if (strlen($soloNum) === 10) $soloNum = '57' . $soloNum;
+            $waLink = "<a href='https://wa.me/{$soloNum}' target='_blank' style='color: #10B981; font-weight: 700; text-decoration: none;'>{$whatsapp} (Chatear en WhatsApp)</a>";
+        }
+
+        $mensajeHtml = "
+        <div style='font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(0,0,0,0.06);'>
+          <div style='background: linear-gradient(135deg, #8B5CF6 0%, #1FC8C0 100%); padding: 32px 24px; text-align: center; color: #ffffff;'>
+            <h1 style='margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;'>Fundación A+</h1>
+            <p style='margin: 6px 0 0 0; font-size: 14px; opacity: 0.95; font-weight: 500;'>Nueva postulación recibida en tiempo real</p>
+          </div>
+          
+          <div style='padding: 28px 24px;'>
+            <div style='background: #F5F3FF; border-left: 4px solid #8B5CF6; padding: 14px 18px; border-radius: 8px; margin-bottom: 24px;'>
+              <p style='margin: 0; font-size: 11px; color: #7C3AED; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;'>Convocatoria / Formulario</p>
+              <p style='margin: 4px 0 0 0; font-size: 16px; color: #0E1726; font-weight: 800;'>{$tituloFormulario}</p>
+            </div>
+
+            <h2 style='font-size: 15px; color: #0E1726; font-weight: 800; margin: 0 0 14px 0; border-bottom: 2px solid #F1F5F9; padding-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;'>
+              Ficha del Aspirante
+            </h2>
+
+            <table style='width: 100%; border-collapse: collapse; margin-bottom: 24px;'>
+              <tr>
+                <td style='padding: 8px 0; font-size: 13px; color: #64748B; width: 38%; font-weight: 600;'>Nombre completo:</td>
+                <td style='padding: 8px 0; font-size: 14px; color: #0E1726; font-weight: 700;'>{$nombreAspirante}</td>
+              </tr>
+              <tr>
+                <td style='padding: 8px 0; font-size: 13px; color: #64748B; font-weight: 600;'>Documento:</td>
+                <td style='padding: 8px 0; font-size: 14px; color: #0E1726;'>" . ($documento ?: '—') . "</td>
+              </tr>
+              <tr>
+                <td style='padding: 8px 0; font-size: 13px; color: #64748B; font-weight: 600;'>Correo electrónico:</td>
+                <td style='padding: 8px 0; font-size: 14px; color: #8B5CF6; font-weight: 600;'>
+                  <a href='mailto:{$correoAspirante}' style='color: #8B5CF6; text-decoration: none;'>{$correoAspirante}</a>
+                </td>
+              </tr>
+              <tr>
+                <td style='padding: 8px 0; font-size: 13px; color: #64748B; font-weight: 600;'>WhatsApp / Celular:</td>
+                <td style='padding: 8px 0; font-size: 14px; color: #0E1726;'>{$waLink}</td>
+              </tr>
+              <tr>
+                <td style='padding: 8px 0; font-size: 13px; color: #64748B; font-weight: 600;'>Dirección / Municipio:</td>
+                <td style='padding: 8px 0; font-size: 14px; color: #0E1726;'>" . ($direccion ?: '—') . "</td>
+              </tr>
+              <tr>
+                <td style='padding: 8px 0; font-size: 13px; color: #64748B; font-weight: 600;'>Edad:</td>
+                <td style='padding: 8px 0; font-size: 14px; color: #0E1726;'>" . ($edad ?: '—') . "</td>
+              </tr>
+              <tr>
+                <td style='padding: 8px 0; font-size: 13px; color: #64748B; font-weight: 600;'>Nivel educativo:</td>
+                <td style='padding: 8px 0; font-size: 14px; color: #0E1726;'>" . ($educacion ?: '—') . "</td>
+              </tr>
+            </table>
+
+            <h2 style='font-size: 15px; color: #0E1726; font-weight: 800; margin: 24px 0 14px 0; border-bottom: 2px solid #F1F5F9; padding-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;'>
+              Respuestas del Formulario
+            </h2>
+            {$filasRespuestas}
+
+            <div style='margin-top: 32px; text-align: center;'>
+              <a href='https://fundacionamas.org.co/#formularios' style='background: linear-gradient(135deg, #8B5CF6 0%, #1FC8C0 100%); color: #ffffff; padding: 14px 32px; border-radius: 9999px; font-weight: 700; text-decoration: none; font-size: 14px; display: inline-block; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.35);'>
+                Ver Postulaciones en el Panel
+              </a>
+            </div>
+          </div>
+
+          <div style='background: #F8F9FA; padding: 18px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748B; line-height: 1.6;'>
+            <p style='margin: 0 0 4px 0; font-weight: 700; color: #334155;'>Fundación A+ &bull; Notificación Administrativa</p>
+            <p style='margin: 0 0 6px 0;'>Quibdó, Chocó, Colombia &bull; Contacto: <a href='mailto:info@fundacionamas.org.co' style='color: #8B5CF6; text-decoration: none;'>info@fundacionamas.org.co</a></p>
+            <p style='margin: 0; font-size: 10px; color: #94A3B8;'>Notificación transaccional automática registrada el {$fechaHora}.</p>
+          </div>
+        </div>";
+
+        // ── Mensaje de confirmación para el ASPIRANTE ──────────────────────────
+        $asuntoAspirante = "Fundación A+ | Confirmación de postulación recibida: {$tituloFormulario}";
+        $mensajeTextoAspirante = "Hola, {$nombreAspirante}:\n\n";
+        $mensajeTextoAspirante .= "Te confirmamos que hemos recibido con éxito tu postulación al programa formativo:\n";
+        $mensajeTextoAspirante .= "{$tituloFormulario}\n\n";
+        $mensajeTextoAspirante .= "Tus datos y respuestas han quedado debidamente registrados en nuestra plataforma. En este momento, el equipo de admisiones y selección de la Fundación A+ se encuentra revisando tu postulación detalladamente.\n\n";
+        $mensajeTextoAspirante .= "DATOS REGISTRADOS:\n";
+        $mensajeTextoAspirante .= "- Nombre: {$nombreAspirante}\n";
+        if ($documento) $mensajeTextoAspirante .= "- Documento: {$documento}\n";
+        if ($correoAspirante) $mensajeTextoAspirante .= "- Correo: {$correoAspirante}\n";
+        if ($whatsapp) $mensajeTextoAspirante .= "- WhatsApp / Contacto: {$whatsapp}\n";
+        if ($direccion) $mensajeTextoAspirante .= "- Municipio / Residencia: {$direccion}\n\n";
+        $mensajeTextoAspirante .= "¿QUÉ SIGUE A CONTINUACIÓN?\n";
+        $mensajeTextoAspirante .= "Mantente atento(a) a tu correo electrónico y a tu línea de WhatsApp. Próximamente te estaremos contactando para comunicarte el avance de tu proceso.\n\n";
+        $mensajeTextoAspirante .= "Gracias por tu interés en hacer parte de la Fundación A+.\n\n";
+        $mensajeTextoAspirante .= "Atentamente,\nEquipo de Admisiones y Convocatorias\nFundación A+\nhttps://fundacionamas.org.co";
+
+        $mensajeHtmlAspirante = "
+        <div style='font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(0,0,0,0.06);'>
+          <div style='background: linear-gradient(135deg, #8B5CF6 0%, #1FC8C0 100%); padding: 32px 24px; text-align: center; color: #ffffff;'>
+            <h1 style='margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;'>Fundación A+</h1>
+            <p style='margin: 6px 0 0 0; font-size: 14px; opacity: 0.95; font-weight: 500;'>Postulación Recibida con Éxito</p>
+          </div>
+          
+          <div style='padding: 28px 24px;'>
+            <p style='font-size: 17px; font-weight: 800; color: #0E1726; margin: 0 0 12px 0;'>
+              Hola, {$nombreAspirante}:
+            </p>
+            <p style='font-size: 14px; color: #475569; line-height: 1.6; margin: 0 0 20px 0;'>
+              Te confirmamos que hemos recibido exitosamente tu postulación al programa formativo <strong style='color: #7C3AED;'>{$tituloFormulario}</strong>.
+            </p>
+
+            <div style='background: #F5F3FF; border-left: 4px solid #8B5CF6; padding: 14px 18px; border-radius: 8px; margin-bottom: 22px;'>
+              <p style='margin: 0; font-size: 11px; color: #7C3AED; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;'>Estado actual de tu postulación</p>
+              <p style='margin: 4px 0 0 0; font-size: 15px; color: #0E1726; font-weight: 800;'>En proceso de revisión por el equipo de admisiones</p>
+            </div>
+
+            <div style='background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px 20px; margin-bottom: 22px;'>
+              <p style='margin: 0 0 10px 0; font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase;'>Datos registrados en tu formulario:</p>
+              <table style='width: 100%; border-collapse: collapse; font-size: 13px;'>
+                <tr><td style='padding: 5px 0; color: #64748B; width: 38%;'>Nombre completo:</td><td style='padding: 5px 0; color: #0E1726; font-weight: 700;'>{$nombreAspirante}</td></tr>
+                " . ($documento ? "<tr><td style='padding: 5px 0; color: #64748B;'>Documento:</td><td style='padding: 5px 0; color: #0E1726; font-weight: 600;'>{$documento}</td></tr>" : "") . "
+                " . ($correoAspirante ? "<tr><td style='padding: 5px 0; color: #64748B;'>Correo:</td><td style='padding: 5px 0; color: #0E1726; font-weight: 600;'>{$correoAspirante}</td></tr>" : "") . "
+                " . ($whatsapp ? "<tr><td style='padding: 5px 0; color: #64748B;'>WhatsApp / Teléfono:</td><td style='padding: 5px 0; color: #0E1726; font-weight: 600;'>{$whatsapp}</td></tr>" : "") . "
+                " . ($direccion ? "<tr><td style='padding: 5px 0; color: #64748B;'>Ubicación:</td><td style='padding: 5px 0; color: #0E1726; font-weight: 600;'>{$direccion}</td></tr>" : "") . "
+              </table>
+            </div>
+
+            <div style='background: #ECFDF5; border-left: 4px solid #10B981; padding: 14px 18px; border-radius: 8px; margin-bottom: 24px;'>
+              <p style='margin: 0; font-size: 12px; color: #065F46; font-weight: 700; text-transform: uppercase;'>¿Qué sigue a continuación?</p>
+              <p style='margin: 4px 0 0 0; font-size: 13px; color: #047857; line-height: 1.5;'>
+                Nuestro equipo de selección está revisando las respuestas recibidas. Te recomendamos estar pendiente de tu bandeja de entrada y de tu WhatsApp, donde te notificaremos los siguientes pasos del proceso.
+              </p>
+            </div>
+
+            <p style='font-size: 13px; color: #64748B; margin: 0; line-height: 1.5;'>
+              Muchas gracias por tu compromiso y por dar este paso junto a la Fundación A+.
+            </p>
+          </div>
+
+          <div style='background: #F8F9FA; padding: 18px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748B; line-height: 1.6;'>
+            <p style='margin: 0 0 4px 0; font-weight: 700; color: #334155;'>Fundación A+ &bull; Educación y Tecnología</p>
+            <p style='margin: 0 0 6px 0;'>Sede Principal: Quibdó, Chocó, Colombia &bull; Contacto: <a href='mailto:info@fundacionamas.org.co' style='color: #8B5CF6; text-decoration: none;'>info@fundacionamas.org.co</a></p>
+            <p style='margin: 0; font-size: 10px; color: #94A3B8;'>Recibiste este correo porque enviaste una postulación en fundacionamas.org.co. Si no realizaste esta solicitud, puedes desestimar este mensaje.</p>
+          </div>
+        </div>";
+
+        $enviadoSmtp = false;
+        // Si hay servidor SMTP configurado, enviar directo desde PHP
+        if (!empty($cfg['smtp_user']) && !empty($cfg['smtp_pass']) && ($cfg['email_metodo'] ?? '') === 'smtp') {
+            require_once __DIR__ . '/mailer.php';
+            $smtpConfig = [
+                'smtp_host' => $cfg['smtp_host'] ?? 'smtp.gmail.com',
+                'smtp_port' => (int)($cfg['smtp_port'] ?? 465),
+                'smtp_user' => $cfg['smtp_user'],
+                'smtp_pass' => $cfg['smtp_pass'],
+                'smtp_from' => $cfg['smtp_from'] ?? 'info@fundacionamas.org.co',
+                'smtp_from_name' => $cfg['nombre'] ?? 'Fundación A+',
+                'smtp_secure' => $cfg['smtp_secure'] ?? 'ssl',
+            ];
+            $resFund = enviarCorreoSmtp($smtpConfig, $destinatario, 'Fundación A+', $asunto, $mensajeTexto, $mensajeHtml);
+            if ($correoAspirante && filter_var($correoAspirante, FILTER_VALIDATE_EMAIL)) {
+                enviarCorreoSmtp($smtpConfig, $correoAspirante, $nombreAspirante, $asuntoAspirante, $mensajeTextoAspirante, $mensajeHtmlAspirante);
+            }
+            if (!empty($resFund['ok'])) {
+                $enviadoSmtp = true;
+            }
+        }
+
+        $emailjsConfig = [
+            'publicKey' => $cfg['emailjs_public_key'] ?? 'eIyshGVkR2fYZQJfO',
+            'serviceId' => $cfg['emailjs_service_id'] ?? 'service_20mxfgu',
+            'templateId' => $cfg['emailjs_template_id'] ?? 'template_qvmzl1l',
+        ];
+
+        return [
+            'enviadoSmtp' => $enviadoSmtp,
+            'destinatario' => $destinatario,
+            'nombreAspirante' => $nombreAspirante,
+            'correoAspirante' => $correoAspirante,
+            'asunto' => $asunto,
+            'mensaje' => $mensajeTexto,
+            'mensajeHtml' => $mensajeHtml,
+            'emailjs' => $emailjsConfig,
+            'notificacionFundacion' => [
+                'destinatario' => $destinatario,
+                'nombre' => 'Fundación A+',
+                'asunto' => $asunto,
+                'mensaje' => $mensajeTexto,
+                'mensajeHtml' => $mensajeHtml,
+            ],
+            'notificacionAspirante' => ($correoAspirante && filter_var($correoAspirante, FILTER_VALIDATE_EMAIL)) ? [
+                'destinatario' => $correoAspirante,
+                'nombre' => $nombreAspirante,
+                'asunto' => $asuntoAspirante,
+                'mensaje' => $mensajeTextoAspirante,
+                'mensajeHtml' => $mensajeHtmlAspirante,
+            ] : null,
+        ];
+    } catch (Throwable $e) {
+        error_log('[notificarNuevaPostulacionPorCorreo] Error: ' . $e->getMessage());
+        return null;
+    }
 }

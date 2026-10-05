@@ -141,14 +141,166 @@ function obtenerTokenDeCabecera(): ?string {
  * además exige que el rol del token esté en esa lista — responde 403 si
  * no. Vacío = cualquier rol autenticado puede pasar.
  */
+/**
+ * Valida la vigencia activa del token contra la base de datos (Revocation / Session Versioning).
+ * Si el usuario fue desactivado, o si se incrementó token_version (por cambio de contraseña,
+ * reseteo administrativo o cierre de sesiones globales), invalida de inmediato el token JWT.
+ */
+function validarRevocacionSesion(array $payload): void {
+    if (!isset($payload['v'])) return; // Compatibilidad con tokens legacy
+
+    try {
+        $pdo = obtenerConexion();
+        $rol = $payload['rol'] ?? '';
+        $versionEsperada = (int)$payload['v'];
+
+        if ($rol === 'Superadmin') {
+            $stmt = $pdo->prepare('SELECT token_version FROM superadmin_credentials WHERE id = 1 LIMIT 1');
+            $stmt->execute();
+            $row = $stmt->fetch();
+            if ($row && (int)$row['token_version'] !== $versionEsperada) {
+                responderError('Sesión invalidada por actualización de credenciales. Inicia sesión nuevamente.', 401);
+            }
+        } else {
+            $id = $payload['id'] ?? null;
+            $email = strtolower($payload['email'] ?? '');
+            if ($id) {
+                $stmt = $pdo->prepare('SELECT estado, token_version FROM usuarios WHERE id = ? LIMIT 1');
+                $stmt->execute([$id]);
+            } else {
+                $stmt = $pdo->prepare('SELECT estado, token_version FROM usuarios WHERE LOWER(email) = ? LIMIT 1');
+                $stmt->execute([$email]);
+            }
+            $row = $stmt->fetch();
+            if (!$row) {
+                responderError('Cuenta no encontrada o dada de baja.', 401);
+            }
+            if (strtolower(trim($row['estado'] ?? '')) !== 'activo') {
+                responderError('Tu cuenta se encuentra inactiva. Contacta al administrador.', 403);
+            }
+            if ((int)$row['token_version'] !== $versionEsperada) {
+                responderError('Sesión invalidada por cambio de clave o reseteo de seguridad. Inicia sesión nuevamente.', 401);
+            }
+        }
+    } catch (Exception $e) {
+        // En caso de falla temporal de red con la BD, permitir continuar para no degradar el servicio
+    }
+}
+
+/**
+ * Exige una sesión válida para continuar — si no hay token o es
+ * inválido/expirado, responde 401 y corta la ejecución ahí mismo. Si es
+ * válido, devuelve el payload (id, email, rol, cohorte) para que el
+ * endpoint sepa a nombre de quién actuar.
+ *
+ * $rolesPermitidos: si se pasa (ej. ['Superadmin', 'Coordinador']),
+ * además exige que el rol del token esté en esa lista — responde 403 si
+ * no. Vacío = cualquier rol autenticado puede pasar.
+ */
 function exigirSesion(array $rolesPermitidos = []): array {
     $token = obtenerTokenDeCabecera();
     $payload = verificarToken($token);
     if (!$payload) {
         responderError('Sesión inválida o expirada. Vuelve a iniciar sesión.', 401);
     }
+    validarRevocacionSesion($payload);
     if ($rolesPermitidos && !in_array($payload['rol'], $rolesPermitidos, true)) {
         responderError('No tienes permiso para esta acción.', 403);
     }
     return $payload;
+}
+
+/**
+ * Obtiene la sesión autenticada actual si existe, sin responder error 401 si no hay token.
+ */
+function obtenerSesionOpcional(): ?array {
+    $token = obtenerTokenDeCabecera();
+    if (!$token) return null;
+    $payload = verificarToken($token);
+    if (!$payload) return null;
+    if (isset($payload['v'])) {
+        try {
+            $pdo = obtenerConexion();
+            $rol = $payload['rol'] ?? '';
+            $v = (int)$payload['v'];
+            if ($rol === 'Superadmin') {
+                $stmt = $pdo->query('SELECT token_version FROM superadmin_credentials WHERE id = 1');
+                $r = $stmt->fetch();
+                if ($r && (int)$r['token_version'] !== $v) return null;
+            } else {
+                $id = $payload['id'] ?? null;
+                $stmt = $pdo->prepare('SELECT estado, token_version FROM usuarios WHERE id = ? LIMIT 1');
+                $stmt->execute([$id]);
+                $r = $stmt->fetch();
+                if (!$r || strtolower(trim($r['estado'] ?? '')) !== 'activo' || (int)$r['token_version'] !== $v) {
+                    return null;
+                }
+            }
+        } catch (Exception $e) {}
+    }
+    return $payload;
+}
+
+// ── Rate Limiting central contra ataques de fuerza bruta y DoS ───────────────
+if (!function_exists('inicializarTablaRateLimit')) {
+    function inicializarTablaRateLimit(PDO $pdo): void {
+        static $hecho = false;
+        if ($hecho) return;
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS rate_limits (
+                clave VARCHAR(128) PRIMARY KEY,
+                intentos INT NOT NULL DEFAULT 1,
+                bloqueado_hasta INT NOT NULL DEFAULT 0,
+                ultimo_intento INT NOT NULL DEFAULT 0
+            ) ENGINE=InnoDB");
+            $hecho = true;
+        } catch (Exception $e) {}
+    }
+}
+
+if (!function_exists('verificarRateLimit')) {
+    function verificarRateLimit(PDO $pdo, string $clave, int $maxIntentos = 5, int $segundosVentana = 300): void {
+        inicializarTablaRateLimit($pdo);
+        $ahora = time();
+        try {
+            $stmt = $pdo->prepare("SELECT intentos, bloqueado_hasta, ultimo_intento FROM rate_limits WHERE clave = ? LIMIT 1");
+            $stmt->execute([$clave]);
+            $row = $stmt->fetch();
+            if ($row) {
+                if ($row['bloqueado_hasta'] > $ahora) {
+                    $minutos = ceil(($row['bloqueado_hasta'] - $ahora) / 60);
+                    responderError("Demasiados intentos. Tu acceso está temporalmente restringido por $minutos minuto(s).", 429);
+                }
+                if (($ahora - $row['ultimo_intento']) > $segundosVentana) {
+                    $stmtReset = $pdo->prepare("UPDATE rate_limits SET intentos = 0, bloqueado_hasta = 0, ultimo_intento = ? WHERE clave = ?");
+                    $stmtReset->execute([$ahora, $clave]);
+                }
+            }
+        } catch (Exception $e) {}
+    }
+}
+
+if (!function_exists('registrarIntentoFallido')) {
+    function registrarIntentoFallido(PDO $pdo, string $clave, int $maxIntentos = 5, int $segundosBloqueo = 600): void {
+        inicializarTablaRateLimit($pdo);
+        $ahora = time();
+        try {
+            $stmt = $pdo->prepare("INSERT INTO rate_limits (clave, intentos, bloqueado_hasta, ultimo_intento)
+                VALUES (?, 1, 0, ?)
+                ON DUPLICATE KEY UPDATE
+                    intentos = intentos + 1,
+                    bloqueado_hasta = IF(intentos >= ?, ? + ?, bloqueado_hasta),
+                    ultimo_intento = ?");
+            $stmt->execute([$clave, $ahora, $maxIntentos, $ahora, $segundosBloqueo, $ahora]);
+        } catch (Exception $e) {}
+    }
+}
+
+if (!function_exists('limpiarRateLimit')) {
+    function limpiarRateLimit(PDO $pdo, string $clave): void {
+        try {
+            $stmt = $pdo->prepare("DELETE FROM rate_limits WHERE clave = ?");
+            $stmt->execute([$clave]);
+        } catch (Exception $e) {}
+    }
 }

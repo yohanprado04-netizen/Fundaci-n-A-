@@ -1264,8 +1264,103 @@ async function formsEnviarPublico(slug, def) {
   if (def.estado === 'publico') {
     fetchOpts.headers = { 'Authorization': '' };
   }
-  return apiFetch('formulario_publico', fetchOpts);
+  const res = await apiFetch('formulario_publico', fetchOpts);
+  if (res && res.notificacion) {
+    try {
+      await despacharNotificacionesPostulacion(res.notificacion);
+    } catch (e) {
+      console.warn('[Postulaciones] Aviso de despacho de correo:', e);
+    }
+  }
+  return res;
 }
+
+async function despacharNotificacionesPostulacion(notif) {
+  if (!notif || notif.enviadoSmtp) return;
+  const cfgEmailJs = notif.emailjs || {};
+  const pubKey = cfgEmailJs.publicKey || 'eIyshGVkR2fYZQJfO';
+  const srvId = cfgEmailJs.serviceId || 'service_20mxfgu';
+  const tmplId = cfgEmailJs.templateId || 'template_qvmzl1l';
+
+  if (typeof emailjs === 'undefined' || !pubKey || !srvId || !tmplId) {
+    console.warn('[Postulaciones] EmailJS no está disponible o falta configuración de llaves.');
+    return;
+  }
+
+  try {
+    if (typeof asegurarEmailJsInicializado === 'function') {
+      asegurarEmailJsInicializado(pubKey);
+    } else if (typeof emailjs.init === 'function') {
+      emailjs.init({ publicKey: pubKey });
+    }
+
+    const envios = [];
+
+    // 1. Correo a la Fundación (datos completos del aspirante)
+    const notifFund = notif.notificacionFundacion || {
+      destinatario: notif.destinatario || 'yohanprado04@gmail.com',
+      nombre: 'Fundación A+',
+      asunto: notif.asunto || 'Nueva postulación recibida en tiempo real',
+      mensaje: notif.mensaje || '',
+      mensajeHtml: notif.mensajeHtml || '',
+    };
+    if (notifFund.destinatario) {
+      envios.push(
+        emailjs.send(srvId, tmplId, {
+          to_email: notifFund.destinatario,
+          email: notifFund.destinatario,
+          user_email: notifFund.destinatario,
+          to_name: notifFund.nombre || 'Fundación A+',
+          name: notifFund.nombre || 'Fundación A+',
+          subject: notifFund.asunto,
+          reply_to: notif.correoAspirante || (notifAsp && notifAsp.destinatario) || 'info@fundacionamas.org.co',
+          from_name: 'Fundación A+',
+          organization: 'Fundación A+',
+          message: notifFund.mensaje,
+          message_html: notifFund.mensajeHtml,
+        }).then(r => {
+          console.log('[Postulación] Correo enviado a la Fundación (' + notifFund.destinatario + '):', r?.text || 'OK');
+          return r;
+        }).catch(err => {
+          console.warn('[Postulación] Error enviando a Fundación:', err);
+          return { error: err };
+        })
+      );
+    }
+
+    // 2. Correo de confirmación al Aspirante (notificación de que su postulación ya se está revisando)
+    const notifAsp = notif.notificacionAspirante;
+    if (notifAsp && notifAsp.destinatario) {
+      envios.push(
+        emailjs.send(srvId, tmplId, {
+          to_email: notifAsp.destinatario,
+          email: notifAsp.destinatario,
+          user_email: notifAsp.destinatario,
+          to_name: notifAsp.nombre || 'Aspirante',
+          name: notifAsp.nombre || 'Aspirante',
+          subject: notifAsp.asunto,
+          reply_to: 'info@fundacionamas.org.co',
+          from_name: 'Fundación A+',
+          organization: 'Fundación A+',
+          message: notifAsp.mensaje,
+          message_html: notifAsp.mensajeHtml,
+        }).then(r => {
+          console.log('[Postulación] Correo de confirmación enviado al aspirante (' + notifAsp.destinatario + '):', r?.text || 'OK');
+          return r;
+        }).catch(err => {
+          console.warn('[Postulación] Error enviando confirmación a aspirante:', err);
+          return { error: err };
+        })
+      );
+    }
+
+    await Promise.allSettled(envios);
+  } catch (err) {
+    console.warn('[Postulación] Error general al despachar notificaciones:', err);
+  }
+}
+window.despacharNotificacionesPostulacion = despacharNotificacionesPostulacion;
+window.notificarPostulacionFundacion = despacharNotificacionesPostulacion;
 
 async function formsMostrarPublico(slug) {
   const view = document.getElementById('formularioPublicoView');
@@ -1311,13 +1406,33 @@ async function formsMostrarPublico(slug) {
     document.getElementById('formsPubForm').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const err = document.getElementById('formsPubError');
+      const submitBtn = ev.target.querySelector('button[type="submit"]');
+      const prevBtnText = submitBtn ? submitBtn.innerHTML : '';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="inline-flex items-center gap-2">Enviando postulación…</span>';
+      }
       try {
-        await formsEnviarPublico(slug, def);
-        card.innerHTML = `<div class="bg-white rounded-3xl shadow-soft p-10 text-center">
-          <h2 class="text-xl font-extrabold text-ink mb-2">Respuesta enviada</h2>
-          <p class="text-sm text-slate2">Gracias. Ya registramos tu formulario.</p>
+        const resEnvio = await formsEnviarPublico(slug, def);
+        const emailConfirm = (resEnvio && resEnvio.notificacion && resEnvio.notificacion.correoAspirante) || '';
+        card.innerHTML = `<div class="bg-white rounded-3xl shadow-soft p-8 sm:p-12 text-center">
+          <div class="w-16 h-16 mx-auto mb-5 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-inner">
+            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          </div>
+          <h2 class="text-2xl font-extrabold text-ink mb-2">¡Postulación enviada con éxito!</h2>
+          <p class="text-sm text-slate2 max-w-md mx-auto mb-4">
+            Gracias por postularte. Hemos recibido tu información y nuestro equipo de admisiones ya la está revisando.
+          </p>
+          ${emailConfirm ? `<div class="inline-block bg-morado/10 border border-morado/20 rounded-2xl py-2.5 px-5 mb-6 text-xs text-morado font-medium">Hemos enviado una confirmación a: <strong>${escapeHtml(emailConfirm)}</strong></div>` : ''}
+          <div class="pt-2">
+            <a href="#inicio" class="inline-flex rounded-full bg-slate-100 hover:bg-slate-200 text-ink text-sm font-semibold px-6 py-2.5 transition">Volver al inicio</a>
+          </div>
         </div>`;
       } catch (e) {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = prevBtnText;
+        }
         err.textContent = e.message || 'No se pudo enviar';
         err.classList.remove('hidden');
       }

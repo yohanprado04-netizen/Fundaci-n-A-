@@ -99,11 +99,7 @@ async function apiLogin(email, password) {
     if (err.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError') && !err.message.includes('comunicarse con el servidor')) {
       throw err;
     }
-    // BYPASS OFFLINE: Si falla la conexión, devolver un mock de Superadmin para poder probar el frontend
-    console.warn('[apiLogin] Servidor offline. Iniciando sesión local simulada como Superadmin.');
-    const mockToken = 'mock-offline-token';
-    setAuthToken(mockToken);
-    return { token: mockToken, usuario: { id: 'admin-local', nombre: 'Admin Local (Offline)', email: email, rol: 'Superadmin', estadoRegistro: 'Aprobado' } };
+    throw new Error('No se pudo conectar con el servidor local (' + API_BASE_URL + '). Verifica que Apache y MySQL estén iniciados en el Panel de Control de XAMPP.');
   }
 }
 
@@ -170,6 +166,11 @@ const ENTIDADES_MYSQL = new Set([
   'chat_voz_conocimiento',   // base de conocimiento en MySQL
   'trainee_archivos',        // historial de archivos del estudiante en MySQL
   'comunicados',             // comunicados institucionales y notificaciones
+  'pagos_docentes',          // honorarios y pagos de docentes confidencial
+  'pagos_estudiantes',       // matrículas y pagos de estudiantes con comprobante
+  'justificaciones_asistencia', // excusas médicas / laborales de asistencia en MySQL
+  'proyectos_fundacion',     // portafolio de proyectos e iniciativas A+ de la Fundación
+  'proyectos_estudiantes',   // proyectos de desarrollo creados por estudiantes
 ]);
 
 // Entidades que son objetos únicos (no arrays).
@@ -343,6 +344,10 @@ const Store = {
   save(entity, records) {
     _invalidateCache(entity);
     return this.set(entity, records);
+  },
+
+  clearCache(entity) {
+    _invalidateCache(entity);
   },
 
   /**

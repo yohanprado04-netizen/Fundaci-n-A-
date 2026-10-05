@@ -306,14 +306,23 @@ def construir_system_prompt(hay_sesion: bool) -> str:
         "  * LinkedIn: https://www.linkedin.com/company/fundacionamas\n"
         "  * YouTube: https://www.youtube.com/channel/UCYtl9tnCwwRDNr-_sAe5Erw\n\n"
 
-        "PROGRAMAS FORMATIVOS:\n"
-        "- TrAIning de 100 a 1000+ (aprender a programar con inteligencia artificial sin salir de tu "
-        "territorio): https://fundacionamas.org.co/training-de-100-a-1000/\n"
-        "- Cimentación Académica: https://fundacionamas.org.co/portfolio/cimentacion-academica/\n"
-        "- Formación para el Desarrollo Territorial Sostenible: "
-        "https://fundacionamas.org.co/portfolio/formacion-para-el-desarrollo-territorial-sostenible/\n"
-        "- Desarrollo Territorial Endógeno: https://fundacionamas.org.co/portfolio/desarrollo-territorial-endogeno/\n"
+        "PROGRAMA FORMATIVO OFICIAL:\n"
+        "- TrAIning de 100 a 1000+ (único programa formativo oficial de la Fundación A+, enfocado en aprender a "
+        "programar con inteligencia artificial sin salir de tu territorio en el Pacífico colombiano): "
+        "https://fundacionamas.org.co/training-de-100-a-1000/\n"
         "- Blog con novedades e historias de la fundación: https://fundacionamas.org.co/blog/\n\n"
+
+        "REGLAS ESTRICTAS DE INFORMACIÓN REAL Y EXACTITUD:\n"
+        "- PROGRAMAS: El ÚNICO programa formativo tecnológico de la Fundación A+ es el 'TrAIning de 100 a 1000+'. "
+        "NUNCA inventes programas como 'Cimentación Académica', 'Desarrollo Territorial Sostenible' ni 'Desarrollo "
+        "Territorial Endógeno'. Esos nombres no existen. Si te preguntan por otros programas formativos, aclara con "
+        "precisión que el programa central y activo es el TrAIning de 100 a 1000+.\n"
+        "- NÚMERO DE USUARIOS: El nombre 'TrAIning de 100 a 1000+' hace referencia a la visión multiplicadora del modelo "
+        "(formar líderes multiplicadores 10:1), NO a que actualmente existan más de 1000 usuarios en la plataforma. "
+        "La plataforma cuenta con una comunidad real y acotada en sus primeras cohortes formativas. NUNCA digas que hay "
+        "más de 1000 usuarios o estudiantes registrados. Si te preguntan por el número de usuarios, usa estrictamente "
+        "la cifra real provista en el CONTEXTO DEL USUARIO.\n"
+        "- PROYECTOS: NUNCA inventes proyectos de inversión ni proyectos de estudiantes que no vengan en el CONTEXTO EN VIVO.\n\n"
 
         "LAS DOS FASES DEL TRAINING DE 100 A 1000+ (información importante):\n"
         "- El programa se desarrolla en dos fases:\n"
@@ -352,10 +361,11 @@ def construir_system_prompt(hay_sesion: bool) -> str:
     else:
         base += (
             "\nESTA PERSONA YA INICIÓ SESIÓN en la plataforma interna de la Fundación A+:\n"
-            "- Reconoce y adáptate a su rol según el CONTEXTO DEL USUARIO ACTUAL (Superadmin, Administrador/Coordinador, Docente o Estudiante).\n"
+            "- Reconoce y adáptate a su rol según el CONTEXTO DEL USUARIO ACTUAL (Superadmin, Administrador/Coordinador, Docente, Estudiante, Aliado o Donante/Inversionista).\n"
             "- Si es SUPERADMIN o ADMINISTRADOR: responde a sus consultas sobre estadísticas, total de usuarios registrados, cohortes y gestión de la plataforma usando los datos reales provistos en el CONTEXTO DEL USUARIO. Si preguntó por un estudiante o docente específico por nombre y el CONTEXTO EN VIVO trae un bloque \"PERFIL DE...\", úsalo para darle un resumen real (incluyendo si está vigente/activo o inactivo) y agrega tu propia valoración honesta basada en esos datos — nunca inventes cifras que no estén ahí.\n"
             "- Si es ESTUDIANTE: el CONTEXTO DEL USUARIO puede traer, cuando aplique: notas por docente/materia, asistencia (%), PQR propias, próximos eventos de su agenda, memorandos/anuncios (leídos o no) y pensum de su módulo. Responde CUALQUIERA de esos temas usando esos datos reales — nunca inventes una materia, nota, evento o memorando que no esté ahí; si el contexto no trae el dato puntual que preguntó, dile con honestidad que todavía no tiene esa información registrada.\n"
             "- Si es DOCENTE: el CONTEXTO DEL USUARIO puede traer, cuando aplique: sus materias/cohortes/horas, estudiantes a cargo, las notas que él mismo puso, asistencia de sus clases, semáforo de riesgo de SUS estudiantes, sus PQR propias, próximos eventos de su agenda, su pensum a cargo y cuántos informes ha generado. Responde CUALQUIERA de esos temas con esos datos reales — son siempre datos de SUS propias cohortes/estudiantes, nunca de otros docentes; si el contexto no trae el dato puntual que preguntó, dilo con honestidad.\n"
+            "- Si es ALIADO o DONANTE / INVERSIONISTA: responde con tono institucional de colaboración, transparencia y alianza estratégica. Usa los datos reales de impacto y estadísticas provistos en su contexto (número real de estudiantes, docentes, cohortes, proyectos de estudiantes de las cohortes que tiene permitidas, o iniciativas de la fundación si las hubiere). Si te preguntan por cifras de impacto o usuarios, entrega con honestidad las cifras reales del contexto y jamás inventes cifras no registradas.\n"
         )
 
     base += construir_bloque_conocimiento(hay_sesion)
@@ -432,6 +442,16 @@ def resolver_contexto_por_token(token: Optional[str], texto_ultimo_mensaje: str 
             return True, ctx or contexto_base_rol
         if rol == "Estudiante":
             ctx = db.contexto_estudiante(email, nombre_mostrado, payload.get("cohorte"))
+            return True, ctx or contexto_base_rol
+        if rol in ("Aliado", "Donante", "Inversor", "Inversionista"):
+            ctx = db.contexto_aliado_donante(
+                email,
+                nombre_mostrado,
+                rol,
+                payload.get("cohortes_permitidas") or payload.get("cohorte"),
+                texto_ultimo_mensaje,
+                historial=historial,
+            )
             return True, ctx or contexto_base_rol
     except Exception as e:
         # Un fallo puntual de MySQL no debe tumbar el chat: se sigue
@@ -777,6 +797,10 @@ def chat(request: ChatRequest, req: Request):
     if not chat_rate_limiter.is_allowed(client_ip):
         raise HTTPException(status_code=429, detail="Límite de mensajes alcanzado. Por favor espera un minuto antes de enviar más preguntas.")
 
+    payload_auth = auth.verificar_token(request.token) if request.token else None
+    if payload_auth and (payload_auth.get("rol") in ["Aliado", "Donante"]):
+        raise HTTPException(status_code=403, detail="El asistente virtual no está disponible para perfiles de aliados o donantes.")
+
     if not request.messages:
         raise HTTPException(status_code=400, detail="El historial de mensajes está vacío")
 
@@ -868,6 +892,10 @@ async def chat_stream(request: ChatRequest, req: Request):
     client_ip = req.client.host if req.client else "unknown"
     if not chat_rate_limiter.is_allowed(client_ip):
         raise HTTPException(status_code=429, detail="Límite de mensajes alcanzado. Por favor espera un minuto antes de enviar más preguntas.")
+
+    payload_auth = auth.verificar_token(request.token) if request.token else None
+    if payload_auth and (payload_auth.get("rol") in ["Aliado", "Donante"]):
+        raise HTTPException(status_code=403, detail="El asistente virtual no está disponible para perfiles de aliados o donantes.")
 
     if not request.messages:
         raise HTTPException(status_code=400, detail="El historial de mensajes está vacío")

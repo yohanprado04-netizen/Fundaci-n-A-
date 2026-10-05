@@ -29,6 +29,13 @@ function enviarCorreoSmtp(array $config, string $destinatarioEmail, string $dest
         return ['ok' => false, 'error' => 'Faltan parámetros de configuración SMTP (servidor, usuario o contraseña). Configúralos en el panel de Configuración.'];
     }
 
+    // Alineación SPF / DKIM para Gmail y proveedores principales:
+    // Si se envía vía Gmail SMTP, el sobre MAIL FROM debe coincidir con la cuenta autenticada ($user)
+    // para no fallar SPF/DMARC. Las respuestas se canalizan con Reply-To.
+    if (strpos($host, 'gmail.com') !== false && strpos($user, '@') !== false) {
+        $from = $user;
+    }
+
     $timeout = 15;
     $address = ($secure === 'ssl' ? 'ssl://' : '') . $host;
     
@@ -58,7 +65,9 @@ function enviarCorreoSmtp(array $config, string $destinatarioEmail, string $dest
         return ['ok' => false, 'error' => 'Respuesta inesperada del servidor SMTP: ' . trim($r)];
     }
 
-    $escribir('EHLO ' . gethostname());
+    // EHLO con FQDN válido (nunca nombre de máquina local para evitar penalización antispam)
+    $ehloDomain = (strpos($host, 'gmail.com') !== false) ? 'gmail.com' : (explode('@', $from)[1] ?? 'fundacionamas.org.co');
+    $escribir('EHLO ' . $ehloDomain);
     $r = $leer();
 
     if ($secure === 'tls') {
@@ -69,7 +78,7 @@ function enviarCorreoSmtp(array $config, string $destinatarioEmail, string $dest
             return ['ok' => false, 'error' => 'Fallo al iniciar TLS: ' . trim($r)];
         }
         stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
-        $escribir('EHLO ' . gethostname());
+        $escribir('EHLO ' . $ehloDomain);
         $r = $leer();
     }
 
@@ -115,13 +124,24 @@ function enviarCorreoSmtp(array $config, string $destinatarioEmail, string $dest
         return ['ok' => false, 'error' => 'Error al iniciar DATA: ' . trim($r)];
     }
 
-    $boundary = 'b1_' . md5(uniqid((string)time()));
+    $boundary = 'b1_' . md5(uniqid((string)time(), true));
+    $msgDomain = (explode('@', $from)[1] ?? 'fundacionamas.org.co');
+    $messageId = '<' . bin2hex(random_bytes(16)) . '.' . time() . '@' . $msgDomain . '>';
+
     $headers = [];
-    $headers[] = 'From: ' . "=?UTF-8?B?" . base64_encode($fromName) . "?=" . " <$from>";
-    $headers[] = 'To: ' . "=?UTF-8?B?" . base64_encode($destinatarioNombre) . "?=" . " <$destinatarioEmail>";
+    $headers[] = 'From: =?UTF-8?B?' . base64_encode($fromName) . '?= <' . $from . '>';
+    $headers[] = 'Reply-To: =?UTF-8?B?' . base64_encode($fromName) . '?= <info@fundacionamas.org.co>';
+    $headers[] = 'Return-Path: <' . $from . '>';
+    $headers[] = 'To: =?UTF-8?B?' . base64_encode($destinatarioNombre) . '?= <' . $destinatarioEmail . '>';
     $headers[] = 'Subject: =?UTF-8?B?' . base64_encode($asunto) . '?=';
-    $headers[] = 'MIME-Version: 1.0';
     $headers[] = 'Date: ' . date('r');
+    $headers[] = 'Message-ID: ' . $messageId;
+    $headers[] = 'MIME-Version: 1.0';
+    $headers[] = 'X-Mailer: Fundacion A+ Portal Mailer/2.0';
+    $headers[] = 'Auto-Submitted: auto-generated';
+    $headers[] = 'X-Auto-Response-Suppress: All';
+    $headers[] = 'Importance: High';
+    $headers[] = 'X-Priority: 3';
     
     if ($cuerpoHtml) {
         $headers[] = "Content-Type: multipart/alternative; boundary=\"$boundary\"";
@@ -129,16 +149,16 @@ function enviarCorreoSmtp(array $config, string $destinatarioEmail, string $dest
         $mensaje .= "--$boundary\r\n";
         $mensaje .= "Content-Type: text/plain; charset=UTF-8\r\n";
         $mensaje .= "Content-Transfer-Encoding: base64\r\n\r\n";
-        $mensaje .= chunk_split(base64_encode($cuerpoTexto)) . "\r\n";
+        $mensaje .= rtrim(chunk_split(base64_encode($cuerpoTexto))) . "\r\n";
         $mensaje .= "--$boundary\r\n";
         $mensaje .= "Content-Type: text/html; charset=UTF-8\r\n";
         $mensaje .= "Content-Transfer-Encoding: base64\r\n\r\n";
-        $mensaje .= chunk_split(base64_encode($cuerpoHtml)) . "\r\n";
+        $mensaje .= rtrim(chunk_split(base64_encode($cuerpoHtml))) . "\r\n";
         $mensaje .= "--$boundary--\r\n";
     } else {
         $headers[] = 'Content-Type: text/plain; charset=UTF-8';
         $headers[] = 'Content-Transfer-Encoding: base64';
-        $mensaje = implode("\r\n", $headers) . "\r\n\r\n" . chunk_split(base64_encode($cuerpoTexto));
+        $mensaje = implode("\r\n", $headers) . "\r\n\r\n" . rtrim(chunk_split(base64_encode($cuerpoTexto)));
     }
 
     $escribir($mensaje . "\r\n.");

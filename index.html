@@ -315,7 +315,8 @@
     color: #FFFFFF !important;
   }
 </style>
-<link rel="stylesheet" href="style.css?v=20261002-v1">
+<link rel="stylesheet" href="style.css?v=20261004-v75">
+<link rel="stylesheet" href="modulo-aplus/css/aplus-module.css">
 </head>
 <body class="bg-white text-ink antialiased">
 
@@ -343,7 +344,7 @@
       </nav>
 
       <div class="hidden lg:flex items-center gap-4">
-        <a href="#programa" class="header-btn-join text-xs font-bold uppercase tracking-wide text-white bg-ink hover:from-morado hover:to-turquesa transition-all duration-300 rounded-full px-6 py-3 shadow-sm hover:shadow-[0_4px_16px_rgba(139,92,246,0.35)] hover:-translate-y-0.5" style="background: #14181F !important; color: #FFFFFF !important;">
+        <a href="#unete" onclick="const el=document.getElementById('unete'); if(el){ el.scrollIntoView({behavior:'smooth'}); }" class="header-btn-join text-xs font-bold uppercase tracking-wide text-white bg-ink hover:from-morado hover:to-turquesa transition-all duration-300 rounded-full px-6 py-3 shadow-sm hover:shadow-[0_4px_16px_rgba(139,92,246,0.35)] hover:-translate-y-0.5 cursor-pointer" style="background: #14181F !important; color: #FFFFFF !important;">
           ÚNETE AL PROGRAMA
         </a>
       </div>
@@ -363,7 +364,7 @@
       <a href="https://fundacionamas.org.co/" target="_blank" rel="noopener noreferrer" class="py-3 px-4 min-h-[48px] flex items-center rounded-xl text-slate2 font-medium hover:bg-gray-50 active:bg-gray-100 active:scale-[0.98] transition-all">Nosotros</a>
       <a href="#programa" class="py-3 px-4 min-h-[48px] flex items-center rounded-xl text-slate2 font-medium hover:bg-gray-50 active:bg-gray-100 active:scale-[0.98] transition-all">Training / Programas</a>
       <a href="#calificaciones" class="py-3 px-4 min-h-[48px] flex items-center rounded-xl text-slate2 font-medium hover:bg-gray-50 active:bg-gray-100 active:scale-[0.98] transition-all">Portal</a>
-      <a href="#programa" class="mt-3 min-h-[48px] flex items-center justify-center text-center text-xs font-bold uppercase tracking-wide text-white bg-gradient-to-r from-morado to-turquesa rounded-2xl px-5 py-3.5 shadow-md active:scale-[0.98] transition-transform">ÚNETE AL PROGRAMA</a>
+      <a href="#unete" onclick="const el=document.getElementById('unete'); if(el){ el.scrollIntoView({behavior:'smooth'}); }" class="mt-3 min-h-[48px] flex items-center justify-center text-center text-xs font-bold uppercase tracking-wide text-white bg-gradient-to-r from-morado to-turquesa rounded-2xl px-5 py-3.5 shadow-md active:scale-[0.98] transition-transform cursor-pointer">ÚNETE AL PROGRAMA</a>
     </nav>
   </div>
 </header>
@@ -620,7 +621,7 @@
 </section>
 
 <!-- ============ CTA FINAL ============ -->
-<section class="py-24 relative overflow-hidden">
+<section id="unete" class="py-24 relative overflow-hidden scroll-mt-20">
   <div class="max-w-7xl mx-auto px-6 lg:px-10">
     <div class="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-ink via-gray-900 to-ink px-8 py-16 sm:px-16 sm:py-20 text-center shadow-2xl border border-white/10">
       <div class="pointer-events-none absolute -top-24 -left-24 w-80 h-80 rounded-full bg-morado/30 blur-3xl"></div>
@@ -747,6 +748,15 @@
       </div>
       <!-- Perfil de usuario en esquina superior derecha con avatar y dropdown + Bell de Notificaciones -->
       <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Botón para ocultar/mostrar módulos en el panel administrativo cuando hay mucha información -->
+        <button type="button" id="btnPersonalizarModulos" onclick="abrirModalGestionModulos()" class="relative p-2 rounded-xl text-slate-600 hover:text-morado hover:bg-morado/10 transition cursor-pointer flex items-center gap-1.5" title="Personalizar módulos visibles" aria-label="Personalizar módulos visibles">
+          <svg class="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h8m-8 6h16" />
+          </svg>
+          <span class="text-xs font-bold hidden sm:inline text-slate-700">Módulos</span>
+          <span id="badgeModulosOcultos" class="hidden text-[10px] font-extrabold bg-amber-500 text-white rounded-full px-1.5 py-0.2 shadow-xs">0</span>
+        </button>
+
         <button type="button" onclick="showPanel('notificaciones')" class="relative p-2 rounded-xl text-slate2 hover:text-morado hover:bg-morado/10 transition cursor-pointer" title="Centro de Notificaciones y Alertas" aria-label="Notificaciones">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -806,7 +816,7 @@
         <span>Administración</span>
       </div>
 
-      <div class="mb-6">
+      <div class="mb-6" data-section="general">
         <p class="role-sidebar-section-title">General</p>
         <nav class="flex flex-col gap-1 text-sm">
           <button onclick="showPanel('resumen')" data-panel="resumen" data-panel-code="admin.resumen" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
@@ -823,7 +833,7 @@
         </nav>
       </div>
 
-      <div class="mb-6" data-super-only-group="true">
+      <div class="mb-6" data-super-only-group="true" data-section="superadmin">
         <p class="role-sidebar-section-title is-highlight">Superadmin</p>
         <nav class="flex flex-col gap-1 text-sm">
           <button onclick="showPanel('administradores')" data-panel="administradores" data-panel-code="admin.usuarios" data-super-only="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
@@ -833,12 +843,16 @@
         </nav>
       </div>
 
-      <div class="mb-6">
+      <div class="mb-6" data-section="academica">
         <p class="role-sidebar-section-title">Gestión académica</p>
         <nav class="flex flex-col gap-1 text-sm">
           <button onclick="showPanel('usuarios')" data-panel="usuarios" data-panel-code="admin.usuarios" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM5 20a7 7 0 0114 0"/></svg>
             Usuarios
+          </button>
+          <button onclick="showPanel('talentos')" data-panel="talentos" data-panel-code="admin.talentos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            Banco de Talentos
           </button>
           <button onclick="showPanel('perfiles')" data-panel="perfiles" data-panel-code="admin.perfiles" data-super-only="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
@@ -864,10 +878,72 @@
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M4.93 4.93l14.14 14.14M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             Semáforo en riesgo
           </button>
+          <button onclick="showPanel('calificaciones')" data-panel="calificaciones" data-panel-code="admin.calificaciones" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 012-2h2a2 2 0 012 2v6m-9 0h14a1 1 0 001-1V9.5a1 1 0 00-.4-.8l-6-4.5a1 1 0 00-1.2 0l-6 4.5a1 1 0 00-.4.8V18a1 1 0 001 1z"/></svg>
+            Calificaciones
+          </button>
         </nav>
       </div>
 
-      <div class="mb-6">
+      <div class="mb-6" data-section="proyectos">
+        <p class="role-sidebar-section-title">Portafolio & Proyectos</p>
+        <nav class="flex flex-col gap-1 text-sm">
+          <button onclick="showPanel('proyectosFundacion')" data-panel="proyectosFundacion" data-panel-code="admin.proyectos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            Proyectos Fundación
+          </button>
+          <button onclick="showPanel('proyectosEstudiantes')" data-panel="proyectosEstudiantes" data-panel-code="admin.proyectosEstudiantes" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+            Proyectos de Estudiantes
+          </button>
+        </nav>
+      </div>
+
+      <div class="mb-6" data-section="pagos">
+        <p class="role-sidebar-section-title">Finanzas & Pagos</p>
+        <nav class="flex flex-col gap-1 text-sm">
+          <button onclick="showPanel('pagos')" data-panel="pagos" data-panel-code="admin.pagos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Pagos
+          </button>
+        </nav>
+      </div>
+
+      <div class="mb-6" data-section="comunicacion">
+        <p class="role-sidebar-section-title">Comunicación</p>
+        <nav class="flex flex-col gap-1 text-sm">
+          <button onclick="showPanel('memorandos')" data-panel="memorandos" data-panel-code="admin.memorandos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            Memorandos
+          </button>
+        </nav>
+      </div>
+      <div class="mb-6" data-section="pqr">
+        <p class="role-sidebar-section-title">PQR</p>
+        <nav class="flex flex-col gap-1 text-sm">
+          <button onclick="showPanel('pqr')" data-panel="pqr" data-panel-code="admin.pqr" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.02-.465L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+            PQR
+            <span id="pqrBadgeAdmin" class="hidden ml-auto text-[10px] font-bold bg-oro text-white rounded-full w-5 h-5 grid place-items-center">0</span>
+          </button>
+        </nav>
+      </div>
+
+      <div class="mb-6" data-section="reportes">
+        <p class="role-sidebar-section-title">Reportes</p>
+        <nav class="flex flex-col gap-1 text-sm">
+          <button onclick="showPanel('informesAdmin')" data-panel="informesAdmin" data-panel-code="admin.informesAdmin" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2zM12 4.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7z"/></svg>
+            Informes de docentes
+          </button>
+          <button onclick="showPanel('trainee')" data-panel="trainee" data-panel-code="admin.trainee" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            Historial Trainee
+          </button>
+        </nav>
+      </div>
+
+      <div class="mb-6" data-section="recursos">
         <p class="role-sidebar-section-title">Inventario y Recursos</p>
         <nav class="flex flex-col gap-1 text-sm">
           <button onclick="showPanel('recursos')" data-panel="recursos" data-panel-code="admin.recursos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
@@ -885,45 +961,7 @@
         </nav>
       </div>
 
-      <div class="mb-6">
-        <p class="role-sidebar-section-title">Comunicación</p>
-        <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanel('memorandos')" data-panel="memorandos" data-panel-code="admin.memorandos" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            Memorandos
-          </button>
-        </nav>
-      </div>
-      <div class="mb-6">
-        <p class="role-sidebar-section-title">PQR</p>
-        <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanel('pqr')" data-panel="pqr" data-panel-code="admin.pqr" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.02-.465L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-            PQR
-            <span id="pqrBadgeAdmin" class="hidden ml-auto text-[10px] font-bold bg-oro text-white rounded-full w-5 h-5 grid place-items-center">0</span>
-          </button>
-        </nav>
-      </div>
-
-      <div class="mb-6">
-        <p class="role-sidebar-section-title">Reportes</p>
-        <nav class="flex flex-col gap-1 text-sm">
-          <button onclick="showPanel('calificaciones')" data-panel="calificaciones" data-panel-code="admin.calificaciones" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 012-2h2a2 2 0 012 2v6m-9 0h14a1 1 0 001-1V9.5a1 1 0 00-.4-.8l-6-4.5a1 1 0 00-1.2 0l-6 4.5a1 1 0 00-.4.8V18a1 1 0 001 1z"/></svg>
-            Calificaciones
-          </button>
-          <button onclick="showPanel('informesAdmin')" data-panel="informesAdmin" data-panel-code="admin.informesAdmin" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2zM12 4.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7z"/></svg>
-            Informes de docentes
-          </button>
-          <button onclick="showPanel('trainee')" data-panel="trainee" data-panel-code="admin.trainee" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            Historial Trainee
-          </button>
-        </nav>
-      </div>
-
-      <div class="mb-6">
+      <div class="mb-6" data-section="formularios">
         <p class="role-sidebar-section-title">Formularios</p>
         <nav class="flex flex-col gap-1 text-sm">
           <button onclick="showPanel('formularios')" data-panel="formularios" data-panel-code="admin.forms" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
@@ -937,7 +975,7 @@
         </nav>
       </div>
 
-      <div>
+      <div class="mb-6" data-section="sistema">
         <p class="role-sidebar-section-title">Sistema</p>
         <nav class="flex flex-col gap-1 text-sm">
           <button onclick="showPanel('chatvoz')" data-panel="chatvoz" data-panel-code="admin.chatvoz" data-super-only="true" class="panel-tab text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
@@ -981,6 +1019,7 @@
 
       <div id="panel-administradores" class="panel-content hidden"><div id="mount-administradores"></div></div>
       <div id="panel-usuarios" class="panel-content hidden"><div id="mount-usuarios"></div></div>
+      <div id="panel-talentos" class="panel-content hidden"><div id="mount-talentos"></div></div>
       <div id="panel-perfiles" class="panel-content hidden"><div id="mount-perfiles"></div></div>
       <div id="panel-modulos" class="panel-content hidden"><div id="mount-modulos"></div></div>
       <div id="panel-cursos" class="panel-content hidden"><div id="mount-cursos"></div></div>
@@ -990,6 +1029,9 @@
       <div id="panel-memorandos" class="panel-content hidden"><div id="mount-memorandos"></div></div>
       <div id="panel-pqr" class="panel-content hidden"><div id="mount-pqr"></div></div>
       <div id="panel-calificaciones" class="panel-content hidden"><div id="mount-calificaciones"></div></div>
+      <div id="panel-pagos" class="panel-content hidden"><div id="mount-pagos"></div></div>
+      <div id="panel-proyectosFundacion" class="panel-content hidden"><div id="mount-proyectos-fundacion"></div></div>
+      <div id="panel-proyectosEstudiantes" class="panel-content hidden"><div id="mount-proyectos-estudiantes"></div></div>
       <div id="panel-informesAdmin" class="panel-content hidden"><div id="mount-informes-admin"></div></div>
       <div id="panel-formularios" class="panel-content hidden min-w-0 max-w-full"><div id="mount-formularios" class="min-w-0 max-w-full"></div></div>
       <div id="panel-formulariosPapelera" class="panel-content hidden"><div id="mount-formulariosPapelera"></div></div>
@@ -1007,18 +1049,18 @@
   <div id="adminModal" class="hidden fixed inset-0 z-[100]">
     <div class="absolute inset-0 bg-ink/60 backdrop-blur-md transition-opacity" onclick="closeModal()"></div>
     <div class="absolute inset-0 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
-      <div class="relative bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white w-full max-w-2xl my-8 p-7 sm:p-9 ring-1 ring-black/5">
-        <button onclick="closeModal()" class="absolute top-5 right-5 text-slate2 hover:text-ink transition p-1 rounded-full hover:bg-gray-100">
+      <div class="relative bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white w-full max-w-2xl my-auto p-5 sm:p-6 max-h-[92vh] overflow-y-auto ring-1 ring-black/5">
+        <button onclick="closeModal()" class="absolute top-4 right-4 text-slate2 hover:text-ink transition p-1 rounded-full hover:bg-gray-100">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
-        <div class="pb-5 mb-5 border-b border-gray-100">
+        <div class="pb-3 mb-4 border-b border-gray-100">
           <p id="modalEyebrow" class="text-xs font-bold tracking-widest uppercase text-morado"></p>
-          <h3 id="modalTitle" class="text-xl font-extrabold text-ink mt-1 tracking-tight"></h3>
+          <h3 id="modalTitle" class="text-lg sm:text-xl font-extrabold text-ink mt-0.5 tracking-tight"></h3>
         </div>
-        <form id="modalForm" onsubmit="event.preventDefault(); saveModal();" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4"></form>
-        <div class="flex items-center gap-3 mt-8">
-          <button type="button" onclick="saveModal()" class="btn-glow-primary flex-1 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold text-sm py-3.5 shadow-lg shadow-morado/20 hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition">Guardar</button>
-          <button type="button" onclick="closeModal()" class="rounded-2xl border border-gray-200 text-slate2 font-semibold text-sm py-3.5 px-6 hover:bg-gray-50 transition">Cancelar</button>
+        <form id="modalForm" onsubmit="event.preventDefault(); saveModal();" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3.5"></form>
+        <div class="flex items-center gap-3 mt-5 pt-1">
+          <button type="button" onclick="saveModal()" class="btn-glow-primary flex-1 rounded-xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold text-sm py-2.5 shadow-md shadow-morado/20 hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition cursor-pointer">Guardar</button>
+          <button type="button" onclick="closeModal()" class="rounded-xl border border-gray-200 text-slate2 font-semibold text-sm py-2.5 px-6 hover:bg-gray-50 transition cursor-pointer">Cancelar</button>
         </div>
       </div>
     </div>
@@ -1430,6 +1472,10 @@
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.25C10.5 5 8.5 4.5 6.5 4.5c-1 0-2 .1-3 .4v13.6c1-.3 2-.4 3-.4 2 0 4 .5 5.5 1.7 1.5-1.2 3.5-1.7 5.5-1.7 1 0 2 .1 3 .4V4.9c-1-.3-2-.4-3-.4-2 0-4 .5-5.5 1.75V19"/></svg>
             Pensum curricular
           </button>
+          <button onclick="showPanelEstudiante('misProyectos')" data-spanel="misProyectos" data-panel-code="estudiante.misProyectos" class="panel-tab-s text-left rounded-xl px-4 py-2.5 transition border-l-2 border-transparent text-slate2 hover:bg-gray-100 hover:text-ink flex items-center gap-2.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+            Mis Proyectos
+          </button>
         </nav>
       </div>
 
@@ -1505,6 +1551,7 @@
       <div id="panel-s-memorandos" class="panel-content-s hidden"><div id="mount-s-memorandos"></div></div>
       <div id="panel-s-pqr" class="panel-content-s hidden"><div id="mount-s-pqr"></div></div>
       <div id="panel-s-agenda" class="panel-content-s hidden"><div id="mount-s-agenda"></div></div>
+      <div id="panel-s-misProyectos" class="panel-content-s hidden"><div id="mount-s-misProyectos"></div></div>
       <div id="panel-s-solicitar_equipo" class="panel-content-s hidden"><div id="mount-s-solicitar_equipo"></div></div>
     </main>
   </div>
@@ -1816,6 +1863,1084 @@
   </div>
 </div>
 
+<!-- ============ MODAL: GESTIÓN DE HONORARIOS Y PAGOS DE DOCENTES (CONFIDENCIAL ADMIN) ============ -->
+<div id="modalPagosDocente" class="hidden fixed inset-0 z-[125] flex items-center justify-center p-3 sm:p-5">
+  <div class="absolute inset-0 bg-ink/50 backdrop-blur-sm transition-opacity" onclick="cerrarModalPagosDocente()"></div>
+  <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-4xl z-10 animate-fade-in border border-gray-100 flex flex-col max-h-[92vh] overflow-hidden">
+    <!-- Header -->
+    <div class="p-5 sm:p-6 bg-gradient-to-r from-purple-900 via-indigo-900 to-purple-950 text-white shrink-0">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-purple-500/20 text-purple-200 border border-purple-400/30">
+              <svg class="w-3 h-3 text-purple-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              Confidencial · Exclusivo Administración
+            </span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30">
+              Pago por Horas
+            </span>
+          </div>
+          <h2 id="pagosDocenteNombre" class="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">Profesor</h2>
+          <div class="flex items-center gap-3 text-xs text-purple-200 mt-1 flex-wrap">
+            <span id="pagosDocenteEmail" class="flex items-center gap-1"></span>
+            <span class="text-purple-400">·</span>
+            <span id="pagosDocenteTelefono" class="flex items-center gap-1"></span>
+            <span class="text-purple-400">·</span>
+            <span id="pagosDocenteCohortes" class="font-semibold text-white"></span>
+          </div>
+        </div>
+        <button type="button" onclick="cerrarModalPagosDocente()" class="text-purple-200 hover:text-white p-2 rounded-full hover:bg-white/10 transition cursor-pointer shrink-0" title="Cerrar modal">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Body Scrollable -->
+    <div class="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
+      <!-- KPIs Grid Ordenada y Calculada por Datos Reales -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[96px]">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Tarifa por Hora</p>
+          <p id="kpiTarifaHora" class="text-lg sm:text-xl font-black text-purple-700 mt-1">$ 0 COP</p>
+          <p id="kpiTarifaSub" class="text-[11px] text-slate-500 mt-0.5 truncate">Asignada al perfil</p>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[96px]">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Horas Liquidadas</p>
+          <p id="kpiHorasTotales" class="text-lg sm:text-xl font-black text-ink mt-1">0.0 h</p>
+          <p id="kpiHorasSub" class="text-[11px] text-slate-500 mt-0.5 truncate">Registradas en pagos</p>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[96px]">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Liquidado</p>
+          <p id="kpiTotalPagado" class="text-lg sm:text-xl font-black text-indigo-700 mt-1">$ 0 COP</p>
+          <p id="kpiPagosCount" class="text-[11px] text-slate-500 mt-0.5 truncate">0 pagos registrados</p>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[96px]">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Última Liquidación</p>
+          <p id="kpiUltimoPagoMonto" class="text-lg sm:text-xl font-black text-emerald-600 mt-1">$ 0 COP</p>
+          <p id="kpiUltimoPagoDetalle" class="text-[11px] text-slate-500 mt-0.5 truncate">Sin pagos aún</p>
+        </div>
+      </div>
+
+      <!-- Datos Bancarios & Tarifa Card -->
+      <div class="bg-white rounded-2xl border border-gray-200/90 shadow-sm overflow-hidden">
+        <div class="p-4 sm:p-5 flex items-center justify-between border-b border-gray-100 flex-wrap gap-2">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-ink">Información de Cuenta y Transferencia</h3>
+              <p class="text-[11px] text-slate-500">Datos bancarios donde la Fundación consigna los honorarios</p>
+            </div>
+          </div>
+          <button type="button" id="btnToggleEditBanco" onclick="toggleEditarDatosBancarios()" class="px-3 py-1.5 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition cursor-pointer flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            <span>Editar datos / tarifa</span>
+          </button>
+        </div>
+
+        <!-- Vista de lectura de datos bancarios -->
+        <div id="vistaDatosBancarios" class="p-4 sm:p-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 text-xs">
+          <div>
+            <p class="text-[10px] font-bold uppercase text-slate-400">Entidad Bancaria</p>
+            <p id="bancoVistaNombre" class="font-extrabold text-ink mt-0.5">No registrado</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase text-slate-400">Tipo de Cuenta</p>
+            <p id="bancoVistaTipo" class="font-extrabold text-ink mt-0.5">No registrado</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase text-slate-400">Número de Cuenta</p>
+            <p id="bancoVistaNumero" class="font-mono font-bold text-ink mt-0.5">No registrado</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase text-slate-400">Titular</p>
+            <p id="bancoVistaTitular" class="font-semibold text-ink mt-0.5">No registrado</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase text-slate-400">Documento / NIT</p>
+            <p id="bancoVistaDoc" class="font-semibold text-ink mt-0.5">No registrado</p>
+          </div>
+        </div>
+
+        <!-- Formulario editable de datos bancarios -->
+        <div id="formDatosBancarios" class="hidden p-4 sm:p-5 bg-purple-50/40 border-t border-purple-100">
+          <form onsubmit="event.preventDefault(); guardarDatosBancariosDocente();" class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Tarifa por Hora ($ COP)</label>
+              <input type="number" id="editTarifaHora" min="0" step="500" class="w-full rounded-xl border border-gray-300 p-2 text-xs font-bold text-purple-700 focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white" placeholder="Ej: 35000" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Banco / Entidad</label>
+              <input type="text" id="editBanco" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white" placeholder="Ej: Bancolombia / Nequi" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Tipo de Cuenta</label>
+              <select id="editTipoCuenta" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white">
+                <option value="Ahorros">Ahorros</option>
+                <option value="Corriente">Corriente</option>
+                <option value="Nequi">Nequi</option>
+                <option value="Daviplata">Daviplata</option>
+                <option value="Otro">Otro</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Número de Cuenta</label>
+              <input type="text" id="editNumeroCuenta" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white font-mono" placeholder="Ej: 123-456789-00" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Titular de Cuenta</label>
+              <input type="text" id="editTitularCuenta" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white" placeholder="Nombre completo" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Cédula / NIT</label>
+              <input type="text" id="editDocumentoCuenta" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white" placeholder="C.C. o NIT" />
+            </div>
+            <div class="sm:col-span-3 lg:col-span-6 flex items-center justify-end gap-2 pt-2">
+              <button type="button" onclick="toggleEditarDatosBancarios(false)" class="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-gray-100 transition cursor-pointer">
+                Cancelar
+              </button>
+              <button type="submit" class="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 shadow-sm transition cursor-pointer">
+                Guardar Datos Bancarios
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Historial de Pagos Section -->
+      <div class="bg-white rounded-2xl border border-gray-200/90 shadow-sm overflow-hidden">
+        <div class="p-4 sm:p-5 flex items-center justify-between border-b border-gray-100 flex-wrap gap-3">
+          <div>
+            <h3 class="text-sm font-bold text-ink">Historial de Liquidaciones y Pagos</h3>
+            <p class="text-[11px] text-slate-500">Registro con soporte documental de cada pago realizado</p>
+          </div>
+          <button type="button" onclick="abrirFormNuevoPagoDocente()" class="px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-purple-700 hover:bg-purple-800 shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Registrar Pago / Liquidación
+          </button>
+        </div>
+
+        <!-- Tabla de Pagos -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead>
+              <tr class="bg-slate-50/80 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-gray-100">
+                <th class="py-3 px-4">Periodo / Concepto</th>
+                <th class="py-3 px-3">Fecha de Pago</th>
+                <th class="py-3 px-3 text-center">Horas</th>
+                <th class="py-3 px-3 text-right">Tarifa / Hora</th>
+                <th class="py-3 px-4 text-right">Total Pagado</th>
+                <th class="py-3 px-3">Referencia / Banco</th>
+                <th class="py-3 px-3 text-center">Comprobante</th>
+                <th class="py-3 px-3 text-center">Estado</th>
+                <th class="py-3 px-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaPagosDocenteCuerpo" class="divide-y divide-gray-100">
+              <!-- Renderizado dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: FORMULARIO REGISTRAR / EDITAR PAGO ============ -->
+<div id="modalFormPagoDocente" class="hidden fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-5">
+  <div class="absolute inset-0 bg-ink/60 backdrop-blur-sm transition-opacity" onclick="cerrarFormNuevoPagoDocente()"></div>
+  <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-xl z-10 animate-fade-in border border-gray-100 flex flex-col max-h-[92vh] overflow-hidden">
+    <!-- Header -->
+    <div class="p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-slate-50">
+      <div>
+        <h3 id="formPagoTitulo" class="text-base font-extrabold text-ink">Registrar Pago de Honorarios</h3>
+        <p id="formPagoSubtitulo" class="text-xs text-purple-700 font-semibold mt-0.5">Docente</p>
+      </div>
+      <button type="button" onclick="cerrarFormNuevoPagoDocente()" class="text-slate-400 hover:text-ink p-1.5 rounded-full hover:bg-gray-200 transition cursor-pointer">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- Form -->
+    <form id="formRegistroPago" onsubmit="event.preventDefault(); guardarNuevoPagoDocente();" class="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs">
+      <input type="hidden" id="pago_id" />
+      <input type="hidden" id="pago_docente_id" />
+      <input type="hidden" id="pago_docente_nombre" />
+      <input type="hidden" id="pago_comprobante_url" />
+      <input type="hidden" id="pago_comprobante_nombre" />
+      <input type="hidden" id="pago_comprobante_tipo" />
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Período / Concepto <span class="text-red-500">*</span></label>
+          <input type="text" id="pago_periodo" required class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: Octubre 2026 - Mes Completo" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Mes Calendario <span class="text-red-500">*</span></label>
+          <input type="month" id="pago_mes" required class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3.5 bg-purple-50/50 p-3.5 rounded-2xl border border-purple-100">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Horas Liq. <span class="text-red-500">*</span></label>
+          <input type="number" id="pago_horas" min="0" step="0.5" required oninput="calcularTotalPagoDocente()" class="w-full rounded-xl border border-gray-300 p-2 text-xs font-bold text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white text-center" placeholder="Ej: 16.0" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Tarifa / Hora <span class="text-red-500">*</span></label>
+          <input type="text" inputmode="numeric" id="pago_tarifa_hora" required oninput="this.value=this.value.replace(/[^0-9]/g,'');calcularTotalPagoDocente();" class="w-full rounded-xl border border-gray-300 p-2 text-xs font-bold text-purple-700 focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white text-center" placeholder="Ej: 35000" />
+        </div>
+        <div>
+          <label class="block font-bold text-purple-900 mb-1">Total a Pagar ($)</label>
+          <input type="text" inputmode="numeric" id="pago_total" required oninput="this.value=this.value.replace(/[^0-9]/g,'')" class="w-full rounded-xl border-2 border-purple-400 p-2 text-xs font-black text-purple-900 focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white text-center" placeholder="Ej: 560000" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Fecha de Pago / Transferencia <span class="text-red-500">*</span></label>
+          <input type="date" id="pago_fecha" required class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Entidad Bancaria</label>
+          <input type="text" id="pago_banco" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: Bancolombia / Nequi" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Número de Referencia / Comprobante</label>
+        <input type="text" id="pago_referencia" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: TRANSF-8923482 o # de aprobación" />
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Observaciones / Notas Adicionales</label>
+        <textarea id="pago_observaciones" rows="2" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Notas internas de la liquidación..."></textarea>
+      </div>
+
+      <!-- Subida de Comprobante / Captura -->
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Captura de Pantalla / Comprobante de Transferencia</label>
+        <div id="dropzoneComprobante" class="relative border-2 border-dashed border-purple-200 hover:border-purple-400 rounded-2xl p-4 text-center bg-purple-50/20 transition cursor-pointer">
+          <input type="file" id="pago_file_input" accept="image/png,image/jpeg,image/webp,application/pdf" onchange="manejarComprobantePagoDocente(this)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+          <div id="dropzonePrompt" class="space-y-1">
+            <div class="w-10 h-10 mx-auto rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <p class="text-xs font-bold text-ink">Haz clic o arrastra aquí la captura de la transferencia</p>
+            <p class="text-[11px] text-slate-500">Formatos soportados: PNG, JPG, WEBP o PDF (Máx. 8 MB)</p>
+          </div>
+          <!-- Preview container -->
+          <div id="dropzonePreview" class="hidden flex items-center justify-between p-2 bg-white rounded-xl border border-purple-200">
+            <div class="flex items-center gap-2.5 overflow-hidden">
+              <img id="previewImgComprobante" class="w-10 h-10 rounded-lg object-cover border border-gray-200 shrink-0 hidden" alt="Vista previa" />
+              <div id="previewPdfIcon" class="w-10 h-10 rounded-lg bg-red-50 text-red-600 flex items-center justify-center font-bold text-sm shrink-0 hidden">PDF</div>
+              <div class="text-left truncate">
+                <p id="previewNombreComprobante" class="text-xs font-bold text-ink truncate">comprobante.png</p>
+                <p class="text-[10px] text-emerald-600 font-semibold">Listo para guardar</p>
+              </div>
+            </div>
+            <button type="button" onclick="quitarComprobantePagoDocente(event)" class="text-xs font-bold text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 transition cursor-pointer shrink-0">
+              Quitar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
+        <button type="button" onclick="cerrarFormNuevoPagoDocente()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-gray-100 transition cursor-pointer">
+          Cancelar
+        </button>
+        <button type="submit" id="btnGuardarPago" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 shadow-sm transition cursor-pointer">
+          Guardar Registro de Pago
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ MODAL: REGISTRAR / EDITAR PAGO DE ESTUDIANTE ============ -->
+<div id="modalFormPagoEstudiante" class="hidden fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-5">
+  <div class="absolute inset-0 bg-ink/60 backdrop-blur-sm transition-opacity" onclick="cerrarFormPagoEstudiante()"></div>
+  <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-lg z-10 animate-fade-in border border-gray-100 flex flex-col max-h-[92vh] overflow-hidden">
+    <!-- Header -->
+    <div class="p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-slate-50">
+      <div>
+        <h3 id="formPagoEstudianteTitulo" class="text-base font-extrabold text-ink">Registrar Pago de Estudiante</h3>
+        <p id="formPagoEstudianteSubtitulo" class="text-xs text-purple-700 font-semibold mt-0.5">Comprobante y soporte de matrícula / mensualidad</p>
+      </div>
+      <button type="button" onclick="cerrarFormPagoEstudiante()" class="text-slate-400 hover:text-ink p-1.5 rounded-full hover:bg-gray-200 transition cursor-pointer">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- Form Body -->
+    <form id="formRegistroPagoEstudiante" onsubmit="event.preventDefault(); guardarNuevoPagoEstudiante();" class="p-5 overflow-y-auto space-y-4 text-xs">
+      <input type="hidden" id="pago_estudiante_id" />
+
+      <!-- Selección de Estudiante -->
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Estudiante <span class="text-red-500">*</span></label>
+        <select id="pago_estudiante_usuario_id" onchange="onSeleccionarEstudianteParaPago(this.value)" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" required>
+          <option value="">-- Seleccionar Estudiante --</option>
+        </select>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Cohorte / Programa</label>
+          <input type="text" id="pago_estudiante_cohorte" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none bg-slate-50" placeholder="Ej: Cohorte 1" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Mes Cubierto <span class="text-red-500">*</span></label>
+          <input type="month" id="pago_estudiante_mes" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" required />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Concepto <span class="text-red-500">*</span></label>
+          <select id="pago_estudiante_concepto" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" required>
+            <option value="Mensualidad">Mensualidad</option>
+            <option value="Matrícula">Matrícula</option>
+            <option value="Certificación">Certificación</option>
+            <option value="Cuota">Cuota</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Monto Pagado ($ COP) <span class="text-red-500">*</span></label>
+          <input type="text" inputmode="numeric" id="pago_estudiante_monto" oninput="this.value=this.value.replace(/[^0-9]/g,'')" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-bold focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: 1300000" required />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Fecha del Pago <span class="text-red-500">*</span></label>
+          <input type="date" id="pago_estudiante_fecha" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" required />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Medio de Pago <span class="text-red-500">*</span></label>
+          <select id="pago_estudiante_medio" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" required>
+            <option value="Bancolombia">Bancolombia</option>
+            <option value="Nequi">Nequi</option>
+            <option value="Daviplata">Daviplata</option>
+            <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+            <option value="Efectivo">Efectivo</option>
+            <option value="PSE">PSE</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Número de Referencia / Aprobación</label>
+        <input type="text" id="pago_estudiante_referencia" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: REF-9832104" />
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Observaciones / Notas</label>
+        <textarea id="pago_estudiante_observaciones" rows="2" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Notas adicionales sobre el pago..."></textarea>
+      </div>
+
+      <!-- Subida de Comprobante / Captura -->
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Captura de Pantalla / Comprobante de Pago</label>
+        <div id="dropzoneComprobanteEstudiante" class="relative border-2 border-dashed border-purple-200 hover:border-purple-400 rounded-2xl p-4 text-center bg-purple-50/20 transition cursor-pointer">
+          <input type="file" id="pago_estudiante_file_input" accept="image/png,image/jpeg,image/webp,application/pdf" onchange="manejarComprobantePagoEstudiante(this)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+          <div id="dropzonePromptEstudiante" class="space-y-1">
+            <div class="w-10 h-10 mx-auto rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <p class="text-xs font-bold text-ink">Haz clic o arrastra aquí la captura del comprobante</p>
+            <p class="text-[11px] text-slate-500">Formatos soportados: PNG, JPG, WEBP o PDF (Máx. 8 MB)</p>
+          </div>
+          <!-- Preview container -->
+          <div id="dropzonePreviewEstudiante" class="hidden flex items-center justify-between p-2 bg-white rounded-xl border border-purple-200">
+            <div class="flex items-center gap-2.5 overflow-hidden">
+              <img id="previewImgComprobanteEstudiante" class="w-10 h-10 rounded-lg object-cover border border-gray-200 shrink-0 hidden" alt="Vista previa" />
+              <div id="previewPdfIconEstudiante" class="w-10 h-10 rounded-lg bg-red-50 text-red-600 flex items-center justify-center font-bold text-sm shrink-0 hidden">PDF</div>
+              <div class="text-left truncate">
+                <p id="previewNombreComprobanteEstudiante" class="text-xs font-bold text-ink truncate">comprobante.png</p>
+                <p class="text-[10px] text-emerald-600 font-semibold">Listo para guardar</p>
+              </div>
+            </div>
+            <button type="button" onclick="quitarComprobantePagoEstudiante(event)" class="text-xs font-bold text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 transition cursor-pointer shrink-0">
+              Quitar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
+        <button type="button" onclick="cerrarFormPagoEstudiante()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-gray-100 transition cursor-pointer">
+          Cancelar
+        </button>
+        <button type="submit" id="btnGuardarPagoEstudiante" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 shadow-sm transition cursor-pointer">
+          Guardar Pago de Estudiante
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ MODAL: REGISTRAR / GENERAR PAGOS POR COHORTE ============ -->
+<div id="modalPagosPorCohorte" class="hidden fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-5">
+  <div class="absolute inset-0 bg-ink/60 backdrop-blur-sm transition-opacity" onclick="cerrarModalPagosPorCohorte()"></div>
+  <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-lg z-10 animate-fade-in border border-gray-100 flex flex-col max-h-[92vh] overflow-hidden">
+    <!-- Header -->
+    <div class="p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-slate-50">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shadow-sm">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+        </div>
+        <div>
+          <h3 class="text-base font-extrabold text-ink">Registrar Pagos por Cohorte</h3>
+          <p class="text-xs text-purple-700 font-semibold mt-0.5">Genera el cobro a todos los estudiantes de la cohorte el mismo día</p>
+        </div>
+      </div>
+      <button type="button" onclick="cerrarModalPagosPorCohorte()" class="text-slate-400 hover:text-ink p-1.5 rounded-full hover:bg-gray-200 transition cursor-pointer">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- Form Body -->
+    <form id="formPagosCohorte" onsubmit="event.preventDefault(); generarPagosParaCohorte();" class="p-5 overflow-y-auto space-y-4 text-xs">
+      <!-- Selección de Cohorte -->
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Seleccionar Cohorte <span class="text-red-500">*</span></label>
+        <select id="pago_cohorte_seleccion" onchange="onCambioCohorteGenerarPagos(this.value)" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-semibold focus:ring-2 focus:ring-purple-400 focus:outline-none" required>
+          <option value="">-- Selecciona una Cohorte --</option>
+        </select>
+        <div id="pago_cohorte_resumen_estudiantes" class="hidden mt-2 p-2.5 rounded-xl bg-purple-50/60 border border-purple-200 text-purple-900 text-xs flex items-center justify-between">
+          <span class="font-medium">Estudiantes encontrados en esta cohorte:</span>
+          <span id="pago_cohorte_cant_estudiantes" class="font-extrabold px-2 py-0.5 rounded-full bg-purple-200 text-purple-900 text-[11px]">0</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Fecha de Pago (Mismo día a todos) <span class="text-red-500">*</span></label>
+          <input type="date" id="pago_cohorte_fecha" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" required />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Mes Cubierto <span class="text-red-500">*</span></label>
+          <input type="month" id="pago_cohorte_mes" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" required />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Concepto <span class="text-red-500">*</span></label>
+          <select id="pago_cohorte_concepto" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" required>
+            <option value="Mensualidad">Mensualidad</option>
+            <option value="Matrícula">Matrícula</option>
+            <option value="Certificación">Certificación</option>
+            <option value="Cuota">Cuota</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Monto por Estudiante ($ COP) <span class="text-red-500">*</span></label>
+          <input type="text" inputmode="numeric" id="pago_cohorte_monto" oninput="this.value=this.value.replace(/[^0-9]/g,'')" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-bold focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: 1300000" required />
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Medio de Pago Inicial</label>
+        <select id="pago_cohorte_medio" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none">
+          <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+          <option value="Bancolombia">Bancolombia</option>
+          <option value="Nequi">Nequi</option>
+          <option value="Daviplata">Daviplata</option>
+          <option value="Efectivo">Efectivo</option>
+          <option value="Pendiente">Pendiente de confirmación</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Observación general (opcional)</label>
+        <textarea id="pago_cohorte_observaciones" rows="2" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Nota opcional para todos los registros creados..."></textarea>
+      </div>
+
+      <div class="p-3 bg-amber-50/80 border border-amber-200 rounded-2xl flex items-start gap-2.5">
+        <span class="text-amber-600 shrink-0 mt-0.5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </span>
+        <p class="text-[11px] text-amber-900 leading-relaxed">
+          Los registros se generarán para cada estudiante. En la tabla de pagos o en el Historial Trainee aparecerá el botón <strong>"Adjuntar captura"</strong> para adjuntar la foto o comprobante a medida que paguen.
+        </p>
+      </div>
+
+      <div class="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
+        <button type="button" onclick="cerrarModalPagosPorCohorte()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-gray-100 transition cursor-pointer">
+          Cancelar
+        </button>
+        <button type="submit" id="btnGenerarPagosCohorte" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 shadow-sm transition cursor-pointer">
+          Generar Registros de Pago
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ MODAL: LIGHTBOX / VISOR DE COMPROBANTE DE PAGO ============ -->
+<div id="modalVisorComprobanteDocente" class="hidden fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-5">
+  <div class="absolute inset-0 bg-ink/70 backdrop-blur-md transition-opacity" onclick="cerrarVisorComprobanteDocente()"></div>
+  <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-3xl z-10 animate-fade-in border border-gray-100 flex flex-col max-h-[94vh] overflow-hidden">
+    <!-- Header -->
+    <div class="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-slate-50">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <div>
+          <h3 id="visorComprobanteDocente" class="text-sm font-extrabold text-ink leading-tight">Comprobante de Pago</h3>
+          <p id="visorComprobanteSubtitulo" class="text-[11px] text-slate-500 mt-0.5">Detalle de transferencia</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="button" id="btnAbrirComprobantePestana" onclick="abrirComprobanteEnPestana()" class="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-gray-200 transition flex items-center gap-1.5 cursor-pointer shadow-2xs" title="Abrir en pestaña nueva a tamaño completo">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+          Abrir
+        </button>
+        <button type="button" id="btnDescargarComprobante" onclick="descargarComprobanteActual()" class="px-3 py-1.5 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition flex items-center gap-1.5 cursor-pointer shadow-2xs">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Descargar
+        </button>
+        <button type="button" onclick="cerrarVisorComprobanteDocente()" class="text-slate-400 hover:text-ink p-1.5 rounded-full hover:bg-gray-200 transition cursor-pointer">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Viewer Body -->
+    <div class="p-4 sm:p-6 overflow-y-auto flex-1 flex items-center justify-center bg-slate-900/5 min-h-[300px]">
+      <img id="visorComprobanteImg" class="max-h-[70vh] max-w-full rounded-2xl shadow-md border border-gray-200 object-contain hidden" alt="Captura de Comprobante" />
+      <div id="visorComprobantePdfContainer" class="w-full h-[70vh] rounded-2xl overflow-hidden shadow-md border border-gray-200 bg-white hidden">
+        <iframe id="visorComprobantePdfFrame" class="w-full h-full border-0"></iframe>
+      </div>
+      <div id="visorComprobanteVacio" class="text-center p-8 hidden">
+        <p class="text-sm font-bold text-slate-500">Este registro no tiene comprobante adjunto.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: FORMULARIO CREAR / EDITAR PROYECTO FUNDACIÓN ============ -->
+<div id="modalFormProyectoFundacion" class="hidden fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-5">
+  <div class="absolute inset-0 bg-ink/70 backdrop-blur-md transition-opacity" onclick="cerrarFormProyectoFundacion()"></div>
+  <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-3xl z-10 animate-fade-in border border-gray-100 flex flex-col max-h-[94vh] overflow-hidden">
+    <!-- Header -->
+    <div class="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-slate-50">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+        </div>
+        <div>
+          <h3 id="formProyectoFundacionTitulo" class="text-base font-extrabold text-ink">Registrar Proyecto de la Fundación</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Iniciativa institucional para inversores y aliados estratégicos</p>
+        </div>
+      </div>
+      <button type="button" onclick="cerrarFormProyectoFundacion()" class="text-slate-400 hover:text-ink p-1.5 rounded-full hover:bg-gray-200 transition cursor-pointer">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- Form Body -->
+    <form id="formProyectoFundacion" onsubmit="event.preventDefault(); guardarProyectoFundacion();" class="p-5 overflow-y-auto space-y-4 text-xs">
+      <input type="hidden" id="pf_id" value="" />
+
+      <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+        <div class="sm:col-span-3">
+          <label class="block font-bold text-slate-700 mb-1">Código ID</label>
+          <input type="text" id="pf_codigo" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-mono uppercase font-semibold focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: APL-013" />
+        </div>
+        <div class="sm:col-span-9">
+          <label class="block font-bold text-slate-700 mb-1">Nombre del Proyecto / Iniciativa <span class="text-red-500">*</span></label>
+          <input type="text" id="pf_nombre" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-semibold focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Nombre oficial de la iniciativa..." required />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Categoría <span class="text-red-500">*</span></label>
+          <select id="pf_categoria" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-semibold focus:ring-2 focus:ring-purple-400 focus:outline-none" required>
+            <option value="Educación & IA">Educación &amp; IA</option>
+            <option value="Infraestructura & Conectividad">Infraestructura &amp; Conectividad</option>
+            <option value="Innovación Social">Innovación Social</option>
+            <option value="Sostenibilidad & Becas">Sostenibilidad &amp; Becas</option>
+            <option value="Empleabilidad Tech">Empleabilidad Tech</option>
+            <option value="Impacto Comunitario">Impacto Comunitario</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Estado <span class="text-red-500">*</span></label>
+          <select id="pf_estado" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-semibold focus:ring-2 focus:ring-purple-400 focus:outline-none" required>
+            <option value="En ejecución">En ejecución</option>
+            <option value="En evaluación">En evaluación</option>
+            <option value="Completado">Completado</option>
+            <option value="Proyectado">Proyectado</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Prioridad Estratégica</label>
+          <select id="pf_prioridad" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-semibold focus:ring-2 focus:ring-purple-400 focus:outline-none">
+            <option value="Crítica">Crítica</option>
+            <option value="Alta" selected>Alta</option>
+            <option value="Media">Media</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Switch A+ Alto Impacto -->
+      <div class="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-bold text-purple-900">Iniciativa A+ de Alto Impacto Comunitario</p>
+          <p class="text-[11px] text-purple-700 mt-0.5">Destaca este proyecto con la insignia oficial A+ en el portafolio de inversores</p>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="pf_es_aplus" class="sr-only peer" checked />
+          <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+        </label>
+      </div>
+
+      <!-- Switch Visibilidad para Donantes e Inversores -->
+      <div class="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-bold text-teal-900">Visible para Aliados y Donantes (Portafolio de Inversores)</p>
+          <p class="text-[11px] text-teal-700 mt-0.5">Determina si esta iniciativa es pública para los aliados y donantes en su observatorio</p>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="pf_visible_inversores" class="sr-only peer" checked />
+          <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+        </label>
+      </div>
+
+      <!-- Resumen y Descripción -->
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Resumen Ejecutivo <span class="text-red-500">*</span></label>
+        <textarea id="pf_resumen" rows="2" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Breve síntesis visible en la tarjeta del proyecto..." required></textarea>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Descripción Detallada (un párrafo por línea)</label>
+        <textarea id="pf_descripcion" rows="3" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Párrafos explicativos para el modal detallado del inversor..."></textarea>
+      </div>
+
+      <!-- Métricas Financieras y de Retorno Social (SROI) -->
+      <div class="pt-2 border-t border-gray-100">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Métricas de Inversión & Retorno Social (SROI)</p>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Presupuesto / Inversión ($ COP)</label>
+            <input type="number" id="pf_inversion" min="0" step="1000000" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-bold focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: 450000000" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">SROI Estimado (%)</label>
+            <input type="number" id="pf_sroi" min="0" step="5" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-bold focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: 380" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Retorno Social Proyectado ($ COP)</label>
+            <input type="number" id="pf_retorno_proyectado" min="0" step="1000000" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-bold focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: 1710000000" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Índice Impacto (0-100)</label>
+            <input type="number" id="pf_indice_impacto" min="0" max="100" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-bold focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: 95" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Horizonte Maduración (Meses)</label>
+            <input type="number" id="pf_sroi_horizonte" min="1" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: 36" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Payback / Primeros Hitos (Meses)</label>
+            <input type="number" id="pf_payback" min="1" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: 8" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Nivel de Riesgo</label>
+            <select id="pf_riesgo" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none">
+              <option value="Bajo" selected>Bajo</option>
+              <option value="Medio">Medio</option>
+              <option value="Alto">Alto</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fechas, Territorio y Responsable -->
+      <div class="pt-2 border-t border-gray-100">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Ubicación & Coordinación</p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Fecha de Inicio</label>
+            <input type="date" id="pf_fecha_inicio" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Fecha Objetivo / Cierre</label>
+            <input type="date" id="pf_fecha_objetivo" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Región / Territorio</label>
+            <input type="text" id="pf_region" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: Quibdó, Chocó" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Responsable (Nombre)</label>
+            <input type="text" id="pf_resp_nombre" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Nombre del líder o director..." />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Cargo / Rol</label>
+            <input type="text" id="pf_resp_cargo" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Ej: Directora Académica" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Correo Electrónico</label>
+            <input type="email" id="pf_resp_email" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="contacto@fundacionamas.org.co" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Hitos y Ficha Técnica -->
+      <div class="pt-2 border-t border-gray-100">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Hitos y Ficha Técnica</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Hitos de Impacto (un hito por línea)</label>
+            <textarea id="pf_hitos" rows="3" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="100 líderes formados en la primera cohorte&#10;Becas 100% gratuitas&#10;Modelo multiplicador exponencial 10:1"></textarea>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Ficha Técnica (formato: Etiqueta: Valor por línea)</label>
+            <textarea id="pf_specs" rows="3" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Beneficiarios: 100 jóvenes multiplicadores&#10;Alcance: 1.000+ personas en territorio&#10;Costo para el estudiante: $ 0 COP"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
+        <button type="button" onclick="cerrarFormProyectoFundacion()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-gray-100 transition cursor-pointer">
+          Cancelar
+        </button>
+        <button type="submit" id="btnGuardarProyectoFundacion" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 shadow-sm transition cursor-pointer">
+          Guardar Proyecto
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ MODAL: LIGHTBOX DETALLE PROYECTO FUNDACIÓN (ESTILO BATMAN) ============ -->
+<div id="modalDetalleProyectoFundacion" class="hidden fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-5">
+  <div class="absolute inset-0 bg-ink/70 backdrop-blur-md transition-opacity" onclick="cerrarDetalleProyectoFundacion()"></div>
+  <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-4xl z-10 animate-fade-in border border-gray-100 flex flex-col max-h-[94vh] overflow-hidden">
+    <!-- Header -->
+    <div class="p-5 sm:p-6 border-b border-gray-100 bg-slate-50/70 shrink-0">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2 flex-wrap mb-2">
+            <span id="dpf_codigo" class="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-gray-200 text-slate-700">APL-001</span>
+            <span id="dpf_categoria_badge" class="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-purple-100 text-purple-800">Educación &amp; IA</span>
+            <span id="dpf_aplus_badge" class="text-xs font-extrabold px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-300">A+ Alto Impacto</span>
+            <span id="dpf_estado_badge" class="text-xs font-semibold px-2 py-0.5 rounded-lg bg-blue-100 text-blue-800">En ejecución</span>
+          </div>
+          <h2 id="dpf_nombre" class="text-xl sm:text-2xl font-black text-ink tracking-tight leading-snug">Nombre del Proyecto</h2>
+        </div>
+        <button type="button" onclick="cerrarDetalleProyectoFundacion()" class="text-slate-400 hover:text-ink p-2 rounded-full hover:bg-gray-200 transition cursor-pointer shrink-0">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="p-5 sm:p-7 overflow-y-auto space-y-6 text-xs">
+      <!-- KPIs Cuantitativos del Retorno Social -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200">
+          <p class="text-[10px] font-bold uppercase text-purple-900/70">Presupuesto / Inversión</p>
+          <p id="dpf_inversion" class="text-base sm:text-lg font-black text-purple-900 mt-1">$ 0 COP</p>
+          <p class="text-[10px] text-purple-700 font-medium mt-0.5">Fondos requeridos</p>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+          <p class="text-[10px] font-bold uppercase text-emerald-900/70">Retorno Social (SROI)</p>
+          <p id="dpf_sroi" class="text-base sm:text-lg font-black text-emerald-800 mt-1">+0%</p>
+          <p id="dpf_horizonte" class="text-[10px] text-emerald-700 font-medium mt-0.5">En horizonte de 0 meses</p>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200">
+          <p class="text-[10px] font-bold uppercase text-amber-900/70">Valor Social Proyectado</p>
+          <p id="dpf_retorno_proy" class="text-base sm:text-lg font-black text-amber-900 mt-1">$ 0 COP</p>
+          <p class="text-[10px] text-amber-700 font-medium mt-0.5">Impacto económico social</p>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+          <p class="text-[10px] font-bold uppercase text-slate-500">Índice de Impacto</p>
+          <div class="flex items-center gap-2 mt-1">
+            <span id="dpf_impacto_num" class="text-base sm:text-lg font-black text-ink">0</span>
+            <span class="text-xs text-slate-400 font-semibold">/ 100</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1.5 overflow-hidden">
+            <div id="dpf_impacto_bar" class="bg-purple-600 h-1.5 rounded-full" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resumen Ejecutivo -->
+      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Resumen Ejecutivo</h4>
+        <p id="dpf_resumen" class="text-xs text-slate-700 leading-relaxed font-medium"></p>
+      </div>
+
+      <!-- Descripción Detallada -->
+      <div>
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Propuesta Técnica & Transformación</h4>
+        <div id="dpf_descripcion" class="space-y-2 text-xs text-slate-700 leading-relaxed font-medium"></div>
+      </div>
+
+      <!-- Hitos de Impacto y Puntos Clave -->
+      <div>
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Hitos de Impacto y Logros Clave</h4>
+        <ul id="dpf_hitos" class="space-y-1.5 list-disc list-inside text-xs text-slate-700 font-medium"></ul>
+      </div>
+
+      <!-- Ficha Técnica Specs -->
+      <div>
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Ficha Técnica & Alcance</h4>
+        <div id="dpf_specs" class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs"></div>
+      </div>
+
+      <!-- Desglose Cuantitativo SROI -->
+      <div id="dpf_roi_section" class="hidden">
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Desglose Cuantitativo del Retorno Social</h4>
+        <div id="dpf_roi_breakdown" class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs"></div>
+      </div>
+
+      <!-- Responsable y Territorio -->
+      <div class="p-4 rounded-2xl bg-purple-50/40 border border-purple-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div>
+          <p class="text-[10px] font-bold uppercase text-purple-900/60">Responsable / Dirección</p>
+          <p id="dpf_responsable" class="text-xs font-extrabold text-ink mt-0.5">Coordinación Fundación A+</p>
+          <p id="dpf_email" class="text-[11px] text-slate-500 font-medium"></p>
+        </div>
+        <div class="text-left sm:text-right">
+          <p class="text-[10px] font-bold uppercase text-purple-900/60">Territorio de Intervención</p>
+          <p id="dpf_region" class="text-xs font-bold text-ink mt-0.5">Quibdó, Chocó</p>
+          <p id="dpf_fechas" class="text-[11px] text-slate-500 font-medium"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="p-4 border-t border-gray-100 flex items-center justify-between shrink-0 bg-slate-50">
+      <span class="text-[11px] text-slate-500 font-medium">Portafolio Oficial · Fundación A+</span>
+      <button type="button" onclick="cerrarDetalleProyectoFundacion()" class="px-5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-gray-200 transition cursor-pointer">
+        Cerrar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: FORMULARIO SUBIR PROYECTO DE ESTUDIANTE ============ -->
+<div id="modalFormProyectoEstudiante" class="hidden fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-5">
+  <div class="absolute inset-0 bg-ink/70 backdrop-blur-md transition-opacity" onclick="cerrarFormProyectoEstudiante()"></div>
+  <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-2xl z-10 animate-fade-in border border-gray-100 flex flex-col max-h-[94vh] overflow-hidden">
+    <!-- Header -->
+    <div class="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-slate-50">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+        </div>
+        <div>
+          <h3 id="formProyectoEstudianteTitulo" class="text-base font-extrabold text-ink">Subir Proyecto de Desarrollo</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Comparte tu software con inversores y aliados corporativos</p>
+        </div>
+      </div>
+      <button type="button" onclick="cerrarFormProyectoEstudiante()" class="text-slate-400 hover:text-ink p-1.5 rounded-full hover:bg-gray-200 transition cursor-pointer">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- Form Body -->
+    <form id="formProyectoEstudiante" onsubmit="event.preventDefault(); guardarProyectoEstudiante();" class="p-5 overflow-y-auto space-y-4 text-xs">
+      <input type="hidden" id="pe_id" value="" />
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Título del Proyecto <span class="text-red-500">*</span></label>
+        <input type="text" id="pe_titulo" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-semibold focus:ring-2 focus:ring-amber-400 focus:outline-none" placeholder="Ej: Asistente IA para agricultores del Atrato" required />
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+            <span>Cohorte</span>
+            <span id="pe_cohorte_badge_fijo" class="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full hidden">Asignada automáticamente</span>
+          </label>
+          <input type="text" id="pe_cohorte" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-amber-400 focus:outline-none" placeholder="Ej: Primera corte" />
+          <p id="pe_cohorte_ayuda" class="text-[10px] text-slate-500 mt-1 hidden">Esta cohorte corresponde a tu programa formativo activo y queda estática para este proyecto.</p>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Categoría / Área</label>
+          <select id="pe_categoria" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink font-semibold focus:ring-2 focus:ring-amber-400 focus:outline-none">
+            <option value="Inteligencia Artificial">Inteligencia Artificial</option>
+            <option value="Desarrollo Web & Móvil">Desarrollo Web &amp; Móvil</option>
+            <option value="Internet de las Cosas (IoT)">Internet de las Cosas (IoT)</option>
+            <option value="Automatización & Data">Automatización &amp; Data</option>
+            <option value="Impacto Social & Comunitario">Impacto Social &amp; Comunitario</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Tecnologías Utilizadas (separadas por coma) <span class="text-red-500">*</span></label>
+        <input type="text" id="pe_tecnologias" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-amber-400 focus:outline-none" placeholder="Ej: Python, FastAPI, Gemini AI, Tailwind CSS, PostgreSQL" required />
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Integrantes del Equipo (si fue grupal)</label>
+        <input type="text" id="pe_integrantes" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-amber-400 focus:outline-none" placeholder="Nombres de los compañeros de equipo..." />
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Descripción del Proyecto y Problema que Resuelve <span class="text-red-500">*</span></label>
+        <textarea id="pe_descripcion" rows="3" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-amber-400 focus:outline-none" placeholder="Explica qué hace tu proyecto, a quién beneficia y cómo funciona técnicamente..." required></textarea>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Enlace a Demo en Vivo o Video (opcional)</label>
+          <input type="url" id="pe_url_demo" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-amber-400 focus:outline-none" placeholder="https://mi-proyecto.vercel.app" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Repositorio de Código GitHub (opcional)</label>
+          <input type="url" id="pe_url_repo" class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-amber-400 focus:outline-none" placeholder="https://github.com/usuario/proyecto" />
+        </div>
+      </div>
+
+      <!-- Imagen / Captura del Proyecto -->
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Captura de Pantalla o Imagen del Proyecto</label>
+        <div class="flex items-center gap-3">
+          <input type="file" id="pe_imagen_file" accept="image/*" onchange="procesarImagenProyectoEstudiante(this)" class="text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 cursor-pointer" />
+          <input type="hidden" id="pe_imagen_base64" value="" />
+        </div>
+        <div id="pe_preview_cont" class="mt-2 hidden">
+          <img id="pe_preview_img" class="h-28 rounded-xl object-cover border border-gray-200 shadow-xs" alt="Vista previa del proyecto" />
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
+        <button type="button" onclick="cerrarFormProyectoEstudiante()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-gray-100 transition cursor-pointer">
+          Cancelar
+        </button>
+        <button type="submit" id="btnGuardarProyectoEstudiante" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-sm transition cursor-pointer">
+          Publicar Proyecto
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ MODAL: DETALLE DE PROYECTO DE ESTUDIANTE ============ -->
+<div id="modalDetalleProyectoEstudiante" class="hidden fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-5">
+  <div class="absolute inset-0 bg-ink/70 backdrop-blur-md transition-opacity" onclick="cerrarDetalleProyectoEstudiante()"></div>
+  <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-2xl z-10 animate-fade-in border border-gray-100 flex flex-col max-h-[94vh] overflow-hidden">
+    <!-- Header -->
+    <div class="p-5 border-b border-gray-100 bg-slate-50 shrink-0 flex items-start justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+          <span id="dpe_cohorte" class="text-xs font-bold px-2 py-0.5 rounded-lg bg-gray-200 text-slate-700">Cohorte</span>
+          <span id="dpe_categoria" class="text-xs font-bold px-2 py-0.5 rounded-lg bg-amber-100 text-amber-800">IA</span>
+        </div>
+        <h3 id="dpe_titulo" class="text-xl font-black text-ink">Título del Proyecto</h3>
+        <p id="dpe_autor" class="text-xs text-slate-500 font-medium mt-0.5"></p>
+      </div>
+      <button type="button" onclick="cerrarDetalleProyectoEstudiante()" class="text-slate-400 hover:text-ink p-1.5 rounded-full hover:bg-gray-200 transition cursor-pointer shrink-0">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- Body -->
+    <div class="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs">
+      <div id="dpe_imagen_cont" class="hidden rounded-2xl overflow-hidden border border-gray-200 shadow-sm max-h-64 bg-slate-100">
+        <img id="dpe_imagen" class="w-full h-full object-cover" alt="Captura del proyecto" />
+      </div>
+
+      <div>
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Descripción de la Solución</h4>
+        <p id="dpe_descripcion" class="text-xs text-slate-700 leading-relaxed font-medium whitespace-pre-line"></p>
+      </div>
+
+      <div>
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Stack Tecnológico</h4>
+        <div id="dpe_tecnologias" class="flex flex-wrap gap-1.5"></div>
+      </div>
+
+      <div id="dpe_integrantes_wrap" class="hidden">
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Equipo de Desarrollo</h4>
+        <p id="dpe_integrantes" class="text-xs text-slate-700 font-medium"></p>
+      </div>
+
+      <div class="pt-2 border-t border-gray-100 flex items-center gap-3 flex-wrap">
+        <a id="dpe_link_demo" href="#" target="_blank" rel="noopener" class="hidden px-4 py-2 rounded-xl text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 transition inline-flex items-center gap-1.5 shadow-xs">
+          <span>Abrir Demo en Vivo</span>
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+        </a>
+        <a id="dpe_link_repo" href="#" target="_blank" rel="noopener" class="hidden px-4 py-2 rounded-xl text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 transition inline-flex items-center gap-1.5 shadow-xs">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+          <span>Repositorio GitHub</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: PERSONALIZAR MÓDULOS VISIBLES (SUPERADMIN) ============ -->
+<div id="modalGestionModulos" class="hidden fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-5">
+  <div class="absolute inset-0 bg-ink/70 backdrop-blur-md transition-opacity" onclick="cerrarModalGestionModulos()"></div>
+  <div class="relative bg-white rounded-3xl shadow-softLg w-full max-w-lg z-10 animate-fade-in border border-gray-100 flex flex-col max-h-[90vh] overflow-hidden">
+    <!-- Header -->
+    <div class="p-5 border-b border-gray-100 bg-slate-50/80 shrink-0 flex items-start justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-xs font-bold px-2 py-0.5 rounded-lg bg-morado/10 text-morado">Panel Superadmin</span>
+          <span id="modalModulosCountBadge" class="text-xs font-bold px-2 py-0.5 rounded-lg bg-gray-100 text-slate-600">11 Módulos</span>
+        </div>
+        <h3 class="text-lg font-black text-ink">Personalizar Módulos Visibles</h3>
+        <p class="text-xs text-slate2 font-medium mt-0.5">Oculta o muestra módulos para simplificar la pantalla cuando hay mucha información.</p>
+      </div>
+      <button type="button" onclick="cerrarModalGestionModulos()" class="text-slate-400 hover:text-ink p-1.5 rounded-full hover:bg-gray-200 transition cursor-pointer shrink-0">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- Acciones rápidas -->
+    <div class="px-5 py-3 bg-gray-50/60 border-b border-gray-100 flex items-center justify-between text-xs">
+      <span class="text-slate2 font-medium">Acciones rápidas:</span>
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="alternarTodosModulos(true)" class="px-2.5 py-1 rounded-lg text-morado font-bold hover:bg-morado/10 transition cursor-pointer">Mostrar todos</button>
+        <button type="button" onclick="alternarTodosModulos(false)" class="px-2.5 py-1 rounded-lg text-slate2 font-bold hover:bg-gray-200 transition cursor-pointer">Ocultar todos</button>
+      </div>
+    </div>
+
+    <!-- Lista de módulos con toggles -->
+    <div id="listaTogglesModulos" class="p-5 overflow-y-auto space-y-2.5 text-xs">
+      <!-- Se genera dinámicamente -->
+    </div>
+
+    <!-- Footer -->
+    <div class="p-4 border-t border-gray-100 bg-white shrink-0 flex items-center justify-between gap-3">
+      <span id="resumenModulosVisibles" class="text-xs text-slate2 font-medium">11 visibles</span>
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="restablecerModulosPorDefecto()" class="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate2 hover:bg-gray-100 transition cursor-pointer">
+          Restablecer
+        </button>
+        <button type="button" onclick="cerrarModalGestionModulos()" class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-morado hover:bg-morado/90 transition shadow-sm cursor-pointer">
+          Listo
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ============ TOASTS ============ -->
 <!-- También global por la misma razón: si quedara dentro de un panel oculto,
      los avisos (éxito/error) de Docente o Estudiante nunca se verían. -->
@@ -1871,10 +2996,9 @@
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-<script defer src="db.js?v=20261002-v6ready"></script>
-<script defer src="app.js?v=20261002-v6ready"></script>
-<script defer src="forms.js?v=20261002-forms24"></script>
-
+<script defer src="db.js?v=20261005-v88"></script>
+<script defer src="app.js?v=20261005-v88"></script>
+<script defer src="forms.js?v=20261005-v88"></script>
 
 <!-- Registro de Service Worker para carga instantánea y caché inteligente -->
 <script>
@@ -1883,11 +3007,11 @@
       if ('caches' in window) {
         caches.keys().then(keys => {
           keys.forEach(k => {
-            if (k !== 'fundacion-aplus-v5.0') caches.delete(k);
+            if (k !== 'fundacion-aplus-v8.8-talentos') caches.delete(k);
           });
         });
       }
-      navigator.serviceWorker.register('./sw.js?v=20261002-v50').then((reg) => {
+      navigator.serviceWorker.register('./sw.js?v=20261005-v88').then((reg) => {
         reg.update();
       }).catch((err) => {
         console.warn('[SW] Registro de Service Worker omitido:', err);
@@ -1903,11 +3027,3 @@
 
 </body>
 </html>
-
-
-
-
-
-
-
-

@@ -371,9 +371,55 @@ button, a, input, select, textarea, [role="button"], label {
     --role-primary-text: #4A148C;
     --role-primary-dot: #8B5CF6;
     --role-badge-bg: rgba(106, 27, 154, 0.08);
-    --role-badge-border: rgba(106, 27, 154, 0.22);
-    --role-badge-text: #6A1B9A;
   }
+  /* 1.1 Aliados Estratégicos — Azul Cielo / Cyan */
+  .sidebar-role-aliado,
+  body.role-aliado .sidebar-role-admin {
+    --role-primary: #0284c7;
+    --role-primary-hover: #0369a1;
+    --role-primary-subtle: rgba(2, 132, 199, 0.08);
+    --role-primary-active: rgba(2, 132, 199, 0.15);
+    --role-primary-border: rgba(2, 132, 199, 0.28);
+    --role-primary-text: #0369a1;
+    --role-primary-dot: #38bdf8;
+    --role-badge-bg: rgba(2, 132, 199, 0.08);
+    --role-badge-border: rgba(2, 132, 199, 0.22);
+    --role-badge-text: #0284c7;
+  }
+
+  body.role-aliado .btn-crear-accion,
+  body.role-aliado [data-action="create"],
+  body.role-aliado [data-action="delete"] {
+    display: none !important;
+  }
+
+  /* Restricción absoluta para el rol Aliado en la barra lateral */
+  body.role-aliado .sidebar-role-admin .panel-tab {
+    display: none !important;
+  }
+
+  body.role-aliado .sidebar-role-admin .panel-tab[data-panel="resumen"],
+  body.role-aliado .sidebar-role-admin .panel-tab[data-panel="modulos"],
+  body.role-aliado .sidebar-role-admin .panel-tab[data-panel="semaforo"],
+  body.role-aliado .sidebar-role-admin .panel-tab[data-panel="calificaciones"],
+  body.role-aliado .sidebar-role-admin .panel-tab[data-panel="proyectosFundacion"],
+  body.role-aliado .sidebar-role-admin .panel-tab[data-panel="proyectosEstudiantes"],
+  body.role-aliado .sidebar-role-admin .panel-tab[data-panel="asistenteChat"] {
+    display: flex !important;
+  }
+
+  /* Ocultar secciones no autorizadas para Aliados */
+  body.role-aliado [data-section="superadmin"],
+  body.role-aliado [data-super-only-group="true"],
+  body.role-aliado [data-admin-hide-group="true"],
+  body.role-aliado [data-section="comunicacion"],
+  body.role-aliado [data-section="pqr"],
+  body.role-aliado [data-section="formularios"],
+  body.role-aliado [data-section="reportes"],
+  body.role-aliado [data-section="sistema"] {
+    display: none !important;
+  }
+
 
   /* 2. Docentes — Verde Turquesa */
   .sidebar-role-docente {
@@ -1537,6 +1583,10 @@ button, a, input, select, textarea, [role="button"], label {
 }
 .header-avatar-circle.role-admin {
   background: linear-gradient(135deg, #8B5CF6 0%, #1FC8C0 100%) !important;
+}
+body.role-aliado .header-avatar-circle.role-admin,
+.header-avatar-circle.role-aliado {
+  background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%) !important;
 }
 .header-avatar-circle.role-docente {
   background: linear-gradient(135deg, #1FC8C0 0%, #8B5CF6 100%) !important;

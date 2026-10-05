@@ -75,21 +75,40 @@ AddDefaultCharset UTF-8
 </IfModule>
 
 # ------------------------------------------------------------------------------
-# 4. Encabezados de Seguridad y Protección (Seguridad valorada por Google Search)
+# 4. Encabezados de Seguridad y Endurecimiento HTTP (Hardening)
 # ------------------------------------------------------------------------------
+ServerSignature Off
+
 <IfModule mod_headers.c>
   Header set X-Content-Type-Options "nosniff"
   Header set X-Frame-Options "SAMEORIGIN"
   Header set Referrer-Policy "strict-origin-when-cross-origin"
+  Header set Permissions-Policy "camera=(self), microphone=(), geolocation=(), payment=(), usb=()"
+  Header set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+  Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: blob: https:; connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 https://api.anthropic.com; media-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self';"
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" "expr=%{HTTPS} == 'on'"
+
+  # Ocultar huellas de tecnología del servidor
+  Header unset X-Powered-By
+  Header unset Server
+  Header always unset X-Powered-By
+  Header always unset Server
 </IfModule>
 
 # ------------------------------------------------------------------------------
-# 5. Bloqueo de Archivos Sensibles y Privados para Crawlers y Visitantes
+# 5. Bloqueo de Archivos Sensibles, Privados y Protección contra Ejecución en Cargas
 # ------------------------------------------------------------------------------
 <FilesMatch "^\.env|^\.git|composer\.(json|lock)|package(-lock)?\.json|\.pem$|\.log$|\.sql$|\.bat$|\.ps1$|\.py$">
   Require all denied
   Order allow,deny
   Deny from all
+</FilesMatch>
+
+# Bloquear ejecución de cualquier script ejecutable o de servidor en carpetas de uploads y adjuntos
+<FilesMatch "(?i)\.(php|phtml|php3|php4|php5|php7|phps|phar|sh|pl|py|cgi|exe|bat|cmd)$">
+  <If "%{REQUEST_URI} =~ m#^/(uploads|archivos|adjuntos)/#">
+    Require all denied
+  </If>
 </FilesMatch>
 
 # Bloquear acceso web directo a carpetas internas de scripts y temporales

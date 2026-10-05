@@ -1,3 +1,14 @@
+// Proteccion activa contra Clickjacking / UI Redressing (OWASP Defense-in-Depth)
+if (window.top !== window.self) {
+  try {
+    if (window.top.location.hostname !== window.self.location.hostname) {
+      window.top.location = window.self.location.href;
+    }
+  } catch (e) {
+    window.top.location = window.self.location.href;
+  }
+}
+
 // Mobile menu toggle
   const menuBtn = document.getElementById('menuBtn');
   const mobileMenu = document.getElementById('mobileMenu');
@@ -601,9 +612,27 @@
   // Nombre a mostrar de quien realiza la acción administrativa actual
   function actorAdminActual() {
     if (currentAdminRole === 'superadmin') return 'Superadmin';
+    if (currentAdminRole === 'aliado' && currentAdminUser) return currentAdminUser.nombre + ' (Aliado)';
     if (currentAdminRole === 'administracion' && currentAdminUser) return currentAdminUser.nombre + ' (Administración)';
     return 'Desconocido';
   }
+
+  // Cohortes asignadas a un Aliado o Donante (null si no tiene restricción o si es Superadmin/Administrador)
+  function cohortesPermitidasParaUsuario(usuario) {
+    const u = usuario || currentAdminUser;
+    if (!u) return null;
+    const r = (u.rol || currentAdminRole || '').toLowerCase();
+    if (r !== 'aliado' && r !== 'donante' && currentAdminRole !== 'aliado' && currentAdminRole !== 'donante') return null;
+    let permitidas = u.cohortesPermitidas || u.cohortes_permitidas;
+    if (typeof permitidas === 'string') {
+      try { permitidas = JSON.parse(permitidas); } catch (e) { permitidas = [permitidas]; }
+    }
+    if (!Array.isArray(permitidas) || permitidas.length === 0 || permitidas.includes('todas')) {
+      return null;
+    }
+    return permitidas;
+  }
+
 
   // Etiqueta descriptiva de una franja de horario
   function franjaLabel(franja) {
@@ -845,6 +874,24 @@
       return;
     }
 
+    if (usuario.rol === 'Aliado' || usuario.rol === 'Donante' || usuario.rol === 'Inversor' || usuario.rol === 'Inversionista') {
+      currentAdminRole = 'aliado';
+      currentAdminUser = usuario;
+      if (typeof window !== 'undefined') {
+        window.currentAdminRole = 'aliado';
+        window.currentAdminUser = usuario;
+      }
+      document.getElementById('siteView').classList.add('hidden');
+      document.getElementById('dashboardView').classList.remove('hidden');
+      applyAdminRoleUI(usuario);
+      actualizarHeaderUsuario('admin');
+      initTema();
+      await initAdmin();
+      showPanel('resumen');
+      await registrarExito();
+      return;
+    }
+
     if (usuario.rol === 'Docente') {
       currentDocente = usuario;
       document.getElementById('siteView').classList.add('hidden');
@@ -889,6 +936,7 @@
       <p class="text-sm text-slate2 mt-1 text-center">Completa tus datos. Un administrador revisará tu solicitud antes de activar tu acceso.</p>
       <div class="mt-6 space-y-3">
         <input id="reg_nombre" type="text" placeholder="Nombre completo" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
+        <input id="reg_documento" type="text" placeholder="Documento de identidad (ej. CC / TI 1023456789)" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
         <input id="reg_email" type="email" placeholder="Correo electrónico" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
         <input id="reg_telefono" type="tel" placeholder="Teléfono / WhatsApp" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
         <div class="relative">
@@ -911,6 +959,7 @@
   async function enviarRegistroPublico() {
     const errorEl = document.getElementById('registroPublicoError');
     const nombre = document.getElementById('reg_nombre').value.trim();
+    const documento = document.getElementById('reg_documento') ? document.getElementById('reg_documento').value.trim() : '';
     const email = document.getElementById('reg_email').value.trim();
     const telefono = document.getElementById('reg_telefono').value.trim();
     const password = document.getElementById('reg_password').value;
@@ -937,7 +986,7 @@
       const resp = await fetch(urlApi, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre, email, telefono, password })
+        body: JSON.stringify({ nombre, documento, email, telefono, password })
       });
       const res = await resp.json().catch(() => ({}));
       if (!resp.ok) {
@@ -973,60 +1022,281 @@
   // configuración global de la plataforma.
   function applyAdminRoleUI(coordinador) {
     const isSuper = currentAdminRole === 'superadmin';
+    const isAliado = currentAdminRole === 'aliado';
+    const isDonante = isAliado && ((currentAdminUser && currentAdminUser.rol === 'Donante') || (coordinador && coordinador.rol === 'Donante'));
 
-    // Reset SIEMPRE primero y completo: cada login (Superadmin o
-    // Administración) parte de un estado limpio y conocido —
-    // TODOS los tabs visibles y TODOS los panel-content ocultos excepto
-    // "resumen" — antes de aplicar sus propias reglas. Sin este doble
-    // reset (tabs Y contenidos), tanto el menú como el panel que haya
-    // quedado abierto en una sesión anterior (Superadmin o de otro
-    // Administrador, con otro perfil) se quedan pegados y contaminan la
-    // vista siguiente, en cualquiera de los dos sentidos.
+    // Reset SIEMPRE primero y completo: cada login (Superadmin, Administración o Aliado)
     document.querySelectorAll('.panel-tab').forEach(tab => tab.classList.remove('hidden'));
     document.querySelectorAll('.panel-content').forEach(panel => {
       panel.classList.toggle('hidden', panel.id !== 'panel-resumen');
     });
-    // Mismo reset para los TÍTULOS de sección del sidebar (ver
-    // ocultarSeccionesSidebarVacias): sin esto, una sección que quedó
-    // oculta en el login de un Coordinador anterior (o de otro perfil)
-    // seguía oculta para el Superadmin o para el siguiente Coordinador,
-    // aunque su perfil sí tuviera módulos ahí.
     document.querySelectorAll('aside .mb-6').forEach(seccion => seccion.classList.remove('hidden'));
     panelActivoAdmin = 'resumen';
 
+    document.body.classList.toggle('role-aliado', isAliado);
+
     const label = document.getElementById('adminPanelLabel');
     const eyebrow = document.getElementById('adminEyebrow');
-    if (label) label.textContent = isSuper ? 'Panel Superadmin' : 'Panel Administración';
-    if (eyebrow) eyebrow.textContent = isSuper ? 'Superadmin' : 'Administración';
+    if (label) label.textContent = isSuper ? 'Panel Superadmin' : (isDonante ? 'Portal Donante / Inversor' : (isAliado ? 'Portal de Aliados' : 'Panel Administración'));
+    if (eyebrow) eyebrow.textContent = isSuper ? 'Superadmin' : (isDonante ? 'Donante / Inversionista' : (isAliado ? 'Aliado Estratégico' : 'Administración'));
     const bannerText = document.getElementById('adminBannerText');
     if (bannerText) {
       bannerText.textContent = isSuper
         ? 'Desde aquí administrarás usuarios, cohortes y calificaciones del Training de 100 a 1000+.'
-        : 'Gestiona cohortes, calificaciones y el seguimiento académico del programa A+ Smart.';
+        : (isDonante
+            ? 'Observatorio de impacto social y seguimiento de las iniciativas y cohortes de la Fundación A+.'
+            : (isAliado
+                ? 'Observatorio y seguimiento del impacto formativo de las cohortes de la Fundación A+.'
+                : 'Gestiona cohortes, calificaciones y el seguimiento académico del programa A+ Smart.'));
     }
-    document.querySelectorAll('.panel-tab[data-super-only="true"]').forEach(tab => {
-      tab.classList.toggle('hidden', !isSuper);
-    });
-    // El grupo/sección "Superadmin" del menú (título + contenedor) solo
-    // se muestra para el Superadmin — igual que sus botones internos.
-    document.querySelectorAll('[data-super-only-group="true"]').forEach(group => {
-      group.classList.toggle('hidden', !isSuper);
-    });
-    // Superadmin ve un menú reducido (Resumen, Administradores, Usuarios,
-    // Cohortes, Calificaciones, Configuración); Administración conserva el
-    // menú completo (sin el apartado de Administradores).
-    document.querySelectorAll('.panel-tab[data-admin-hide="true"]').forEach(tab => {
-      tab.classList.toggle('hidden', isSuper);
-    });
-    document.querySelectorAll('[data-admin-hide-group="true"]').forEach(group => {
-      group.classList.toggle('hidden', isSuper);
-    });
-    const restrictedNote = document.getElementById('adminRestrictedNote');
-    if (restrictedNote) restrictedNote.classList.toggle('hidden', isSuper);
     const roleChip = document.getElementById('adminRoleChip');
-    if (roleChip) roleChip.textContent = isSuper ? 'Superadmin' : 'Administración';
+    if (roleChip) roleChip.textContent = isSuper ? 'Superadmin' : (isDonante ? 'Donante' : (isAliado ? 'Aliado' : 'Administración'));
+
+    // Sidebar badge
+    const sidebarBadgeSpan = document.querySelector('#dashboardView .role-sidebar-badge span:last-child');
+    if (sidebarBadgeSpan) {
+      sidebarBadgeSpan.textContent = isSuper ? 'Superadmin' : (isDonante ? 'Donante / Inversionista' : (isAliado ? 'Aliado Estratégico' : 'Administración'));
+    }
+
+    if (isAliado) {
+      // Paneles permitidos:
+      // Aliado: observatorio de cohortes, notas y semáforo (sin proyectos/portafolios, sin asistente virtual)
+      // Donante: observatorio de cohortes, notas, semáforo y proyectos (sin asistente virtual)
+      // Ni Aliado ni Donante tienen acceso al módulo de asistente virtual ("máquina virtual" / chatbot)
+      const tabsAliadosPermitidos = isDonante
+        ? ['resumen', 'modulos', 'semaforo', 'calificaciones', 'proyectosFundacion', 'proyectosEstudiantes']
+        : ['resumen', 'modulos', 'semaforo', 'calificaciones'];
+      document.querySelectorAll('.panel-tab').forEach(tab => {
+        const p = tab.getAttribute('data-panel');
+        const permitido = tabsAliadosPermitidos.includes(p);
+        tab.classList.toggle('hidden', !permitido);
+        tab.style.setProperty('display', permitido ? 'flex' : 'none', 'important');
+      });
+      document.querySelectorAll('[data-super-only-group="true"], [data-section="superadmin"], [data-section="pagos"], [data-section="comunicacion"], [data-section="pqr"], [data-section="formularios"], [data-section="reportes"], [data-section="sistema"]').forEach(group => {
+        group.classList.add('hidden');
+        group.style.setProperty('display', 'none', 'important');
+      });
+      // Portafolio & Proyectos: Aliado no puede tener portafolios y proyectos; Donante sí
+      document.querySelectorAll('[data-section="proyectos"]').forEach(group => {
+        if (!isDonante) {
+          group.classList.add('hidden');
+          group.style.setProperty('display', 'none', 'important');
+        } else {
+          group.classList.remove('hidden');
+          group.style.removeProperty('display');
+        }
+      });
+      // Quitar el módulo de asistente virtual ("máquina virtual") de la barra lateral para aliados y donantes
+      document.querySelectorAll('.panel-tab[data-panel="asistenteChat"]').forEach(tab => {
+        tab.classList.add('hidden');
+        tab.style.setProperty('display', 'none', 'important');
+      });
+      // Quitar el widget flotante del chatbot IA ("máquina virtual") para aliados y donantes
+      const aplusChat = document.getElementById('aplusChat');
+      if (aplusChat) {
+        aplusChat.style.setProperty('display', 'none', 'important');
+      }
+      ocultarSeccionesSidebarVacias('.panel-tab');
+    } else {
+      document.querySelectorAll('.panel-tab').forEach(tab => {
+        tab.style.removeProperty('display');
+      });
+      document.querySelectorAll('[data-section]').forEach(group => {
+        group.style.removeProperty('display');
+      });
+      document.querySelectorAll('.panel-tab[data-super-only="true"]').forEach(tab => {
+        tab.classList.toggle('hidden', !isSuper);
+      });
+      document.querySelectorAll('[data-super-only-group="true"]').forEach(group => {
+        group.classList.toggle('hidden', !isSuper);
+      });
+      document.querySelectorAll('.panel-tab[data-admin-hide="true"]').forEach(tab => {
+        tab.classList.toggle('hidden', isSuper);
+      });
+      document.querySelectorAll('[data-admin-hide-group="true"]').forEach(group => {
+        group.classList.toggle('hidden', isSuper);
+      });
+      // Restaurar el widget flotante del chatbot IA para otros roles
+      const aplusChat = document.getElementById('aplusChat');
+      if (aplusChat) {
+        aplusChat.style.removeProperty('display');
+      }
+    }
+
+    const restrictedNote = document.getElementById('adminRestrictedNote');
+    if (restrictedNote) restrictedNote.classList.toggle('hidden', isSuper || isAliado);
     actualizarHeaderUsuario('admin');
+
+    const btnMod = document.getElementById('btnPersonalizarModulos');
+    if (btnMod) btnMod.classList.toggle('hidden', !isSuper && currentAdminRole !== 'administracion');
+
+    if (isSuper || currentAdminRole === 'administracion') {
+      aplicarModulosOcultosSuperadmin();
+    }
   }
+
+  // =========================================================================
+  // GESTOR DE MÓDULOS VISIBLES PARA EL SUPERADMIN CUANDO HAY MUCHA INFORMACIÓN
+  // =========================================================================
+  const MODULOS_SIDEBAR_CONFIG = [
+    { key: 'general', titulo: 'General', desc: 'Resumen institucional y notificaciones', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+    { key: 'superadmin', titulo: 'Superadmin', desc: 'Gestión de administradores de la plataforma', icon: 'M12 15a3 3 0 100-6 3 3 0 000 6z' },
+    { key: 'academica', titulo: 'Gestión académica', desc: 'Usuarios, cohortes, pensum, notas y semáforo', icon: 'M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25' },
+    { key: 'proyectos', titulo: 'Portafolio & Proyectos', desc: 'Proyectos de la fundación y de estudiantes', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
+    { key: 'pagos', titulo: 'Finanzas & Pagos', desc: 'Control de pagos y dispersiones', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+    { key: 'comunicacion', titulo: 'Comunicación', desc: 'Memorandos y comunicados institucionales', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+    { key: 'pqr', titulo: 'PQRs & Solicitudes', desc: 'Peticiones, quejas y reclamos de la comunidad', icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.02-.465L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' },
+    { key: 'reportes', titulo: 'Reportes & Informes', desc: 'Informes de docentes e historial trainee', icon: 'M9 19v-6a2 2 0 012-2h2a2 2 0 012 2v6m-9 0h14a1 1 0 001-1V9.5a1 1 0 00-.4-.8l-6-4.5a1 1 0 00-1.2 0l-6 4.5a1 1 0 00-.4.8V18a1 1 0 001 1z' },
+    { key: 'recursos', titulo: 'Inventario y Recursos', desc: 'Catálogo de equipos, préstamos y asignaciones', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
+    { key: 'formularios', titulo: 'Formularios & Forms', desc: 'Constructor de formularios y papelera', icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' },
+    { key: 'sistema', titulo: 'Sistema & Auditoría', desc: 'Auditoría, chat de conocimiento y configuración', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }
+  ];
+
+  function getModulosOcultosSuperadmin() {
+    try {
+      const guardado = localStorage.getItem('aplus_modulos_ocultos_superadmin');
+      return guardado ? JSON.parse(guardado) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function setModulosOcultosSuperadmin(keys) {
+    try {
+      localStorage.setItem('aplus_modulos_ocultos_superadmin', JSON.stringify(keys));
+    } catch (e) {}
+  }
+
+  function aplicarModulosOcultosSuperadmin() {
+    const isSuper = currentAdminRole === 'superadmin';
+    const isCoordinador = currentAdminRole === 'administracion';
+    if (!isSuper && !isCoordinador) return;
+
+    const ocultos = getModulosOcultosSuperadmin();
+    const badge = document.getElementById('badgeModulosOcultos');
+    if (badge) {
+      if (ocultos.length > 0) {
+        badge.textContent = ocultos.length;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    MODULOS_SIDEBAR_CONFIG.forEach(m => {
+      const estaOculto = ocultos.includes(m.key);
+      document.querySelectorAll(`aside [data-section="${m.key}"]`).forEach(seccion => {
+        if (estaOculto) {
+          seccion.classList.add('hidden');
+          seccion.style.setProperty('display', 'none', 'important');
+        } else {
+          // Solo mostrar si no está restringido por permisos de rol
+          if (m.key === 'superadmin' && !isSuper) {
+            seccion.classList.add('hidden');
+            seccion.style.setProperty('display', 'none', 'important');
+          } else {
+            seccion.classList.remove('hidden');
+            seccion.style.removeProperty('display');
+          }
+        }
+      });
+    });
+
+    ocultarSeccionesSidebarVacias('.panel-tab');
+
+    // Si el panel actual pertenece a una sección oculta, redirigir a resumen
+    if (panelActivoAdmin && panelActivoAdmin !== 'resumen') {
+      const seccionPadre = document.querySelector(`aside [data-panel="${panelActivoAdmin}"]`)?.closest('[data-section]')?.getAttribute('data-section');
+      if (seccionPadre && ocultos.includes(seccionPadre)) {
+        showPanel('resumen');
+      }
+    }
+  }
+  window.aplicarModulosOcultosSuperadmin = aplicarModulosOcultosSuperadmin;
+
+  function abrirModalGestionModulos() {
+    const modal = document.getElementById('modalGestionModulos');
+    if (!modal) return;
+    const lista = document.getElementById('listaTogglesModulos');
+    const ocultos = getModulosOcultosSuperadmin();
+
+    const visiblesCount = MODULOS_SIDEBAR_CONFIG.length - ocultos.length;
+    const countBadge = document.getElementById('modalModulosCountBadge');
+    if (countBadge) countBadge.textContent = `${MODULOS_SIDEBAR_CONFIG.length} Módulos`;
+    const resumen = document.getElementById('resumenModulosVisibles');
+    if (resumen) resumen.textContent = `${visiblesCount} visibles (${ocultos.length} ocultos)`;
+
+    if (lista) {
+      lista.innerHTML = MODULOS_SIDEBAR_CONFIG.map(m => {
+        const estaOculto = ocultos.includes(m.key);
+        const estaVisible = !estaOculto;
+        return `
+          <div class="p-3 rounded-2xl border ${estaVisible ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50/80 opacity-75'} flex items-center justify-between gap-3 transition">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-8 h-8 rounded-xl ${estaVisible ? 'bg-morado/10 text-morado' : 'bg-gray-200 text-slate2'} flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="${m.icon}"/></svg>
+              </div>
+              <div class="min-w-0">
+                <p class="font-bold text-xs text-ink truncate">${escapeHtml(m.titulo)}</p>
+                <p class="text-[11px] text-slate2 truncate">${escapeHtml(m.desc)}</p>
+              </div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer shrink-0">
+              <input type="checkbox" ${estaVisible ? 'checked' : ''} onchange="toggleModuloSuperadmin('${m.key}', this.checked)" class="sr-only peer">
+              <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-morado"></div>
+            </label>
+          </div>
+        `;
+      }).join('');
+    }
+
+    modal.classList.remove('hidden');
+  }
+  window.abrirModalGestionModulos = abrirModalGestionModulos;
+
+  function cerrarModalGestionModulos() {
+    const modal = document.getElementById('modalGestionModulos');
+    if (modal) modal.classList.add('hidden');
+  }
+  window.cerrarModalGestionModulos = cerrarModalGestionModulos;
+
+  function toggleModuloSuperadmin(key, checked) {
+    let ocultos = getModulosOcultosSuperadmin();
+    if (checked) {
+      ocultos = ocultos.filter(k => k !== key);
+    } else {
+      if (!ocultos.includes(key)) ocultos.push(key);
+    }
+    setModulosOcultosSuperadmin(ocultos);
+    aplicarModulosOcultosSuperadmin();
+
+    // Actualizar resumen
+    const visiblesCount = MODULOS_SIDEBAR_CONFIG.length - ocultos.length;
+    const resumen = document.getElementById('resumenModulosVisibles');
+    if (resumen) resumen.textContent = `${visiblesCount} visibles (${ocultos.length} ocultos)`;
+  }
+  window.toggleModuloSuperadmin = toggleModuloSuperadmin;
+
+  function alternarTodosModulos(mostrarTodos) {
+    if (mostrarTodos) {
+      setModulosOcultosSuperadmin([]);
+    } else {
+      // Dejar al menos 'general' para no dejar el sidebar totalmente vacío
+      const todosMenosGeneral = MODULOS_SIDEBAR_CONFIG.filter(m => m.key !== 'general').map(m => m.key);
+      setModulosOcultosSuperadmin(todosMenosGeneral);
+    }
+    aplicarModulosOcultosSuperadmin();
+    abrirModalGestionModulos(); // refresca los checkboxes
+  }
+  window.alternarTodosModulos = alternarTodosModulos;
+
+  function restablecerModulosPorDefecto() {
+    setModulosOcultosSuperadmin([]);
+    aplicarModulosOcultosSuperadmin();
+    abrirModalGestionModulos();
+    toast('Se han restablecido todos los módulos como visibles.', 'ok');
+  }
+  window.restablecerModulosPorDefecto = restablecerModulosPorDefecto;
 
   // async (fire-and-forget desde showPanel, ver más abajo): Store('usuarios')
   // ahora habla con MySQL. 'modulos' sigue síncrono (localStorage, Fase 2
@@ -1052,7 +1322,10 @@
     semaforoCohorteFiltro = '';
     aplicarTema('light', false);
     document.documentElement.classList.remove('dark');
-    if (document.body) document.body.classList.remove('dark', 'dark-mode');
+    if (document.body) {
+      document.body.classList.remove('dark', 'dark-mode');
+      document.body.classList.remove('role-aliado');
+    }
     ['dashboardView', 'teacherView', 'studentView'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('dark');
@@ -1068,6 +1341,10 @@
     else if (typeof setAuthToken === 'function') setAuthToken(null);
     localStorage.removeItem(DB_PREFIX_TOKEN + 'authToken');
     localStorage.removeItem('aplus_chat_token');
+    const aplusChat = document.getElementById('aplusChat');
+    if (aplusChat) aplusChat.style.removeProperty('display');
+    const btnMod = document.getElementById('btnPersonalizarModulos');
+    if (btnMod) btnMod.classList.add('hidden');
     if (window.aplusChatResetSession) window.aplusChatResetSession();
   }
 
@@ -1183,15 +1460,17 @@
   function actualizarHeaderUsuario(role) {
     if (role === 'admin') {
       const isSuper = currentAdminRole === 'superadmin';
+      const isAliado = currentAdminRole === 'aliado';
       const user = currentAdminUser || {};
-      const nombre = isSuper ? 'Superadministrador' : (user.nombre || 'Administración');
-      const email = isSuper ? (user.email || 'admin@fundacionamas.org.co') : (user.email || 'coordinacion@fundacionamas.org.co');
-      const rol = isSuper ? 'Superadmin' : (user.rol || 'Administración');
+      const isDonante = isAliado && (user.rol === 'Donante');
+      const nombre = isSuper ? 'Superadministrador' : (isDonante ? (user.nombre || 'Donante / Inversionista') : (isAliado ? (user.nombre || 'Aliado Estratégico') : (user.nombre || 'Administración')));
+      const email = isSuper ? (user.email || 'admin@fundacionamas.org.co') : (isDonante ? (user.email || 'donante@fundacion.org') : (isAliado ? (user.email || 'aliado@fundacionamas.org.co') : (user.email || 'coordinacion@fundacionamas.org.co')));
+      const rol = isSuper ? 'Superadmin' : (isDonante ? 'Donante / Inversionista' : (isAliado ? 'Aliado Estratégico' : (user.rol || 'Administración')));
       const fotoUrl = user.fotoUrl || '';
-      const iniciales = isSuper ? 'SA' : (nombre.split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || 'AD');
+      const iniciales = isSuper ? 'SA' : (nombre.split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || (isDonante ? 'DO' : (isAliado ? 'AL' : 'AD')));
 
       const headerName = document.getElementById('headerUserName-admin');
-      if (headerName) headerName.textContent = isSuper ? 'Superadmin' : (nombre.split(' ')[0] || 'Admin');
+      if (headerName) headerName.textContent = isSuper ? 'Superadmin' : (isDonante ? (nombre.split(' ')[0] || 'Donante') : (isAliado ? (nombre.split(' ')[0] || 'Aliado') : (nombre.split(' ')[0] || 'Admin')));
       const dropName = document.getElementById('dropdownUserName-admin');
       if (dropName) dropName.textContent = nombre;
       const dropEmail = document.getElementById('dropdownUserEmail-admin');
@@ -1201,7 +1480,9 @@
 
       const avatarCont = document.getElementById('headerAvatarImg-admin');
       if (avatarCont) {
-        avatarCont.style.background = 'linear-gradient(135deg, #8B5CF6 0%, #1FC8C0 100%)';
+        avatarCont.style.background = isAliado
+          ? 'linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)'
+          : 'linear-gradient(135deg, #8B5CF6 0%, #1FC8C0 100%)';
         avatarCont.style.color = '#FFFFFF';
         if (fotoUrl) {
           avatarCont.innerHTML = `<img src="${fotoUrl}" alt="${escapeHtml(nombre)}" class="w-full h-full object-cover">`;
@@ -1459,6 +1740,21 @@
   const PANEL_COLOR = '#6A1B9A';
   let panelActivoAdmin = null;
   async function showPanel(panel) {
+    if (panel === 'asistenteChat') {
+      if (currentAdminRole === 'aliado') return;
+      abrirAplusChatDirecto();
+      return;
+    }
+    if (currentAdminRole === 'aliado') {
+      const isDonante = (currentAdminUser && (currentAdminUser.rol === 'Donante' || currentAdminUser.rol === 'Inversor' || currentAdminUser.rol === 'Inversionista'));
+      const tabsAliadosPermitidos = isDonante
+        ? ['resumen', 'modulos', 'semaforo', 'calificaciones', 'proyectosFundacion', 'proyectosEstudiantes']
+        : ['resumen', 'modulos', 'semaforo', 'calificaciones'];
+      if (!tabsAliadosPermitidos.includes(panel)) {
+        if (panel !== 'resumen') showPanel('resumen');
+        return;
+      }
+    }
     if (currentAdminRole === 'administracion' && currentAdminUser) {
       const tabDelPanel = document.querySelector('.panel-tab[data-panel="' + panel + '"]');
       if (tabDelPanel && (tabDelPanel.dataset.superOnly === 'true' || tabDelPanel.classList.contains('hidden'))) return;
@@ -1483,7 +1779,7 @@
     panelActivoAdmin = panel;
 
     // Si el contenedor está vacío o contiene error previo, mostrar skeleton de carga inmediata
-    const mountId = 'mount-' + (panel === 'informesAdmin' ? 'informes-admin' : panel);
+    const mountId = 'mount-' + (panel === 'informesAdmin' ? 'informes-admin' : (panel === 'proyectosFundacion' ? 'proyectos-fundacion' : (panel === 'proyectosEstudiantes' ? 'proyectos-estudiantes' : panel)));
     const mount = document.getElementById(mountId);
     if (mount && (!mount.innerHTML.trim() || mount.innerHTML.includes('No se pudo cargar el módulo'))) {
       mount.innerHTML = `<div class="admin-panel-card p-8">
@@ -1577,7 +1873,20 @@
     return h * 60 + m;
   }
   function horasFranja(franja) {
-    return Math.round(((minutosDesdeHora(franja.fin) - minutosDesdeHora(franja.inicio)) / 60) * 100) / 100;
+    if (!franja || !franja.inicio || !franja.fin) return 0;
+    const duracionMin = minutosDesdeHora(franja.fin) - minutosDesdeHora(franja.inicio);
+    if (duracionMin <= 0) return 0;
+    let horas = duracionMin / 60;
+    // En el horario si un profesor tiene todo el día (ej. 08:00 a 17:00, >= 8.5 horas),
+    // no calcular la hora de almuerzo (poner solo 8 horas).
+    if (horas >= 8.5) {
+      if (duracionMin >= 510 && duracionMin <= 570) {
+        horas = 8;
+      } else {
+        horas = Math.max(8, horas - 1);
+      }
+    }
+    return Math.round(horas * 100) / 100;
   }
   function mesLabel(mesValue) {
     if (!mesValue || mesValue === '0000-00') return 'Periodo sin fecha registrada';
@@ -1792,6 +2101,10 @@
   }
 
   function abrirModalColoresCamisa(cohorte) {
+    if (currentAdminRole === 'aliado') {
+      toast('Los aliados estratégicos tienen acceso de solo lectura', 'err');
+      return;
+    }
     const cohorteActual = cohorte || horarioState.cohorte;
     if (!cohorteActual) {
       toast('Selecciona una cohorte primero', 'err');
@@ -2141,6 +2454,24 @@
   window.escapeHtml = escapeHtml;
   window.toast = toast;
 
+  function parsearHabilidades(val) {
+    if (!val) return [];
+    if (Array.isArray(val)) {
+      return val.map(s => String(s || '').trim()).filter(Boolean);
+    }
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (!trimmed || trimmed === '[]') return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.map(s => String(s || '').trim()).filter(Boolean);
+      } catch (_) {}
+      return trimmed.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+    }
+    return [];
+  }
+  window.parsearHabilidades = parsearHabilidades;
+
   function fmtDate(iso) {
     if (!iso) return '—';
     const d = new Date(iso + 'T00:00:00');
@@ -2162,6 +2493,7 @@
     { codigo: 'admin.resumen', categoria: 'Administrativo', etiqueta: 'Resumen' },
     { codigo: 'admin.notificaciones', categoria: 'Administrativo', etiqueta: 'Notificaciones y Alertas' },
     { codigo: 'admin.usuarios', categoria: 'Administrativo', etiqueta: 'Usuarios' },
+    { codigo: 'admin.talentos', categoria: 'Administrativo', etiqueta: 'Banco de Talentos' },
     { codigo: 'admin.perfiles', categoria: 'Administrativo', etiqueta: 'Perfiles y permisos' },
     { codigo: 'admin.modulos', categoria: 'Administrativo', etiqueta: 'Cohortes' },
     { codigo: 'admin.cursos', categoria: 'Administrativo', etiqueta: 'Cursos' },
@@ -2172,6 +2504,7 @@
     { codigo: 'admin.memorandos', categoria: 'Administrativo', etiqueta: 'Memorandos' },
     { codigo: 'admin.pqr', categoria: 'Administrativo', etiqueta: 'PQR' },
     { codigo: 'admin.calificaciones', categoria: 'Administrativo', etiqueta: 'Calificaciones' },
+    { codigo: 'admin.pagos', categoria: 'Administrativo', etiqueta: 'Gestión de Pagos' },
     { codigo: 'admin.informesAdmin', categoria: 'Administrativo', etiqueta: 'Informes' },
     { codigo: 'admin.forms', categoria: 'Administrativo', etiqueta: 'Forms' },
     { codigo: 'admin.trainee', categoria: 'Administrativo', etiqueta: 'Historial Trainee' },
@@ -2204,6 +2537,7 @@
     { codigo: 'estudiante.memorandos', categoria: 'Estudiante', etiqueta: 'Memorandos' },
     { codigo: 'estudiante.pqr', categoria: 'Estudiante', etiqueta: 'PQR' },
     { codigo: 'estudiante.agenda', categoria: 'Estudiante', etiqueta: 'Agenda' },
+    { codigo: 'estudiante.misProyectos', categoria: 'Estudiante', etiqueta: 'Mis Proyectos' },
     { codigo: 'estudiante.solicitar_equipo', categoria: 'Estudiante', etiqueta: 'Solicitar Equipo' },
   ];
 
@@ -2254,6 +2588,10 @@
         p.permisos['admin.forms'] = { ver: true, crear: true, editar: true, eliminar: true };
         cambiosPerfiles = true;
       }
+      if (p.categoria === 'Estudiante' && (!p.permisos['estudiante.misProyectos'] || !p.permisos['estudiante.misProyectos'].ver)) {
+        p.permisos['estudiante.misProyectos'] = { ver: true, crear: true, editar: true, eliminar: true };
+        cambiosPerfiles = true;
+      }
       if (p.permisos['admin.encuestas']) {
         delete p.permisos['admin.encuestas'];
         cambiosPerfiles = true;
@@ -2292,14 +2630,20 @@
     if (usuario.rol === 'Superadmin' || currentAdminRole === 'superadmin') {
       return { ver: true, crear: true, editar: true, eliminar: true };
     }
-    // Módulo de Recursos: acceso garantizado para solicitudes y gestión
-    if (panelCodigo === 'docente.solicitar_equipo' || panelCodigo === 'estudiante.solicitar_equipo' ||
-        panelCodigo === 'admin.recursos' || panelCodigo === 'admin.solicitudes_recursos' || panelCodigo === 'admin.asignaciones_recursos') {
-      return { ver: true, crear: true, editar: true, eliminar: true };
+    // Aliado Estratégico vs Donante / Inversor
+    if (usuario.rol === 'Aliado' || usuario.rol === 'Donante' || usuario.rol === 'Inversor' || usuario.rol === 'Inversionista' || currentAdminRole === 'aliado') {
+      const esDonante = usuario.rol === 'Donante' || usuario.rol === 'Inversor' || usuario.rol === 'Inversionista' ||
+        (currentAdminUser && (currentAdminUser.rol === 'Donante' || currentAdminUser.rol === 'Inversor' || currentAdminUser.rol === 'Inversionista'));
+      const panelesPermitidos = esDonante
+        ? ['admin.resumen', 'admin.modulos', 'admin.semaforo', 'admin.calificaciones', 'admin.informesAdmin', 'admin.proyectos', 'admin.proyectosEstudiantes']
+        : ['admin.resumen', 'admin.modulos', 'admin.semaforo', 'admin.calificaciones', 'admin.informesAdmin'];
+      return { ver: panelesPermitidos.includes(panelCodigo), crear: false, editar: false, eliminar: false };
     }
     const idsPerfiles = usuario.perfiles || [];
-    // Notificaciones institucionales siempre visibles para el rol respectivo
-    if (panelCodigo === 'admin.notificaciones' || panelCodigo === 'docente.notificaciones' || panelCodigo === 'estudiante.notificaciones') {
+    // Notificaciones institucionales, Banco de Talentos, Mis Proyectos y Módulo de Recursos siempre visibles
+    if (panelCodigo === 'admin.notificaciones' || panelCodigo === 'admin.talentos' || panelCodigo === 'docente.notificaciones' || panelCodigo === 'estudiante.notificaciones' || panelCodigo === 'estudiante.misProyectos' || panelCodigo === 'estudiante.proyectos' ||
+        panelCodigo === 'admin.recursos' || panelCodigo === 'admin.solicitudes_recursos' || panelCodigo === 'admin.asignaciones_recursos' ||
+        panelCodigo === 'docente.solicitar_equipo' || panelCodigo === 'estudiante.solicitar_equipo') {
       return { ver: true, crear: true, editar: true, eliminar: true };
     }
     // Si es Administrador o Coordinador y no tiene perfil restringido, otorgar acceso administrativo
@@ -2401,8 +2745,15 @@
     document.querySelectorAll(tabSelector).forEach(tab => {
       const seccion = tab.closest('nav')?.parentElement;
       if (!seccion) return;
-      const algunoVisible = Array.from(seccion.querySelectorAll(tabSelector)).some(t => !t.classList.contains('hidden'));
+      const algunoVisible = Array.from(seccion.querySelectorAll(tabSelector)).some(t => {
+        return !t.classList.contains('hidden') && t.style.display !== 'none';
+      });
       seccion.classList.toggle('hidden', !algunoVisible);
+      if (!algunoVisible) {
+        seccion.style.setProperty('display', 'none', 'important');
+      } else {
+        seccion.style.removeProperty('display');
+      }
     });
   }
 
@@ -2441,6 +2792,8 @@
       fields: [
         { key: 'nombre', label: 'Nombre completo', type: 'text', required: true },
         { key: 'email', label: 'Correo electrónico', type: 'email', required: true },
+        { key: 'documento', label: 'Documento de identidad', type: 'text', placeholder: 'Ej. CC / TI 1023456789' },
+        { key: 'telefono', label: 'Número de teléfono / WhatsApp', type: 'tel', placeholder: 'Ej. 300 123 4567' },
         // Contraseña de acceso: el usuario inicia sesión con su correo + esta
         // contraseña. Al editar, se puede dejar en blanco para conservar la
         // que ya tenía (ver manejo especial en saveModal).
@@ -2448,7 +2801,7 @@
         // Las opciones reales de "rol" se calculan en openModal() a partir de
         // rolesCreacionUsuario(): Estudiante/Docente para Administración, y
         // además Coordinador ("Administrador") si quien crea es el Superadmin.
-        { key: 'rol', label: 'Rol', type: 'select', options: ['Estudiante', 'Docente', 'Coordinador', 'Administrador'], required: true },
+        { key: 'rol', label: 'Rol', type: 'select', options: ['Estudiante', 'Docente', 'Coordinador', 'Administrador', 'Aliado'], required: true },
         // Las opciones reales de "cohorte" se calculan en openModal() a partir de
         // las cohortes existentes (Store('modulos')) — ver bloque "select" más abajo.
         { key: 'cohorte', label: 'Cohorte', type: 'select', options: [] },
@@ -2598,22 +2951,51 @@
   // se crean aquí: tienen su propio apartado exclusivo del Superadmin (ver
   // panel "Administradores" / renderAdministradores() / openModal(..., 'Coordinador')).
   function rolesCreacionUsuario() {
-    return ['Estudiante', 'Docente'];
+    return ['Estudiante', 'Docente', 'Aliado', 'Donante'];
   }
+
+  // Controladores de selección de cohortes para Aliados (individuales vs todas)
+  function toggleAliadoTodasCohortes(chk) {
+    const checkboxes = document.querySelectorAll('.aliado-cohorte-checkbox');
+    if (chk && chk.checked) {
+      checkboxes.forEach(c => c.checked = false);
+    }
+  }
+  window.toggleAliadoTodasCohortes = toggleAliadoTodasCohortes;
+
+  function onToggleAliadoCohorteItem(chk) {
+    const chkTodas = document.getElementById('aliado_todas_cohortes');
+    if (chk && chk.checked && chkTodas) {
+      chkTodas.checked = false;
+    }
+    const marcadas = document.querySelectorAll('.aliado-cohorte-checkbox:checked');
+    if (marcadas.length === 0 && chkTodas) {
+      chkTodas.checked = true;
+    }
+  }
+  window.onToggleAliadoCohorteItem = onToggleAliadoCohorteItem;
 
   // async: 'usuarios' habla con MySQL ahora. Se precargan aquí, ANTES del
   // .map() síncrono de más abajo (que genera el HTML de cada campo del
   // formulario), porque ese .map() no puede usar await dentro de sus
   // callbacks. record0 también depende de esto cuando entity=='usuarios'.
   async function openModal(entity, id, forcedRole, options = {}) {
+    if (currentAdminRole === 'aliado') {
+      toast('Los aliados estratégicos tienen acceso de solo lectura', 'err');
+      return;
+    }
     const schema = SCHEMAS[entity];
     if (!schema) return;
-    const listaEntidadActual = await Store.list(entity); // funciona igual para 'usuarios' (MySQL) y cualquier otra entidad (localStorage, ver Store híbrido en db.js)
+    const listaEntidadActual = await Store.list(entity, { forceRefresh: true }); // funciona igual para 'usuarios' (MySQL) y cualquier otra entidad (localStorage, ver Store híbrido en db.js)
     const record0 = id ? listaEntidadActual.find(r => r.id === id) : null;
 
-    // Solo el Superadmin puede editar cuentas de Administrador (Coordinador).
-    if (entity === 'usuarios' && record0 && (record0.rol === 'Coordinador' || record0.rol === 'Administrador') && currentAdminRole !== 'superadmin') {
-      toast('Solo el Superadmin puede editar una cuenta de Administrador', 'err');
+    // Solo el Superadmin puede gestionar cuentas de Administrador o Aliado Estratégico.
+    if (entity === 'usuarios' && record0 && (record0.rol === 'Coordinador' || record0.rol === 'Administrador' || record0.rol === 'Aliado') && currentAdminRole !== 'superadmin') {
+      toast('Solo el Superadmin puede editar esta cuenta', 'err');
+      return;
+    }
+    if (entity === 'usuarios' && (forcedRole === 'Coordinador' || forcedRole === 'Aliado') && currentAdminRole !== 'superadmin') {
+      toast('Solo el Superadmin puede crear este tipo de cuenta', 'err');
       return;
     }
 
@@ -2639,8 +3021,12 @@
 
     const esDocenteModal = (forcedRole === 'Docente') || (record0 && record0.rol === 'Docente');
     const esEstudianteModal = (forcedRole === 'Estudiante') || (record0 && record0.rol === 'Estudiante');
+    const esAliadoModal = (forcedRole === 'Aliado') || (record0 && record0.rol === 'Aliado');
+    const esDonanteModal = (forcedRole === 'Donante') || (record0 && record0.rol === 'Donante');
     let labelModal = schema.label;
     if (forcedRole === 'Coordinador') labelModal = 'Administrador';
+    else if (esAliadoModal) labelModal = 'Aliado Estratégico';
+    else if (esDonanteModal) labelModal = 'Donante / Inversionista';
     else if (esDocenteModal) labelModal = 'Profesor / Docente';
     else if (esEstudianteModal) labelModal = 'Estudiante';
 
@@ -2682,18 +3068,33 @@
         </div>`;
     }
 
-    form.innerHTML = bannerAprobacion + bannerFotoUsuario + schema.fields.map(f => {
-      const val = record ? record[f.key] : (f.default !== undefined ? f.default : '');
+    let fieldsToRender = [...schema.fields];
+    if (entity === 'usuarios' && (esAliadoModal || esDonanteModal)) {
+      // Orden equilibrado en 2 columnas:
+      // Fila 1: nombre (col 1), email (col 2)
+      // Fila 2: password (col 1), estado (col 2)
+      // Fila 3: cohorte (sm:col-span-2)
+      // rol: oculto (display:none)
+      const keysOrder = ['nombre', 'email', 'password', 'estado', 'cohorte', 'rol'];
+      fieldsToRender.sort((a, b) => {
+        const ia = keysOrder.indexOf(a.key);
+        const ib = keysOrder.indexOf(b.key);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
+    }
+
+    form.innerHTML = bannerAprobacion + bannerFotoUsuario + fieldsToRender.map(f => {
+      let val = record ? record[f.key] : (f.default !== undefined ? f.default : '');
       const idAttr = 'field_' + f.key;
 
-      // Apartado exclusivo de Administradores: el rol ya viene fijo
-      // (Coordinador) y no aplica cohorte, así que esos dos campos se
-      // guardan como ocultos en vez de mostrarse en el formulario.
-      if (entity === 'usuarios' && forcedRole && f.key === 'rol') {
-        return `<input type="hidden" id="${idAttr}" value="${escapeHtml(forcedRole)}" />`;
+      // Apartado exclusivo de Administradores, Aliados y Donantes: el rol ya viene fijo
+      // y se guarda como oculto sin ocupar celda en el grid.
+      if (entity === 'usuarios' && (forcedRole || esAliadoModal || esDonanteModal) && f.key === 'rol') {
+        const rolVal = forcedRole || (record ? record.rol : (esDonanteModal ? 'Donante' : 'Aliado'));
+        return `<input type="hidden" id="${idAttr}" value="${escapeHtml(rolVal)}" style="display:none;" />`;
       }
       if (entity === 'usuarios' && forcedRole === 'Coordinador' && f.key === 'cohorte') {
-        return `<input type="hidden" id="${idAttr}" value="" />`;
+        return `<input type="hidden" id="${idAttr}" value="" style="display:none;" />`;
       }
 
       // Buscador de destinatario para Memorandos: escribe nombre o correo y
@@ -2738,7 +3139,54 @@
           opciones = rolesCreacionUsuario();
         } else if (entity === 'usuarios' && f.key === 'cohorte') {
           const esDocente = (forcedRole === 'Docente') || (record && record.rol === 'Docente');
-          if (esDocente) {
+          const esAliado = (forcedRole === 'Aliado') || (record && record.rol === 'Aliado') || (forcedRole === 'Donante') || (record && record.rol === 'Donante');
+          if (esAliado) {
+            let asignadas = [];
+            if (record && record.cohortesPermitidas) {
+              if (Array.isArray(record.cohortesPermitidas)) {
+                asignadas = record.cohortesPermitidas.map(c => String(c).trim());
+              } else if (typeof record.cohortesPermitidas === 'string') {
+                try {
+                  const parsed = JSON.parse(record.cohortesPermitidas);
+                  asignadas = Array.isArray(parsed) ? parsed : [record.cohortesPermitidas];
+                } catch (e) {
+                  asignadas = record.cohortesPermitidas.split(',').map(s => s.trim());
+                }
+              }
+            } else if (record && record.cohorte) {
+              asignadas = record.cohorte.split(',').map(s => s.trim());
+            }
+            if (!record || asignadas.length === 0) {
+              asignadas = ['todas'];
+            }
+            const esTodas = asignadas.some(c => c.toLowerCase() === 'todas');
+
+            return `
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold text-slate2 mb-1">Cohortes autorizadas para monitoreo</label>
+              <div class="rounded-xl border border-teal-500/25 bg-teal-50/25 p-2.5 space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                  <label class="inline-flex items-center gap-2 text-xs font-bold text-ink cursor-pointer select-none">
+                    <input type="checkbox" id="aliado_todas_cohortes" onchange="toggleAliadoTodasCohortes(this)" ${esTodas ? 'checked' : ''} class="w-3.5 h-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 cursor-pointer" />
+                    <span>Todas las cohortes (Observatorio global)</span>
+                  </label>
+                  <span class="text-[10px] font-semibold text-teal-700 bg-teal-100/70 px-2 py-0.5 rounded-full">Monitoreo multi-cohorte</span>
+                </div>
+
+                <div id="aliado_cohortes_especificas" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-24 overflow-y-auto pt-1.5 border-t border-teal-500/15 pr-0.5">
+                  ${(modulosPrecargados || []).map(m => {
+                    const check = !esTodas && asignadas.some(a => a.toLowerCase() === m.nombre.toLowerCase());
+                    return `
+                    <label class="flex items-center gap-1.5 text-xs font-medium text-ink bg-white border border-gray-200/90 rounded-lg px-2 py-1 cursor-pointer hover:border-teal-400 select-none">
+                      <input type="checkbox" name="aliado_cohorte_item" value="${escapeHtml(m.nombre)}" onchange="onToggleAliadoCohorteItem(this)" ${check ? 'checked' : ''} class="aliado-cohorte-checkbox w-3.5 h-3.5 rounded border-gray-300 text-teal-600 focus:ring-teal-400 cursor-pointer" />
+                      <span class="truncate text-[11px]">${escapeHtml(m.nombre)}</span>
+                    </label>`;
+                  }).join('')}
+                </div>
+              </div>
+              <input type="hidden" id="${idAttr}" value="${esTodas ? 'Todas' : (asignadas.filter(c => c.toLowerCase() !== 'todas').join(', ') || 'Todas')}" style="display:none;" />
+            </div>`;
+          } else if (esDocente) {
             // Profesores: pueden ser asignados a cualquier cohorte sin restricción de cupos de estudiante
             opciones = [{ value: '', label: '— Sin cohorte asignada —' }];
             (modulosPrecargados || []).forEach(m => {
@@ -2790,7 +3238,8 @@
         // Normaliza a {value,label} para poder mezclar strings simples con pares dinámicos.
         opciones = opciones.map(o => (o && typeof o === 'object') ? o : { value: o, label: (o === '' ? 'Sin asignar' : o) });
         const opts = opciones.map(o => `<option value="${escapeHtml(o.value)}" ${val === o.value ? 'selected' : ''} ${o.disabled ? 'disabled class="text-coral bg-gray-100"' : ''}>${escapeHtml(o.label)}</option>`).join('');
-        return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
+        const labelSelect = (entity === 'usuarios' && f.key === 'cohorte' && (forcedRole === 'Aliado' || (record && record.rol === 'Aliado'))) ? 'Cohortes autorizadas / Monitoreadas' : f.label;
+        return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${labelSelect}</label>
           <select id="${idAttr}" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition">${opts}</select></div>`;
       }
       if (f.type === 'textarea') {
@@ -2809,12 +3258,12 @@
       if (f.type === 'password') {
         const ayudaPassword = (entity === 'usuarios' && f.key === 'password')
           ? (modalCtx.esAprobacion
-              ? 'Escribe una nueva contraseña para asignársela, o déjala en blanco para conservar la que el estudiante definió al registrarse. (Mínimo 6 caracteres, letra y número).'
-              : ((record ? 'Déjala en blanco para conservar la contraseña actual. ' : '') + 'Mínimo 6 caracteres, con al menos una letra y un número.'))
+              ? 'Escribe una nueva contraseña para asignársela, o déjala en blanco para conservar la que definió al registrarse. (Mínimo 6 caracteres, letra y número).'
+              : ((record ? 'Déjala en blanco para conservar la contraseña actual. ' : '') + 'Mínimo 6 caracteres, letra y número.'))
           : '';
         return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
           <input id="${idAttr}" type="text" value="" placeholder="${modalCtx.esAprobacion ? 'Nueva contraseña (opcional)' : ''}" autocomplete="new-password" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
-          ${ayudaPassword ? `<p class="text-xs text-slate2 mt-1.5">${ayudaPassword}</p>` : ''}</div>`;
+          ${ayudaPassword ? `<p class="text-[11px] text-slate2 mt-1 leading-tight">${ayudaPassword}</p>` : ''}</div>`;
       }
       return `<div><label class="block text-xs font-semibold text-slate2 mb-1.5" for="${idAttr}">${f.label}</label>
         <input id="${idAttr}" type="${f.type}" ${step} value="${escapeHtml(val)}" autocomplete="new-password" class="w-full rounded-xl border border-morado/25 bg-morado/5 px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" /></div>`;
@@ -2824,7 +3273,7 @@
     //      materias y horas (tomadas del pensum creado a partir del calendario
     //      de cohortes que ya armó el administrador). Solo aplica al EDITAR,
     //      nunca al crear, porque primero hay que guardar al docente. ----
-    if (entity === 'usuarios') {
+    if (entity === 'usuarios' && !esAliadoModal && !esDonanteModal) {
       const materiasWrap = document.createElement('div');
       materiasWrap.id = 'materiasAsignadasContainer';
       materiasWrap.className = 'sm:col-span-2';
@@ -2832,9 +3281,9 @@
 
       const rolSelect = document.getElementById('field_rol');
       const refrescarSeccionMaterias = async () => {
-        materiasWrap.innerHTML = (id && rolSelect.value === 'Docente') ? await renderMateriasAssignSection(record) : '';
+        materiasWrap.innerHTML = (id && rolSelect && rolSelect.value === 'Docente') ? await renderMateriasAssignSection(record) : '';
       };
-      rolSelect.addEventListener('change', refrescarSeccionMaterias);
+      if (rolSelect) rolSelect.addEventListener('change', refrescarSeccionMaterias);
       await refrescarSeccionMaterias();
     }
 
@@ -2842,8 +3291,9 @@
     //      perfiles cuya categoría corresponde al rol elegido (Estudiante/
     //      Docente => su categoría; Coordinador/Administrador => categoría
     //      Administrativo) y se recalculan si el usuario cambia el rol en
-    //      el propio formulario, antes de guardar. ----
-    if (entity === 'usuarios') {
+    //      el propio formulario, antes de guardar.
+    //      Para Aliados y Donantes NO aplica: su acceso está fijado al Observatorio en solo lectura. ----
+    if (entity === 'usuarios' && !esAliadoModal && !esDonanteModal) {
       const perfilesWrap = document.createElement('div');
       perfilesWrap.id = 'perfilesAsignadosContainer';
       perfilesWrap.className = 'sm:col-span-2';
@@ -2877,17 +3327,81 @@
       };
       if (rolSelectParaPerfiles) rolSelectParaPerfiles.addEventListener('change', refrescarSeccionPerfiles);
       refrescarSeccionPerfiles();
+
+      // Selector interactivo de Habilidades y Destrezas para Estudiantes y Docentes
+      const habilidadesWrap = document.createElement('div');
+      habilidadesWrap.id = 'habilidadesUsuarioContainer';
+      habilidadesWrap.className = 'sm:col-span-2 pt-3 mt-2 border-t border-gray-100';
+
+      let habsModal = record ? parsearHabilidades(record.habilidades) : [];
+      window.__habilidadesModalUsuario = habsModal;
+
+      const sugerenciasPopularesModal = ['Python', 'JavaScript', 'React', 'Node.js', 'SQL', 'Figma', 'Git', 'HTML/CSS', 'Edición de Video', 'Marketing Digital', 'Redacción', 'Ventas', 'Excel', 'Liderazgo', 'Inglés B1/B2'];
+
+      const refrescarChipsModal = () => {
+        const chipsCont = document.getElementById('modal_usuario_habilidades_chips');
+        const hiddenInput = document.getElementById('field_habilidades_hidden');
+        if (hiddenInput) hiddenInput.value = JSON.stringify(window.__habilidadesModalUsuario);
+        if (chipsCont) {
+          chipsCont.innerHTML = window.__habilidadesModalUsuario.length
+            ? window.__habilidadesModalUsuario.map((h, idx) => `
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-morado/10 text-morado border border-morado/20">
+                  <span>${escapeHtml(h)}</span>
+                  <button type="button" onclick="window.__removerHabilidadModalUsuario(${idx})" class="w-3.5 h-3.5 rounded-full hover:bg-morado/20 text-morado inline-flex items-center justify-center cursor-pointer font-bold leading-none">&times;</button>
+                </span>`).join('')
+            : '<span class="text-xs text-slate2 italic">Sin habilidades asignadas aún. Escribe o selecciona sugerencias abajo.</span>';
+        }
+      };
+
+      window.__removerHabilidadModalUsuario = (idx) => {
+        window.__habilidadesModalUsuario.splice(idx, 1);
+        refrescarChipsModal();
+      };
+
+      window.__agregarHabilidadModalUsuario = (texto) => {
+        const input = document.getElementById('modal_usuario_nueva_habilidad');
+        const val = (texto || (input ? input.value : '')).trim();
+        if (!val) return;
+        const partes = val.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+        partes.forEach(p => {
+          if (!window.__habilidadesModalUsuario.some(h => h.toLowerCase() === p.toLowerCase())) {
+            window.__habilidadesModalUsuario.push(p);
+          }
+        });
+        refrescarChipsModal();
+        if (input) input.value = '';
+      };
+
+      habilidadesWrap.innerHTML = `
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <label class="block text-xs font-bold uppercase tracking-wider text-morado">Habilidades y Destrezas</label>
+            <span class="text-[11px] text-slate2">Tags para búsqueda de talento</span>
+          </div>
+          <input type="hidden" id="field_habilidades_hidden" value="${escapeHtml(JSON.stringify(habsModal))}" />
+          <div id="modal_usuario_habilidades_chips" class="flex flex-wrap gap-1.5 mb-2.5 min-h-[38px] p-2.5 bg-gray-50/80 rounded-xl border border-gray-200"></div>
+          <div class="flex gap-2 mb-2">
+            <input id="modal_usuario_nueva_habilidad" type="text" maxlength="40" placeholder="Ej. Python, Figma, React..." class="flex-1 rounded-xl border border-morado/25 bg-morado/5 px-3 py-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-morado/30" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.__agregarHabilidadModalUsuario();}" />
+            <button type="button" onclick="window.__agregarHabilidadModalUsuario()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-morado text-white hover:bg-morado/90 transition shadow-sm cursor-pointer shrink-0">+ Añadir</button>
+          </div>
+          <div class="flex flex-wrap gap-1 items-center">
+            <span class="text-[10px] text-slate2 font-semibold mr-1">Sugerencias:</span>
+            ${sugerenciasPopularesModal.map(s => `<button type="button" onclick="window.__agregarHabilidadModalUsuario('${escapeHtml(s)}')" class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white border border-gray-200 text-slate-700 hover:border-morado hover:text-morado transition cursor-pointer">+ ${escapeHtml(s)}</button>`).join('')}
+          </div>
+        </div>`;
+      form.appendChild(habilidadesWrap);
+      setTimeout(refrescarChipsModal, 0);
     }
 
     if (entity === 'usuarios') {
       const notifWrap = document.createElement('div');
-      notifWrap.className = 'sm:col-span-2 pt-3 border-t border-gray-100 flex items-center justify-between gap-3';
+      notifWrap.className = 'sm:col-span-2 pt-2.5 border-t border-gray-100 flex items-center justify-between gap-3';
       notifWrap.innerHTML = `
-        <label class="flex items-center gap-2.5 text-xs font-semibold text-ink cursor-pointer select-none">
+        <label class="flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer select-none">
           <input id="field_notificar_correo" type="checkbox" ${modalCtx.esAprobacion ? 'checked' : ''} class="w-4 h-4 rounded border-morado/40 text-morado focus:ring-morado/40" />
-          <span>Enviar notificación por correo con credenciales de acceso y logo institucional</span>
+          <span>Enviar notificación con credenciales y logo institucional</span>
         </label>
-        <span class="text-[11px] text-slate2 font-medium">EmailJS / SMTP</span>`;
+        <span class="text-[11px] text-slate2 font-medium shrink-0">EmailJS / SMTP</span>`;
       form.appendChild(notifWrap);
     }
 
@@ -2906,6 +3420,59 @@
         <p><span class="font-semibold text-ink">Docente(s) asignado(s):</span> ${docentesAsignados.length ? escapeHtml(docentesAsignados.join(', ')) : 'Sin asignar — ve al panel "Horario" y escribe el nombre del docente en la celda correspondiente'}</p>
         <p><span class="font-semibold text-ink">Estudiantes matriculados:</span> ${inscritosReales} de ${record.cupos || 0} cupos ${inscritosReales >= (record.cupos || 0) && record.cupos ? '<span class="text-coral font-semibold">· Cupos llenos</span>' : ''}</p>`;
       form.appendChild(info);
+    }
+
+    if (entity === 'usuarios' && esDocenteModal && puedeGestionarPagosDocentes()) {
+      const honorariosSec = document.createElement('div');
+      honorariosSec.className = 'sm:col-span-2 pt-4 mt-2 border-t border-purple-100 bg-purple-50/30 p-4 rounded-2xl border border-purple-200/60';
+      const tarifaVal = record ? (record.tarifaHora || record.tarifa_hora || 0) : 0;
+      const bancoVal = record ? (record.banco || '') : '';
+      const tipoVal = record ? (record.tipoCuenta || record.tipo_cuenta || 'Ahorros') : 'Ahorros';
+      const numVal = record ? (record.numeroCuenta || record.numero_cuenta || '') : '';
+      const titularVal = record ? (record.titularCuenta || record.titular_cuenta || '') : '';
+      const docVal = record ? (record.documentoCuenta || record.documento_cuenta || '') : '';
+      
+      honorariosSec.innerHTML = `
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-purple-600"></span>
+            <p class="text-xs font-bold text-purple-900 uppercase tracking-wider">Honorarios y Datos Bancarios (Confidencial)</p>
+          </div>
+          ${id ? `<button type="button" onclick="closeModal(); abrirModalPagosDocente('${id}');" class="text-xs font-bold text-purple-700 bg-white hover:bg-purple-100 px-3 py-1 rounded-xl border border-purple-300 shadow-xs transition cursor-pointer inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>Ver Expediente de Pagos</span></button>` : ''}
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Tarifa por Hora ($ COP)</label>
+            <input type="number" id="field_tarifa_hora" min="0" step="500" value="${tarifaVal || ''}" class="w-full rounded-xl border border-gray-300 p-2 text-xs font-bold text-purple-700 bg-white focus:ring-2 focus:ring-purple-400" placeholder="Ej: 35000" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Banco / Entidad</label>
+            <input type="text" id="field_banco" value="${escapeHtml(bancoVal)}" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink bg-white focus:ring-2 focus:ring-purple-400" placeholder="Ej: Bancolombia" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Tipo de Cuenta</label>
+            <select id="field_tipo_cuenta" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink bg-white focus:ring-2 focus:ring-purple-400">
+              <option value="Ahorros" ${tipoVal === 'Ahorros' ? 'selected' : ''}>Ahorros</option>
+              <option value="Corriente" ${tipoVal === 'Corriente' ? 'selected' : ''}>Corriente</option>
+              <option value="Nequi" ${tipoVal === 'Nequi' ? 'selected' : ''}>Nequi</option>
+              <option value="Daviplata" ${tipoVal === 'Daviplata' ? 'selected' : ''}>Daviplata</option>
+              <option value="Otro" ${tipoVal === 'Otro' ? 'selected' : ''}>Otro</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Número de Cuenta</label>
+            <input type="text" id="field_numero_cuenta" value="${escapeHtml(numVal)}" class="w-full rounded-xl border border-gray-300 p-2 text-xs font-mono text-ink bg-white focus:ring-2 focus:ring-purple-400" placeholder="Ej: 123-456789-00" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Titular</label>
+            <input type="text" id="field_titular_cuenta" value="${escapeHtml(titularVal)}" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink bg-white focus:ring-2 focus:ring-purple-400" placeholder="Nombre completo" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Documento / NIT</label>
+            <input type="text" id="field_documento_cuenta" value="${escapeHtml(docVal)}" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink bg-white focus:ring-2 focus:ring-purple-400" placeholder="Cédula o NIT" />
+          </div>
+        </div>`;
+      form.appendChild(honorariosSec);
     }
 
     document.getElementById('adminModal').classList.remove('hidden');
@@ -3111,6 +3678,20 @@
       }
     }
 
+    // ---- Usuarios: configuración de cohortes permitidas para Aliados y Donantes ----
+    if (entity === 'usuarios' && (data.rol === 'Aliado' || data.rol === 'Donante')) {
+      const chkTodas = document.getElementById('aliado_todas_cohortes');
+      const seleccionadas = Array.from(document.querySelectorAll('.aliado-cohorte-checkbox:checked')).map(c => c.value);
+
+      if ((chkTodas && chkTodas.checked) || seleccionadas.length === 0) {
+        data.cohortesPermitidas = ['todas'];
+        data.cohorte = 'Todas';
+      } else {
+        data.cohortesPermitidas = seleccionadas;
+        data.cohorte = seleccionadas.join(', ');
+      }
+    }
+
     // ---- Usuarios: no permitir matricular un estudiante en una cohorte sin cupos ----
     // Se cuentan los inscritos reales (contarInscritos) contra el total de cupos de
     // la cohorte. Si el estudiante ya pertenecía a esa misma cohorte, no se bloquea
@@ -3170,6 +3751,39 @@
     // ---- Usuarios: perfiles seleccionados (checkboxes fuera de schema.fields) ----
     if (entity === 'usuarios') {
       data.perfiles = Array.from(document.querySelectorAll('.perfil-asignado-checkbox:checked')).map(chk => chk.value);
+
+      const elTarifa = document.getElementById('field_tarifa_hora');
+      if (elTarifa) data.tarifaHora = parseFloat(elTarifa.value) || 0;
+      const elBanco = document.getElementById('field_banco');
+      if (elBanco) data.banco = elBanco.value.trim();
+      const elTipoCuenta = document.getElementById('field_tipo_cuenta');
+      if (elTipoCuenta) data.tipoCuenta = elTipoCuenta.value.trim();
+      const elNumCuenta = document.getElementById('field_numero_cuenta');
+      if (elNumCuenta) data.numeroCuenta = elNumCuenta.value.trim();
+      const elTitular = document.getElementById('field_titular_cuenta');
+      if (elTitular) data.titularCuenta = elTitular.value.trim();
+      const elDocCuenta = document.getElementById('field_documento_cuenta');
+      if (elDocCuenta) data.documentoCuenta = elDocCuenta.value.trim();
+
+      // Auto-commit de cualquier habilidad pendiente escrita en el input antes de guardar
+      const inputNuevaHab = document.getElementById('modal_usuario_nueva_habilidad');
+      if (inputNuevaHab && inputNuevaHab.value.trim()) {
+        const partes = inputNuevaHab.value.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+        if (Array.isArray(window.__habilidadesModalUsuario)) {
+          partes.forEach(p => {
+            if (!window.__habilidadesModalUsuario.some(h => h.toLowerCase() === p.toLowerCase())) {
+              window.__habilidadesModalUsuario.push(p);
+            }
+          });
+          const elHabHidden = document.getElementById('field_habilidades_hidden');
+          if (elHabHidden) elHabHidden.value = JSON.stringify(window.__habilidadesModalUsuario);
+        }
+      }
+
+      const elHab = document.getElementById('field_habilidades_hidden');
+      if (elHab) {
+        data.habilidades = parsearHabilidades(elHab.value);
+      }
     }
 
     const esAprobacion = !!modalCtx.esAprobacion;
@@ -3214,8 +3828,10 @@
 
     // Cerramos el modal y re-renderizamos inmediatamente para que la interfaz responda al instante
     closeModal();
+    if (typeof Store.clearCache === 'function') Store.clearCache(entity);
     if (panelActivoAdmin && RENDERERS[panelActivoAdmin]) await RENDERERS[panelActivoAdmin]();
     if (RENDERERS[entity] && panelActivoAdmin !== entity) await RENDERERS[entity]();
+    if (entity === 'usuarios' && panelActivoAdmin !== 'talentos' && RENDERERS['talentos']) await RENDERERS['talentos']();
     if (horariosChanged && panelActivoAdmin !== 'modulos' && RENDERERS['modulos']) await RENDERERS['modulos']();
     if (panelActivoAdmin === 'resumen') await renderAdminBannerStats();
     if (entity === 'usuarios') renderConstellation();
@@ -3256,10 +3872,14 @@
 
   // async: 'usuarios' habla con MySQL ahora.
   async function askDelete(entity, id) {
+    if (currentAdminRole === 'aliado') {
+      toast('Los aliados estratégicos tienen acceso de solo lectura', 'err');
+      return;
+    }
     if (entity === 'usuarios') {
       const record = (await Store.list('usuarios')).find(r => r.id === id);
-      if (record && (record.rol === 'Coordinador' || record.rol === 'Administrador') && currentAdminRole !== 'superadmin') {
-        toast('Solo el Superadmin puede eliminar una cuenta de Administrador', 'err');
+      if (record && (record.rol === 'Coordinador' || record.rol === 'Administrador' || record.rol === 'Aliado') && currentAdminRole !== 'superadmin') {
+        toast('Solo el Superadmin puede eliminar cuentas de Administrador o Aliado', 'err');
         return;
       }
     }
@@ -3284,13 +3904,31 @@
   }
   // async: 'usuarios' habla con MySQL ahora (aplica cuando entity==='usuarios').
   async function confirmDelete() {
+    if (currentAdminRole === 'aliado') {
+      closeConfirm();
+      toast('Los aliados estratégicos tienen acceso de solo lectura', 'err');
+      return;
+    }
     const { entity, id } = deleteCtx;
     if (!entity || !id) return closeConfirm();
-    const records = (await Store.list(entity)).filter(r => r.id !== id);
-    await Store.save(entity, records);
     closeConfirm();
+
+    try {
+      if (entity === 'chat_voz_conocimiento') {
+        await apiFetch(`chat_voz_conocimiento?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+      }
+    } catch (e) {}
+
+    const records = (await Store.list(entity, { forceRefresh: true })).filter(r => r.id !== id);
+    await Store.save(entity, records);
+    if (typeof _invalidateCache === 'function') {
+      _invalidateCache(entity);
+    }
     if (panelActivoAdmin && RENDERERS[panelActivoAdmin]) await RENDERERS[panelActivoAdmin]();
     if (RENDERERS[entity] && panelActivoAdmin !== entity) await RENDERERS[entity]();
+    if (entity === 'chat_voz_conocimiento' || panelActivoAdmin === 'chatvoz') {
+      await renderChatVozConocimiento();
+    }
     if (panelActivoAdmin === 'resumen') await renderAdminBannerStats();
     if (entity === 'usuarios') renderConstellation();
     toast('Registro eliminado', 'ok');
@@ -3654,6 +4292,7 @@
   // ---------- Helper: encabezado de sección con botón "Nuevo" + buscador ----------
   function sectionHeader(entity, title, subtitle, extraBtn, showNewButton, csvExcludeKeys) {
     if (showNewButton === undefined) showNewButton = true;
+    if (currentAdminRole === 'aliado') showNewButton = false;
     const excludeArg = csvExcludeKeys && csvExcludeKeys.length ? ', ' + JSON.stringify(csvExcludeKeys) : '';
     const tableId = 'table-' + entity;
     // Auto-programar inicialización de la tabla
@@ -4115,12 +4754,162 @@
       </div>`;
   }
 
-  // ---------- RENDER: Resumen ----------
+  // ---------- RENDER: Resumen Aliado Estratégico (Observatorio) ----------
+  async function renderResumenAliado() {
+    const user = currentAdminUser || {};
+    const modulosList = await Store.list('modulos');
+    const permitidas = cohortesPermitidasParaUsuario(user);
+
+    const cohortes = permitidas
+      ? modulosList.filter(m => permitidas.includes(m.nombre))
+      : modulosList;
+
+    const semaforoRaw = await computeSemaforo();
+    const semaforo = permitidas
+      ? semaforoRaw.filter(s => permitidas.includes(s.cohorte))
+      : semaforoRaw;
+
+    const totalEstudiantes = semaforo.length;
+    const conPromedio = semaforo.filter(s => s.promedio !== '—');
+    const promedio = conPromedio.length
+      ? (conPromedio.reduce((a, s) => a + Number(s.promedio), 0) / conPromedio.length).toFixed(1)
+      : '—';
+
+    const conAsistencia = semaforo.filter(s => s.asistencia !== '—' && !isNaN(Number(s.asistencia)));
+    const asistenciaPromedio = conAsistencia.length
+      ? Math.round(conAsistencia.reduce((a, s) => a + Number(s.asistencia), 0) / conAsistencia.length) + '%'
+      : '—';
+
+    const enVerde = semaforo.filter(s => s.riesgo === 'Verde').length;
+    const enAmarillo = semaforo.filter(s => s.riesgo === 'Amarillo').length;
+    const enRojo = semaforo.filter(s => s.riesgo === 'Rojo').length;
+
+    const cuposTotales = cohortes.reduce((a, m) => a + Number(m.cupos || 0), 0);
+    const pctVerde = totalEstudiantes ? Math.round((enVerde / totalEstudiantes) * 100) : 0;
+    const pctAlerta = totalEstudiantes ? Math.round(((enAmarillo + enRojo) / totalEstudiantes) * 100) : 0;
+
+    const iconUsuarios = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m5-5.13a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 10-3.87-5"/></svg>';
+    const iconRiesgo = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.008M10.29 3.86L1.82 18a1.5 1.5 0 001.29 2.25h17.78A1.5 1.5 0 0022.18 18L13.71 3.86a1.5 1.5 0 00-2.42 0z"/></svg>';
+    const iconPromedio = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6a2 2 0 012-2h2a2 2 0 012 2v6m-6 0h6m-6 0H6a1 1 0 01-1-1V6a2 2 0 012-2h10a2 2 0 012 2v10a1 1 0 01-1 1h-2"/></svg>';
+    const iconCohortes = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.25v13.5M4.75 8.5L12 6.25l7.25 2.25v9L12 19.75l-7.25-2.25v-9z"/></svg>';
+    const iconVerde = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+    const iconAsist = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+
+    const cardsHtml = [
+      statCardBrand({ label: 'Estudiantes beneficiarios', value: totalEstudiantes, sub: cohortes.length + ' cohorte' + (cohortes.length === 1 ? '' : 's') + ' vinculada' + (cohortes.length === 1 ? '' : 's'), color: '#0284c7', icon: iconUsuarios, clickPanel: 'semaforo' }),
+      statCardBrand({ label: 'Promedio general', value: promedio, sub: 'Sobre 10.0 en cohortes vinculadas', color: '#F5A623', icon: iconPromedio, clickPanel: 'calificaciones' }),
+      statCardBrand({ label: 'Asistencia promedio', value: asistenciaPromedio, sub: 'Cumplimiento a clases', color: '#1FC8C0', icon: iconAsist, clickPanel: 'semaforo' }),
+      statCardBrand({ label: 'Desempeño óptimo', value: enVerde + ' (' + pctVerde + '%)', sub: 'Estudiantes en semáforo verde', color: '#10B981', icon: iconVerde, clickPanel: 'semaforo' }),
+      statCardBrand({ label: 'Acompañamiento prioritario', value: (enAmarillo + enRojo) + ' (' + pctAlerta + '%)', sub: enRojo + ' en riesgo + ' + enAmarillo + ' en alerta', color: '#F0455C', icon: iconRiesgo, clickPanel: 'semaforo' }),
+      statCardBrand({ label: 'Cohortes en seguimiento', value: cohortes.length, sub: totalEstudiantes + ' / ' + cuposTotales + ' cupos totales', color: '#8B5CF6', icon: iconCohortes, clickPanel: 'modulos' }),
+    ].join('');
+
+    const ranking = [...semaforo].filter(s => s.promedio !== '—').sort((a, b) => Number(b.promedio) - Number(a.promedio)).slice(0, 5);
+    const rankHtml = ranking.length ? ranking.map((r, i) => `
+      <div class="flex items-center gap-3">
+        <span class="w-6 h-6 rounded-full ${i === 0 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-slate2'} text-xs font-bold grid place-items-center shrink-0">${i + 1}</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm text-ink font-semibold truncate">${escapeHtml(r.nombre)}</p>
+          <p class="text-xs text-slate2 truncate">${escapeHtml(r.cohorte || '—')}</p>
+        </div>
+        <div class="text-right shrink-0">
+          <span class="text-sm font-bold font-mono" style="color:${r.riesgo === 'Rojo' ? '#F0455C' : r.riesgo === 'Amarillo' ? '#F5A623' : '#10B981'}">${r.promedio}</span>
+          <p class="text-[10px] text-slate2">${r.asistencia !== '—' ? r.asistencia + '% asist.' : ''}</p>
+        </div>
+      </div>`).join('') : `<p class="text-sm text-slate2">Aún no hay calificaciones registradas en estas cohortes.</p>`;
+
+    const cohortesRowsHtml = cohortes.map(c => {
+      const cantEst = semaforo.filter(s => s.cohorte === c.nombre).length;
+      const semaforoCohorte = semaforo.filter(s => s.cohorte === c.nombre && s.promedio !== '—');
+      const promCohorte = semaforoCohorte.length ? (semaforoCohorte.reduce((acc, s) => acc + Number(s.promedio), 0) / semaforoCohorte.length).toFixed(1) : '—';
+      const pctCupos = c.cupos ? Math.min(100, Math.round((cantEst / c.cupos) * 100)) : 0;
+      return `
+        <tr class="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
+          <td class="py-3 px-4 font-semibold text-ink text-sm">${escapeHtml(c.nombre)}</td>
+          <td class="py-3 px-4 text-xs text-slate2">${fmtDate(c.fechaInicio)} – ${fmtDate(c.fechaFin)}</td>
+          <td class="py-3 px-4 text-sm font-mono font-bold text-ink">${cantEst} / ${c.cupos || '—'} <span class="text-xs text-slate2 font-normal">(${pctCupos}%)</span></td>
+          <td class="py-3 px-4 text-sm font-mono font-bold text-morado">${promCohorte}</td>
+          <td class="py-3 px-4">${statusPill(c.estado, ESTADO_COLORS)}</td>
+          <td class="py-3 px-4 text-right">
+            <button onclick="horarioState.cohorte='${escapeHtml(c.nombre)}';showPanel('modulos');" class="text-xs font-semibold text-sky-600 hover:text-sky-800 transition">Ver Horario ›</button>
+          </td>
+        </tr>`;
+    }).join('');
+
+    const etiquetaPermitidas = permitidas
+      ? `Cohortes asignadas: <strong class="text-ink">${escapeHtml(permitidas.join(', '))}</strong>`
+      : `<strong class="text-emerald-700">Acceso global a todas las cohortes del programa</strong>`;
+
+    document.getElementById('mount-resumen').innerHTML = `
+      <!-- Banner institucional para aliados -->
+      <div class="mb-6 p-5 rounded-2xl bg-gradient-to-r from-sky-50 via-indigo-50/40 to-teal-50/30 border border-sky-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-sky-500/20 shrink-0">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+          </div>
+          <div>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded-md">Observatorio de Aliados Estratégicos</span>
+            <h2 class="text-lg font-extrabold text-ink leading-tight mt-0.5">Seguimiento de Impacto y Rendimiento</h2>
+            <p class="text-xs text-slate2 mt-0.5">${etiquetaPermitidas}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 self-end sm:self-center shrink-0">
+          <button onclick="showPanel('semaforo')" class="px-3.5 py-2 rounded-xl bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 text-xs font-bold transition shadow-sm">Ver Semáforo</button>
+          <button onclick="showPanel('calificaciones')" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 text-white hover:opacity-95 text-xs font-bold transition shadow-md shadow-sky-500/20">Calificaciones</button>
+        </div>
+      </div>
+
+      <!-- Tarjetas de métricas -->
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">${cardsHtml}</div>
+
+      <!-- Cohortes en seguimiento & Ranking -->
+      <div class="grid lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 admin-panel-card p-6">
+          <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+            <div>
+              <h3 class="font-extrabold text-ink text-base">Cohortes vinculadas</h3>
+              <p class="text-xs text-slate2 mt-0.5">Avance y cobertura académica de los grupos en formación</p>
+            </div>
+            <button onclick="showPanel('modulos')" class="text-xs font-bold text-sky-600 hover:underline">Ver todas</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full admin-table text-left">
+              <thead><tr class="text-xs font-bold text-slate2 uppercase tracking-wide border-b border-gray-100">
+                <th class="py-2.5 px-4">Cohorte</th><th class="py-2.5 px-4">Fechas</th><th class="py-2.5 px-4">Estudiantes</th><th class="py-2.5 px-4">Promedio</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4"></th>
+              </tr></thead>
+              <tbody>${cohortesRowsHtml || '<tr><td colspan="6" class="py-6 text-center text-sm text-slate2">No hay cohortes asignadas actualmente.</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="admin-panel-card p-6 flex flex-col">
+          <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+            <div>
+              <h3 class="font-extrabold text-ink text-base">Top rendimiento</h3>
+              <p class="text-xs text-slate2 mt-0.5">Estudiantes más destacados</p>
+            </div>
+            <span class="text-xs font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-md">Top 5</span>
+          </div>
+          <div class="space-y-4 flex-1">${rankHtml}</div>
+          <div class="pt-4 mt-4 border-t border-gray-100">
+            <button onclick="showPanel('informesAdmin')" class="w-full py-2.5 rounded-xl border border-sky-200 bg-sky-50/60 hover:bg-sky-100 text-sky-800 text-xs font-bold transition flex items-center justify-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              Ver informes de docentes
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }
+
   // ---------- RENDER: Resumen ----------
   // async: 'usuarios' vía MySQL + contarInscritos() async.
   async function renderResumen() {
     if (currentAdminRole === 'superadmin') {
       await renderResumenSuperadmin();
+      return;
+    }
+    if (currentAdminRole === 'aliado') {
+      await renderResumenAliado();
       return;
     }
 
@@ -4267,15 +5056,57 @@
     return { label: 'DOC', bg: 'bg-slate-700 text-white', icon: 'doc' };
   }
 
+  window.seleccionarHabilidadTrainee = function(h) {
+    const input = document.getElementById('traineeBusquedaEmail');
+    if (input) {
+      input.value = h;
+      onBuscaTraineeEmail(h);
+      input.focus();
+    }
+  };
+
   async function renderTrainee() {
     const todosEstudiantes = (await Store.list('usuarios'))
       .filter(u => u.rol === 'Estudiante' || u.fueEstudiante)
       .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
 
+    // Extraer talentos y habilidades únicos de estudiantes
+    const habilidadesEstudiantes = new Set();
+    todosEstudiantes.forEach(u => {
+      let habs = [];
+      if (Array.isArray(u.habilidades)) habs = u.habilidades;
+      else if (typeof u.habilidades === 'string' && u.habilidades.trim()) {
+        try {
+          const p = JSON.parse(u.habilidades);
+          if (Array.isArray(p)) habs = p;
+        } catch(e) {
+          habs = u.habilidades.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+      habs.forEach(h => {
+        if (h && typeof h === 'string' && h.trim()) habilidadesEstudiantes.add(h.trim());
+      });
+    });
+    const listaTopHabilidades = Array.from(habilidadesEstudiantes).sort();
+
     if (!traineeState.estudianteId && todosEstudiantes.length > 0) {
       traineeState.estudianteId = todosEstudiantes[0].id;
     }
     const estudianteActivo = todosEstudiantes.find(u => u.id === traineeState.estudianteId);
+
+    const radarTalentosHtml = listaTopHabilidades.length > 0 ? `
+      <div class="mt-3.5 pt-3 border-t border-morado/10">
+        <p class="text-[11px] font-bold uppercase tracking-wider text-slate2 mb-2 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          Radar de Talentos (Filtrar estudiantes por habilidad requerida):
+        </p>
+        <div class="flex flex-wrap gap-1.5">
+          ${listaTopHabilidades.map(h => `
+            <button type="button" onclick="seleccionarHabilidadTrainee('${escapeHtml(h)}')" class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-morado/10 text-morado border border-morado/20 hover:bg-morado hover:text-white transition cursor-pointer">
+              ${escapeHtml(h)}
+            </button>`).join('')}
+        </div>
+      </div>` : '';
 
     document.getElementById('mount-trainee').innerHTML = `
       <div class="mb-5">
@@ -4284,60 +5115,82 @@
       </div>
       <div class="admin-panel-card p-6 mb-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-          <label class="block text-xs font-bold text-slate2 uppercase tracking-wide" for="traineeBusquedaEmail">Buscar por correo o nombre</label>
+          <label class="block text-xs font-bold text-slate2 uppercase tracking-wide" for="traineeBusquedaEmail">Buscar por nombre, correo, documento o habilidad</label>
           <span class="text-xs text-slate2">${todosEstudiantes.length} trainees en plataforma</span>
         </div>
         <div class="relative w-full sm:max-w-md mb-3">
-          <input id="traineeBusquedaEmail" type="text" value="${estudianteActivo ? escapeHtml(estudianteActivo.nombre + ' (' + estudianteActivo.email + ')') : ''}" oninput="onBuscaTraineeEmail(this.value)" autocomplete="off" placeholder="Escribe para buscar..."
+          <input id="traineeBusquedaEmail" type="text" value="${estudianteActivo ? escapeHtml(estudianteActivo.nombre + ' (' + estudianteActivo.email + ')') : ''}" oninput="onBuscaTraineeEmail(this.value)" autocomplete="off" placeholder="Escribe un nombre, documento o habilidad (ej. Python)..."
             class="w-full rounded-xl border border-morado/25 bg-morado/5 pl-9 pr-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado" />
           <svg class="w-4 h-4 text-slate2 absolute left-3 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
         </div>
         <div id="traineeBusquedaResultados" class="mb-2"></div>
-        ${todosEstudiantes.length ? `
-          <div class="pt-3 border-t border-gray-100 flex items-center gap-2 overflow-x-auto pb-1">
-            <span class="text-[11px] font-bold text-slate2 uppercase tracking-wide shrink-0">Acceso rápido:</span>
-            ${todosEstudiantes.slice(0, 10).map(u => `
-              <button onclick="onCambiaTraineeEstudiante('${u.id}')" class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${u.id === traineeState.estudianteId ? 'bg-morado text-white shadow-sm' : 'bg-gray-100 text-slate2 hover:bg-gray-200 hover:text-ink'}">
-                ${escapeHtml(u.nombre.split(' ')[0])}
-              </button>
-            `).join('')}
-            ${todosEstudiantes.length > 10 ? `<span class="text-xs text-slate2 shrink-0">+${todosEstudiantes.length - 10} más</span>` : ''}
-          </div>
-        ` : ''}
+        ${radarTalentosHtml}
       </div>
       <div id="traineeFicha"></div>`;
 
     await renderTraineeFicha();
   }
 
-  // Busca por coincidencia parcial de correo O nombre, y solo entre quienes
-  // son o fueron Estudiante — nunca se listan nombres/correos de antemano,
-  // solo aparecen como resultado de escribir algo que coincide.
+  // Busca por coincidencia parcial de correo, nombre, documento, teléfono o habilidades,
+  // y solo entre quienes son o fueron Estudiante.
   // async: 'usuarios' vía MySQL.
   async function onBuscaTraineeEmail(valor) {
     const wrap = document.getElementById('traineeBusquedaResultados');
     const q = valor.trim().toLowerCase();
-    if (q.length < 3) { wrap.innerHTML = ''; return; }
+    if (q.length < 1) { wrap.innerHTML = ''; return; }
 
-    const coincidencias = (await Store.list('usuarios'))
-      .filter(u => (u.rol === 'Estudiante' || u.fueEstudiante) &&
-        ((u.email || '').toLowerCase().includes(q) || (u.nombre || '').toLowerCase().includes(q)))
-      .slice(0, 8);
+    const todos = await Store.list('usuarios');
+    const coincidencias = todos
+      .filter(u => {
+        if (u.rol !== 'Estudiante' && !u.fueEstudiante) return false;
+        const nombreMatch = (u.nombre || '').toLowerCase().includes(q);
+        const emailMatch = (u.email || '').toLowerCase().includes(q);
+        const docMatch = (u.documento || '').toLowerCase().includes(q);
+        const telMatch = (u.telefono || '').toLowerCase().includes(q);
+        let habMatch = false;
+        let habs = [];
+        if (Array.isArray(u.habilidades)) habs = u.habilidades;
+        else if (typeof u.habilidades === 'string' && u.habilidades.trim()) {
+          try {
+            const p = JSON.parse(u.habilidades);
+            if (Array.isArray(p)) habs = p;
+          } catch(e) {
+            habs = u.habilidades.split(',').map(s => s.trim()).filter(Boolean);
+          }
+        }
+        habMatch = habs.some(h => String(h).toLowerCase().includes(q));
+        return nombreMatch || emailMatch || docMatch || telMatch || habMatch;
+      })
+      .slice(0, 10);
 
     if (!coincidencias.length) {
-      wrap.innerHTML = `<p class="text-xs text-slate2 mt-1">Sin coincidencias.</p>`;
+      wrap.innerHTML = `<p class="text-xs text-slate2 mt-1">Sin coincidencias para "${escapeHtml(valor)}".</p>`;
       return;
     }
     wrap.innerHTML = `
-      <div class="border border-gray-100 rounded-xl divide-y divide-gray-50 overflow-hidden">
-        ${coincidencias.map(u => `
+      <div class="border border-gray-100 rounded-xl divide-y divide-gray-50 overflow-hidden shadow-sm">
+        ${coincidencias.map(u => {
+          let habs = [];
+          if (Array.isArray(u.habilidades)) habs = u.habilidades;
+          else if (typeof u.habilidades === 'string' && u.habilidades.trim()) {
+            try {
+              const p = JSON.parse(u.habilidades);
+              if (Array.isArray(p)) habs = p;
+            } catch(e) {
+              habs = u.habilidades.split(',').map(s => s.trim()).filter(Boolean);
+            }
+          }
+          const matchHab = habs.find(h => String(h).toLowerCase().includes(q));
+          return `
           <button onclick="onCambiaTraineeEstudiante('${u.id}')" class="w-full text-left px-3.5 py-2.5 text-sm hover:bg-gray-50 transition flex items-center justify-between gap-3">
             <span class="min-w-0">
               <span class="block text-ink font-medium truncate">${escapeHtml(u.nombre)}</span>
-              <span class="block text-xs text-slate2 truncate">${escapeHtml(u.email)}</span>
+              <span class="block text-xs text-slate2 truncate">${escapeHtml(u.email)}${u.documento ? ' · Doc: ' + escapeHtml(u.documento) : ''}${u.telefono ? ' · Tel: ' + escapeHtml(u.telefono) : ''}</span>
+              ${matchHab ? `<span class="inline-block mt-1 text-[11px] font-bold text-morado bg-morado/10 border border-morado/20 px-2 py-0.5 rounded-md">Talento coincidente: ${escapeHtml(matchHab)}</span>` : ''}
             </span>
             <span class="text-xs text-slate2 shrink-0">${u.rol === 'Estudiante' ? '' : 'Fue estudiante · ahora ' + escapeHtml(u.rol)}</span>
-          </button>`).join('')}
+          </button>`;
+        }).join('')}
       </div>`;
   }
 
@@ -4372,6 +5225,12 @@
     traineeState.archivosExpandidos = false;
     await showPanel('trainee');
   }
+
+  function toggleMostrarTodosPagosTrainee() {
+    window.__traineeMostrarTodosPagos = !window.__traineeMostrarTodosPagos;
+    renderTraineeFicha();
+  }
+  window.toggleMostrarTodosPagosTrainee = toggleMostrarTodosPagosTrainee;
 
   async function renderTraineeFicha() {
     const wrap = document.getElementById('traineeFicha');
@@ -4450,6 +5309,18 @@
     const totalImagenes = archivosTodos.filter(a => (a.tipo || '').startsWith('image/')).length;
     const totalPdfs = archivosTodos.filter(a => (a.tipo === 'application/pdf' || (a.nombre || '').toLowerCase().endsWith('.pdf'))).length;
 
+    // ---- Pagos y Comprobantes del Estudiante ----
+    let pagosEstudiante = [];
+    try {
+      pagosEstudiante = (await Store.list('pagos_estudiantes', { query: 'estudiante_id=' + encodeURIComponent(est.id), forceRefresh: true }))
+        .filter(p => String(p.estudiante_id || p.estudianteId) === String(est.id))
+        .sort((a, b) => (b.fecha_pago || b.fechaPago || '').localeCompare(a.fecha_pago || a.fechaPago || ''));
+      window.__cachePagosTraineeActual = pagosEstudiante;
+    } catch (e) {
+      console.warn('Error al cargar pagos del estudiante:', e);
+    }
+    const totalPagadoEstudiante = pagosEstudiante.reduce((acc, p) => acc + (parseFloat(p.monto) || 0), 0);
+
     const filtroTipo = traineeState.filtroTipo || 'todos';
     const filtroArchivo = (traineeState.busquedaArchivo || '').trim().toLowerCase();
 
@@ -4501,6 +5372,40 @@
                 ${statusPill(est.estado || 'Activo', ESTADO_COLORS)}
               </div>
               <p class="text-sm text-slate2 mt-0.5">${escapeHtml(est.email || '')} ${cohorteHistorica ? '· <span class="font-semibold text-ink">' + escapeHtml(cohorteHistorica) + '</span>' + (esEstudianteActual ? '' : ' (cohorte histórica)') : ''}</p>
+              
+              <!-- Documento y Contacto -->
+              <div class="flex items-center gap-4 text-xs text-slate2 mt-2 flex-wrap">
+                ${est.documento ? `<span><b class="text-ink">Documento:</b> ${escapeHtml(est.documento)}</span>` : ''}
+                ${est.telefono ? `<span class="inline-flex items-center gap-1.5"><b class="text-ink">Teléfono:</b> ${escapeHtml(est.telefono)}${(() => {
+                  const d = (est.telefono || '').replace(/\D/g, '');
+                  if (d.length >= 10) {
+                    const wa = d.length === 10 ? '57' + d : d;
+                    return `<a href="https://wa.me/${wa}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 hover:bg-emerald-100 transition"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>WhatsApp</a>`;
+                  }
+                  return '';
+                })()}</span>` : ''}
+              </div>
+
+              <!-- Habilidades y Destrezas Chips -->
+              ${(() => {
+                let habs = [];
+                if (Array.isArray(est.habilidades)) habs = est.habilidades;
+                else if (typeof est.habilidades === 'string' && est.habilidades.trim()) {
+                  try {
+                    const p = JSON.parse(est.habilidades);
+                    if (Array.isArray(p)) habs = p;
+                  } catch(e) {
+                    habs = est.habilidades.split(',').map(s => s.trim()).filter(Boolean);
+                  }
+                }
+                if (habs && habs.length > 0) {
+                  return `<div class="flex items-center gap-1.5 flex-wrap mt-2.5">
+                    <span class="text-[11px] font-bold text-slate2 uppercase tracking-wide mr-1">Talentos / Habilidades:</span>
+                    ${habs.map(h => `<span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold bg-morado/10 text-morado border border-morado/20">${escapeHtml(h)}</span>`).join('')}
+                  </div>`;
+                }
+                return '';
+              })()}
             </div>
           </div>
           <div class="flex items-center gap-2 shrink-0">
@@ -4621,6 +5526,126 @@
           </table>
         </div>
         ${asistencia.length > 10 ? `<p class="text-xs text-slate2 mt-2">Mostrando los 10 registros más recientes de un total de ${asistencia.length}.</p>` : ''}` : '<p class="text-sm text-slate2 py-2">Sin registros de asistencia.</p>'}
+      </div>
+
+      <!-- SECCIÓN: HISTORIAL DE PAGOS Y COMPROBANTES DEL ESTUDIANTE -->
+      <div class="admin-panel-card p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-gray-100">
+          <div class="flex items-center gap-3">
+            <div class="w-11 h-11 rounded-2xl bg-purple-50 text-morado flex items-center justify-center font-bold text-lg shadow-inner shrink-0">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="text-base font-extrabold text-ink">Historial de Pagos y Comprobantes</h3>
+                <span class="text-xs font-bold text-morado bg-morado/10 px-2.5 py-0.5 rounded-full">${pagosEstudiante.length}</span>
+              </div>
+              <p class="text-xs text-slate2 mt-0.5">Control de matrículas, mensualidades y comprobantes adjuntos</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <div class="px-3.5 py-1.5 rounded-xl bg-purple-50 border border-purple-200/80 text-morado text-xs font-black">
+              Total Abonado: $ ${totalPagadoEstudiante.toLocaleString('es-CO')} COP
+            </div>
+            ${currentAdminRole !== 'aliado' ? `
+              <button type="button" onclick="abrirFormPagoEstudiante('${est.id}')" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-morado hover:bg-morado/90 transition shadow-sm cursor-pointer">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                Registrar Pago
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        ${pagosEstudiante.length ? (() => {
+          const limitePagosTrainee = 10;
+          const mostrarTodosTrainee = Boolean(window.__traineeMostrarTodosPagos);
+          const pagosEstudianteRender = (mostrarTodosTrainee || pagosEstudiante.length <= limitePagosTrainee) ? pagosEstudiante : pagosEstudiante.slice(0, limitePagosTrainee);
+
+          return `
+          <div class="overflow-x-auto">
+            <table class="w-full admin-table text-xs">
+              <thead>
+                <tr class="text-left font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
+                  <th class="py-2.5 px-3">Fecha</th>
+                  <th class="py-2.5 px-3">Concepto</th>
+                  <th class="py-2.5 px-3">Mes Cubierto</th>
+                  <th class="py-2.5 px-3">Monto</th>
+                  <th class="py-2.5 px-3">Medio / Ref</th>
+                  <th class="py-2.5 px-3">Comprobante</th>
+                  ${currentAdminRole !== 'aliado' ? `<th class="py-2.5 px-3 text-right">Acciones</th>` : ''}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                ${pagosEstudianteRender.map(p => {
+                  const tieneComp = Boolean(p.comprobante_url || p.comprobanteUrl);
+                  return `
+                    <tr class="hover:bg-purple-50/20 transition">
+                      <td class="py-3 px-3 font-semibold text-ink whitespace-nowrap">${fmtDate(p.fecha_pago || p.fechaPago)}</td>
+                      <td class="py-3 px-3 font-bold text-ink">
+                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-slate-100 text-slate-700">
+                          ${escapeHtml(p.concepto || 'Mensualidad')}
+                        </span>
+                      </td>
+                      <td class="py-3 px-3 text-slate-600 font-mono text-[11px]">${escapeHtml(p.mes || '—')}</td>
+                      <td class="py-3 px-3 font-black text-purple-700 text-xs whitespace-nowrap">$ ${Number(p.monto || 0).toLocaleString('es-CO')} COP</td>
+                      <td class="py-3 px-3">
+                        <p class="font-medium text-ink">${escapeHtml(p.medio_pago || p.medioPago || '—')}</p>
+                        ${p.numero_referencia || p.numeroReferencia ? `<p class="text-[10px] text-slate-400 font-mono">${escapeHtml(p.numero_referencia || p.numeroReferencia)}</p>` : ''}
+                      </td>
+                      <td class="py-3 px-3 whitespace-nowrap">
+                        ${tieneComp ? `
+                          <div class="inline-flex items-center gap-1.5">
+                            <button type="button" onclick="verComprobantePagoEstudiante('${p.id}')" class="px-2.5 py-1 rounded-lg text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition flex items-center gap-1 cursor-pointer" title="Ver captura o PDF">
+                              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                              Ver
+                            </button>
+                            <button type="button" onclick="descargarComprobanteDirecto('${p.id}', 'estudiante')" class="p-1 rounded-lg text-slate-500 hover:text-purple-700 hover:bg-purple-50 transition cursor-pointer" title="Descargar comprobante">
+                              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            </button>
+                          </div>
+                        ` : `
+                          <button type="button" onclick="abrirFormPagoEstudiante('${est.id}', '${p.id}', true)" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 transition cursor-pointer shadow-2xs hover:scale-[1.02] active:scale-[0.98]" title="Adjuntar soporte o captura para este pago">
+                            <svg class="w-3.5 h-3.5 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            <span>Adjuntar captura</span>
+                          </button>
+                        `}
+                      </td>
+                      ${currentAdminRole !== 'aliado' ? `
+                        <td class="py-3 px-3 text-right whitespace-nowrap">
+                          <button type="button" onclick="abrirFormPagoEstudiante('${est.id}', '${p.id}')" class="text-xs font-bold text-purple-700 hover:underline mr-2.5 cursor-pointer">Editar</button>
+                          <button type="button" onclick="eliminarPagoEstudiante('${p.id}')" class="text-xs font-bold text-red-600 hover:underline cursor-pointer">Eliminar</button>
+                        </td>
+                      ` : ''}
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+            ${pagosEstudiante.length > limitePagosTrainee ? `
+              <div class="pt-3 px-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                <span class="text-slate2 font-medium">Mostrando ${pagosEstudianteRender.length} de ${pagosEstudiante.length} registros</span>
+                <button type="button" onclick="toggleMostrarTodosPagosTrainee('${est.id}')" class="font-bold text-morado hover:underline cursor-pointer">
+                  ${mostrarTodosTrainee ? 'Mostrar solo 10' : `Ver todos los pagos (${pagosEstudiante.length})`}
+                </button>
+              </div>
+            ` : ''}
+          </div>
+          `;
+        })() : `
+          <div class="py-8 text-center rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/50">
+            <div class="w-12 h-12 rounded-full bg-purple-100 text-purple-700 mx-auto flex items-center justify-center mb-2.5">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+            </div>
+            <p class="text-xs font-bold text-ink">Sin registros de pago para este estudiante</p>
+            <p class="text-[11px] text-slate2 mt-0.5 max-w-sm mx-auto">No se han registrado pagos de matrícula ni mensualidades para este perfil trainee.</p>
+            ${currentAdminRole !== 'aliado' ? `
+              <button type="button" onclick="abrirFormPagoEstudiante('${est.id}')" class="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-morado hover:bg-morado/90 transition shadow-sm cursor-pointer">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                Registrar primer pago
+              </button>
+            ` : ''}
+          </div>
+        `}
       </div>
 
       <div class="admin-panel-card p-6 md:p-8">
@@ -5103,6 +6128,17 @@
 
     const fechaHoy = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
 
+    let pdfHabs = [];
+    if (Array.isArray(est.habilidades)) pdfHabs = est.habilidades;
+    else if (typeof est.habilidades === 'string' && est.habilidades.trim()) {
+      try {
+        const p = JSON.parse(est.habilidades);
+        if (Array.isArray(p)) pdfHabs = p;
+      } catch(e) {
+        pdfHabs = est.habilidades.split(',').map(s => s.trim()).filter(Boolean);
+      }
+    }
+
     const htmlDoc = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -5192,8 +6228,16 @@
           <div class="val">${escapeHtml(est.nombre)}</div>
         </div>
         <div>
+          <div class="label">Documento de Identidad</div>
+          <div class="val">${escapeHtml(est.documento || 'No registrado')}</div>
+        </div>
+        <div>
           <div class="label">Correo Electrónico</div>
           <div class="val">${escapeHtml(est.email || 'No registrado')}</div>
+        </div>
+        <div>
+          <div class="label">Teléfono de Contacto</div>
+          <div class="val">${escapeHtml(est.telefono || 'No registrado')}</div>
         </div>
         <div>
           <div class="label">Cohorte Académica</div>
@@ -5203,6 +6247,13 @@
           <div class="label">Estado Actual</div>
           <div class="val">${escapeHtml(est.estado || 'Activo')}</div>
         </div>
+        ${pdfHabs.length ? `
+        <div style="grid-column: span 2;">
+          <div class="label">Habilidades y Destrezas Destacadas</div>
+          <div class="val" style="margin-top:4px;">
+            ${pdfHabs.map(h => `<span style="display:inline-block;padding:2px 8px;margin-right:4px;margin-bottom:4px;font-size:11px;font-weight:700;background:#EDE9FE;color:#6D28D9;border-radius:6px;">${escapeHtml(h)}</span>`).join('')}
+          </div>
+        </div>` : ''}
       </div>
     </div>
 
@@ -5484,7 +6535,7 @@
 
   let tabUsuariosActivo = 'todos'; // 'todos' | 'profesores' | 'estudiantes' | 'registrados' | 'inactivos'
   async function cambiarTabUsuarios(tab) {
-    tabUsuariosActivo = tab;
+    tabUsuariosActivo = (tab === 'aliados') ? 'todos' : tab;
     if (typeof TableManager !== 'undefined' && TableManager.clearFilter) {
       TableManager.clearFilter('table-usuarios');
     }
@@ -5514,11 +6565,39 @@
     return false;
   }
 
+  window.filtrarUsuariosPorHabilidad = function(h) {
+    const inp = document.querySelector('input[data-table="table-usuarios"]');
+    if (inp) {
+      inp.value = h;
+      filtrarTablaLive(h, 'table-usuarios');
+      inp.focus();
+    }
+  };
+
   // async: 'usuarios' vía MySQL.
   async function renderUsuarios() {
     // Forzar lectura fresca de la base de datos limpiando la caché en memoria
     if (typeof Store.clearCache === 'function') Store.clearCache('usuarios');
     const todosUsuarios = await Store.list('usuarios', { forceRefresh: true });
+
+    // Extraer conjunto único de habilidades registradas para filtros rápidos
+    const conjuntoHabilidades = new Set();
+    todosUsuarios.forEach(u => {
+      let habs = [];
+      if (Array.isArray(u.habilidades)) habs = u.habilidades;
+      else if (typeof u.habilidades === 'string' && u.habilidades.trim()) {
+        try {
+          const p = JSON.parse(u.habilidades);
+          if (Array.isArray(p)) habs = p;
+        } catch(e) {
+          habs = u.habilidades.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+      habs.forEach(h => {
+        if (h && typeof h === 'string' && h.trim()) conjuntoHabilidades.add(h.trim());
+      });
+    });
+    const listaHabilidadesFiltro = Array.from(conjuntoHabilidades).sort();
 
     // Respaldo de seguridad: si existe alguna solicitud pendiente o registro guardado en localStorage, integrarla
     try {
@@ -5548,7 +6627,7 @@
     } catch (e) {}
 
     const pendientes = todosUsuarios.filter(esSolicitudPendienteUsuario);
-    const records = todosUsuarios.filter(u => u.rol !== 'Coordinador' && u.rol !== 'Administrador' && !esSolicitudPendienteUsuario(u));
+    const records = todosUsuarios.filter(u => u.rol !== 'Coordinador' && u.rol !== 'Administrador' && u.rol !== 'Aliado' && !esSolicitudPendienteUsuario(u));
 
     const docentes = records.filter(u => u.rol === 'Docente');
     const estudiantes = records.filter(u => u.rol === 'Estudiante');
@@ -5580,7 +6659,38 @@
       return conRol ? `<div class="usr-type"><span class="usr-role">Estudiante</span>${chip}</div>` : chip;
     };
     const usrHead = cols => `<thead><tr>${cols.map((c, i) => `<th${i === cols.length - 1 ? ' class="usr-th-right"' : ''}>${c}</th>`).join('')}</tr></thead>`;
-    const usrFila = ({ u, tono, search, extraNombre = '', tipo, estado, acciones, dim = false }) => `
+    const usrFila = ({ u, tono, search, extraNombre = '', tipo, estado, acciones, dim = false }) => {
+      let chipsHabilidades = '';
+      let habs = [];
+      if (Array.isArray(u.habilidades)) habs = u.habilidades;
+      else if (typeof u.habilidades === 'string' && u.habilidades.trim()) {
+        try {
+          const p = JSON.parse(u.habilidades);
+          if (Array.isArray(p)) habs = p;
+        } catch(e) {
+          habs = u.habilidades.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+      if (habs && habs.length > 0) {
+        const visibles = habs.slice(0, 3);
+        const restantes = habs.length - visibles.length;
+        chipsHabilidades = `<div class="usr-skills-strip" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;">` +
+          visibles.map(h => `<span style="display:inline-block;font-size:0.68rem;font-weight:700;padding:1px 6px;border-radius:6px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;">${escapeHtml(h)}</span>`).join('') +
+          (restantes > 0 ? `<span style="display:inline-block;font-size:0.68rem;font-weight:600;padding:1px 5px;border-radius:6px;background:#f3f4f6;color:#4b5563;">+${restantes}</span>` : '') +
+          `</div>`;
+      }
+
+      const telDigits = (u.telefono || '').replace(/\D/g, '');
+      const waLink = telDigits.length >= 10 ? `https://wa.me/${telDigits.length === 10 ? '57' + telDigits : telDigits}` : null;
+      const telDisplay = u.telefono ? `
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <span style="font-weight:600;">${escapeHtml(u.telefono)}</span>
+          ${waLink ? `<a href="${waLink}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:3px;font-size:0.7rem;color:#059669;text-decoration:none;font-weight:700;"><svg style="width:11px;height:11px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>WhatsApp</a>` : ''}
+        </div>` : '<span class="usr-muted">—</span>';
+
+      const docDisplay = u.documento ? `<span style="display:inline-block;font-size:0.72rem;color:#6b7280;margin-top:2px;">Doc: <b style="color:#374151;">${escapeHtml(u.documento)}</b></span>` : '';
+
+      return `
         <tr data-search="${escapeHtml(String(search).toLowerCase())}" class="usr-row usr-tone-${tono}${dim ? ' usr-row--dim' : ''}">
           <td>
             <div class="usr-person">
@@ -5588,14 +6698,17 @@
               <div class="usr-person-txt">
                 <div class="usr-name-line"><p class="usr-name">${escapeHtml(u.nombre)}</p>${extraNombre}</div>
                 <p class="usr-mail">${escapeHtml(u.email)}</p>
+                ${docDisplay}
+                ${chipsHabilidades}
               </div>
             </div>
           </td>
-          <td class="usr-phone">${escapeHtml(u.telefono || '—')}</td>
+          <td class="usr-phone">${telDisplay}</td>
           <td>${tipo}</td>
           <td>${estado}</td>
           <td class="usr-actions"><div class="usr-actions-in">${acciones}</div></td>
         </tr>`;
+    };
     const usrVacio = (titulo, texto) => `<tr class="usr-empty-row"><td colspan="5"><div class="usr-empty">
         <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         <p class="usr-empty-t">${titulo}</p><p class="usr-empty-s">${texto}</p></div></td></tr>`;
@@ -5619,14 +6732,22 @@
       const allRows = listaCombinada.map(u => {
         const esPend = esSolicitudPendienteUsuario(u);
         const esInact = String(u.estado || '').toLowerCase() === 'inactivo';
+        const btnPagosDoc = (u.rol === 'Docente' && puedeGestionarPagosDocentes())
+          ? `<button type="button" onclick="abrirModalPagosDocente('${u.id}')" title="Honorarios y Pagos" class="usr-btn usr-btn--pay" style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;font-size:0.75rem;font-weight:700;color:#6b21a8;background:#f3e8ff;border:1px solid #d8b4fe;border-radius:8px;cursor:pointer;transition:all 0.15s ease;"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Pagos</button>`
+          : '';
+        const habsStr = Array.isArray(u.habilidades) ? u.habilidades.join(' ') : (u.habilidades || '');
         return usrFila({
           u,
           tono: esPend ? 'gold' : (esInact ? 'brown' : (u.rol === 'Docente' ? 'purple' : 'teal')),
-          search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + (u.rol || '') + ' ' + (u.cohorte || ''),
+          search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + (u.documento || '') + ' ' + (u.rol || '') + ' ' + (u.cohorte || '') + ' ' + habsStr,
           extraNombre: esPend ? '<span class="usr-tag usr-tone-gold">Solicitud</span>' : '',
-          tipo: esPend ? '<span class="usr-chip usr-tone-gold">Autorregistro web</span>' : (u.rol === 'Docente' ? '<span class="usr-chip usr-tone-purple">Profesor</span>' : usrTipoEstudiante(u, true)),
+          tipo: esPend
+            ? '<span class="usr-chip usr-tone-gold">Autorregistro web</span>'
+            : (u.rol === 'Docente'
+                ? '<span class="usr-chip usr-tone-purple">Profesor</span>'
+                : usrTipoEstudiante(u, true)),
           estado: esPend ? usrPillPendiente : usrEstadoPill(u.estado),
-          acciones: esPend ? usrBtnsPendiente(u.id) : usrBtnEditar(u.id) + usrBtnEliminar(u.id)
+          acciones: esPend ? usrBtnsPendiente(u.id) : (btnPagosDoc + usrBtnEditar(u.id) + usrBtnEliminar(u.id))
         });
       }).join('');
       tablaHeaderHtml = usrHead(['Usuario / Solicitante', 'Teléfono', 'Tipo / Cohorte', 'Estado', 'Acciones']);
@@ -5637,28 +6758,35 @@
       const rowsDocentes = docentes.map((u, i) => {
         const resumen = resumenesMaterias[i];
         const materiasTexto = (resumen && Array.isArray(resumen.materias)) ? resumen.materias.join(' ') : (resumen ? (resumen.count + ' materias') : '');
+        const btnPagos = puedeGestionarPagosDocentes()
+          ? `<button type="button" onclick="abrirModalPagosDocente('${u.id}')" title="Honorarios y Pagos" class="usr-btn usr-btn--pay" style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;font-size:0.75rem;font-weight:700;color:#6b21a8;background:#f3e8ff;border:1px solid #d8b4fe;border-radius:8px;cursor:pointer;transition:all 0.15s ease;"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Pagos</button>`
+          : '';
+        const habsStr = Array.isArray(u.habilidades) ? u.habilidades.join(' ') : (u.habilidades || '');
         return usrFila({
           u, tono: 'purple',
-          search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + materiasTexto,
+          search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + (u.documento || '') + ' ' + materiasTexto + ' ' + habsStr,
           tipo: resumen && resumen.count > 0
             ? `<span class="usr-chip usr-tone-purple">${resumen.count} materia${resumen.count === 1 ? '' : 's'} · ${resumen.totalHoras} h/sem</span>`
             : '<span class="usr-muted">Sin materias en horario</span>',
           estado: usrEstadoPill(u.estado),
-          acciones: usrBtnEditar(u.id) + usrBtnEliminar(u.id)
+          acciones: btnPagos + usrBtnEditar(u.id) + usrBtnEliminar(u.id)
         });
       }).join('');
       tablaHeaderHtml = usrHead(['Profesor / Docente', 'Teléfono', 'Materias Asignadas', 'Estado', 'Acciones']);
       cuerpoTablaHtml = rowsDocentes || emptyRow(5);
 
     } else if (tabUsuariosActivo === 'estudiantes') {
-      const rowsEstudiantes = estudiantes.map(u => usrFila({
-        u, tono: 'teal',
-        search: u.nombre + ' ' + u.email + ' ' + (u.telefono || '') + ' ' + (u.cohorte || ''),
-        extraNombre: u.fueEstudiante ? `<button onclick="abrirHistorialTrainee('${u.id}')" title="Fue estudiante — ver su historial" class="usr-tag usr-tone-purple usr-tag--btn">Historial</button>` : '',
-        tipo: usrTipoEstudiante(u, false),
-        estado: usrEstadoPill(u.estado),
-        acciones: usrBtnEditar(u.id) + usrBtnEliminar(u.id)
-      })).join('');
+      const rowsEstudiantes = estudiantes.map(u => {
+        const habsStr = Array.isArray(u.habilidades) ? u.habilidades.join(' ') : (u.habilidades || '');
+        return usrFila({
+          u, tono: 'teal',
+          search: u.nombre + ' ' + u.email + ' ' + (u.telefono || '') + ' ' + (u.documento || '') + ' ' + (u.cohorte || '') + ' ' + habsStr,
+          extraNombre: u.fueEstudiante ? `<button onclick="abrirHistorialTrainee('${u.id}')" title="Fue estudiante — ver su historial" class="usr-tag usr-tone-purple usr-tag--btn">Historial</button>` : '',
+          tipo: usrTipoEstudiante(u, false),
+          estado: usrEstadoPill(u.estado),
+          acciones: usrBtnEditar(u.id) + usrBtnEliminar(u.id)
+        });
+      }).join('');
       tablaHeaderHtml = usrHead(['Estudiante', 'Teléfono', 'Cohorte Asignada', 'Estado', 'Acciones']);
       cuerpoTablaHtml = rowsEstudiantes || emptyRow(5);
 
@@ -5667,7 +6795,7 @@
         const fechaTxt = u.creadoEn ? new Date(u.creadoEn).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Reciente';
         return usrFila({
           u, tono: 'gold',
-          search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || ''),
+          search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + (u.documento || ''),
           tipo: `<span class="usr-muted">${escapeHtml(fechaTxt)}</span>`,
           estado: usrPillPendiente,
           acciones: usrBtnsPendiente(u.id)
@@ -5678,13 +6806,16 @@
 
     } else if (tabUsuariosActivo === 'inactivos') {
       const inactivos = records.filter(u => (u.estado || '').toLowerCase() === 'inactivo');
-      const rowsInactivos = inactivos.map(u => usrFila({
-        u, tono: 'brown', dim: true,
-        search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + (u.rol || '') + ' ' + (u.cohorte || ''),
-        tipo: `<span class="usr-muted">${escapeHtml(u.rol || 'Usuario')} ${u.cohorte ? '· ' + escapeHtml(u.cohorte) : ''}</span>`,
-        estado: usrEstadoPill(u.estado),
-        acciones: usrBtnEditar(u.id) + usrBtnEliminar(u.id)
-      })).join('');
+      const rowsInactivos = inactivos.map(u => {
+        const habsStr = Array.isArray(u.habilidades) ? u.habilidades.join(' ') : (u.habilidades || '');
+        return usrFila({
+          u, tono: 'brown', dim: true,
+          search: (u.nombre || '') + ' ' + (u.email || '') + ' ' + (u.telefono || '') + ' ' + (u.documento || '') + ' ' + (u.rol || '') + ' ' + (u.cohorte || '') + ' ' + habsStr,
+          tipo: `<span class="usr-muted">${escapeHtml(u.rol || 'Usuario')} ${u.cohorte ? '· ' + escapeHtml(u.cohorte) : ''}</span>`,
+          estado: usrEstadoPill(u.estado),
+          acciones: usrBtnEditar(u.id) + usrBtnEliminar(u.id)
+        });
+      }).join('');
       tablaHeaderHtml = usrHead(['Usuario Inactivo', 'Teléfono', 'Rol / Cohorte', 'Estado', 'Acciones']);
       cuerpoTablaHtml = rowsInactivos || usrVacio('No hay usuarios inactivos', 'Todos los usuarios del sistema se encuentran actualmente activos.');
     }
@@ -5713,6 +6844,18 @@
 
     const placeholderBusqueda = tabUsuariosActivo === 'profesores' ? 'profesores' : (tabUsuariosActivo === 'estudiantes' ? 'estudiantes' : (tabUsuariosActivo === 'registrados' ? 'solicitudes' : (tabUsuariosActivo === 'inactivos' ? 'inactivos' : 'usuarios')));
 
+    const barHabilidadesHtml = listaHabilidadesFiltro.length > 0 ? `
+      <div class="usr-skills-filterbar" style="display:flex;align-items:center;gap:6px;overflow-x:auto;padding:8px 16px;background:#f8fafc;border-top:1px solid #f1f5f9;border-bottom:1px solid #e2e8f0;font-size:0.75rem;">
+        <span style="font-weight:700;color:#64748b;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;">
+          <svg style="width:13px;height:13px;color:#8B5CF6;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+          Filtrar por talento:
+        </span>
+        <button type="button" onclick="filtrarUsuariosPorHabilidad('')" class="usr-skill-pill-btn" style="background:#ffffff;border:1px solid #cbd5e1;color:#475569;border-radius:12px;padding:2px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;white-space:nowrap;">Todas</button>
+        ${listaHabilidadesFiltro.map(hab => `
+          <button type="button" onclick="filtrarUsuariosPorHabilidad('${escapeHtml(hab)}')" class="usr-skill-pill-btn" style="background:#e0e7ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:12px;padding:2px 8px;font-size:0.72rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.15s ease;">${escapeHtml(hab)}</button>
+        `).join('')}
+      </div>` : '';
+
     document.getElementById('mount-usuarios').innerHTML = `
       ${alertaPendientes}
       <div class="usr-panel">
@@ -5735,6 +6878,7 @@
             </button>`}
           </div>
         </div>
+        ${barHabilidadesHtml}
 
         <div class="usr-tablewrap">
           <table id="table-usuarios" class="usr-table">
@@ -5764,6 +6908,3129 @@
   //   5. Reemplaza los 3 valores de EMAILJS_CONFIG abajo.
   //   6. Agrega este script en index.html, ANTES de app.js:
   //      <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  // =========================================================================
+  // CONTROL DE HONORARIOS Y PAGOS DE DOCENTES (SUPERADMIN / COORDINADOR)
+  // Confidencial: Los profesores y aliados tienen acceso estrictamente prohibido.
+  // =========================================================================
+
+  function puedeGestionarPagosDocentes() {
+    return (currentAdminRole === 'superadmin' || currentAdminRole === 'administracion') && !currentDocente && !currentEstudiante;
+  }
+
+  let docentePagosActual = null;
+  let comprobanteActualDoc = null;
+
+  async function abrirModalPagosDocente(docenteId) {
+    if (!puedeGestionarPagosDocentes()) {
+      toast('Acceso no autorizado. Este módulo es exclusivo para Administradores.', 'err');
+      return;
+    }
+
+    const todosUsuarios = await Store.list('usuarios', { forceRefresh: true });
+    const docente = todosUsuarios.find(u => u.id === docenteId);
+    if (!docente) {
+      toast('Docente no encontrado.', 'err');
+      return;
+    }
+
+    docentePagosActual = docente;
+
+    // Header info
+    document.getElementById('pagosDocenteNombre').textContent = docente.nombre || 'Docente';
+    document.getElementById('pagosDocenteEmail').innerHTML = `<svg class="w-3.5 h-3.5 inline mr-1 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>${escapeHtml(docente.email || '')}`;
+    document.getElementById('pagosDocenteTelefono').innerHTML = `<svg class="w-3.5 h-3.5 inline mr-1 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>${escapeHtml(docente.telefono || 'Sin teléfono')}`;
+    document.getElementById('pagosDocenteCohortes').textContent = docente.cohorte ? `Cohorte: ${docente.cohorte}` : 'Sin cohorte directa';
+
+    // Tarifa configurada
+    const tarifaHora = Number(docente.tarifaHora || docente.tarifa_hora || 0);
+
+    // Actualizar datos bancarios vista
+    document.getElementById('bancoVistaNombre').textContent = docente.banco || 'No registrado';
+    document.getElementById('bancoVistaTipo').textContent = docente.tipoCuenta || docente.tipo_cuenta || 'No registrado';
+    document.getElementById('bancoVistaNumero').textContent = docente.numeroCuenta || docente.numero_cuenta || 'No registrado';
+    document.getElementById('bancoVistaTitular').textContent = docente.titularCuenta || docente.titular_cuenta || docente.nombre || 'No registrado';
+    document.getElementById('bancoVistaDoc').textContent = docente.documentoCuenta || docente.documento_cuenta || 'No registrado';
+
+    // Prellenar form de edición de banco
+    document.getElementById('editTarifaHora').value = tarifaHora || '';
+    document.getElementById('editBanco').value = docente.banco || '';
+    document.getElementById('editTipoCuenta').value = docente.tipoCuenta || docente.tipo_cuenta || 'Ahorros';
+    document.getElementById('editNumeroCuenta').value = docente.numeroCuenta || docente.numero_cuenta || '';
+    document.getElementById('editTitularCuenta').value = docente.titularCuenta || docente.titular_cuenta || docente.nombre || '';
+    document.getElementById('editDocumentoCuenta').value = docente.documentoCuenta || docente.documento_cuenta || '';
+
+    // Ocultar formulario de banco por defecto
+    toggleEditarDatosBancarios(false);
+
+    // Cargar historial de pagos y KPIs reales
+    await renderTablaPagosDocente(docenteId, tarifaHora);
+
+    document.getElementById('modalPagosDocente').classList.remove('hidden');
+  }
+
+  function cerrarModalPagosDocente() {
+    document.getElementById('modalPagosDocente').classList.add('hidden');
+    docentePagosActual = null;
+    window.__docentePagosMostrarTodos = false;
+  }
+
+  function toggleMostrarTodosPagosDocente() {
+    window.__docentePagosMostrarTodos = !window.__docentePagosMostrarTodos;
+    if (docentePagosActual) {
+      const tarifaHora = Number(docentePagosActual.tarifaHora || docentePagosActual.tarifa_hora || 0);
+      renderTablaPagosDocente(docentePagosActual.id, tarifaHora);
+    }
+  }
+  window.toggleMostrarTodosPagosDocente = toggleMostrarTodosPagosDocente;
+
+  function toggleEditarDatosBancarios(mostrar) {
+    const vista = document.getElementById('vistaDatosBancarios');
+    const form = document.getElementById('formDatosBancarios');
+    const btn = document.getElementById('btnToggleEditBanco');
+    const debeMostrar = (mostrar !== undefined) ? mostrar : form.classList.contains('hidden');
+
+    if (debeMostrar) {
+      vista.classList.add('hidden');
+      form.classList.remove('hidden');
+      if (btn) btn.innerHTML = 'Ocultar edición';
+    } else {
+      vista.classList.remove('hidden');
+      form.classList.add('hidden');
+      if (btn) btn.innerHTML = '<svg class="w-3.5 h-3.5 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>Editar datos / tarifa';
+    }
+  }
+
+  async function guardarDatosBancariosDocente() {
+    if (!docentePagosActual) return;
+    const docenteId = docentePagosActual.id;
+    const nuevaTarifa = parseFloat(document.getElementById('editTarifaHora').value) || 0;
+    const nuevoBanco = document.getElementById('editBanco').value.trim();
+    const nuevoTipo = document.getElementById('editTipoCuenta').value;
+    const nuevoNumero = document.getElementById('editNumeroCuenta').value.trim();
+    const nuevoTitular = document.getElementById('editTitularCuenta').value.trim();
+    const nuevoDoc = document.getElementById('editDocumentoCuenta').value.trim();
+
+    try {
+      await apiFetch('pagos_docentes?action=datos_bancarios', {
+        method: 'POST',
+        body: JSON.stringify({
+          docenteId,
+          tarifaHora: nuevaTarifa,
+          banco: nuevoBanco,
+          tipoCuenta: nuevoTipo,
+          numeroCuenta: nuevoNumero,
+          titularCuenta: nuevoTitular,
+          documentoCuenta: nuevoDoc
+        })
+      });
+
+      const usuarios = await Store.list('usuarios');
+      const idx = usuarios.findIndex(u => u.id === docenteId);
+      if (idx !== -1) {
+        usuarios[idx].tarifaHora = nuevaTarifa;
+        usuarios[idx].tarifa_hora = nuevaTarifa;
+        usuarios[idx].banco = nuevoBanco;
+        usuarios[idx].tipoCuenta = nuevoTipo;
+        usuarios[idx].tipo_cuenta = nuevoTipo;
+        usuarios[idx].numeroCuenta = nuevoNumero;
+        usuarios[idx].numero_cuenta = nuevoNumero;
+        usuarios[idx].titularCuenta = nuevoTitular;
+        usuarios[idx].titular_cuenta = nuevoTitular;
+        usuarios[idx].documentoCuenta = nuevoDoc;
+        usuarios[idx].documento_cuenta = nuevoDoc;
+      }
+
+      toast('Datos bancarios y tarifa actualizados con éxito', 'ok');
+      await abrirModalPagosDocente(docenteId);
+    } catch (err) {
+      toast('Error al actualizar datos bancarios: ' + err.message, 'err');
+    }
+  }
+
+  async function renderTablaPagosDocente(docenteId, tarifaHora) {
+    const tbody = document.getElementById('tablaPagosDocenteCuerpo');
+    tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-slate-400">Cargando pagos...</td></tr>`;
+
+    let pagos = [];
+    try {
+      pagos = await Store.list('pagos_docentes?docente_id=' + encodeURIComponent(docenteId), { forceRefresh: true });
+      if (!Array.isArray(pagos)) pagos = [];
+    } catch (e) {
+      pagos = [];
+    }
+
+    const pagosDocente = pagos.filter(p => (p.docenteId === docenteId || p.docente_id === docenteId));
+    window.__cachePagosDocenteActual = pagosDocente;
+
+    const totalHoras = pagosDocente.reduce((acc, p) => acc + (Number(p.horas) || 0), 0);
+    const totalPagado = pagosDocente.reduce((acc, p) => acc + (Number(p.totalPagado || p.total_pagado) || 0), 0);
+
+    // Actualizar Franja Financiera (calculada 100% de datos reales)
+    document.getElementById('kpiTarifaHora').textContent = `$ ${Number(tarifaHora || 0).toLocaleString('es-CO')} COP`;
+    const kpiTarifaSub = document.getElementById('kpiTarifaSub');
+    if (kpiTarifaSub) kpiTarifaSub.textContent = (tarifaHora > 0) ? 'Asignada al perfil' : 'Sin tarifa configurada';
+
+    const kpiHorasTotales = document.getElementById('kpiHorasTotales');
+    if (kpiHorasTotales) kpiHorasTotales.textContent = `${totalHoras.toFixed(1)} h`;
+    const kpiHorasSub = document.getElementById('kpiHorasSub');
+    if (kpiHorasSub) kpiHorasSub.textContent = totalHoras > 0 ? `Total en ${pagosDocente.length} pago${pagosDocente.length === 1 ? '' : 's'}` : 'Sin horas registradas';
+
+    document.getElementById('kpiTotalPagado').textContent = `$ ${Math.round(totalPagado).toLocaleString('es-CO')} COP`;
+    document.getElementById('kpiPagosCount').textContent = `${pagosDocente.length} pago${pagosDocente.length === 1 ? '' : 's'} registrado${pagosDocente.length === 1 ? '' : 's'}`;
+
+    const kpiUltimoMonto = document.getElementById('kpiUltimoPagoMonto');
+    const kpiUltimoDet = document.getElementById('kpiUltimoPagoDetalle');
+    if (pagosDocente.length > 0) {
+      const u = pagosDocente[0];
+      const uMonto = Number(u.totalPagado || u.total_pagado || 0);
+      const uFecha = u.fechaPago || u.fecha_pago || '';
+      const uFechaTxt = uFecha ? new Date(uFecha + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+      if (kpiUltimoMonto) kpiUltimoMonto.textContent = `$ ${uMonto.toLocaleString('es-CO')} COP`;
+      if (kpiUltimoDet) kpiUltimoDet.textContent = `${escapeHtml(u.periodo || 'Liquidación')} · ${uFechaTxt}`;
+    } else {
+      if (kpiUltimoMonto) kpiUltimoMonto.textContent = '$ 0 COP';
+      if (kpiUltimoDet) kpiUltimoDet.textContent = 'Sin liquidaciones aún';
+    }
+
+    if (pagosDocente.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="9" class="p-8 text-center">
+            <div class="max-w-xs mx-auto text-center space-y-2">
+              <div class="w-10 h-10 mx-auto rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              </div>
+              <p class="text-xs font-bold text-ink">Sin pagos registrados aún</p>
+              <p class="text-[11px] text-slate-400">Registra el primer comprobante de transferencia y liquidación de honorarios con el botón de arriba.</p>
+            </div>
+          </td>
+        </tr>`;
+      return;
+    }
+
+    const limite = 10;
+    const mostrarTodos = Boolean(window.__docentePagosMostrarTodos);
+    const listaRender = (mostrarTodos || pagosDocente.length <= limite) ? pagosDocente : pagosDocente.slice(0, limite);
+
+    let htmlFilas = listaRender.map(p => {
+      const id = p.id;
+      const periodo = escapeHtml(p.periodo || 'Periodo');
+      const mes = escapeHtml(p.mes || '');
+      const fecha = p.fechaPago || p.fecha_pago || '';
+      const fechaTxt = fecha ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+      const horas = Number(p.horas || 0);
+      const tarifa = Number(p.tarifaHora || p.tarifa_hora || 0);
+      const total = Number(p.totalPagado || p.total_pagado || 0);
+      const ref = escapeHtml(p.numeroReferencia || p.numero_referencia || '—');
+      const banco = escapeHtml(p.entidadBancaria || p.entidad_bancaria || '');
+      const compUrl = p.comprobanteUrl || p.comprobante_url || '';
+      const tieneComp = !!compUrl;
+
+      return `
+        <tr class="hover:bg-slate-50/80 transition">
+          <td class="py-3 px-4">
+            <p class="font-extrabold text-ink">${periodo}</p>
+            <p class="text-[10px] text-slate-400 font-semibold">${mes}</p>
+          </td>
+          <td class="py-3 px-3 text-slate-600 font-medium">${fechaTxt}</td>
+          <td class="py-3 px-3 text-center font-bold text-ink">${horas.toFixed(1)} h</td>
+          <td class="py-3 px-3 text-right font-medium text-purple-700">$ ${tarifa.toLocaleString('es-CO')}</td>
+          <td class="py-3 px-4 text-right font-black text-ink text-sm">$ ${total.toLocaleString('es-CO')}</td>
+          <td class="py-3 px-3">
+            <p class="font-mono text-[11px] font-semibold text-slate-700">${ref}</p>
+            <p class="text-[10px] text-slate-400">${banco}</p>
+          </td>
+          <td class="py-3 px-3 text-center">
+            ${tieneComp ? `
+              <div class="inline-flex items-center gap-1.5 justify-center">
+                <button type="button" onclick="verComprobantePagoDocente('${id}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition cursor-pointer shadow-2xs" title="Ver captura o PDF">
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                  Ver
+                </button>
+                <button type="button" onclick="descargarComprobanteDirecto('${id}', 'docente')" class="p-1 rounded-lg text-slate-500 hover:text-purple-700 hover:bg-purple-50 transition cursor-pointer" title="Descargar archivo adjunto">
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                </button>
+              </div>` : `
+              <span class="text-[11px] text-slate-400 italic">Sin adjunto</span>`}
+          </td>
+          <td class="py-3 px-3 text-center">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Pagado
+            </span>
+          </td>
+          <td class="py-3 px-3 text-right whitespace-nowrap">
+            <button type="button" onclick="eliminarPagoDocente('${id}')" class="p-1 text-slate-400 hover:text-red-600 transition cursor-pointer" title="Eliminar este pago">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </td>
+        </tr>`;
+    }).join('');
+
+    if (pagosDocente.length > limite) {
+      htmlFilas += `
+        <tr class="bg-purple-50/40 border-t border-purple-100">
+          <td colspan="9" class="py-3 px-4 text-center">
+            <div class="flex items-center justify-center gap-3 text-xs">
+              <span class="text-slate-500 font-medium">Mostrando ${listaRender.length} de ${pagosDocente.length} liquidaciones</span>
+              <button type="button" onclick="toggleMostrarTodosPagosDocente()" class="font-bold text-purple-700 hover:text-purple-900 bg-white hover:bg-purple-100 px-3 py-1 rounded-lg border border-purple-200 transition cursor-pointer shadow-2xs">
+                ${mostrarTodos ? 'Mostrar solo 10' : ('Ver las ' + (pagosDocente.length - limite) + ' restantes (Ver todas)')}
+              </button>
+            </div>
+          </td>
+        </tr>`;
+    }
+
+    tbody.innerHTML = htmlFilas;
+  }
+
+  function abrirFormNuevoPagoDocente() {
+    if (!docentePagosActual) return;
+    const docente = docentePagosActual;
+
+    document.getElementById('formPagoTitulo').textContent = 'Registrar Pago / Liquidación';
+    document.getElementById('formPagoSubtitulo').textContent = `Docente: ${docente.nombre}`;
+
+    document.getElementById('pago_id').value = '';
+    document.getElementById('pago_docente_id').value = docente.id;
+    document.getElementById('pago_docente_nombre').value = docente.nombre;
+    document.getElementById('pago_comprobante_url').value = '';
+    document.getElementById('pago_comprobante_nombre').value = '';
+    document.getElementById('pago_comprobante_tipo').value = '';
+
+    const hoy = new Date();
+    const hoyStr = hoy.toISOString().slice(0, 10);
+    const mesStr = hoy.toISOString().slice(0, 7);
+    const mesNom = hoy.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+
+    document.getElementById('pago_periodo').value = `Honorarios ${mesNom.charAt(0).toUpperCase() + mesNom.slice(1)}`;
+    document.getElementById('pago_mes').value = mesStr;
+    document.getElementById('pago_fecha').value = hoyStr;
+    document.getElementById('pago_banco').value = docente.banco || '';
+    document.getElementById('pago_referencia').value = '';
+    document.getElementById('pago_observaciones').value = '';
+
+    const tarifa = Number(docente.tarifaHora || docente.tarifa_hora || 0);
+    document.getElementById('pago_tarifa_hora').value = tarifa || '';
+    document.getElementById('pago_horas').value = '';
+    document.getElementById('pago_total').value = '';
+
+    quitarComprobantePagoDocente();
+
+    document.getElementById('modalFormPagoDocente').classList.remove('hidden');
+  }
+
+  function cerrarFormNuevoPagoDocente() {
+    document.getElementById('modalFormPagoDocente').classList.add('hidden');
+  }
+
+  function calcularTotalPagoDocente() {
+    const horas = parseFloat(document.getElementById('pago_horas').value) || 0;
+    const tarifa = parseFloat(document.getElementById('pago_tarifa_hora').value) || 0;
+    const total = horas * tarifa;
+    document.getElementById('pago_total').value = Math.round(total);
+  }
+
+  function manejarComprobantePagoDocente(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    if (file.size > 8 * 1024 * 1024) {
+      toast('El archivo no puede superar 8 MB', 'err');
+      input.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      document.getElementById('pago_comprobante_url').value = dataUrl;
+      document.getElementById('pago_comprobante_nombre').value = file.name;
+      document.getElementById('pago_comprobante_tipo').value = file.type || 'image/png';
+
+      document.getElementById('dropzonePrompt').classList.add('hidden');
+      const prev = document.getElementById('dropzonePreview');
+      prev.classList.remove('hidden');
+      document.getElementById('previewNombreComprobante').textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+
+      const img = document.getElementById('previewImgComprobante');
+      const pdfIcon = document.getElementById('previewPdfIcon');
+      if (file.type === 'application/pdf') {
+        img.classList.add('hidden');
+        pdfIcon.classList.remove('hidden');
+      } else {
+        img.src = dataUrl;
+        img.classList.remove('hidden');
+        pdfIcon.classList.add('hidden');
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function quitarComprobantePagoDocente(event) {
+    if (event) event.stopPropagation();
+    document.getElementById('pago_file_input').value = '';
+    document.getElementById('pago_comprobante_url').value = '';
+    document.getElementById('pago_comprobante_nombre').value = '';
+    document.getElementById('pago_comprobante_tipo').value = '';
+    document.getElementById('dropzonePrompt').classList.remove('hidden');
+    document.getElementById('dropzonePreview').classList.add('hidden');
+  }
+
+  async function guardarNuevoPagoDocente() {
+    const docenteId = document.getElementById('pago_docente_id').value;
+    const docenteNombre = document.getElementById('pago_docente_nombre').value;
+    const periodo = document.getElementById('pago_periodo').value.trim();
+    const mes = document.getElementById('pago_mes').value;
+    const horas = parseFloat(document.getElementById('pago_horas').value) || 0;
+    const tarifaHora = parseFloat(document.getElementById('pago_tarifa_hora').value) || 0;
+    const totalPagado = parseFloat(document.getElementById('pago_total').value) || 0;
+    const fechaPago = document.getElementById('pago_fecha').value;
+    const entidadBancaria = document.getElementById('pago_banco').value.trim();
+    const numeroReferencia = document.getElementById('pago_referencia').value.trim();
+    const observaciones = document.getElementById('pago_observaciones').value.trim();
+    const comprobanteUrl = document.getElementById('pago_comprobante_url').value;
+    const comprobanteNombre = document.getElementById('pago_comprobante_nombre').value;
+    const comprobanteTipo = document.getElementById('pago_comprobante_tipo').value;
+
+    if (!periodo || !fechaPago || totalPagado <= 0) {
+      toast('Por favor completa el período, fecha y un total mayor a 0.', 'err');
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarPago');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    const payload = {
+      docenteId,
+      docenteNombre,
+      periodo,
+      mes,
+      horas,
+      tarifaHora,
+      totalPagado,
+      fechaPago,
+      entidadBancaria,
+      numeroReferencia,
+      observaciones,
+      comprobanteUrl,
+      comprobanteNombre,
+      comprobanteTipo,
+      estado: 'Pagado'
+    };
+
+    try {
+      await apiFetch('pagos_docentes', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      toast('Registro de pago guardado exitosamente', 'ok');
+      cerrarFormNuevoPagoDocente();
+      if (docentePagosActual) {
+        await abrirModalPagosDocente(docenteId);
+      }
+    } catch (err) {
+      toast('Error al guardar el pago: ' + err.message, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Guardar Registro de Pago';
+    }
+  }
+
+  // =========================================================================
+  // SISTEMA UNIVERSAL DE COMPROBANTES DE PAGO (DOCENTES Y ESTUDIANTES)
+  // =========================================================================
+
+  let comprobanteActualBlobUrl = null;
+
+  function dataURItoBlob(dataURI, defaultMime = 'application/octet-stream') {
+    if (!dataURI || typeof dataURI !== 'string' || !dataURI.startsWith('data:')) return null;
+    try {
+      const parts = dataURI.split(',');
+      if (parts.length < 2) return null;
+      const header = parts[0];
+      const base64Data = parts[1];
+      const mimeMatch = header.match(/:(.*?);/);
+      const mime = (mimeMatch && mimeMatch[1]) ? mimeMatch[1] : defaultMime;
+      const binary = atob(base64Data);
+      const len = binary.length;
+      const buffer = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        buffer[i] = binary.charCodeAt(i);
+      }
+      return new Blob([buffer], { type: mime });
+    } catch (err) {
+      console.warn('[Comprobante] Error al convertir dataURI a Blob:', err);
+      return null;
+    }
+  }
+
+  function obtenerUrlVisualizable(url, mimeType = '') {
+    if (!url) return { url: '', isBlob: false };
+    if (url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) {
+      return { url, isBlob: false };
+    }
+    if (url.startsWith('data:')) {
+      const blob = dataURItoBlob(url, mimeType);
+      if (blob) {
+        return { url: URL.createObjectURL(blob), isBlob: true };
+      }
+    }
+    return { url, isBlob: false };
+  }
+
+  function descargarArchivoDirecto(url, nombre = 'comprobante', mimeType = '') {
+    let target = url;
+    let esBlobTemporal = false;
+    if (url && url.startsWith('data:')) {
+      const blob = dataURItoBlob(url, mimeType);
+      if (blob) {
+        target = URL.createObjectURL(blob);
+        esBlobTemporal = true;
+      }
+    }
+    const a = document.createElement('a');
+    a.href = target;
+    a.download = nombre;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    if (esBlobTemporal) {
+      setTimeout(() => URL.revokeObjectURL(target), 15000);
+    }
+  }
+
+  function abrirComprobanteEnPestana() {
+    if (comprobanteActualBlobUrl) {
+      window.open(comprobanteActualBlobUrl, '_blank');
+      return;
+    }
+    if (!comprobanteActualDoc || !comprobanteActualDoc.comprobanteUrl) return;
+    const url = comprobanteActualDoc.comprobanteUrl;
+    if (url.startsWith('data:')) {
+      const blob = dataURItoBlob(url, comprobanteActualDoc.comprobanteTipo);
+      if (blob) {
+        const bUrl = URL.createObjectURL(blob);
+        window.open(bUrl, '_blank');
+        return;
+      }
+    }
+    window.open(url, '_blank');
+  }
+  window.abrirComprobanteEnPestana = abrirComprobanteEnPestana;
+
+  async function verComprobantePago(pagoId, tipo = 'docente') {
+    try {
+      let pago = null;
+      if (window.__cachePagosDocenteActual && Array.isArray(window.__cachePagosDocenteActual)) {
+        const p = window.__cachePagosDocenteActual.find(x => x.id === pagoId);
+        if (p && (p.comprobante_url || p.comprobanteUrl)) pago = p;
+      }
+      if (!pago && window.__cachePagosTraineeActual && Array.isArray(window.__cachePagosTraineeActual)) {
+        const p = window.__cachePagosTraineeActual.find(x => x.id === pagoId);
+        if (p && (p.comprobante_url || p.comprobanteUrl)) pago = p;
+      }
+      if (!pago && window.__cachePagosEstudiantes && Array.isArray(window.__cachePagosEstudiantes)) {
+        const p = window.__cachePagosEstudiantes.find(x => x.id === pagoId);
+        if (p && (p.comprobante_url || p.comprobanteUrl)) pago = p;
+      }
+      if (!pago || !(pago.comprobante_url || pago.comprobanteUrl)) {
+        const endpoint = tipo === 'estudiante' ? ('pagos_estudiantes?id=' + encodeURIComponent(pagoId)) : ('pagos_docentes?id=' + encodeURIComponent(pagoId));
+        pago = await apiFetch(endpoint);
+      }
+      const rawUrl = pago ? (pago.comprobante_url || pago.comprobanteUrl) : null;
+      if (!pago || !rawUrl) {
+        toast('No se encontró el comprobante para este registro.', 'err');
+        return;
+      }
+
+      if (comprobanteActualBlobUrl) {
+        try { URL.revokeObjectURL(comprobanteActualBlobUrl); } catch(e){}
+        comprobanteActualBlobUrl = null;
+      }
+
+      const nombreArchivo = pago.comprobante_nombre || pago.comprobanteNombre || `comprobante_${pago.id || 'pago'}`;
+      const cTipo = pago.comprobante_tipo || pago.comprobanteTipo || '';
+      const persona = pago.estudiante_nombre || pago.estudianteNombre || pago.docente_nombre || pago.docenteNombre || 'Pago';
+      const concepto = pago.concepto || pago.periodo || 'Liquidación';
+      const monto = Number(pago.monto || pago.total_pagado || pago.totalPagado || 0);
+      const fecha = fmtDate(pago.fecha_pago || pago.fechaPago || '');
+
+      const isPdf = cTipo === 'application/pdf' || rawUrl.startsWith('data:application/pdf') || nombreArchivo.toLowerCase().endsWith('.pdf');
+
+      const visual = obtenerUrlVisualizable(rawUrl, isPdf ? 'application/pdf' : cTipo);
+      if (visual.isBlob) {
+        comprobanteActualBlobUrl = visual.url;
+      }
+
+      comprobanteActualDoc = {
+        comprobanteUrl: rawUrl,
+        comprobanteNombre: nombreArchivo,
+        comprobanteTipo: cTipo,
+        id: pago.id
+      };
+
+      document.getElementById('visorComprobanteDocente').textContent = `${concepto} · ${persona}`;
+      document.getElementById('visorComprobanteSubtitulo').textContent = `Monto: $ ${monto.toLocaleString('es-CO')} COP · Fecha: ${fecha} · Archivo: ${nombreArchivo}`;
+
+      const img = document.getElementById('visorComprobanteImg');
+      const pdfCont = document.getElementById('visorComprobantePdfContainer');
+      const pdfFrame = document.getElementById('visorComprobantePdfFrame');
+      const vacio = document.getElementById('visorComprobanteVacio');
+
+      if (isPdf) {
+        img.classList.add('hidden');
+        img.src = '';
+        pdfFrame.src = visual.url;
+        pdfCont.classList.remove('hidden');
+        vacio.classList.add('hidden');
+      } else {
+        pdfCont.classList.add('hidden');
+        pdfFrame.src = 'about:blank';
+        img.src = visual.url;
+        img.classList.remove('hidden');
+        vacio.classList.add('hidden');
+      }
+
+      document.getElementById('modalVisorComprobanteDocente').classList.remove('hidden');
+    } catch (e) {
+      toast('Error al cargar comprobante: ' + e.message, 'err');
+    }
+  }
+
+  async function verComprobantePagoDocente(pagoId) {
+    return verComprobantePago(pagoId, 'docente');
+  }
+
+  async function verComprobantePagoEstudiante(pagoId) {
+    return verComprobantePago(pagoId, 'estudiante');
+  }
+
+  async function descargarComprobanteDirecto(pagoId, tipo = 'docente') {
+    try {
+      let pago = null;
+      if (window.__cachePagosDocenteActual && Array.isArray(window.__cachePagosDocenteActual)) {
+        const p = window.__cachePagosDocenteActual.find(x => x.id === pagoId);
+        if (p && (p.comprobante_url || p.comprobanteUrl)) pago = p;
+      }
+      if (!pago && window.__cachePagosTraineeActual && Array.isArray(window.__cachePagosTraineeActual)) {
+        const p = window.__cachePagosTraineeActual.find(x => x.id === pagoId);
+        if (p && (p.comprobante_url || p.comprobanteUrl)) pago = p;
+      }
+      if (!pago && window.__cachePagosEstudiantes && Array.isArray(window.__cachePagosEstudiantes)) {
+        const p = window.__cachePagosEstudiantes.find(x => x.id === pagoId);
+        if (p && (p.comprobante_url || p.comprobanteUrl)) pago = p;
+      }
+      if (!pago || !(pago.comprobante_url || pago.comprobanteUrl)) {
+        const endpoint = tipo === 'estudiante' ? ('pagos_estudiantes?id=' + encodeURIComponent(pagoId)) : ('pagos_docentes?id=' + encodeURIComponent(pagoId));
+        pago = await apiFetch(endpoint);
+      }
+      const url = pago ? (pago.comprobante_url || pago.comprobanteUrl) : null;
+      if (!pago || !url) {
+        toast('No se encontró el archivo del comprobante.', 'err');
+        return;
+      }
+      const nombreArchivo = pago.comprobante_nombre || pago.comprobanteNombre || `comprobante_${pago.id || 'pago'}`;
+      const cTipo = pago.comprobante_tipo || pago.comprobanteTipo || '';
+      descargarArchivoDirecto(url, nombreArchivo, cTipo);
+    } catch (e) {
+      toast('Error al descargar: ' + e.message, 'err');
+    }
+  }
+
+  function cerrarVisorComprobanteDocente() {
+    const m = document.getElementById('modalVisorComprobanteDocente');
+    if (m) m.classList.add('hidden');
+    const img = document.getElementById('visorComprobanteImg');
+    if (img) img.src = '';
+    const frame = document.getElementById('visorComprobantePdfFrame');
+    if (frame) frame.src = 'about:blank';
+    if (comprobanteActualBlobUrl) {
+      try { URL.revokeObjectURL(comprobanteActualBlobUrl); } catch(e){}
+      comprobanteActualBlobUrl = null;
+    }
+    comprobanteActualDoc = null;
+  }
+
+  function descargarComprobanteActual() {
+    if (!comprobanteActualDoc || !comprobanteActualDoc.comprobanteUrl) return;
+    const url = comprobanteActualDoc.comprobanteUrl;
+    const nombre = comprobanteActualDoc.comprobanteNombre || `comprobante_${comprobanteActualDoc.id || 'pago'}`;
+    const tipo = comprobanteActualDoc.comprobanteTipo || '';
+    descargarArchivoDirecto(url, nombre, tipo);
+  }
+
+  async function eliminarPagoDocente(pagoId) {
+    if (!confirm('¿Estás seguro de eliminar este registro de pago? Esta acción no se puede deshacer.')) return;
+    try {
+      await apiFetch('pagos_docentes?id=' + encodeURIComponent(pagoId), { method: 'DELETE' });
+      toast('Registro de pago eliminado', 'ok');
+      if (docentePagosActual) {
+        await abrirModalPagosDocente(docentePagosActual.id);
+      }
+      if (document.getElementById('panel-pagos') && !document.getElementById('panel-pagos').classList.contains('hidden')) {
+        renderPanelPagos();
+      }
+    } catch (err) {
+      toast('Error al eliminar: ' + err.message, 'err');
+    }
+  }
+
+  // =========================================================================
+  // GESTIÓN DE PAGOS DE ESTUDIANTES (MATRÍCULAS / MENSUALIDADES)
+  // =========================================================================
+
+  let comprobanteEstudianteTemporal = null;
+
+  async function abrirFormPagoEstudiante(estudianteId = null, pagoId = null, enfocarCaptura = false) {
+    if (!puedeGestionarPagosDocentes()) {
+      toast('Acceso no autorizado.', 'err');
+      return;
+    }
+
+    const usuarios = await Store.list('usuarios');
+    const estudiantes = usuarios.filter(u => u.rol === 'Estudiante' || u.rol === 'estudiante').sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+    const select = document.getElementById('pago_estudiante_usuario_id');
+    select.innerHTML = '<option value="">-- Seleccionar Estudiante --</option>' +
+      estudiantes.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.nombre)} (${escapeHtml(e.cohorte || e.cohorteAnterior || 'Sin cohorte')})</option>`).join('');
+
+    const modal = document.getElementById('modalFormPagoEstudiante');
+    const form = document.getElementById('formRegistroPagoEstudiante');
+    form.reset();
+    comprobanteEstudianteTemporal = null;
+
+    document.getElementById('dropzonePromptEstudiante').classList.remove('hidden');
+    document.getElementById('dropzonePreviewEstudiante').classList.add('hidden');
+    document.getElementById('previewImgComprobanteEstudiante').classList.add('hidden');
+    document.getElementById('previewPdfIconEstudiante').classList.add('hidden');
+
+    const hoy = new Date().toISOString().split('T')[0];
+    const mesActual = hoy.substring(0, 7);
+    document.getElementById('pago_estudiante_fecha').value = hoy;
+    document.getElementById('pago_estudiante_mes').value = mesActual;
+    document.getElementById('pago_estudiante_id').value = pagoId || '';
+
+    if (pagoId) {
+      document.getElementById('formPagoEstudianteTitulo').textContent = enfocarCaptura ? 'Adjuntar Captura / Comprobante de Pago' : 'Editar Pago de Estudiante';
+      const pago = await apiFetch('pagos_estudiantes?id=' + encodeURIComponent(pagoId));
+      if (pago) {
+        select.value = pago.estudiante_id || pago.estudianteId || '';
+        document.getElementById('pago_estudiante_cohorte').value = pago.cohorte || '';
+        document.getElementById('pago_estudiante_concepto').value = pago.concepto || 'Mensualidad';
+        document.getElementById('pago_estudiante_mes').value = pago.mes || mesActual;
+        document.getElementById('pago_estudiante_monto').value = pago.monto || '';
+        document.getElementById('pago_estudiante_fecha').value = pago.fecha_pago || pago.fechaPago || hoy;
+        document.getElementById('pago_estudiante_medio').value = pago.medio_pago || pago.medioPago || 'Bancolombia';
+        document.getElementById('pago_estudiante_referencia').value = pago.numero_referencia || pago.numeroReferencia || '';
+        document.getElementById('pago_estudiante_observaciones').value = pago.observaciones || '';
+        if (pago.comprobante_url || pago.comprobanteUrl) {
+          comprobanteEstudianteTemporal = {
+            nombre: pago.comprobante_nombre || pago.comprobanteNombre || 'comprobante_existente',
+            tipo: pago.comprobante_tipo || pago.comprobanteTipo || 'image/png',
+            url: pago.comprobante_url || pago.comprobanteUrl
+          };
+          mostrarPreviewComprobanteEstudiante(comprobanteEstudianteTemporal.nombre, comprobanteEstudianteTemporal.tipo, comprobanteEstudianteTemporal.url);
+        }
+      }
+    } else {
+      document.getElementById('formPagoEstudianteTitulo').textContent = 'Registrar Pago de Estudiante';
+      if (estudianteId) {
+        select.value = estudianteId;
+        await onSeleccionarEstudianteParaPago(estudianteId);
+      }
+    }
+
+    const dropzone = document.getElementById('dropzoneComprobanteEstudiante');
+    if (dropzone) {
+      if (enfocarCaptura) {
+        dropzone.classList.add('ring-4', 'ring-purple-400', 'bg-purple-100/40');
+        setTimeout(() => {
+          dropzone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+      } else {
+        dropzone.classList.remove('ring-4', 'ring-purple-400', 'bg-purple-100/40');
+      }
+    }
+
+    modal.classList.remove('hidden');
+  }
+
+  function cerrarFormPagoEstudiante() {
+    const modal = document.getElementById('modalFormPagoEstudiante');
+    if (modal) modal.classList.add('hidden');
+    const dropzone = document.getElementById('dropzoneComprobanteEstudiante');
+    if (dropzone) dropzone.classList.remove('ring-4', 'ring-purple-400', 'bg-purple-100/40');
+    comprobanteEstudianteTemporal = null;
+  }
+
+  async function onSeleccionarEstudianteParaPago(usuarioId) {
+    if (!usuarioId) return;
+    const usuarios = await Store.list('usuarios');
+    const u = usuarios.find(x => x.id === usuarioId);
+    if (u) {
+      const cohorteInput = document.getElementById('pago_estudiante_cohorte');
+      if (cohorteInput) cohorteInput.value = u.cohorte || u.cohorteAnterior || '';
+    }
+  }
+
+  function manejarComprobantePagoEstudiante(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    if (file.size > 8 * 1024 * 1024) {
+      toast('El archivo supera el límite permitido de 8 MB.', 'err');
+      input.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      comprobanteEstudianteTemporal = {
+        nombre: file.name,
+        tipo: file.type,
+        url: e.target.result
+      };
+      mostrarPreviewComprobanteEstudiante(file.name, file.type, e.target.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function mostrarPreviewComprobanteEstudiante(nombre, tipo, url) {
+    document.getElementById('dropzonePromptEstudiante').classList.add('hidden');
+    const prev = document.getElementById('dropzonePreviewEstudiante');
+    prev.classList.remove('hidden');
+    document.getElementById('previewNombreComprobanteEstudiante').textContent = nombre;
+
+    const img = document.getElementById('previewImgComprobanteEstudiante');
+    const pdf = document.getElementById('previewPdfIconEstudiante');
+
+    if (tipo === 'application/pdf' || (url && url.startsWith('data:application/pdf'))) {
+      img.classList.add('hidden');
+      pdf.classList.remove('hidden');
+    } else {
+      pdf.classList.add('hidden');
+      img.src = url;
+      img.classList.remove('hidden');
+    }
+  }
+
+  function quitarComprobantePagoEstudiante(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    comprobanteEstudianteTemporal = null;
+    const input = document.getElementById('pago_estudiante_file_input');
+    if (input) input.value = '';
+    document.getElementById('dropzonePromptEstudiante').classList.remove('hidden');
+    document.getElementById('dropzonePreviewEstudiante').classList.add('hidden');
+    document.getElementById('previewImgComprobanteEstudiante').classList.add('hidden');
+    document.getElementById('previewPdfIconEstudiante').classList.add('hidden');
+  }
+
+  async function guardarNuevoPagoEstudiante() {
+    const estudianteId = document.getElementById('pago_estudiante_usuario_id').value;
+    if (!estudianteId) {
+      toast('Por favor selecciona el estudiante.', 'err');
+      return;
+    }
+    const montoRaw = (document.getElementById('pago_estudiante_monto').value || '').trim();
+    if (!montoRaw || !/^\d+$/.test(montoRaw)) {
+      toast('El monto solo debe contener números (no se permiten letras ni símbolos).', 'err');
+      return;
+    }
+    const monto = parseFloat(montoRaw);
+    if (monto <= 0) {
+      toast('El monto a pagar debe ser mayor a 0.', 'err');
+      return;
+    }
+    const fechaPago = document.getElementById('pago_estudiante_fecha').value;
+    const mes = document.getElementById('pago_estudiante_mes').value;
+    const concepto = document.getElementById('pago_estudiante_concepto').value;
+    const medioPago = document.getElementById('pago_estudiante_medio').value;
+    const referencia = document.getElementById('pago_estudiante_referencia').value.trim();
+    const observaciones = document.getElementById('pago_estudiante_observaciones').value.trim();
+    const cohorte = document.getElementById('pago_estudiante_cohorte').value.trim();
+
+    const usuarios = await Store.list('usuarios');
+    const est = usuarios.find(u => u.id === estudianteId);
+    const estudianteNombre = est ? est.nombre : 'Estudiante';
+
+    const btn = document.getElementById('btnGuardarPagoEstudiante');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    const pagoId = document.getElementById('pago_estudiante_id').value || null;
+
+    const payload = {
+      id: pagoId || ('pe_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7)),
+      estudiante_id: estudianteId,
+      estudiante_nombre: estudianteNombre,
+      cohorte: cohorte,
+      concepto: concepto,
+      mes: mes,
+      monto: monto,
+      fecha_pago: fechaPago,
+      medio_pago: medioPago,
+      numero_referencia: referencia,
+      observaciones: observaciones,
+      estado: 'Aprobado',
+      comprobante_nombre: comprobanteEstudianteTemporal ? comprobanteEstudianteTemporal.nombre : null,
+      comprobante_tipo: comprobanteEstudianteTemporal ? comprobanteEstudianteTemporal.tipo : null,
+      comprobante_url: comprobanteEstudianteTemporal ? comprobanteEstudianteTemporal.url : null
+    };
+
+    try {
+      await apiFetch('pagos_estudiantes', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      Store.invalidate('pagos_estudiantes');
+      if (window.__cachePagosEstudiantes && Array.isArray(window.__cachePagosEstudiantes)) {
+        const idx = window.__cachePagosEstudiantes.findIndex(p => p.id === payload.id);
+        if (idx !== -1) {
+          window.__cachePagosEstudiantes[idx] = {
+            ...window.__cachePagosEstudiantes[idx],
+            ...payload,
+            comprobanteUrl: payload.comprobante_url,
+            comprobanteNombre: payload.comprobante_nombre,
+            comprobanteTipo: payload.comprobante_tipo
+          };
+        } else {
+          window.__cachePagosEstudiantes.unshift({
+            ...payload,
+            comprobanteUrl: payload.comprobante_url,
+            comprobanteNombre: payload.comprobante_nombre,
+            comprobanteTipo: payload.comprobante_tipo
+          });
+        }
+      }
+      if (window.__cachePagosTraineeActual && Array.isArray(window.__cachePagosTraineeActual)) {
+        const idxT = window.__cachePagosTraineeActual.findIndex(p => p.id === payload.id);
+        if (idxT !== -1) {
+          window.__cachePagosTraineeActual[idxT] = {
+            ...window.__cachePagosTraineeActual[idxT],
+            ...payload,
+            comprobanteUrl: payload.comprobante_url,
+            comprobanteNombre: payload.comprobante_nombre,
+            comprobanteTipo: payload.comprobante_tipo
+          };
+        }
+      }
+      toast('Comprobante y pago guardados correctamente', 'ok');
+      cerrarFormPagoEstudiante();
+      if (document.getElementById('panel-pagos') && !document.getElementById('panel-pagos').classList.contains('hidden')) {
+        await renderPanelPagos();
+      }
+      if (document.getElementById('panel-trainee') && !document.getElementById('panel-trainee').classList.contains('hidden')) {
+        await renderTraineeFicha();
+      }
+    } catch (e) {
+      toast('Error al guardar el pago: ' + e.message, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Guardar Pago de Estudiante';
+    }
+  }
+
+  async function eliminarPagoEstudiante(pagoId) {
+    if (!confirm('¿Estás seguro de eliminar este registro de pago de estudiante? Esta acción no se puede deshacer.')) return;
+    try {
+      await apiFetch('pagos_estudiantes?id=' + encodeURIComponent(pagoId), { method: 'DELETE' });
+      Store.invalidate('pagos_estudiantes');
+      toast('Pago de estudiante eliminado', 'ok');
+      if (document.getElementById('panel-pagos') && !document.getElementById('panel-pagos').classList.contains('hidden')) {
+        await renderPanelPagos();
+      }
+      if (document.getElementById('panel-trainee') && !document.getElementById('panel-trainee').classList.contains('hidden')) {
+        await renderTraineeFicha();
+      }
+    } catch (err) {
+      toast('Error al eliminar: ' + err.message, 'err');
+    }
+  }
+
+  // =========================================================================
+  // MÓDULO PRINCIPAL: PANEL DE PAGOS (TABS: ESTUDIANTES Y PROFESORES)
+  // =========================================================================
+
+  async function abrirModalPagosPorCohorte() {
+    if (!puedeGestionarPagosDocentes()) {
+      toast('Acceso no autorizado.', 'err');
+      return;
+    }
+    const usuarios = await Store.list('usuarios');
+    const estudiantes = usuarios.filter(u => u.rol === 'Estudiante' || u.rol === 'estudiante');
+    
+    // Contabilizar estudiantes por cohorte
+    const cohortesMap = {};
+    estudiantes.forEach(e => {
+      const c = e.cohorte || e.cohorteAnterior;
+      if (c) {
+        cohortesMap[c] = (cohortesMap[c] || 0) + 1;
+      }
+    });
+
+    const select = document.getElementById('pago_cohorte_seleccion');
+    const listaCohortes = Object.keys(cohortesMap).sort();
+    if (!listaCohortes.length) {
+      select.innerHTML = '<option value="">-- No hay cohortes registradas con estudiantes --</option>';
+    } else {
+      select.innerHTML = '<option value="">-- Selecciona una Cohorte --</option>' +
+        listaCohortes.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)} (${cohortesMap[c]} estudiantes)</option>`).join('');
+    }
+
+    const hoy = new Date().toISOString().split('T')[0];
+    const mesActual = hoy.substring(0, 7);
+    document.getElementById('pago_cohorte_fecha').value = hoy;
+    document.getElementById('pago_cohorte_mes').value = mesActual;
+    document.getElementById('pago_cohorte_monto').value = '';
+    document.getElementById('pago_cohorte_concepto').value = 'Mensualidad';
+    document.getElementById('pago_cohorte_medio').value = 'Transferencia Bancaria';
+    document.getElementById('pago_cohorte_observaciones').value = '';
+    document.getElementById('pago_cohorte_resumen_estudiantes').classList.add('hidden');
+
+    document.getElementById('modalPagosPorCohorte').classList.remove('hidden');
+  }
+
+  function cerrarModalPagosPorCohorte() {
+    const modal = document.getElementById('modalPagosPorCohorte');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  async function onCambioCohorteGenerarPagos(cohorte) {
+    const resumen = document.getElementById('pago_cohorte_resumen_estudiantes');
+    const cantBadge = document.getElementById('pago_cohorte_cant_estudiantes');
+    if (!cohorte) {
+      if (resumen) resumen.classList.add('hidden');
+      return;
+    }
+    const usuarios = await Store.list('usuarios');
+    const enCohorte = usuarios.filter(u => (u.rol === 'Estudiante' || u.rol === 'estudiante') && (u.cohorte === cohorte || u.cohorteAnterior === cohorte));
+    if (cantBadge) cantBadge.textContent = `${enCohorte.length} alumnos`;
+    if (resumen) resumen.classList.remove('hidden');
+  }
+
+  async function generarPagosParaCohorte() {
+    const cohorte = document.getElementById('pago_cohorte_seleccion').value;
+    if (!cohorte) {
+      toast('Por favor selecciona una cohorte.', 'err');
+      return;
+    }
+    const fechaPago = document.getElementById('pago_cohorte_fecha').value;
+    if (!fechaPago) {
+      toast('Por favor selecciona la fecha de pago.', 'err');
+      return;
+    }
+    const mes = document.getElementById('pago_cohorte_mes').value;
+    if (!mes) {
+      toast('Por favor selecciona el mes cubierto.', 'err');
+      return;
+    }
+    const montoRaw = (document.getElementById('pago_cohorte_monto').value || '').trim();
+    if (!montoRaw || !/^\d+$/.test(montoRaw)) {
+      toast('El monto solo debe contener números (no se permiten letras ni símbolos).', 'err');
+      return;
+    }
+    const monto = parseFloat(montoRaw);
+    if (monto <= 0) {
+      toast('El monto a cobrar debe ser mayor a 0.', 'err');
+      return;
+    }
+    const concepto = (document.getElementById('pago_cohorte_concepto') ? document.getElementById('pago_cohorte_concepto').value : '') || 'Mensualidad';
+    const medioPago = document.getElementById('pago_cohorte_medio').value;
+    const observaciones = document.getElementById('pago_cohorte_observaciones').value.trim();
+
+    const usuarios = await Store.list('usuarios');
+    const estudiantes = usuarios.filter(u => (u.rol === 'Estudiante' || u.rol === 'estudiante') && (u.cohorte === cohorte || u.cohorteAnterior === cohorte));
+
+    if (!estudiantes.length) {
+      toast('No hay estudiantes registrados en la cohorte seleccionada.', 'err');
+      return;
+    }
+
+    const confirmMsg = `¿Deseas generar el registro de pago para los ${estudiantes.length} estudiantes de la "${cohorte}" por valor de $ ${monto.toLocaleString('es-CO')} COP el día ${fechaPago}?`;
+    if (!confirm(confirmMsg)) return;
+
+    const btn = document.getElementById('btnGenerarPagosCohorte');
+    btn.disabled = true;
+    btn.textContent = `Generando para ${estudiantes.length} estudiantes...`;
+
+    try {
+      const lotePagos = estudiantes.map(e => ({
+        id: 'pe_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7) + '_' + e.id,
+        estudiante_id: e.id,
+        estudiante_nombre: e.nombre || 'Estudiante',
+        cohorte: cohorte,
+        concepto: concepto,
+        mes: mes,
+        monto: monto,
+        fecha_pago: fechaPago,
+        medio_pago: medioPago,
+        numero_referencia: '',
+        comprobante_nombre: null,
+        comprobante_tipo: null,
+        comprobante_url: null,
+        observaciones: observaciones,
+        estado: 'Pendiente'
+      }));
+
+      await apiFetch('pagos_estudiantes', {
+        method: 'POST',
+        body: JSON.stringify(lotePagos)
+      });
+
+      toast(`¡Se crearon con éxito los ${lotePagos.length} registros de pago para la ${cohorte}!`, 'ok');
+      cerrarModalPagosPorCohorte();
+      if (document.getElementById('panel-pagos') && !document.getElementById('panel-pagos').classList.contains('hidden')) {
+        await renderPanelPagos();
+      }
+    } catch (e) {
+      toast('Error al generar pagos por cohorte: ' + e.message, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Generar Registros de Pago';
+    }
+  }
+
+  const pagosState = {
+    tab: 'estudiantes', // 'estudiantes' | 'profesores'
+    filtroCohorteEst: '',
+    filtroMesEst: '',
+    busquedaEst: '',
+    mostrarTodosEst: false,
+    filtroCohorteDoc: '',
+    busquedaDoc: '',
+  };
+
+  function cambiarTabPagos(tab) {
+    pagosState.tab = tab;
+    renderPanelPagos();
+  }
+
+  function limpiarFiltrosPagosEst() {
+    pagosState.filtroCohorteEst = '';
+    pagosState.filtroMesEst = '';
+    pagosState.busquedaEst = '';
+    pagosState.mostrarTodosEst = false;
+    renderPanelPagos();
+  }
+  window.limpiarFiltrosPagosEst = limpiarFiltrosPagosEst;
+
+  function toggleMostrarTodosPagosEst() {
+    pagosState.mostrarTodosEst = !pagosState.mostrarTodosEst;
+    const cuerpo = document.getElementById('tablaPagosEstudiantesCuerpo');
+    if (cuerpo && window.__cachePagosEstudiantes) {
+      cuerpo.innerHTML = renderFilasPagosEstudiantes(window.__cachePagosEstudiantes);
+    }
+  }
+  window.toggleMostrarTodosPagosEst = toggleMostrarTodosPagosEst;
+
+  function onInputBusquedaPagosEst(val) {
+    pagosState.busquedaEst = val;
+    const cuerpo = document.getElementById('tablaPagosEstudiantesCuerpo');
+    if (cuerpo && window.__cachePagosEstudiantes) {
+      cuerpo.innerHTML = renderFilasPagosEstudiantes(window.__cachePagosEstudiantes);
+    }
+  }
+
+  function onInputBusquedaPagosDoc(val) {
+    pagosState.busquedaDoc = val;
+    const grid = document.getElementById('gridDocentesPagos');
+    if (grid && window.__cacheDocentesPagos) {
+      grid.innerHTML = renderTarjetasDocentesPagos(window.__cacheDocentesPagos.docentes, window.__cacheDocentesPagos.pagosDocentes);
+    }
+  }
+
+  function formatearMesFiltro(m) {
+    if (!m) return 'Sin mes';
+    if (/^\d{4}-\d{2}$/.test(m)) {
+      return mesLabel(m);
+    }
+    return m;
+  }
+
+  function renderFilasPagosEstudiantes(pagosEstudiantes) {
+    let filtrados = pagosEstudiantes || [];
+    if (pagosState.filtroCohorteEst) {
+      filtrados = filtrados.filter(p => (p.cohorte || '').toLowerCase() === pagosState.filtroCohorteEst.toLowerCase());
+    }
+    if (pagosState.filtroMesEst) {
+      filtrados = filtrados.filter(p => (p.mes || '').toLowerCase() === pagosState.filtroMesEst.toLowerCase());
+    }
+    if (pagosState.busquedaEst) {
+      const q = pagosState.busquedaEst.toLowerCase().trim();
+      filtrados = filtrados.filter(p => 
+        (p.estudiante_nombre || p.estudianteNombre || '').toLowerCase().includes(q) ||
+        (p.concepto || '').toLowerCase().includes(q) ||
+        (p.numero_referencia || p.numeroReferencia || '').toLowerCase().includes(q) ||
+        (p.medio_pago || p.medioPago || '').toLowerCase().includes(q) ||
+        (p.mes || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (!filtrados.length) {
+      return `
+        <tr>
+          <td colspan="8" class="text-center py-12">
+            <div class="w-12 h-12 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+            <p class="text-xs font-bold text-ink">No se encontraron pagos con los filtros seleccionados</p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Prueba ajustando el mes, la cohorte o limpiando los filtros.</p>
+          </td>
+        </tr>
+      `;
+    }
+
+    const limite = 10;
+    const mostrarTodos = Boolean(pagosState.mostrarTodosEst);
+    const listaRender = (mostrarTodos || filtrados.length <= limite) ? filtrados : filtrados.slice(0, limite);
+
+    let htmlFilas = listaRender.map(p => {
+      const id = p.id;
+      const fecha = fmtDate(p.fecha_pago || p.fechaPago);
+      const estNombre = escapeHtml(p.estudiante_nombre || p.estudianteNombre || 'Estudiante');
+      const cohorte = escapeHtml(p.cohorte || 'Sin cohorte');
+      const concepto = escapeHtml(p.concepto || 'Mensualidad');
+      const mes = escapeHtml(p.mes || '—');
+      const monto = Number(p.monto || 0);
+      const medio = escapeHtml(p.medio_pago || p.medioPago || '—');
+      const ref = escapeHtml(p.numero_referencia || p.numeroReferencia || '');
+      const tieneComp = Boolean(p.comprobante_url || p.comprobanteUrl);
+
+      return `
+        <tr class="hover:bg-purple-50/20 transition">
+          <td class="py-3.5 px-4 font-semibold text-ink whitespace-nowrap">${fecha}</td>
+          <td class="py-3.5 px-4">
+            <div class="flex items-center gap-2.5">
+              <div class="w-7 h-7 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs shrink-0">
+                ${estNombre.charAt(0).toUpperCase()}
+              </div>
+              <span class="font-bold text-ink truncate max-w-[150px] sm:max-w-[200px]" title="${estNombre}">${estNombre}</span>
+            </div>
+          </td>
+          <td class="py-3.5 px-4 whitespace-nowrap">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">${cohorte}</span>
+          </td>
+          <td class="py-3.5 px-4 whitespace-nowrap">
+            <span class="font-bold text-ink">${concepto}</span>
+            <span class="text-[10px] text-slate-400 font-mono ml-1">(${mes})</span>
+          </td>
+          <td class="py-3.5 px-4 font-black text-purple-800 whitespace-nowrap">$ ${monto.toLocaleString('es-CO')} <span class="text-[10px] font-semibold text-slate-400">COP</span></td>
+          <td class="py-3.5 px-4 whitespace-nowrap">
+            <p class="font-medium text-ink">${medio}</p>
+            ${ref ? `<p class="text-[10px] text-slate-400 font-mono">${ref}</p>` : ''}
+          </td>
+          <td class="py-3.5 px-4 whitespace-nowrap">
+            ${tieneComp ? `
+              <div class="inline-flex items-center gap-1.5">
+                <button type="button" onclick="verComprobantePagoEstudiante('${id}')" class="px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition flex items-center gap-1 cursor-pointer shadow-2xs" title="Ver captura o comprobante">
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                  Ver
+                </button>
+                <button type="button" onclick="descargarComprobanteDirecto('${id}', 'estudiante')" class="p-1 rounded-lg text-slate-500 hover:text-purple-700 hover:bg-purple-50 transition cursor-pointer" title="Descargar comprobante">
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                </button>
+              </div>
+            ` : `
+              <button type="button" onclick="abrirFormPagoEstudiante('${p.estudiante_id || p.estudianteId}', '${id}', true)" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 transition cursor-pointer shadow-2xs hover:scale-[1.02] active:scale-[0.98]" title="Adjuntar soporte o captura para este pago">
+                <svg class="w-3.5 h-3.5 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <span>Adjuntar captura</span>
+              </button>
+            `}
+          </td>
+          <td class="py-3.5 px-4 text-right whitespace-nowrap">
+            <button type="button" onclick="abrirFormPagoEstudiante(null, '${id}')" class="text-xs font-bold text-purple-700 hover:underline mr-2.5 cursor-pointer">Editar</button>
+            <button type="button" onclick="eliminarPagoEstudiante('${id}')" class="text-xs font-bold text-red-600 hover:underline cursor-pointer">Eliminar</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    if (filtrados.length > limite) {
+      htmlFilas += `
+        <tr class="bg-purple-50/40 border-t border-purple-100">
+          <td colspan="8" class="py-3 px-4 text-center">
+            <div class="flex items-center justify-center gap-3 text-xs">
+              <span class="text-slate-500 font-medium">Mostrando ${listaRender.length} de ${filtrados.length} pagos de estudiantes</span>
+              <button type="button" onclick="toggleMostrarTodosPagosEst()" class="font-bold text-purple-700 hover:text-purple-900 bg-white hover:bg-purple-100 px-3 py-1 rounded-lg border border-purple-200 transition cursor-pointer shadow-2xs">
+                ${mostrarTodos ? 'Mostrar solo 10' : `Ver los ${filtrados.length - limite} restantes (Ver todos)`}
+              </button>
+            </div>
+          </td>
+        </tr>`;
+    }
+
+    return htmlFilas;
+  }
+
+  function renderTarjetasDocentesPagos(docentes, pagosDocentes) {
+    let filtrados = docentes || [];
+    if (pagosState.filtroCohorteDoc) {
+      filtrados = filtrados.filter(d => (d.cohorte || '').toLowerCase() === pagosState.filtroCohorteDoc.toLowerCase());
+    }
+    if (pagosState.busquedaDoc) {
+      const q = pagosState.busquedaDoc.toLowerCase().trim();
+      filtrados = filtrados.filter(d => 
+        (d.nombre || '').toLowerCase().includes(q) ||
+        (d.email || '').toLowerCase().includes(q) ||
+        (d.cohorte || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (!filtrados.length) {
+      return `
+        <div class="col-span-full admin-panel-card p-10 text-center text-slate-400">
+          <div class="w-12 h-12 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+          </div>
+          <p class="text-xs font-bold text-ink">No se encontraron profesores</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">Verifica los filtros aplicados o registra docentes en el módulo de Usuarios.</p>
+        </div>
+      `;
+    }
+
+    return filtrados.map(d => {
+      const tarifa = Number(d.tarifaHora || d.tarifa_hora || 0);
+      const pagosDelDocente = (pagosDocentes || []).filter(p => String(p.docenteId || p.docente_id) === String(d.id));
+      const totalPagado = pagosDelDocente.reduce((acc, p) => acc + Number(p.totalPagado || p.total_pagado || 0), 0);
+      const tieneBanco = Boolean(d.banco && (d.numeroCuenta || d.numero_cuenta));
+
+      return `
+        <div class="admin-panel-card p-5 flex flex-col justify-between hover:shadow-md transition">
+          <div>
+            <div class="flex items-start justify-between gap-3 mb-3">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-700 to-indigo-800 text-white flex items-center justify-center font-black text-sm shadow-sm">
+                  ${(d.nombre || 'P').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h4 class="text-sm font-extrabold text-ink leading-snug">${escapeHtml(d.nombre || 'Docente')}</h4>
+                  <p class="text-[11px] text-slate-400 truncate max-w-[160px]">${escapeHtml(d.email || '')}</p>
+                </div>
+              </div>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${tarifa > 0 ? 'bg-purple-50 text-purple-800 border border-purple-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}">
+                ${tarifa > 0 ? `$ ${tarifa.toLocaleString('es-CO')} / h` : 'Sin tarifa'}
+              </span>
+            </div>
+
+            <div class="space-y-2 py-3 border-y border-gray-100 text-xs">
+              <div class="flex items-center justify-between text-slate-600">
+                <span class="text-[11px] font-semibold text-slate-400">Cohorte:</span>
+                <span class="font-bold text-ink">${escapeHtml(d.cohorte || 'General')}</span>
+              </div>
+              <div class="flex items-center justify-between text-slate-600">
+                <span class="text-[11px] font-semibold text-slate-400">Cuenta Bancaria:</span>
+                <span class="font-bold text-ink">${tieneBanco ? `${escapeHtml(d.banco)} · ${escapeHtml(d.tipoCuenta || d.tipo_cuenta || 'Ahorros')}` : '<span class="text-amber-600 font-medium">Pendiente</span>'}</span>
+              </div>
+              <div class="flex items-center justify-between text-slate-600">
+                <span class="text-[11px] font-semibold text-slate-400">Total Liquidado:</span>
+                <span class="font-extrabold text-emerald-700">$ ${totalPagado.toLocaleString('es-CO')} COP</span>
+              </div>
+              <div class="flex items-center justify-between text-slate-600">
+                <span class="text-[11px] font-semibold text-slate-400">Historial:</span>
+                <span class="text-[11px] font-bold text-purple-700">${pagosDelDocente.length} liquidaciones</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 flex items-center gap-2">
+            <button type="button" onclick="abrirModalPagosDocente('${d.id}')" class="flex-1 px-3 py-2 rounded-xl text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 transition shadow-sm flex items-center justify-center gap-1.5 cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              <span>Ver Expediente & Liquidar</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function renderPanelPagos() {
+    const mount = document.getElementById('mount-pagos');
+    if (!mount) return;
+
+    if (!puedeGestionarPagosDocentes()) {
+      mount.innerHTML = `
+        <div class="admin-panel-card p-10 text-center">
+          <div class="w-12 h-12 rounded-full bg-red-50 text-red-600 mx-auto flex items-center justify-center mb-3">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </div>
+          <h3 class="text-sm font-bold text-ink">Módulo Confidencial</h3>
+          <p class="text-xs text-slate2 mt-1">Este módulo contiene información financiera reservada para Superadministradores y Coordinadores.</p>
+        </div>`;
+      return;
+    }
+
+    mount.innerHTML = `
+      <div class="flex items-center justify-center p-12">
+        <div class="w-8 h-8 border-3 border-morado border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    `;
+
+    const [usuarios, pagosDocentes, pagosEstudiantes] = await Promise.all([
+      Store.list('usuarios', { forceRefresh: true }),
+      apiFetch('pagos_docentes').catch(() => []),
+      apiFetch('pagos_estudiantes').catch(() => [])
+    ]);
+
+    const docentes = usuarios.filter(u => u.rol === 'Docente' || u.rol === 'docente');
+    const estudiantes = usuarios.filter(u => u.rol === 'Estudiante' || u.rol === 'estudiante');
+
+    window.__cachePagosEstudiantes = pagosEstudiantes || [];
+    window.__cacheDocentesPagos = { docentes, pagosDocentes: pagosDocentes || [] };
+
+    const totalDocentes = docentes.length;
+    const totalEstudiantes = estudiantes.length;
+
+    // Calcular KPIs
+    const totalLiquidadoDocentes = (pagosDocentes || []).reduce((acc, p) => acc + (parseFloat(p.totalPagado || p.total_pagado || 0)), 0);
+
+    // Meses únicos en pagos de estudiantes
+    const mesesSet = new Set((pagosEstudiantes || []).map(p => p.mes).filter(Boolean));
+    const hoyMes = new Date().toISOString().substring(0, 7);
+    mesesSet.add(hoyMes);
+    const mesesEstudiantes = Array.from(mesesSet).sort().reverse();
+
+    // KPIs contextuales para estudiantes según filtros activos (cohorte / mes)
+    const hayFiltroEstActivo = Boolean(pagosState.filtroCohorteEst || pagosState.filtroMesEst);
+    const pagosEstKPI = (pagosEstudiantes || []).filter(p => {
+      if (pagosState.filtroCohorteEst && (p.cohorte || '').toLowerCase() !== pagosState.filtroCohorteEst.toLowerCase()) return false;
+      if (pagosState.filtroMesEst && (p.mes || '').toLowerCase() !== pagosState.filtroMesEst.toLowerCase()) return false;
+      return true;
+    });
+
+    const totalRecaudadoEstudiantes = pagosEstKPI.reduce((acc, p) => acc + (parseFloat(p.monto || 0)), 0);
+    const cantComprobantesEstudiantes = pagosEstKPI.length;
+    const estudiantesConPagoIds = new Set(pagosEstKPI.map(p => p.estudiante_id || p.estudianteId));
+
+    // Calcular tarifa promedio docentes
+    const docentesConTarifa = docentes.filter(d => Number(d.tarifaHora || d.tarifa_hora || 0) > 0);
+    const tarifaPromedio = docentesConTarifa.length ? Math.round(docentesConTarifa.reduce((acc, d) => acc + Number(d.tarifaHora || d.tarifa_hora), 0) / docentesConTarifa.length) : 0;
+
+    // Cohortes únicas
+    const cohortesDocentes = [...new Set(docentes.map(d => d.cohorte).filter(Boolean))].sort();
+    const cohortesEstudiantes = [...new Set(estudiantes.map(e => e.cohorte || e.cohorteAnterior).filter(Boolean))].sort();
+
+    const tabActiva = pagosState.tab || 'estudiantes';
+
+    let html = `
+      <div class="mb-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+          <div>
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+              </span>
+              <h2 class="text-xl sm:text-2xl font-black text-ink">Gestión de Pagos y Finanzas</h2>
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800">Confidencial</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">Control integral de recaudos de estudiantes (matrículas/mensualidades) y liquidación de honorarios a profesores por horas.</p>
+          </div>
+
+          <!-- Selector de Pestañas Estudiantes vs Profesores -->
+          <div class="flex items-center p-1 bg-gray-100 rounded-2xl border border-gray-200/80 shrink-0 self-start md:self-auto">
+            <button type="button" onclick="cambiarTabPagos('estudiantes')" class="px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer ${tabActiva === 'estudiantes' ? 'bg-white text-purple-900 shadow-sm' : 'text-slate-600 hover:text-ink'}">
+              <span>Estudiantes</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-black ${tabActiva === 'estudiantes' ? 'bg-purple-100 text-purple-800' : 'bg-gray-200 text-slate-600'}">${(pagosEstudiantes || []).length}</span>
+            </button>
+            <button type="button" onclick="cambiarTabPagos('profesores')" class="px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer ${tabActiva === 'profesores' ? 'bg-white text-purple-900 shadow-sm' : 'text-slate-600 hover:text-ink'}">
+              <span>Profesores</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-black ${tabActiva === 'profesores' ? 'bg-purple-100 text-purple-800' : 'bg-gray-200 text-slate-600'}">${docentes.length}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    if (tabActiva === 'estudiantes') {
+      html += `
+        <!-- KPIs Estudiantes -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div class="admin-panel-card p-4 sm:p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Recaudado</p>
+              <p class="text-xl sm:text-2xl font-black text-ink mt-0.5">$ ${totalRecaudadoEstudiantes.toLocaleString('es-CO')} <span class="text-xs font-semibold text-slate-400">COP</span></p>
+              <p class="text-[11px] text-emerald-600 font-semibold mt-0.5">${hayFiltroEstActivo ? 'Recaudo según filtros activos' : 'Recaudos totales registrados'}</p>
+            </div>
+          </div>
+          <div class="admin-panel-card p-4 sm:p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-purple-50 text-morado flex items-center justify-center shrink-0">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Comprobantes Registrados</p>
+              <p class="text-xl sm:text-2xl font-black text-ink mt-0.5">${cantComprobantesEstudiantes}</p>
+              <p class="text-[11px] text-slate-500 font-medium mt-0.5">${hayFiltroEstActivo ? 'Comprobantes en el filtro seleccionado' : 'Con soporte documental adjunto'}</p>
+            </div>
+          </div>
+          <div class="admin-panel-card p-4 sm:p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            </div>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Estudiantes con Registro</p>
+              <p class="text-xl sm:text-2xl font-black text-ink mt-0.5">${estudiantesConPagoIds.size} <span class="text-xs font-semibold text-slate-400">/ ${totalEstudiantes}</span></p>
+              <p class="text-[11px] text-indigo-600 font-semibold mt-0.5">${hayFiltroEstActivo ? 'Alumnos con registro en este filtro' : 'Alumnos con pagos activos'}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filtros y Botón de Acción -->
+        <div class="admin-panel-card p-4 mb-6">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5 flex-1 flex-wrap">
+              <div class="relative flex-1 min-w-[200px]">
+                <input type="text" id="busquedaPagosEstudiante" value="${escapeHtml(pagosState.busquedaEst || '')}" oninput="onInputBusquedaPagosEst(this.value)" placeholder="Buscar por estudiante, concepto, referencia..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-xs text-ink placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              </div>
+
+              <!-- Filtro por Mes -->
+              <select id="filtroMesPagosEst" onchange="pagosState.filtroMesEst=this.value;renderPanelPagos();" class="rounded-xl border border-gray-200 py-2 px-3 text-xs text-ink font-semibold focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white">
+                <option value="">Todos los meses</option>
+                ${mesesEstudiantes.map(m => `<option value="${escapeHtml(m)}" ${pagosState.filtroMesEst === m ? 'selected' : ''}>${escapeHtml(formatearMesFiltro(m))}</option>`).join('')}
+              </select>
+
+              <!-- Filtro por Cohorte -->
+              <select id="filtroCohortePagosEst" onchange="pagosState.filtroCohorteEst=this.value;renderPanelPagos();" class="rounded-xl border border-gray-200 py-2 px-3 text-xs text-ink font-semibold focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white">
+                <option value="">Todas las cohortes</option>
+                ${cohortesEstudiantes.map(c => `<option value="${escapeHtml(c)}" ${pagosState.filtroCohorteEst === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+              </select>
+
+              ${(pagosState.filtroCohorteEst || pagosState.filtroMesEst || pagosState.busquedaEst) ? `
+              <button type="button" onclick="limpiarFiltrosPagosEst()" class="px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 border border-gray-200 transition cursor-pointer flex items-center gap-1 shadow-2xs" title="Limpiar filtros aplicados">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                <span>Limpiar</span>
+              </button>` : ''}
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap shrink-0">
+              <button type="button" onclick="abrirModalPagosPorCohorte()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:opacity-95 shadow-sm transition cursor-pointer">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                <span>+ Registrar por Cohorte</span>
+              </button>
+              <button type="button" onclick="abrirFormPagoEstudiante()" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-purple-800 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition cursor-pointer">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                <span>+ Pago Individual</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla de Pagos de Estudiantes -->
+        <div class="admin-panel-card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 border-b border-gray-100 text-slate-500 font-extrabold uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th class="py-3.5 px-4">Fecha Pago</th>
+                  <th class="py-3.5 px-4">Estudiante</th>
+                  <th class="py-3.5 px-4">Cohorte</th>
+                  <th class="py-3.5 px-4">Concepto / Mes</th>
+                  <th class="py-3.5 px-4">Monto</th>
+                  <th class="py-3.5 px-4">Medio & Ref</th>
+                  <th class="py-3.5 px-4">Comprobante</th>
+                  <th class="py-3.5 px-4 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tablaPagosEstudiantesCuerpo" class="divide-y divide-gray-100">
+                ${renderFilasPagosEstudiantes(pagosEstudiantes || [])}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } else {
+      html += `
+        <!-- KPIs Profesores -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div class="admin-panel-card p-4 sm:p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 font-bold">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 14v7"/></svg>
+            </div>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Docentes en Nómina</p>
+              <p class="text-xl sm:text-2xl font-black text-ink mt-0.5">${totalDocentes}</p>
+              <p class="text-[11px] text-slate-500 font-medium mt-0.5">${docentesConTarifa.length} con tarifa / hora asignada</p>
+            </div>
+          </div>
+          <div class="admin-panel-card p-4 sm:p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-purple-50 text-morado flex items-center justify-center shrink-0 font-bold">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Tarifa Promedio por Hora</p>
+              <p class="text-xl sm:text-2xl font-black text-ink mt-0.5">$ ${tarifaPromedio.toLocaleString('es-CO')} <span class="text-xs font-semibold text-slate-400">/ h</span></p>
+              <p class="text-[11px] text-purple-700 font-semibold mt-0.5">Honorarios promedio calculados</p>
+            </div>
+          </div>
+          <div class="admin-panel-card p-4 sm:p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 font-bold">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            </div>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Liquidado a Profesores</p>
+              <p class="text-xl sm:text-2xl font-black text-ink mt-0.5">$ ${totalLiquidadoDocentes.toLocaleString('es-CO')} <span class="text-xs font-semibold text-slate-400">COP</span></p>
+              <p class="text-[11px] text-emerald-600 font-semibold mt-0.5">${(pagosDocentes || []).length} pagos liquidados</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filtros Profesores -->
+        <div class="admin-panel-card p-4 mb-6">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5 flex-1 flex-wrap">
+              <div class="relative flex-1 min-w-[200px]">
+                <input type="text" id="busquedaPagosDocente" value="${escapeHtml(pagosState.busquedaDoc || '')}" oninput="onInputBusquedaPagosDoc(this.value)" placeholder="Buscar profesor por nombre, email..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-xs text-ink placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              </div>
+
+              <select id="filtroCohortePagosDoc" onchange="pagosState.filtroCohorteDoc=this.value;renderPanelPagos();" class="rounded-xl border border-gray-200 py-2 px-3 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white">
+                <option value="">Todas las cohortes</option>
+                ${cohortesDocentes.map(c => `<option value="${escapeHtml(c)}" ${pagosState.filtroCohorteDoc === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lista de Profesores -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="gridDocentesPagos">
+          ${renderTarjetasDocentesPagos(docentes, pagosDocentes || [])}
+        </div>
+      `;
+    }
+
+    mount.innerHTML = html;
+  }
+
+  window.puedeGestionarPagosDocentes = puedeGestionarPagosDocentes;
+  window.abrirModalPagosDocente = abrirModalPagosDocente;
+  window.cerrarModalPagosDocente = cerrarModalPagosDocente;
+  window.toggleEditarDatosBancarios = toggleEditarDatosBancarios;
+  window.guardarDatosBancariosDocente = guardarDatosBancariosDocente;
+  window.abrirFormNuevoPagoDocente = abrirFormNuevoPagoDocente;
+  window.cerrarFormNuevoPagoDocente = cerrarFormNuevoPagoDocente;
+  window.calcularTotalPagoDocente = calcularTotalPagoDocente;
+  window.manejarComprobantePagoDocente = manejarComprobantePagoDocente;
+  window.quitarComprobantePagoDocente = quitarComprobantePagoDocente;
+  window.guardarNuevoPagoDocente = guardarNuevoPagoDocente;
+  window.verComprobantePago = verComprobantePago;
+  window.verComprobantePagoDocente = verComprobantePagoDocente;
+  window.verComprobantePagoEstudiante = verComprobantePagoEstudiante;
+  window.descargarComprobanteDirecto = descargarComprobanteDirecto;
+  window.cerrarVisorComprobanteDocente = cerrarVisorComprobanteDocente;
+  window.descargarComprobanteActual = descargarComprobanteActual;
+  window.eliminarPagoDocente = eliminarPagoDocente;
+
+  window.abrirFormPagoEstudiante = abrirFormPagoEstudiante;
+  window.cerrarFormPagoEstudiante = cerrarFormPagoEstudiante;
+  window.onSeleccionarEstudianteParaPago = onSeleccionarEstudianteParaPago;
+  window.manejarComprobantePagoEstudiante = manejarComprobantePagoEstudiante;
+  window.quitarComprobantePagoEstudiante = quitarComprobantePagoEstudiante;
+  window.guardarNuevoPagoEstudiante = guardarNuevoPagoEstudiante;
+  window.eliminarPagoEstudiante = eliminarPagoEstudiante;
+  window.cambiarTabPagos = cambiarTabPagos;
+  window.onInputBusquedaPagosEst = onInputBusquedaPagosEst;
+  window.onInputBusquedaPagosDoc = onInputBusquedaPagosDoc;
+  window.renderPanelPagos = renderPanelPagos;
+  window.abrirModalPagosPorCohorte = abrirModalPagosPorCohorte;
+  window.cerrarModalPagosPorCohorte = cerrarModalPagosPorCohorte;
+  window.onCambioCohorteGenerarPagos = onCambioCohorteGenerarPagos;
+  window.generarPagosParaCohorte = generarPagosParaCohorte;
+
+  // =========================================================================
+  // MÓDULO: PROYECTOS FUNDACIÓN A+ & PROYECTOS DE ESTUDIANTES (PORTAFOLIO INVERSORES)
+  // =========================================================================
+
+  let proyectosFundacionState = {
+    busqueda: '',
+    categoria: '',
+    estado: '',
+    soloAplus: false,
+    vista: 'grid',
+    orden: 'impacto'
+  };
+
+  let proyectosEstudiantesState = {
+    busqueda: '',
+    cohorte: '',
+    categoria: ''
+  };
+
+  function puedeGestionarProyectosFundacion() {
+    return currentAdminRole === 'superadmin' || currentAdminRole === 'administracion' || (currentAdminUser && (currentAdminUser.rol === 'Superadmin' || currentAdminUser.rol === 'Coordinador' || currentAdminUser.rol === 'Administrador'));
+  }
+
+  function formatCOP(num) {
+    const n = Number(num || 0);
+    return '$ ' + n.toLocaleString('es-CO') + ' COP';
+  }
+
+  // ---------- PROYECTOS FUNDACIÓN (PORTAFOLIO INVERSORES) ----------
+  async function renderPanelProyectosFundacion() {
+    const mount = document.getElementById('mount-proyectos-fundacion');
+    if (!mount) return;
+
+    let proyectos = await Store.list('proyectos_fundacion');
+    if (!proyectos || proyectos.length === 0) {
+      proyectos = [];
+    }
+
+    const esAdmin = puedeGestionarProyectosFundacion();
+    if (!esAdmin) {
+      proyectos = proyectos.filter(p => p.visibleInversores !== false && p.visible_inversores !== 0 && p.visible_inversores !== '0');
+    }
+    window.__cacheProyectosFundacion = proyectos;
+
+    const total = proyectos.length;
+    const aplusCount = proyectos.filter(p => p.isAPlus || p.es_aplus || p.esAplus).length;
+    const aplusProjects = proyectos.filter(p => p.isAPlus || p.es_aplus || p.esAplus);
+    const avgRoi = aplusProjects.length
+      ? Math.round(aplusProjects.reduce((acc, p) => acc + Number(p.roi || p.sroi || 0), 0) / aplusProjects.length)
+      : 0;
+    const capitalTotal = proyectos.reduce((acc, p) => acc + Number(p.investment || p.inversion || 0), 0);
+    const categoriasUnicas = Array.from(new Set(proyectos.map(p => p.category || p.categoria).filter(Boolean))).sort();
+
+    mount.innerHTML = `
+      <div id="aplus-module-root" class="w-full">
+        <section class="aplus-module" aria-labelledby="aplus-title">
+          <header class="aplus-header">
+            <div class="flex items-center justify-between flex-wrap gap-4 mb-3">
+              <div>
+                <p class="aplus-header__eyebrow">Fundación A+ · Portafolio Social &amp; Territorial</p>
+                <h1 class="aplus-header__title" id="aplus-title">Proyectos e Iniciativas A+</h1>
+                <p class="aplus-header__subtitle">
+                  Explora las iniciativas de alto impacto territorial y los programas estratégicos <strong>A+</strong>: modelos de formación multiplicadora 10:1, conectividad e infraestructura con Retorno Social de la Inversión (SROI) certificado.
+                </p>
+              </div>
+              ${esAdmin ? `
+                <button type="button" onclick="abrirFormNuevoProyectoFundacion()" class="aplus-btn aplus-btn--primary cursor-pointer shrink-0" style="padding: 0.75rem 1.4rem; border-radius: 1rem; font-size: 0.875rem; font-weight: 700; border: none !important; color: #FFFFFF !important; background: linear-gradient(90deg, #8B5CF6 0%, #1FC8C0 100%) !important; box-shadow: 0 4px 16px rgba(139,92,246,0.35); display: inline-flex; align-items: center; gap: 0.5rem;">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                  <span>Registrar Proyecto A+</span>
+                </button>
+              ` : ''}
+            </div>
+
+            <!-- Métricas KPI Portafolio -->
+            <ul class="aplus-metrics" aria-label="Resumen del portafolio">
+              <li class="aplus-metric">
+                <span class="aplus-metric__icon">
+                  <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                </span>
+                <div class="aplus-metric__text">
+                  <span class="aplus-metric__label">Iniciativas en Cartera</span>
+                  <strong class="aplus-metric__value">${total}</strong>
+                </div>
+              </li>
+              <li class="aplus-metric aplus-metric--aplus">
+                <span class="aplus-metric__icon">
+                  <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+                </span>
+                <div class="aplus-metric__text">
+                  <span class="aplus-metric__label">Iniciativas A+ Activas</span>
+                  <strong class="aplus-metric__value">${aplusCount}</strong>
+                </div>
+              </li>
+              <li class="aplus-metric">
+                <span class="aplus-metric__icon">
+                  <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                </span>
+                <div class="aplus-metric__text">
+                  <span class="aplus-metric__label">SROI Promedio A+</span>
+                  <strong class="aplus-metric__value">${avgRoi ? `+${avgRoi}%` : '0%'}</strong>
+                </div>
+              </li>
+              <li class="aplus-metric">
+                <span class="aplus-metric__icon">
+                  <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </span>
+                <div class="aplus-metric__text">
+                  <span class="aplus-metric__label">Presupuesto Requerido</span>
+                  <strong class="aplus-metric__value">${capitalTotal ? formatCOP(capitalTotal).replace(' COP', '') : '$ 0'}</strong>
+                </div>
+              </li>
+            </ul>
+          </header>
+
+          <!-- Barra de Filtros y Búsqueda -->
+          <div class="aplus-filters" role="search" aria-label="Filtros de proyectos">
+            <div class="aplus-filters__row aplus-filters__row--primary">
+              <div class="aplus-search">
+                <span class="aplus-search__icon">
+                  <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                </span>
+                <input
+                  type="search"
+                  id="pf_input_buscar"
+                  class="aplus-search__input"
+                  placeholder="Buscar iniciativas por nombre, código o resumen..."
+                  value="${escapeHtml(proyectosFundacionState.busqueda)}"
+                  oninput="onInputBusquedaProyectosFundacion(this.value)"
+                />
+                <button type="button" class="aplus-search__clear" id="pf_btn_clear_search" aria-label="Limpiar búsqueda" onclick="limpiarBusquedaProyectosFundacion()" style="display: ${proyectosFundacionState.busqueda ? 'flex' : 'none'};">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </div>
+
+              <button type="button" class="aplus-switch cursor-pointer" role="switch" aria-checked="${proyectosFundacionState.soloAplus ? 'true' : 'false'}" onclick="onToggleAplusProyectosFundacion(!proyectosFundacionState.soloAplus)">
+                <span class="aplus-switch__track" aria-hidden="true"><span class="aplus-switch__thumb"></span></span>
+                <span class="aplus-switch__label">Solo Iniciativas A+</span>
+              </button>
+            </div>
+
+            <div class="aplus-filters__row aplus-filters__row--secondary">
+              <div class="aplus-field">
+                <label class="aplus-field__label" for="pf_select_cat">Categoría</label>
+                <select id="pf_select_cat" class="aplus-select" onchange="onCambioFiltroCatProyectosFundacion(this.value)">
+                  <option value="">Todas las categorías</option>
+                  ${categoriasUnicas.map(c => `<option value="${escapeHtml(c)}" ${proyectosFundacionState.categoria === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="aplus-field">
+                <label class="aplus-field__label" for="pf_select_est">Estado</label>
+                <select id="pf_select_est" class="aplus-select" onchange="onCambioFiltroEstadoProyectosFundacion(this.value)">
+                  <option value="">Todos los estados</option>
+                  <option value="En ejecución" ${proyectosFundacionState.estado === 'En ejecución' ? 'selected' : ''}>En ejecución</option>
+                  <option value="En evaluación" ${proyectosFundacionState.estado === 'En evaluación' ? 'selected' : ''}>En evaluación</option>
+                  <option value="Completado" ${proyectosFundacionState.estado === 'Completado' ? 'selected' : ''}>Completado</option>
+                </select>
+              </div>
+
+              <div class="aplus-field">
+                <label class="aplus-field__label" for="pf_select_orden">Ordenar por</label>
+                <select id="pf_select_orden" class="aplus-select" onchange="onCambioOrdenProyectosFundacion(this.value)">
+                  <option value="impacto" ${proyectosFundacionState.orden === 'impacto' ? 'selected' : ''}>Mayor Impacto Social</option>
+                  <option value="sroi" ${proyectosFundacionState.orden === 'sroi' ? 'selected' : ''}>Mayor Retorno (SROI)</option>
+                  <option value="inversion" ${proyectosFundacionState.orden === 'inversion' ? 'selected' : ''}>Mayor Presupuesto</option>
+                  <option value="alfa" ${proyectosFundacionState.orden === 'alfa' ? 'selected' : ''}>Alfabético (A-Z)</option>
+                </select>
+              </div>
+
+              <div class="aplus-filters__actions">
+                <div class="aplus-view-toggle" role="group" aria-label="Tipo de vista">
+                  <button type="button" data-view="grid" class="aplus-view-toggle__btn ${proyectosFundacionState.vista === 'grid' ? 'is-active' : ''}" onclick="cambiarVistaProyectosFundacion('grid')" aria-pressed="${proyectosFundacionState.vista === 'grid' ? 'true' : 'false'}" title="Cuadrícula">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                  </button>
+                  <button type="button" data-view="list" class="aplus-view-toggle__btn ${proyectosFundacionState.vista === 'list' ? 'is-active' : ''}" onclick="cambiarVistaProyectosFundacion('list')" aria-pressed="${proyectosFundacionState.vista === 'list' ? 'true' : 'false'}" title="Lista">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                  </button>
+                </div>
+                <button type="button" class="aplus-btn aplus-btn--ghost cursor-pointer" onclick="limpiarTodosFiltrosProyectosFundacion()">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                  <span>Limpiar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contenedor de Proyectos -->
+          <div id="pf_lista_contenedor" class="mt-6">
+            ${renderFilasProyectosFundacion(proyectos)}
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderFilasProyectosFundacion(proyectos) {
+    const todosProyectos = proyectos || [];
+    let filtrados = [...todosProyectos];
+
+    if (proyectosFundacionState.busqueda) {
+      const q = proyectosFundacionState.busqueda.toLowerCase();
+      filtrados = filtrados.filter(p =>
+        (p.name || p.nombre || '').toLowerCase().includes(q) ||
+        (p.id || '').toLowerCase().includes(q) ||
+        (p.summary || p.resumen || p.descripcion || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (proyectosFundacionState.categoria) {
+      filtrados = filtrados.filter(p => (p.category || p.categoria) === proyectosFundacionState.categoria);
+    }
+
+    if (proyectosFundacionState.estado) {
+      filtrados = filtrados.filter(p => (p.status || p.estado) === proyectosFundacionState.estado);
+    }
+
+    if (proyectosFundacionState.soloAplus) {
+      filtrados = filtrados.filter(p => p.isAPlus || p.es_aplus || p.esAplus);
+    }
+
+    if (proyectosFundacionState.orden === 'impacto') {
+      filtrados.sort((a, b) => Number(b.impactScore || b.indice_impacto || 0) - Number(a.impactScore || a.indice_impacto || 0));
+    } else if (proyectosFundacionState.orden === 'sroi') {
+      filtrados.sort((a, b) => Number(b.sroi || b.roi || 0) - Number(a.sroi || a.roi || 0));
+    } else if (proyectosFundacionState.orden === 'inversion') {
+      filtrados.sort((a, b) => Number(b.inversion_cop || b.investment || b.inversion || 0) - Number(a.inversion_cop || a.investment || a.inversion || 0));
+    } else if (proyectosFundacionState.orden === 'reciente') {
+      filtrados.sort((a, b) => new Date(b.createdAt || b.creado_en || 0) - new Date(a.createdAt || a.creado_en || 0));
+    } else if (proyectosFundacionState.orden === 'alfa') {
+      filtrados.sort((a, b) => (a.name || a.nombre || '').localeCompare(b.name || b.nombre || ''));
+    }
+
+    const esAdmin = puedeGestionarProyectosFundacion();
+
+    if (todosProyectos.length === 0) {
+      return `
+        <div class="bg-white rounded-3xl border border-gray-200/80 shadow-sm p-12 text-center my-6">
+          <div class="w-16 h-16 mx-auto rounded-3xl bg-purple-50 text-purple-700 flex items-center justify-center mb-4">
+            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          </div>
+          <h3 class="text-base font-bold text-ink">Aún no hay proyectos institucionales registrados</h3>
+          <p class="text-xs text-slate-500 mt-1.5 max-w-md mx-auto">
+            ${esAdmin ? 'Comienza a construir el portafolio social y territorial de la Fundación A+ haciendo clic en el botón superior.' : 'La administración de la Fundación A+ aún no ha publicado iniciativas en este portafolio.'}
+          </p>
+          ${esAdmin ? `
+            <button type="button" onclick="abrirFormNuevoProyectoFundacion()" class="mt-4 px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs transition cursor-pointer">
+              Registrar Primer Proyecto A+
+            </button>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    if (filtrados.length === 0) {
+      return `
+        <div class="bg-white rounded-3xl border border-gray-200/80 shadow-sm p-12 text-center my-6">
+          <div class="w-16 h-16 mx-auto rounded-3xl bg-gray-50 text-slate-400 flex items-center justify-center mb-4">
+            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <h3 class="text-base font-bold text-ink">No se encontraron iniciativas</h3>
+          <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">No hay proyectos que coincidan con los filtros seleccionados.</p>
+          <button type="button" onclick="limpiarTodosFiltrosProyectosFundacion()" class="mt-4 px-4 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold transition cursor-pointer">Restablecer filtros</button>
+        </div>
+      `;
+    }
+
+    const esGrid = proyectosFundacionState.vista === 'grid';
+
+    return `
+      <div class="flex items-center justify-between text-xs text-slate-500 mb-4 px-1">
+        <span>Mostrando <strong>${filtrados.length}</strong> iniciativa${filtrados.length === 1 ? '' : 's'}</span>
+      </div>
+      <div class="${esGrid ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6' : 'flex flex-col gap-4'}" data-view="${proyectosFundacionState.vista}">
+        ${filtrados.map(p => {
+          const id = p.id;
+          const nombre = escapeHtml(p.name || p.nombre || '');
+          const categoria = escapeHtml(p.category || p.categoria || 'General');
+          const estado = escapeHtml(p.status || p.estado || 'En evaluación');
+          const esAplus = Boolean(p.isAPlus || p.es_aplus || p.esAplus);
+          const resumen = escapeHtml(p.summary || p.resumen || '');
+          const inversion = Number(p.investment || p.inversion || 0);
+          const sroi = Number(p.roi || p.sroi || 0);
+          const retorno = Number(p.projectedReturn || p.retorno_proyectado || (inversion * (sroi / 100)));
+          const horizonte = Number(p.roiHorizonMonths || p.sroi_horizonte_meses || 12);
+          const impacto = Number(p.impactScore || p.indice_impacto || 80);
+
+          let estadoClase = 'bg-blue-50 text-blue-700 border-blue-200';
+          if (estado === 'En ejecución') estadoClase = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+          else if (estado === 'Completado') estadoClase = 'bg-purple-50 text-purple-700 border-purple-200';
+
+          return `
+            <article class="bg-white rounded-3xl border border-gray-200/80 hover:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between overflow-hidden p-5 sm:p-6 group">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-3">
+                  <span class="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">${escapeHtml(id)}</span>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">${categoria}</span>
+                    ${esAplus ? `
+                      <span class="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">A+ Alto Impacto</span>
+                    ` : ''}
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${estadoClase}">${estado}</span>
+                    ${esAdmin ? `
+                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${p.visibleInversores !== false && p.visible_inversores !== 0 && p.visible_inversores !== '0' ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-amber-50 text-amber-700 border-amber-200'}" title="${p.visibleInversores !== false && p.visible_inversores !== 0 && p.visible_inversores !== '0' ? 'Visible en portafolio de Aliados y Donantes' : 'Solo visible para Administradores'}">
+                        ${p.visibleInversores !== false && p.visible_inversores !== 0 && p.visible_inversores !== '0' ? 'Visible a Donantes' : 'Solo Administración'}
+                      </span>
+                    ` : ''}
+                  </div>
+                </div>
+
+                <h3 class="text-base font-extrabold text-ink leading-snug group-hover:text-purple-700 transition cursor-pointer" onclick="abrirDetalleProyectoFundacion('${id}')">
+                  ${nombre}
+                </h3>
+
+                <p class="text-xs text-slate-600 font-medium leading-relaxed mt-2.5 line-clamp-3">
+                  ${resumen}
+                </p>
+              </div>
+
+              <div class="mt-5 pt-4 border-t border-gray-100">
+                <!-- Indicadores de Retorno Social -->
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                  <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <p class="text-[10px] font-bold uppercase text-slate-400">Presupuesto</p>
+                    <p class="text-xs font-black text-ink mt-0.5">${formatCOP(inversion).replace(' COP', '')}</p>
+                  </div>
+                  <div class="p-2.5 rounded-xl bg-purple-50/60 border border-purple-100">
+                    <p class="text-[10px] font-bold uppercase text-purple-700">SROI Estimado</p>
+                    <p class="text-xs font-black text-purple-900 mt-0.5">+${sroi}% <span class="text-[10px] font-normal text-slate-400">(${horizonte}m)</span></p>
+                  </div>
+                </div>
+
+                <!-- Barra de Impacto Social -->
+                <div class="mb-4">
+                  <div class="flex items-center justify-between text-[11px] font-bold mb-1">
+                    <span class="text-slate-500">Índice Impacto Social</span>
+                    <span class="text-purple-700">${impacto} / 100</span>
+                  </div>
+                  <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                    <div class="bg-purple-600 h-1.5 rounded-full transition-all duration-500" style="width: ${impacto}%"></div>
+                  </div>
+                </div>
+
+                <!-- Botones de Acción -->
+                <div class="flex items-center justify-between gap-2 pt-2">
+                  <button type="button" onclick="abrirDetalleProyectoFundacion('${id}')" class="px-3.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-2xs">
+                    <span>Ver Ficha Completa</span>
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                  </button>
+
+                  ${esAdmin ? `
+                    <div class="flex items-center gap-1">
+                      <button type="button" onclick="editarProyectoFundacion('${id}')" class="p-1.5 rounded-lg text-slate-500 hover:text-purple-700 hover:bg-purple-50 transition cursor-pointer" title="Editar proyecto">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                      </button>
+                      <button type="button" onclick="eliminarProyectoFundacion('${id}')" class="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 transition cursor-pointer" title="Eliminar proyecto">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      </button>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            </article>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function onInputBusquedaProyectosFundacion(val) {
+    proyectosFundacionState.busqueda = val;
+    const btnClear = document.getElementById('pf_btn_clear_search');
+    if (btnClear) btnClear.style.display = val ? 'flex' : 'none';
+    const cont = document.getElementById('pf_lista_contenedor');
+    if (cont && window.__cacheProyectosFundacion) {
+      cont.innerHTML = renderFilasProyectosFundacion(window.__cacheProyectosFundacion);
+    }
+  }
+
+  function limpiarBusquedaProyectosFundacion() {
+    proyectosFundacionState.busqueda = '';
+    const inp = document.getElementById('pf_input_buscar');
+    if (inp) inp.value = '';
+    const btnClear = document.getElementById('pf_btn_clear_search');
+    if (btnClear) btnClear.style.display = 'none';
+    const cont = document.getElementById('pf_lista_contenedor');
+    if (cont && window.__cacheProyectosFundacion) {
+      cont.innerHTML = renderFilasProyectosFundacion(window.__cacheProyectosFundacion);
+    }
+  }
+
+  function onCambioFiltroCatProyectosFundacion(val) {
+    proyectosFundacionState.categoria = val;
+    const cont = document.getElementById('pf_lista_contenedor');
+    if (cont && window.__cacheProyectosFundacion) {
+      cont.innerHTML = renderFilasProyectosFundacion(window.__cacheProyectosFundacion);
+    }
+  }
+
+  function onCambioFiltroEstadoProyectosFundacion(val) {
+    proyectosFundacionState.estado = val;
+    const cont = document.getElementById('pf_lista_contenedor');
+    if (cont && window.__cacheProyectosFundacion) {
+      cont.innerHTML = renderFilasProyectosFundacion(window.__cacheProyectosFundacion);
+    }
+  }
+
+  function onToggleAplusProyectosFundacion(checked) {
+    proyectosFundacionState.soloAplus = checked;
+    const btnSwitch = document.querySelector('.aplus-switch[role="switch"]');
+    if (btnSwitch) {
+      btnSwitch.setAttribute('aria-checked', checked ? 'true' : 'false');
+      btnSwitch.setAttribute('onclick', `onToggleAplusProyectosFundacion(${!checked})`);
+    }
+    const cont = document.getElementById('pf_lista_contenedor');
+    if (cont && window.__cacheProyectosFundacion) {
+      cont.innerHTML = renderFilasProyectosFundacion(window.__cacheProyectosFundacion);
+    }
+  }
+
+  function onCambioOrdenProyectosFundacion(val) {
+    proyectosFundacionState.orden = val;
+    const cont = document.getElementById('pf_lista_contenedor');
+    if (cont && window.__cacheProyectosFundacion) {
+      cont.innerHTML = renderFilasProyectosFundacion(window.__cacheProyectosFundacion);
+    }
+  }
+
+  function cambiarVistaProyectosFundacion(vista) {
+    proyectosFundacionState.vista = vista;
+    const cont = document.getElementById('pf_lista_contenedor');
+    if (cont && window.__cacheProyectosFundacion) {
+      cont.innerHTML = renderFilasProyectosFundacion(window.__cacheProyectosFundacion);
+    }
+    document.querySelectorAll('.aplus-view-toggle__btn').forEach(btn => {
+      const match = (btn.dataset.view === vista) ||
+        (vista === 'grid' && btn.title.toLowerCase().includes('cuadrícula')) ||
+        (vista === 'list' && btn.title.toLowerCase().includes('lista'));
+      btn.classList.toggle('is-active', match);
+      btn.setAttribute('aria-pressed', match ? 'true' : 'false');
+    });
+  }
+
+  function limpiarTodosFiltrosProyectosFundacion() {
+    proyectosFundacionState.busqueda = '';
+    proyectosFundacionState.categoria = '';
+    proyectosFundacionState.estado = '';
+    proyectosFundacionState.soloAplus = false;
+    renderPanelProyectosFundacion();
+  }
+
+  // ---------- MODAL DETALLE PROYECTO FUNDACIÓN (BATMAN LIGHTBOX) ----------
+  async function abrirDetalleProyectoFundacion(id) {
+    let p = null;
+    if (window.__cacheProyectosFundacion && Array.isArray(window.__cacheProyectosFundacion)) {
+      p = window.__cacheProyectosFundacion.find(item => item.id === id);
+    }
+    if (!p) {
+      try {
+        p = await apiFetch('proyectos_fundacion?id=' + encodeURIComponent(id));
+      } catch (err) {
+        toast('No se pudo cargar la información del proyecto.', 'err');
+        return;
+      }
+    }
+    if (!p) {
+      toast('Proyecto no encontrado.', 'err');
+      return;
+    }
+
+    const modal = document.getElementById('modalDetalleProyectoFundacion');
+    if (!modal) return;
+
+    document.getElementById('dpf_codigo').textContent = p.id || 'APL';
+    document.getElementById('dpf_categoria_badge').textContent = p.category || p.categoria || 'General';
+    document.getElementById('dpf_nombre').textContent = p.name || p.nombre || 'Iniciativa A+';
+
+    const esAplus = Boolean(p.isAPlus || p.es_aplus || p.esAplus);
+    const badgeAplus = document.getElementById('dpf_aplus_badge');
+    if (badgeAplus) badgeAplus.style.display = esAplus ? 'inline-block' : 'none';
+
+    const estado = p.status || p.estado || 'En evaluación';
+    document.getElementById('dpf_estado_badge').textContent = estado;
+
+    // Métricas
+    const inversion = Number(p.investment || p.inversion || 0);
+    const sroi = Number(p.roi || p.sroi || 0);
+    const retorno = Number(p.projectedReturn || p.retorno_proyectado || (inversion * (sroi / 100)));
+    const horizonte = Number(p.roiHorizonMonths || p.sroi_horizonte_meses || 12);
+    const impacto = Number(p.impactScore || p.indice_impacto || 80);
+
+    document.getElementById('dpf_inversion').textContent = formatCOP(inversion);
+    document.getElementById('dpf_sroi').textContent = '+' + sroi + '%';
+    document.getElementById('dpf_horizonte').textContent = 'En horizonte de ' + horizonte + ' meses';
+    document.getElementById('dpf_retorno_proy').textContent = formatCOP(retorno);
+    document.getElementById('dpf_impacto_num').textContent = impacto;
+    document.getElementById('dpf_impacto_bar').style.width = impacto + '%';
+
+    // Resumen y párrafos de descripción
+    document.getElementById('dpf_resumen').textContent = p.summary || p.resumen || '';
+
+    const contDesc = document.getElementById('dpf_descripcion');
+    let descArray = p.description || p.descripcion || [];
+    if (typeof descArray === 'string') {
+      try { descArray = JSON.parse(descArray); } catch(e) { descArray = [descArray]; }
+    }
+    if (Array.isArray(descArray) && descArray.length) {
+      contDesc.innerHTML = descArray.map(parrafo => `<p>${escapeHtml(parrafo)}</p>`).join('');
+    } else {
+      contDesc.innerHTML = `<p>${escapeHtml(p.summary || p.resumen || '')}</p>`;
+    }
+
+    // Hitos de impacto
+    const contHitos = document.getElementById('dpf_hitos');
+    let hitos = p.highlights || p.hitos || [];
+    if (typeof hitos === 'string') {
+      try { hitos = JSON.parse(hitos); } catch(e) { hitos = [hitos]; }
+    }
+    if (Array.isArray(hitos) && hitos.length) {
+      contHitos.innerHTML = hitos.map(h => `<li>${escapeHtml(h)}</li>`).join('');
+    } else {
+      contHitos.innerHTML = `<li class="text-slate-400 italic">No se han registrado hitos para esta iniciativa.</li>`;
+    }
+
+    // Ficha técnica specs
+    const contSpecs = document.getElementById('dpf_specs');
+    let specs = p.specs || p.ficha_tecnica || p.fichaTecnica || [];
+    if (typeof specs === 'string') {
+      try { specs = JSON.parse(specs); } catch(e) { specs = []; }
+    }
+    if (Array.isArray(specs) && specs.length) {
+      contSpecs.innerHTML = specs.map(s => `
+        <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+          <span class="text-slate-500 font-semibold">${escapeHtml(s.label || '')}</span>
+          <span class="text-ink font-bold">${escapeHtml(s.value || '')}</span>
+        </div>
+      `).join('');
+    } else {
+      contSpecs.innerHTML = `<p class="text-slate-400 italic col-span-2">Ficha técnica en consolidación.</p>`;
+    }
+
+    // Desglose SROI
+    const contRoi = document.getElementById('dpf_roi_breakdown');
+    const wrapRoi = document.getElementById('dpf_roi_section');
+    let roiBreak = p.roiBreakdown || p.desglose_sroi || p.desgloseSroi || [];
+    if (typeof roiBreak === 'string') {
+      try { roiBreak = JSON.parse(roiBreak); } catch(e) { roiBreak = []; }
+    }
+    if (Array.isArray(roiBreak) && roiBreak.length) {
+      wrapRoi.classList.remove('hidden');
+      contRoi.innerHTML = roiBreak.map(rb => `
+        <div class="p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100">
+          <p class="text-[10px] font-bold text-emerald-800 uppercase">${escapeHtml(rb.label || '')}</p>
+          <p class="text-xs font-bold text-ink mt-0.5">${escapeHtml(rb.value || '')}</p>
+        </div>
+      `).join('');
+    } else {
+      wrapRoi.classList.add('hidden');
+    }
+
+    // Responsable y Territorio
+    const owner = p.owner || {};
+    const respNombre = owner.name || p.responsable_nombre || p.responsableNombre || 'Coordinación Fundación A+';
+    const respCargo = owner.role || p.responsable_cargo || p.responsableCargo || '';
+    const respEmail = owner.email || p.responsable_email || p.responsableEmail || 'contacto@fundacionamas.org.co';
+
+    document.getElementById('dpf_responsable').textContent = respNombre + (respCargo ? ' · ' + respCargo : '');
+    document.getElementById('dpf_email').textContent = respEmail;
+    document.getElementById('dpf_region').textContent = p.region || 'Quibdó, Chocó';
+
+    const fechaInicio = p.startDate || p.fecha_inicio || '';
+    const fechaObj = p.targetDate || p.fecha_objetivo || '';
+    let fechasTxt = '';
+    if (fechaInicio) fechasTxt += 'Inicio: ' + fechaInicio;
+    if (fechaObj) fechasTxt += (fechasTxt ? ' · ' : '') + 'Meta: ' + fechaObj;
+    document.getElementById('dpf_fechas').textContent = fechasTxt;
+
+    modal.classList.remove('hidden');
+  }
+
+  function cerrarDetalleProyectoFundacion() {
+    const modal = document.getElementById('modalDetalleProyectoFundacion');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  // ---------- FORMULARIO CRUD PROYECTOS FUNDACIÓN ----------
+  function abrirFormNuevoProyectoFundacion() {
+    document.getElementById('formProyectoFundacionTitulo').textContent = 'Registrar Proyecto de la Fundación';
+    document.getElementById('pf_id').value = '';
+    document.getElementById('pf_codigo').value = '';
+    document.getElementById('pf_nombre').value = '';
+    document.getElementById('pf_categoria').value = 'Educación & IA';
+    document.getElementById('pf_estado').value = 'En evaluación';
+    document.getElementById('pf_prioridad').value = 'Alta';
+    document.getElementById('pf_es_aplus').checked = true;
+    const chkVisNuevo = document.getElementById('pf_visible_inversores');
+    if (chkVisNuevo) chkVisNuevo.checked = true;
+    document.getElementById('pf_resumen').value = '';
+    document.getElementById('pf_descripcion').value = '';
+    document.getElementById('pf_inversion').value = '';
+    document.getElementById('pf_sroi').value = '';
+    document.getElementById('pf_retorno_proyectado').value = '';
+    document.getElementById('pf_indice_impacto').value = '85';
+    document.getElementById('pf_sroi_horizonte').value = '24';
+    document.getElementById('pf_payback').value = '6';
+    document.getElementById('pf_riesgo').value = 'Bajo';
+    document.getElementById('pf_fecha_inicio').value = '';
+    document.getElementById('pf_fecha_objetivo').value = '';
+    document.getElementById('pf_region').value = 'Quibdó, Chocó';
+    document.getElementById('pf_resp_nombre').value = '';
+    document.getElementById('pf_resp_cargo').value = '';
+    document.getElementById('pf_resp_email').value = '';
+    document.getElementById('pf_hitos').value = '';
+    document.getElementById('pf_specs').value = '';
+
+    document.getElementById('modalFormProyectoFundacion').classList.remove('hidden');
+  }
+
+  async function editarProyectoFundacion(id) {
+    let p = (window.__cacheProyectosFundacion || []).find(item => item.id === id);
+    if (!p) {
+      p = await apiFetch('proyectos_fundacion?id=' + encodeURIComponent(id));
+    }
+    if (!p) {
+      toast('Proyecto no encontrado', 'err');
+      return;
+    }
+
+    document.getElementById('formProyectoFundacionTitulo').textContent = 'Editar Proyecto de la Fundación (' + (p.id || '') + ')';
+    document.getElementById('pf_id').value = p.id || '';
+    document.getElementById('pf_codigo').value = p.id || '';
+    document.getElementById('pf_nombre').value = p.name || p.nombre || '';
+    document.getElementById('pf_categoria').value = p.category || p.categoria || 'Educación & IA';
+    document.getElementById('pf_estado').value = p.status || p.estado || 'En evaluación';
+    document.getElementById('pf_prioridad').value = p.priority || p.prioridad || 'Alta';
+    document.getElementById('pf_es_aplus').checked = Boolean(p.isAPlus || p.es_aplus || p.esAplus);
+    const chkVisEdit = document.getElementById('pf_visible_inversores');
+    if (chkVisEdit) chkVisEdit.checked = (p.visibleInversores !== false && p.visible_inversores !== 0 && p.visible_inversores !== '0');
+    document.getElementById('pf_resumen').value = p.summary || p.resumen || '';
+
+    let desc = p.description || p.descripcion || [];
+    if (Array.isArray(desc)) desc = desc.join('\n');
+    document.getElementById('pf_descripcion').value = desc || '';
+
+    document.getElementById('pf_inversion').value = p.investment || p.inversion || '';
+    document.getElementById('pf_sroi').value = p.roi || p.sroi || '';
+    document.getElementById('pf_retorno_proyectado').value = p.projectedReturn || p.retorno_proyectado || '';
+    document.getElementById('pf_indice_impacto').value = p.impactScore || p.indice_impacto || '85';
+    document.getElementById('pf_sroi_horizonte').value = p.roiHorizonMonths || p.sroi_horizonte_meses || '24';
+    document.getElementById('pf_payback').value = p.paybackMonths || p.payback_meses || '6';
+    document.getElementById('pf_riesgo').value = p.risk || p.riesgo || 'Bajo';
+    document.getElementById('pf_fecha_inicio').value = p.startDate || p.fecha_inicio || '';
+    document.getElementById('pf_fecha_objetivo').value = p.targetDate || p.fecha_objetivo || '';
+    document.getElementById('pf_region').value = p.region || 'Quibdó, Chocó';
+
+    const owner = p.owner || {};
+    document.getElementById('pf_resp_nombre').value = owner.name || p.responsable_nombre || p.responsableNombre || '';
+    document.getElementById('pf_resp_cargo').value = owner.role || p.responsable_cargo || p.responsableCargo || '';
+    document.getElementById('pf_resp_email').value = owner.email || p.responsable_email || p.responsableEmail || '';
+
+    let hitos = p.highlights || p.hitos || [];
+    if (Array.isArray(hitos)) hitos = hitos.join('\n');
+    document.getElementById('pf_hitos').value = hitos || '';
+
+    let specs = p.specs || p.ficha_tecnica || p.fichaTecnica || [];
+    if (Array.isArray(specs)) specs = specs.map(s => `${s.label || ''}: ${s.value || ''}`).join('\n');
+    document.getElementById('pf_specs').value = specs || '';
+
+    document.getElementById('modalFormProyectoFundacion').classList.remove('hidden');
+  }
+
+  function cerrarFormProyectoFundacion() {
+    const modal = document.getElementById('modalFormProyectoFundacion');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  async function guardarProyectoFundacion() {
+    const nombre = document.getElementById('pf_nombre').value.trim();
+    if (!nombre) {
+      toast('Por favor ingresa el nombre del proyecto.', 'err');
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarProyectoFundacion');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Guardando...';
+    }
+
+    try {
+      const id = document.getElementById('pf_id').value.trim() || document.getElementById('pf_codigo').value.trim();
+      const rawDesc = document.getElementById('pf_descripcion').value;
+      const descArray = rawDesc.split('\n').map(s => s.trim()).filter(Boolean);
+
+      const rawHitos = document.getElementById('pf_hitos').value;
+      const hitosArray = rawHitos.split('\n').map(s => s.trim()).filter(Boolean);
+
+      const rawSpecs = document.getElementById('pf_specs').value;
+      const specsArray = rawSpecs.split('\n').map(s => s.trim()).filter(Boolean).map(line => {
+        const parts = line.split(':');
+        return {
+          label: (parts[0] || '').trim(),
+          value: (parts.slice(1).join(':') || '').trim()
+        };
+      });
+
+      const inversion = parseFloat(document.getElementById('pf_inversion').value) || 0;
+      const sroi = parseFloat(document.getElementById('pf_sroi').value) || 0;
+      let retorno = parseFloat(document.getElementById('pf_retorno_proyectado').value);
+      if (isNaN(retorno) || retorno <= 0) {
+        retorno = inversion * Math.max(1, sroi / 100);
+      }
+
+      const chkVis = document.getElementById('pf_visible_inversores');
+      const visibleInversores = chkVis ? chkVis.checked : true;
+
+      const nuevoProyecto = {
+        id: id || undefined,
+        name: nombre,
+        nombre: nombre,
+        visibleInversores: visibleInversores,
+        visible_inversores: visibleInversores ? 1 : 0,
+        category: document.getElementById('pf_categoria').value,
+        categoria: document.getElementById('pf_categoria').value,
+        status: document.getElementById('pf_estado').value,
+        estado: document.getElementById('pf_estado').value,
+        priority: document.getElementById('pf_prioridad').value,
+        isAPlus: document.getElementById('pf_es_aplus').checked,
+        es_aplus: document.getElementById('pf_es_aplus').checked,
+        summary: document.getElementById('pf_resumen').value.trim(),
+        resumen: document.getElementById('pf_resumen').value.trim(),
+        description: descArray,
+        descripcion: descArray,
+        investment: inversion,
+        inversion: inversion,
+        roi: sroi,
+        sroi: sroi,
+        projectedReturn: retorno,
+        retorno_proyectado: retorno,
+        impactScore: parseInt(document.getElementById('pf_indice_impacto').value) || 85,
+        indice_impacto: parseInt(document.getElementById('pf_indice_impacto').value) || 85,
+        roiHorizonMonths: parseInt(document.getElementById('pf_sroi_horizonte').value) || 24,
+        sroi_horizonte_meses: parseInt(document.getElementById('pf_sroi_horizonte').value) || 24,
+        paybackMonths: parseInt(document.getElementById('pf_payback').value) || 6,
+        payback_meses: parseInt(document.getElementById('pf_payback').value) || 6,
+        risk: document.getElementById('pf_riesgo').value,
+        startDate: document.getElementById('pf_fecha_inicio').value || null,
+        targetDate: document.getElementById('pf_fecha_objetivo').value || null,
+        region: document.getElementById('pf_region').value.trim() || 'Quibdó, Chocó',
+        owner: {
+          name: document.getElementById('pf_resp_nombre').value.trim(),
+          role: document.getElementById('pf_resp_cargo').value.trim(),
+          email: document.getElementById('pf_resp_email').value.trim()
+        },
+        highlights: hitosArray,
+        specs: specsArray
+      };
+
+      await Store.save('proyectos_fundacion', nuevoProyecto);
+      Store.invalidate('proyectos_fundacion');
+
+      cerrarFormProyectoFundacion();
+      toast('Proyecto guardado con éxito.', 'ok');
+      await renderPanelProyectosFundacion();
+    } catch (err) {
+      toast('Error al guardar el proyecto: ' + err.message, 'err');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Guardar Proyecto';
+      }
+    }
+  }
+
+  async function eliminarProyectoFundacion(id) {
+    if (!confirm('¿Estás seguro de eliminar este proyecto del portafolio institucional?')) return;
+    try {
+      const resp = await apiFetch('proyectos_fundacion?id=' + encodeURIComponent(id), { method: 'DELETE' });
+      if (resp && resp.error) throw new Error(resp.error);
+      Store.invalidate('proyectos_fundacion');
+      toast('Proyecto eliminado del portafolio.', 'ok');
+      await renderPanelProyectosFundacion();
+    } catch (err) {
+      toast('Error al eliminar: ' + err.message, 'err');
+    }
+  }
+
+  // ---------- PROYECTOS DE ESTUDIANTES (APARTADO PARA INVERSORES Y ADMIN) ----------
+  async function renderPanelProyectosEstudiantes() {
+    const mount = document.getElementById('mount-proyectos-estudiantes');
+    if (!mount) return;
+
+    let proyectos = await Store.list('proyectos_estudiantes');
+    if (!proyectos || proyectos.length === 0) {
+      proyectos = [];
+    }
+
+    const permitidas = cohortesPermitidasParaUsuario(currentAdminUser);
+    if (permitidas && Array.isArray(permitidas) && permitidas.length > 0) {
+      proyectos = proyectos.filter(p => permitidas.includes(p.cohorte || p.cohort || ''));
+      if (proyectosEstudiantesState.cohorte && !permitidas.includes(proyectosEstudiantesState.cohorte)) {
+        proyectosEstudiantesState.cohorte = '';
+      }
+    }
+
+    window.__cacheProyectosEstudiantes = proyectos;
+
+    const total = proyectos.length;
+    const autoresUnicos = new Set(proyectos.map(p => p.estudiante_nombre || p.estudianteNombre).filter(Boolean)).size;
+    const cohortesUnicas = permitidas && Array.isArray(permitidas) && permitidas.length > 0
+      ? permitidas
+      : Array.from(new Set(proyectos.map(p => p.cohorte).filter(Boolean))).sort();
+    const categoriasUnicas = Array.from(new Set(proyectos.map(p => p.categoria || p.category).filter(Boolean))).sort();
+
+    const esAdmin = puedeGestionarProyectosFundacion();
+
+    mount.innerHTML = `
+      <div class="space-y-6">
+        <!-- Header -->
+        <div class="admin-panel-card p-6 sm:p-8 bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 rounded-3xl text-white shadow-md relative overflow-hidden">
+          <div class="relative z-10 max-w-3xl">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-amber-300 text-xs font-bold uppercase tracking-wider mb-3 border border-white/10 backdrop-blur-md">
+              Talento Tecnológico Pacífico · Fundación A+
+            </span>
+            <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Proyectos de Estudiantes</h1>
+            <p class="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed">
+              Explora las soluciones de software, prototipos de Inteligencia Artificial y aplicaciones prácticas desarrolladas por los estudiantes del TrAIning de 100 a 1000+.
+            </p>
+          </div>
+        </div>
+
+        <!-- KPIs Proyectos Estudiantiles -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="admin-panel-card p-4 sm:p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+            </div>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Proyectos Desarrollados</p>
+              <p class="text-xl sm:text-2xl font-black text-ink mt-0.5">${total}</p>
+              <p class="text-[11px] text-slate-500 font-medium mt-0.5">Soluciones presentadas</p>
+            </div>
+          </div>
+          <div class="admin-panel-card p-4 sm:p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            </div>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Estudiantes Creadores</p>
+              <p class="text-xl sm:text-2xl font-black text-ink mt-0.5">${autoresUnicos}</p>
+              <p class="text-[11px] text-amber-700 font-semibold mt-0.5">Jóvenes programadores</p>
+            </div>
+          </div>
+          <div class="admin-panel-card p-4 sm:p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Categorías de Impacto</p>
+              <p class="text-xl sm:text-2xl font-black text-ink mt-0.5">${categoriasUnicas.length || 1}</p>
+              <p class="text-[11px] text-emerald-700 font-semibold mt-0.5">Áreas de especialidad</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="admin-panel-card p-4 sm:p-5">
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 text-xs">
+            <div class="sm:col-span-6">
+              <label class="block font-bold text-slate-700 mb-1">Buscar proyecto o tecnología</label>
+              <div class="relative">
+                <input
+                  type="text"
+                  class="w-full rounded-xl border border-gray-300 p-2.5 pl-9 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none"
+                  placeholder="Buscar por título, tecnología, estudiante..."
+                  value="${escapeHtml(proyectosEstudiantesState.busqueda)}"
+                  oninput="onInputBusquedaProyectosEstudiantes(this.value)"
+                />
+                <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              </div>
+            </div>
+            <div class="sm:col-span-3">
+              <label class="block font-bold text-slate-700 mb-1">Filtrar por Cohorte</label>
+              <select class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" onchange="onCambioCohorteProyectosEstudiantes(this.value)">
+                <option value="">${permitidas && permitidas.length > 0 ? 'Tus Cohortes Asignadas' : 'Todas las Cohortes'}</option>
+                ${cohortesUnicas.map(c => `<option value="${escapeHtml(c)}" ${proyectosEstudiantesState.cohorte === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="sm:col-span-3">
+              <label class="block font-bold text-slate-700 mb-1">Filtrar por Categoría</label>
+              <select class="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none" onchange="onCambioCategoriaProyectosEstudiantes(this.value)">
+                <option value="">Todas las Categorías</option>
+                ${categoriasUnicas.map(c => `<option value="${escapeHtml(c)}" ${proyectosEstudiantesState.categoria === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lista / Grid de Proyectos Estudiantiles -->
+        <div id="pe_lista_contenedor">
+          ${renderFilasProyectosEstudiantes(proyectos)}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderFilasProyectosEstudiantes(proyectos) {
+    let filtrados = proyectos || [];
+
+    if (proyectosEstudiantesState.busqueda) {
+      const q = proyectosEstudiantesState.busqueda.toLowerCase();
+      filtrados = filtrados.filter(p =>
+        (p.titulo || p.name || '').toLowerCase().includes(q) ||
+        (p.descripcion || p.description || '').toLowerCase().includes(q) ||
+        (p.tecnologias || '').toLowerCase().includes(q) ||
+        (p.estudiante_nombre || p.estudianteNombre || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (proyectosEstudiantesState.cohorte) {
+      filtrados = filtrados.filter(p => p.cohorte === proyectosEstudiantesState.cohorte);
+    }
+
+    if (proyectosEstudiantesState.categoria) {
+      filtrados = filtrados.filter(p => (p.categoria || p.category) === proyectosEstudiantesState.categoria);
+    }
+
+    if (filtrados.length === 0) {
+      return `
+        <div class="admin-panel-card p-12 text-center bg-white rounded-3xl border border-gray-100 shadow-sm">
+          <div class="w-12 h-12 mx-auto rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center mb-3">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+          </div>
+          <h3 class="text-sm font-bold text-ink">No hay proyectos de estudiantes registrados</h3>
+          <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Aún no se han publicado proyectos que coincidan con estos filtros. Los estudiantes pueden subir sus soluciones desde su portal.</p>
+        </div>
+      `;
+    }
+
+    const esAdmin = puedeGestionarProyectosFundacion();
+
+    return `
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        ${filtrados.map(p => {
+          const id = p.id;
+          const titulo = escapeHtml(p.titulo || p.name || 'Proyecto Estudiantil');
+          const cohorte = escapeHtml(p.cohorte || 'General');
+          const categoria = escapeHtml(p.categoria || p.category || 'Tecnología');
+          const descripcion = escapeHtml(p.descripcion || p.description || '');
+          const autor = escapeHtml(p.estudiante_nombre || p.estudianteNombre || 'Estudiante TrAIning');
+          const tecnologias = (p.tecnologias || '').split(',').map(t => t.trim()).filter(Boolean);
+          const demoUrl = p.url_demo || p.urlDemo || '';
+          const repoUrl = p.url_repositorio || p.urlRepositorio || '';
+          const imagenUrl = p.imagen_url || p.imagenUrl || '';
+
+          return `
+            <article class="admin-panel-card bg-white rounded-3xl border border-gray-200/80 hover:border-amber-400 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between overflow-hidden group">
+              <div>
+                <!-- Imagen o Banner -->
+                ${imagenUrl ? `
+                  <div class="h-44 w-full bg-slate-100 overflow-hidden cursor-pointer" onclick="abrirDetalleProyectoEstudiante('${id}')">
+                    <img src="${escapeHtml(imagenUrl)}" alt="${titulo}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  </div>
+                ` : `
+                  <div class="h-32 w-full bg-gradient-to-br from-amber-50 via-purple-50 to-indigo-50 border-b border-gray-100 flex items-center justify-center cursor-pointer" onclick="abrirDetalleProyectoEstudiante('${id}')">
+                    <div class="flex items-center gap-2 text-slate-400 font-mono text-xs font-bold">
+                      <svg class="w-8 h-8 text-amber-500/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                    </div>
+                  </div>
+                `}
+
+                <div class="p-5">
+                  <div class="flex items-center gap-1.5 flex-wrap mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${cohorte}</span>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">${categoria}</span>
+                  </div>
+
+                  <h3 class="text-base font-extrabold text-ink leading-snug group-hover:text-amber-800 transition cursor-pointer" onclick="abrirDetalleProyectoEstudiante('${id}')">
+                    ${titulo}
+                  </h3>
+
+                  <p class="text-[11px] text-slate-400 font-semibold mt-1">Por: <span class="text-ink">${autor}</span></p>
+
+                  <p class="text-xs text-slate-600 font-medium leading-relaxed mt-2.5 line-clamp-3">
+                    ${descripcion}
+                  </p>
+
+                  <!-- Tecnologías Chips -->
+                  ${tecnologias.length ? `
+                    <div class="flex flex-wrap gap-1 mt-3">
+                      ${tecnologias.slice(0, 4).map(t => `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-50 text-slate-600 border border-slate-200">${escapeHtml(t)}</span>`).join('')}
+                      ${tecnologias.length > 4 ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-slate-400">+${tecnologias.length - 4}</span>` : ''}
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+
+              <!-- Footer Tarjeta con Botones -->
+              <div class="p-5 pt-0">
+                <div class="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                  <button type="button" onclick="abrirDetalleProyectoEstudiante('${id}')" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer">
+                    Ver Detalles
+                  </button>
+
+                  <div class="flex items-center gap-1.5">
+                    ${demoUrl ? `
+                      <a href="${escapeHtml(demoUrl)}" target="_blank" rel="noopener" class="p-1.5 rounded-lg text-purple-700 hover:bg-purple-50 transition" title="Ver Demo en Vivo">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                      </a>
+                    ` : ''}
+                    ${repoUrl ? `
+                      <a href="${escapeHtml(repoUrl)}" target="_blank" rel="noopener" class="p-1.5 rounded-lg text-slate-700 hover:bg-slate-100 transition" title="Ver Repositorio GitHub">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+                      </a>
+                    ` : ''}
+                    ${esAdmin ? `
+                      <button type="button" onclick="eliminarProyectoEstudiante('${id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 transition cursor-pointer" title="Eliminar proyecto">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      </button>
+                    ` : ''}
+                  </div>
+                </div>
+              </div>
+            </article>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function onInputBusquedaProyectosEstudiantes(val) {
+    proyectosEstudiantesState.busqueda = val;
+    const cont = document.getElementById('pe_lista_contenedor');
+    if (cont && window.__cacheProyectosEstudiantes) {
+      cont.innerHTML = renderFilasProyectosEstudiantes(window.__cacheProyectosEstudiantes);
+    }
+  }
+
+  function onCambioCohorteProyectosEstudiantes(val) {
+    proyectosEstudiantesState.cohorte = val;
+    const cont = document.getElementById('pe_lista_contenedor');
+    if (cont && window.__cacheProyectosEstudiantes) {
+      cont.innerHTML = renderFilasProyectosEstudiantes(window.__cacheProyectosEstudiantes);
+    }
+  }
+
+  function onCambioCategoriaProyectosEstudiantes(val) {
+    proyectosEstudiantesState.categoria = val;
+    const cont = document.getElementById('pe_lista_contenedor');
+    if (cont && window.__cacheProyectosEstudiantes) {
+      cont.innerHTML = renderFilasProyectosEstudiantes(window.__cacheProyectosEstudiantes);
+    }
+  }
+
+  async function abrirDetalleProyectoEstudiante(id) {
+    let p = (window.__cacheProyectosEstudiantes || []).find(item => item.id === id);
+    if (!p) {
+      try {
+        p = await apiFetch('proyectos_estudiantes?id=' + encodeURIComponent(id));
+      } catch (e) {
+        toast('No se pudo cargar el proyecto', 'err');
+        return;
+      }
+    }
+    if (!p) return;
+
+    document.getElementById('dpe_titulo').textContent = p.titulo || p.name || 'Proyecto';
+    document.getElementById('dpe_cohorte').textContent = p.cohorte || 'General';
+    document.getElementById('dpe_categoria').textContent = p.categoria || p.category || 'Tecnología';
+    document.getElementById('dpe_autor').textContent = 'Creado por: ' + (p.estudiante_nombre || p.estudianteNombre || 'Estudiante TrAIning');
+    document.getElementById('dpe_descripcion').textContent = p.descripcion || p.description || '';
+
+    // Imagen
+    const imgCont = document.getElementById('dpe_imagen_cont');
+    const imgElem = document.getElementById('dpe_imagen');
+    const imgUrl = p.imagen_url || p.imagenUrl || '';
+    if (imgUrl) {
+      imgElem.src = imgUrl;
+      imgCont.classList.remove('hidden');
+    } else {
+      imgCont.classList.add('hidden');
+    }
+
+    // Tecnologías
+    const contTec = document.getElementById('dpe_tecnologias');
+    const tecs = (p.tecnologias || '').split(',').map(t => t.trim()).filter(Boolean);
+    if (tecs.length) {
+      contTec.innerHTML = tecs.map(t => `<span class="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 text-xs font-bold">${escapeHtml(t)}</span>`).join('');
+    } else {
+      contTec.innerHTML = `<span class="text-slate-400 italic">No especificadas</span>`;
+    }
+
+    // Integrantes
+    const wrapInt = document.getElementById('dpe_integrantes_wrap');
+    const txtInt = document.getElementById('dpe_integrantes');
+    if (p.integrantes && p.integrantes.trim()) {
+      txtInt.textContent = p.integrantes;
+      wrapInt.classList.remove('hidden');
+    } else {
+      wrapInt.classList.add('hidden');
+    }
+
+    // Links Demo / Repo
+    const linkDemo = document.getElementById('dpe_link_demo');
+    const linkRepo = document.getElementById('dpe_link_repo');
+    const demoUrl = p.url_demo || p.urlDemo || '';
+    const repoUrl = p.url_repositorio || p.urlRepositorio || '';
+
+    if (demoUrl) {
+      linkDemo.href = demoUrl;
+      linkDemo.classList.remove('hidden');
+    } else {
+      linkDemo.classList.add('hidden');
+    }
+
+    if (repoUrl) {
+      linkRepo.href = repoUrl;
+      linkRepo.classList.remove('hidden');
+    } else {
+      linkRepo.classList.add('hidden');
+    }
+
+    document.getElementById('modalDetalleProyectoEstudiante').classList.remove('hidden');
+  }
+
+  function cerrarDetalleProyectoEstudiante() {
+    const modal = document.getElementById('modalDetalleProyectoEstudiante');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  // ---------- PORTAL ESTUDIANTE: MIS PROYECTOS ----------
+  async function renderMisProyectosEstudiante() {
+    const mount = document.getElementById('mount-s-misProyectos');
+    if (!mount) return;
+
+    if (!currentEstudiante && typeof localStorage !== 'undefined') {
+      const emailGuardado = localStorage.getItem('aplus_estudiante_email');
+      if (emailGuardado) {
+        try {
+          const u = (await Store.list('usuarios')).find(x => x.email === emailGuardado || x.nombre === emailGuardado);
+          if (u) currentEstudiante = u;
+        } catch (e) {}
+      }
+    }
+
+    const estId = currentEstudiante ? currentEstudiante.id : null;
+    const estEmail = currentEstudiante ? currentEstudiante.email : null;
+
+    let todos = [];
+    try {
+      todos = await Store.list('proyectos_estudiantes');
+      if (!todos) todos = [];
+    } catch (err) {
+      console.warn('[renderMisProyectosEstudiante] Error al leer proyectos_estudiantes:', err);
+      todos = [];
+    }
+    window.__cacheProyectosEstudiantes = todos;
+
+    const misProyectos = (estId || estEmail)
+      ? todos.filter(p =>
+          (estId && (p.estudiante_id === estId || p.estudianteId === estId)) ||
+          (estEmail && (p.estudiante_email === estEmail || p.estudianteEmail === estEmail))
+        )
+      : todos;
+
+    mount.innerHTML = `
+      <div class="space-y-6">
+        <!-- Banner Header -->
+        <div class="p-6 sm:p-8 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 rounded-3xl text-white shadow-md flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold uppercase tracking-wider mb-2 backdrop-blur-md">
+              Portafolio de Desarrollo &amp; Empleabilidad · ${escapeHtml((currentEstudiante && currentEstudiante.cohorte) || 'TrAIning')}
+            </span>
+            <h2 class="text-2xl sm:text-3xl font-black tracking-tight">Mis Proyectos de Software e IA</h2>
+            <p class="text-xs sm:text-sm text-white/80 mt-1 max-w-xl">
+              Publica tus desarrollos para que inversores, reclutadores y aliados estratégicos de la Fundación A+ puedan conocer tus competencias y soluciones.
+            </p>
+          </div>
+          <button type="button" onclick="abrirFormNuevoProyectoEstudiante()" class="px-5 py-3 rounded-2xl bg-white hover:bg-slate-50 text-amber-900 font-extrabold text-xs shadow-md transition flex items-center gap-2 cursor-pointer shrink-0">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            <span>Subir Nuevo Proyecto</span>
+          </button>
+        </div>
+
+        <!-- Lista de Proyectos del Estudiante -->
+        ${misProyectos.length === 0 ? `
+          <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-12 text-center">
+            <div class="w-14 h-14 mx-auto rounded-3xl bg-amber-50 text-amber-700 flex items-center justify-center mb-3">
+              <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+            </div>
+            <h3 class="text-base font-bold text-ink">Aún no has publicado ningún proyecto</h3>
+            <p class="text-xs text-slate-500 mt-1.5 max-w-md mx-auto">
+              Sube el código de tus proyectos de clase, prototipos con Gemini AI, páginas web o soluciones comunitarias con el botón superior.
+            </p>
+            <button type="button" onclick="abrirFormNuevoProyectoEstudiante()" class="mt-4 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition cursor-pointer">
+              Comenzar a subir proyecto
+            </button>
+          </div>
+        ` : `
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            ${misProyectos.map(p => {
+              const id = p.id;
+              const titulo = escapeHtml(p.titulo || p.name || 'Proyecto');
+              const categoria = escapeHtml(p.categoria || p.category || 'General');
+              const descripcion = escapeHtml(p.descripcion || p.description || '');
+              const tecnologias = (p.tecnologias || '').split(',').map(t => t.trim()).filter(Boolean);
+              const demoUrl = p.url_demo || p.urlDemo || '';
+              const repoUrl = p.url_repositorio || p.urlRepositorio || '';
+              const imagenUrl = p.imagen_url || p.imagenUrl || '';
+
+              return `
+                <div class="bg-white rounded-3xl border border-gray-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between">
+                  <div>
+                    ${imagenUrl ? `
+                      <div class="h-40 w-full rounded-2xl overflow-hidden mb-3 border border-gray-100 bg-slate-50">
+                        <img src="${escapeHtml(imagenUrl)}" alt="${titulo}" class="w-full h-full object-cover" />
+                      </div>
+                    ` : ''}
+
+                    <div class="flex items-center gap-1.5 mb-2">
+                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">${escapeHtml(p.cohorte || (currentEstudiante && currentEstudiante.cohorte) || 'General')}</span>
+                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">${categoria}</span>
+                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Publicado</span>
+                    </div>
+
+                    <h3 class="text-base font-extrabold text-ink leading-snug">${titulo}</h3>
+                    <p class="text-xs text-slate-600 font-medium leading-relaxed mt-2 line-clamp-3">${descripcion}</p>
+
+                    ${tecnologias.length ? `
+                      <div class="flex flex-wrap gap-1 mt-3">
+                        ${tecnologias.map(t => `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-50 text-slate-600 border border-slate-200">${escapeHtml(t)}</span>`).join('')}
+                      </div>
+                    ` : ''}
+                  </div>
+
+                  <div class="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                      ${demoUrl ? `
+                        <a href="${escapeHtml(demoUrl)}" target="_blank" rel="noopener" class="text-xs font-bold text-purple-700 hover:underline">Demo</a>
+                      ` : ''}
+                      ${repoUrl ? `
+                        <a href="${escapeHtml(repoUrl)}" target="_blank" rel="noopener" class="text-xs font-bold text-slate-700 hover:underline">GitHub</a>
+                      ` : ''}
+                    </div>
+
+                    <div class="flex items-center gap-1.5">
+                      <button type="button" onclick="editarProyectoEstudiante('${id}')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 transition cursor-pointer">
+                        Editar
+                      </button>
+                      <button type="button" onclick="eliminarProyectoEstudiante('${id}')" class="px-2.5 py-1.5 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 transition cursor-pointer" title="Eliminar proyecto">
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
+      </div>
+    `;
+  }
+
+  // ---------- CRUD PROYECTOS DE ESTUDIANTE ----------
+  function abrirFormNuevoProyectoEstudiante() {
+    document.getElementById('formProyectoEstudianteTitulo').textContent = 'Subir Proyecto de Desarrollo';
+    document.getElementById('pe_id').value = '';
+    document.getElementById('pe_titulo').value = '';
+
+    const cohorteEst = (currentEstudiante && currentEstudiante.cohorte) ? currentEstudiante.cohorte.trim() : '';
+    const inputCohorte = document.getElementById('pe_cohorte');
+    const badgeFijo = document.getElementById('pe_cohorte_badge_fijo');
+    const ayudaFijo = document.getElementById('pe_cohorte_ayuda');
+
+    if (inputCohorte) {
+      inputCohorte.value = cohorteEst;
+      if (cohorteEst) {
+        inputCohorte.readOnly = true;
+        inputCohorte.classList.add('bg-slate-100', 'cursor-not-allowed', 'text-slate-600', 'select-none');
+        if (badgeFijo) badgeFijo.classList.remove('hidden');
+        if (ayudaFijo) ayudaFijo.classList.remove('hidden');
+      } else {
+        inputCohorte.readOnly = false;
+        inputCohorte.classList.remove('bg-slate-100', 'cursor-not-allowed', 'text-slate-600', 'select-none');
+        if (badgeFijo) badgeFijo.classList.add('hidden');
+        if (ayudaFijo) ayudaFijo.classList.add('hidden');
+      }
+    }
+
+    document.getElementById('pe_categoria').value = 'Inteligencia Artificial';
+    document.getElementById('pe_tecnologias').value = '';
+    document.getElementById('pe_integrantes').value = '';
+    document.getElementById('pe_descripcion').value = '';
+    document.getElementById('pe_url_demo').value = '';
+    document.getElementById('pe_url_repo').value = '';
+    document.getElementById('pe_imagen_file').value = '';
+    document.getElementById('pe_imagen_base64').value = '';
+    document.getElementById('pe_preview_cont').classList.add('hidden');
+
+    document.getElementById('modalFormProyectoEstudiante').classList.remove('hidden');
+  }
+
+  async function editarProyectoEstudiante(id) {
+    let p = (window.__cacheProyectosEstudiantes || []).find(item => item.id === id);
+    if (!p) {
+      p = await apiFetch('proyectos_estudiantes?id=' + encodeURIComponent(id));
+    }
+    if (!p) {
+      toast('Proyecto no encontrado', 'err');
+      return;
+    }
+
+    document.getElementById('formProyectoEstudianteTitulo').textContent = 'Editar Proyecto de Desarrollo';
+    document.getElementById('pe_id').value = p.id || '';
+    document.getElementById('pe_titulo').value = p.titulo || p.name || '';
+
+    const cohorteEst = (currentEstudiante && currentEstudiante.cohorte) ? currentEstudiante.cohorte.trim() : '';
+    const cohorteVal = p.cohorte || cohorteEst || '';
+    const inputCohorte = document.getElementById('pe_cohorte');
+    const badgeFijo = document.getElementById('pe_cohorte_badge_fijo');
+    const ayudaFijo = document.getElementById('pe_cohorte_ayuda');
+
+    if (inputCohorte) {
+      inputCohorte.value = cohorteVal;
+      if (cohorteEst) {
+        inputCohorte.readOnly = true;
+        inputCohorte.classList.add('bg-slate-100', 'cursor-not-allowed', 'text-slate-600', 'select-none');
+        if (badgeFijo) badgeFijo.classList.remove('hidden');
+        if (ayudaFijo) ayudaFijo.classList.remove('hidden');
+      } else {
+        inputCohorte.readOnly = false;
+        inputCohorte.classList.remove('bg-slate-100', 'cursor-not-allowed', 'text-slate-600', 'select-none');
+        if (badgeFijo) badgeFijo.classList.add('hidden');
+        if (ayudaFijo) ayudaFijo.classList.add('hidden');
+      }
+    }
+
+    document.getElementById('pe_categoria').value = p.categoria || p.category || 'Inteligencia Artificial';
+    document.getElementById('pe_tecnologias').value = p.tecnologias || '';
+    document.getElementById('pe_integrantes').value = p.integrantes || '';
+    document.getElementById('pe_descripcion').value = p.descripcion || p.description || '';
+    document.getElementById('pe_url_demo').value = p.url_demo || p.urlDemo || '';
+    document.getElementById('pe_url_repo').value = p.url_repositorio || p.urlRepositorio || '';
+
+    const imgBase = p.imagen_url || p.imagenUrl || '';
+    document.getElementById('pe_imagen_base64').value = imgBase;
+    const previewCont = document.getElementById('pe_preview_cont');
+    const previewImg = document.getElementById('pe_preview_img');
+    if (imgBase) {
+      previewImg.src = imgBase;
+      previewCont.classList.remove('hidden');
+    } else {
+      previewCont.classList.add('hidden');
+    }
+
+    document.getElementById('modalFormProyectoEstudiante').classList.remove('hidden');
+  }
+
+  function cerrarFormProyectoEstudiante() {
+    const modal = document.getElementById('modalFormProyectoEstudiante');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function procesarImagenProyectoEstudiante(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    if (file.size > 8 * 1024 * 1024) {
+      toast('La imagen supera el límite de 8 MB.', 'err');
+      input.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById('pe_imagen_base64').value = e.target.result;
+      document.getElementById('pe_preview_img').src = e.target.result;
+      document.getElementById('pe_preview_cont').classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function guardarProyectoEstudiante() {
+    const titulo = document.getElementById('pe_titulo').value.trim();
+    const descripcion = document.getElementById('pe_descripcion').value.trim();
+    if (!titulo || !descripcion) {
+      toast('Por favor completa el título y la descripción.', 'err');
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarProyectoEstudiante');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Guardando...';
+    }
+
+    try {
+      const id = document.getElementById('pe_id').value.trim();
+      const cohorteEst = (currentEstudiante && currentEstudiante.cohorte) ? currentEstudiante.cohorte.trim() : '';
+      const cohorteFinal = cohorteEst || document.getElementById('pe_cohorte').value.trim() || 'General';
+
+      const nuevo = {
+        id: id || undefined,
+        titulo: titulo,
+        cohorte: cohorteFinal,
+        categoria: document.getElementById('pe_categoria').value,
+        tecnologias: document.getElementById('pe_tecnologias').value.trim(),
+        integrantes: document.getElementById('pe_integrantes').value.trim(),
+        descripcion: descripcion,
+        url_demo: document.getElementById('pe_url_demo').value.trim(),
+        url_repositorio: document.getElementById('pe_url_repo').value.trim(),
+        imagen_url: document.getElementById('pe_imagen_base64').value || undefined,
+        estudiante_id: currentEstudiante ? currentEstudiante.id : undefined,
+        estudiante_nombre: currentEstudiante ? (currentEstudiante.nombre || '') : undefined,
+        estudiante_email: currentEstudiante ? (currentEstudiante.email || '') : undefined,
+        estado: 'Publicado'
+      };
+
+      await Store.save('proyectos_estudiantes', nuevo);
+      Store.invalidate('proyectos_estudiantes');
+
+      cerrarFormProyectoEstudiante();
+      toast('Proyecto publicado con éxito.', 'ok');
+
+      if (document.getElementById('mount-s-misProyectos')) {
+        await renderMisProyectosEstudiante();
+      }
+      if (document.getElementById('mount-proyectos-estudiantes')) {
+        await renderPanelProyectosEstudiantes();
+      }
+    } catch (err) {
+      toast('Error al guardar el proyecto: ' + err.message, 'err');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Publicar Proyecto';
+      }
+    }
+  }
+
+  async function eliminarProyectoEstudiante(id) {
+    if (!confirm('¿Estás seguro de eliminar este proyecto?')) return;
+    try {
+      const resp = await apiFetch('proyectos_estudiantes?id=' + encodeURIComponent(id), { method: 'DELETE' });
+      if (resp && resp.error) throw new Error(resp.error);
+      Store.invalidate('proyectos_estudiantes');
+      toast('Proyecto eliminado.', 'ok');
+
+      if (document.getElementById('mount-s-misProyectos')) {
+        await renderMisProyectosEstudiante();
+      }
+      if (document.getElementById('mount-proyectos-estudiantes')) {
+        await renderPanelProyectosEstudiantes();
+      }
+    } catch (err) {
+      toast('Error al eliminar: ' + err.message, 'err');
+    }
+  }
+
+  // Exportar funciones a window
+  window.renderPanelProyectosFundacion = renderPanelProyectosFundacion;
+  window.renderPanelProyectosEstudiantes = renderPanelProyectosEstudiantes;
+  window.renderMisProyectosEstudiante = renderMisProyectosEstudiante;
+  window.onInputBusquedaProyectosFundacion = onInputBusquedaProyectosFundacion;
+  window.limpiarBusquedaProyectosFundacion = limpiarBusquedaProyectosFundacion;
+  window.onCambioFiltroCatProyectosFundacion = onCambioFiltroCatProyectosFundacion;
+  window.onCambioFiltroEstadoProyectosFundacion = onCambioFiltroEstadoProyectosFundacion;
+  window.onToggleAplusProyectosFundacion = onToggleAplusProyectosFundacion;
+  window.onCambioOrdenProyectosFundacion = onCambioOrdenProyectosFundacion;
+  window.cambiarVistaProyectosFundacion = cambiarVistaProyectosFundacion;
+  window.limpiarTodosFiltrosProyectosFundacion = limpiarTodosFiltrosProyectosFundacion;
+  window.abrirDetalleProyectoFundacion = abrirDetalleProyectoFundacion;
+  window.cerrarDetalleProyectoFundacion = cerrarDetalleProyectoFundacion;
+  window.abrirFormNuevoProyectoFundacion = abrirFormNuevoProyectoFundacion;
+  window.editarProyectoFundacion = editarProyectoFundacion;
+  window.cerrarFormProyectoFundacion = cerrarFormProyectoFundacion;
+  window.guardarProyectoFundacion = guardarProyectoFundacion;
+  window.eliminarProyectoFundacion = eliminarProyectoFundacion;
+
+  window.onInputBusquedaProyectosEstudiantes = onInputBusquedaProyectosEstudiantes;
+  window.onCambioCohorteProyectosEstudiantes = onCambioCohorteProyectosEstudiantes;
+  window.onCambioCategoriaProyectosEstudiantes = onCambioCategoriaProyectosEstudiantes;
+  window.abrirDetalleProyectoEstudiante = abrirDetalleProyectoEstudiante;
+  window.cerrarDetalleProyectoEstudiante = cerrarDetalleProyectoEstudiante;
+  window.abrirFormNuevoProyectoEstudiante = abrirFormNuevoProyectoEstudiante;
+  window.editarProyectoEstudiante = editarProyectoEstudiante;
+  window.cerrarFormProyectoEstudiante = cerrarFormProyectoEstudiante;
+  window.procesarImagenProyectoEstudiante = procesarImagenProyectoEstudiante;
+  window.guardarProyectoEstudiante = guardarProyectoEstudiante;
+  window.eliminarProyectoEstudiante = eliminarProyectoEstudiante;
+
   const EMAILJS_CONFIG = {
     publicKey: 'eIyshGVkR2fYZQJfO',
     serviceId: 'service_20mxfgu',
@@ -5794,7 +10061,7 @@
     const cohorteVal = extras.cohorte || '';
 
     function esBcrypt(str) {
-      return typeof str === 'string' && /^$2[aby]$\d{2}$/.test(str);
+      return typeof str === 'string' && /^\$2[aby]\$\d{2}\$/.test(str);
     }
     const rawPass = extras.password || '';
     const contrasenaMostrar = (!rawPass || esBcrypt(rawPass))
@@ -5884,8 +10151,10 @@ Fundación A+`;
     </p>
   </div>
 
-  <div style="background-color: #f8fafc; padding: 14px 36px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9;">
-    Fundación A+ · Todos los derechos reservados
+  <div style="background-color: #f8fafc; padding: 18px 36px; text-align: center; font-size: 11px; color: #64748b; line-height: 1.6; border-top: 1px solid #e2e8f0;">
+    <p style="margin: 0 0 4px 0; font-weight: bold; color: #334155;">Fundación A+ &bull; Educación y Tecnología</p>
+    <p style="margin: 0 0 6px 0;">Sede Principal: Quibdó, Chocó, Colombia &bull; Contacto: <a href="mailto:info@fundacionamas.org.co" style="color: #6366f1; text-decoration: none;">info@fundacionamas.org.co</a></p>
+    <p style="margin: 0; font-size: 10px; color: #94a3b8;">Has recibido este mensaje transaccional en relación con tu cuenta institucional en Fundación A+. Este correo es personal e intransferible.</p>
   </div>
 </div>`;
 
@@ -5951,6 +10220,9 @@ Fundación A+`;
         to_name: nombre,
         name: nombre,
         subject: subject,
+        reply_to: 'info@fundacionamas.org.co',
+        from_name: 'Fundación A+',
+        organization: 'Fundación A+',
         usuario: email,
         password: contrasenaMostrar,
         contrasena: contrasenaMostrar,
@@ -6014,6 +10286,447 @@ Fundación A+`;
     }
     await renderUsuarios();
     await renderAdminBannerStats();
+  }
+
+  // ---------- BANCO DE TALENTOS (Búsqueda por Habilidades) ----------
+  window.__talentoState = {
+    busqueda: '',
+    habilidadSeleccionada: '',
+    cohorte: 'todas',
+    orden: 'habilidades_desc'
+  };
+
+  window.seleccionarHabilidadTalentos = function(hab) {
+    if (!window.__talentoState) window.__talentoState = {};
+    if (window.__talentoState.habilidadSeleccionada && window.__talentoState.habilidadSeleccionada.toLowerCase() === (hab || '').toLowerCase()) {
+      window.__talentoState.habilidadSeleccionada = '';
+    } else {
+      window.__talentoState.habilidadSeleccionada = hab || '';
+    }
+    renderTalentos();
+  };
+
+  window.onCambioBusquedaTalentos = function(val) {
+    if (!window.__talentoState) window.__talentoState = {};
+    window.__talentoState.busqueda = val || '';
+    filtrarTalentosDom();
+  };
+
+  window.onCambioCohorteTalentos = function(val) {
+    if (!window.__talentoState) window.__talentoState = {};
+    window.__talentoState.cohorte = val || 'todas';
+    renderTalentos();
+  };
+
+  window.onCambioOrdenTalentos = function(val) {
+    if (!window.__talentoState) window.__talentoState = {};
+    window.__talentoState.orden = val || 'habilidades_desc';
+    renderTalentos();
+  };
+
+  window.limpiarFiltrosTalentos = function() {
+    window.__talentoState = {
+      busqueda: '',
+      habilidadSeleccionada: '',
+      cohorte: 'todas',
+      orden: 'habilidades_desc'
+    };
+    renderTalentos();
+  };
+
+  function filtrarTalentosDom() {
+    const q = (window.__talentoState.busqueda || '').toLowerCase().trim();
+    const habSel = (window.__talentoState.habilidadSeleccionada || '').toLowerCase().trim();
+    const cards = document.querySelectorAll('.talento-card');
+    let visibles = 0;
+    cards.forEach(card => {
+      const searchData = (card.getAttribute('data-search') || '').toLowerCase();
+      const skillsData = (card.getAttribute('data-skills') || '').toLowerCase();
+      const matchText = !q || searchData.includes(q);
+      const matchHab = !habSel || skillsData.includes(habSel);
+      const visible = matchText && matchHab;
+      card.style.display = visible ? '' : 'none';
+      if (visible) visibles++;
+    });
+
+    const contador = document.getElementById('talentosContadorVisibles');
+    if (contador) contador.textContent = visibles;
+
+    const noResultados = document.getElementById('talentosNoResultados');
+    if (noResultados) {
+      noResultados.style.display = visibles === 0 ? '' : 'none';
+    }
+  }
+
+  window.copiarContactosTalentosFiltrados = function() {
+    const cards = Array.from(document.querySelectorAll('.talento-card')).filter(c => c.style.display !== 'none');
+    if (!cards.length) {
+      toast('No hay estudiantes visibles en el filtro actual para copiar', 'err');
+      return;
+    }
+    const lineas = cards.map(c => {
+      const nombre = c.getAttribute('data-nombre') || '';
+      const email = c.getAttribute('data-email') || '';
+      const tel = c.getAttribute('data-telefono') || '';
+      const cohorte = c.getAttribute('data-cohorte') || '';
+      const habs = c.getAttribute('data-skills') || '';
+      return `${nombre} | Cohorte: ${cohorte || 'Sin cohorte'} | Correo: ${email} | Tel: ${tel || 'Sin teléfono'} | Habilidades: ${habs}`;
+    });
+    const texto = lineas.join('\n');
+    navigator.clipboard.writeText(texto).then(() => {
+      toast(`Se copiaron los contactos de ${cards.length} estudiante(s) al portapapeles`, 'ok');
+    }).catch(() => {
+      toast('Error al copiar al portapapeles', 'err');
+    });
+  };
+
+  async function renderTalentos() {
+    const mount = document.getElementById('mount-talentos');
+    if (!mount) return;
+
+    if (typeof Store.clearCache === 'function') Store.clearCache('usuarios');
+    const todosUsuarios = await Store.list('usuarios', { forceRefresh: true });
+
+    // Filtrar estudiantes activos y egresados excluyendo solicitudes pendientes
+    const estudiantes = todosUsuarios.filter(u =>
+      (u.rol === 'Estudiante' || u.fueEstudiante) &&
+      u.estadoRegistro !== 'Pendiente'
+    );
+
+    // Conjunto único de cohortes disponibles
+    const cohortesSet = new Set();
+    estudiantes.forEach(e => { if (e.cohorte) cohortesSet.add(e.cohorte); });
+    const listaCohortes = Array.from(cohortesSet).sort();
+
+    // Contar frecuencia de cada habilidad
+    const mapaHabilidades = new Map();
+    estudiantes.forEach(e => {
+      const habs = parsearHabilidades(e.habilidades);
+      habs.forEach(h => {
+        const norm = h.trim();
+        if (!norm) return;
+        const count = mapaHabilidades.get(norm) || 0;
+        mapaHabilidades.set(norm, count + 1);
+      });
+    });
+
+    const topHabilidades = Array.from(mapaHabilidades.entries()).sort((a, b) => b[1] - a[1]);
+    const estudiantesConHabilidades = estudiantes.filter(e => parsearHabilidades(e.habilidades).length > 0);
+
+    const state = window.__talentoState;
+
+    mount.innerHTML = `
+      <div class="space-y-6">
+        <!-- Encabezado y Metricas -->
+        <div class="admin-panel-card p-6 sm:p-8 bg-gradient-to-r from-morado/10 via-white to-turquesa/10 border border-morado/15">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-morado/10 text-morado text-xs font-bold uppercase tracking-wider mb-2">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                Banco de Talentos A+
+              </div>
+              <h2 class="text-xl sm:text-2xl font-black text-ink">Búsqueda de Estudiantes por Habilidades</h2>
+              <p class="text-xs sm:text-sm text-slate2 mt-1 max-w-2xl">
+                Encuentra y vincula perfiles calificados según sus destrezas técnicas, herramientas y áreas de conocimiento para proyectos, pasantías y convocatorias laborales.
+              </p>
+            </div>
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <button onclick="copiarContactosTalentosFiltrados()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white text-ink border border-gray-200 hover:border-morado hover:text-morado transition shadow-2xs cursor-pointer">
+                <svg class="w-4 h-4 text-morado" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                Copiar Contactos
+              </button>
+            </div>
+          </div>
+
+          <!-- Métricas clave -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-6">
+            <div class="bg-white/80 backdrop-blur-xs p-4 rounded-xl border border-gray-200/80 shadow-2xs">
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate2">Total Estudiantes</p>
+              <p class="text-xl sm:text-2xl font-black text-ink mt-0.5">${estudiantes.length}</p>
+            </div>
+            <div class="bg-white/80 backdrop-blur-xs p-4 rounded-xl border border-gray-200/80 shadow-2xs">
+              <p class="text-[11px] font-bold uppercase tracking-wider text-morado">Con Habilidades</p>
+              <p class="text-xl sm:text-2xl font-black text-morado mt-0.5">${estudiantesConHabilidades.length}</p>
+            </div>
+            <div class="bg-white/80 backdrop-blur-xs p-4 rounded-xl border border-gray-200/80 shadow-2xs">
+              <p class="text-[11px] font-bold uppercase tracking-wider text-turquesa">Habilidades Únicas</p>
+              <p class="text-xl sm:text-2xl font-black text-turquesa mt-0.5">${mapaHabilidades.size}</p>
+            </div>
+            <div class="bg-white/80 backdrop-blur-xs p-4 rounded-xl border border-gray-200/80 shadow-2xs">
+              <p class="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Disponibles / Activos</p>
+              <p class="text-xl sm:text-2xl font-black text-emerald-600 mt-0.5">${estudiantes.filter(e => (e.estado || 'Activo').toLowerCase() === 'activo').length}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Barra de Búsqueda y Filtros -->
+        <div class="admin-panel-card p-5 space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+            <!-- Input de búsqueda -->
+            <div class="md:col-span-6 relative">
+              <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              </span>
+              <input
+                id="talento_search_input"
+                type="text"
+                placeholder="Buscar por habilidad (ej. Python, React), nombre, documento o correo..."
+                value="${escapeHtml(state.busqueda)}"
+                oninput="onCambioBusquedaTalentos(this.value)"
+                class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm text-ink placeholder-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition"
+              />
+            </div>
+
+            <!-- Filtro de cohorte -->
+            <div class="md:col-span-3">
+              <select
+                id="talento_filter_cohorte"
+                onchange="onCambioCohorteTalentos(this.value)"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado bg-white transition"
+              >
+                <option value="todas">Todas las cohortes</option>
+                ${listaCohortes.map(c => `<option value="${escapeHtml(c)}" ${state.cohorte === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+              </select>
+            </div>
+
+            <!-- Ordenar por -->
+            <div class="md:col-span-3">
+              <select
+                id="talento_sort_by"
+                onchange="onCambioOrdenTalentos(this.value)"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado bg-white transition"
+              >
+                <option value="habilidades_desc" ${state.orden === 'habilidades_desc' ? 'selected' : ''}>Mayor número de habilidades</option>
+                <option value="nombre_asc" ${state.orden === 'nombre_asc' ? 'selected' : ''}>Nombre (A - Z)</option>
+                <option value="nombre_desc" ${state.orden === 'nombre_desc' ? 'selected' : ''}>Nombre (Z - A)</option>
+                <option value="cohorte_asc" ${state.orden === 'cohorte_asc' ? 'selected' : ''}>Cohorte</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Nube interactiva de habilidades con selector de tag -->
+          <div>
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate2">Filtrar por habilidad específica:</span>
+              ${(state.habilidadSeleccionada || state.busqueda || state.cohorte !== 'todas') ? `
+                <button type="button" onclick="limpiarFiltrosTalentos()" class="text-xs font-bold text-coral hover:underline inline-flex items-center gap-1 cursor-pointer">
+                  Limpiar filtros
+                </button>` : ''}
+            </div>
+            <div class="flex flex-wrap gap-1.5 items-center">
+              <button
+                type="button"
+                onclick="seleccionarHabilidadTalentos('')"
+                class="text-xs font-semibold px-3 py-1 rounded-lg border transition cursor-pointer ${!state.habilidadSeleccionada ? 'bg-morado text-white border-morado shadow-2xs' : 'bg-gray-50 text-slate2 border-gray-200 hover:border-morado/40 hover:text-ink'}"
+              >
+                Todas (${estudiantes.length})
+              </button>
+              ${topHabilidades.slice(0, 20).map(([hab, count]) => {
+                const isActive = (state.habilidadSeleccionada.toLowerCase() === hab.toLowerCase());
+                return `
+                  <button
+                    type="button"
+                    onclick="seleccionarHabilidadTalentos('${escapeHtml(hab)}')"
+                    class="text-xs font-semibold px-3 py-1 rounded-lg border transition cursor-pointer inline-flex items-center gap-1.5 ${isActive ? 'bg-morado text-white border-morado shadow-2xs' : 'bg-white text-slate-700 border-gray-200 hover:border-morado/40 hover:text-morado'}"
+                  >
+                    <span>${escapeHtml(hab)}</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded-md ${isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-slate2'}">${count}</span>
+                  </button>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Barra de estado de resultados -->
+        <div class="flex items-center justify-between px-1">
+          <p class="text-xs font-semibold text-slate2">
+            Mostrando <span id="talentosContadorVisibles" class="font-bold text-ink">${estudiantes.length}</span> estudiantes
+            ${state.habilidadSeleccionada ? ` con la habilidad <span class="text-morado font-bold">"${escapeHtml(state.habilidadSeleccionada)}"</span>` : ''}
+            ${state.cohorte !== 'todas' ? ` en <span class="text-turquesa font-bold">"${escapeHtml(state.cohorte)}"</span>` : ''}
+          </p>
+        </div>
+
+        <!-- Grilla de Cards de Talentos -->
+        <div id="talentosCardsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 items-stretch">
+          <!-- Generado dinámicamente -->
+        </div>
+
+        <!-- Estado vacío cuando no hay resultados -->
+        <div id="talentosNoResultados" class="admin-panel-card p-12 text-center" style="display:none;">
+          <div class="w-14 h-14 rounded-2xl bg-morado/10 text-morado mx-auto flex items-center justify-center mb-3">
+            <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <h3 class="text-base font-bold text-ink">No se encontraron estudiantes</h3>
+          <p class="text-xs text-slate2 mt-1 max-w-sm mx-auto">No hay estudiantes que coincidan con la habilidad o criterio de búsqueda seleccionado.</p>
+          <button onclick="limpiarFiltrosTalentos()" class="mt-4 px-4 py-2 rounded-xl text-xs font-bold bg-morado text-white hover:bg-morado/90 transition shadow-sm cursor-pointer">
+            Limpiar filtros de búsqueda
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Procesar ordenamiento y filtrado de la lista inicial
+    let listaFiltrada = [...estudiantes];
+    if (state.cohorte && state.cohorte !== 'todas') {
+      listaFiltrada = listaFiltrada.filter(e => (e.cohorte || '').toLowerCase() === state.cohorte.toLowerCase());
+    }
+    if (state.habilidadSeleccionada) {
+      const habBuscada = state.habilidadSeleccionada.toLowerCase();
+      listaFiltrada = listaFiltrada.filter(e => {
+        const habs = parsearHabilidades(e.habilidades).map(h => h.toLowerCase());
+        return habs.some(h => h === habBuscada);
+      });
+    }
+
+    if (state.orden === 'habilidades_desc') {
+      listaFiltrada.sort((a, b) => parsearHabilidades(b.habilidades).length - parsearHabilidades(a.habilidades).length);
+    } else if (state.orden === 'nombre_asc') {
+      listaFiltrada.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+    } else if (state.orden === 'nombre_desc') {
+      listaFiltrada.sort((a, b) => (b.nombre || '').localeCompare(a.nombre || ''));
+    } else if (state.orden === 'cohorte_asc') {
+      listaFiltrada.sort((a, b) => (a.cohorte || '').localeCompare(b.cohorte || ''));
+    }
+
+    const grid = document.getElementById('talentosCardsGrid');
+    if (!grid) return;
+
+    if (!listaFiltrada.length) {
+      grid.innerHTML = '';
+      const noResultados = document.getElementById('talentosNoResultados');
+      if (noResultados) noResultados.style.display = '';
+      const cont = document.getElementById('talentosContadorVisibles');
+      if (cont) cont.textContent = '0';
+      return;
+    }
+
+    const cardsHtml = listaFiltrada.map(e => {
+      const habs = parsearHabilidades(e.habilidades);
+      const iniciales = escapeHtml((e.nombre || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase());
+      const avatarHtml = e.fotoUrl
+        ? `<div class="shrink-0 overflow-hidden rounded-full border-2 border-white ring-2 ring-gray-200 shadow-2xs bg-gray-100 flex items-center justify-center" style="width:52px;height:52px;min-width:52px;min-height:52px;max-width:52px;max-height:52px;">
+             <img src="${escapeHtml(e.fotoUrl)}" alt="Foto de perfil" onclick="expandirFotoPerfil('${escapeHtml(e.fotoUrl)}', '${escapeHtml(e.nombre || '')}', 'Estudiante')" class="w-full h-full object-cover cursor-pointer hover:scale-105 transition block" style="width:100%;height:100%;object-fit:cover;" title="Clic para ampliar foto" />
+           </div>`
+        : `<div class="shrink-0 rounded-full flex items-center justify-center text-sm font-extrabold text-white shadow-2xs border-2 border-white ring-2 ring-gray-200" style="width:52px;height:52px;min-width:52px;min-height:52px;max-width:52px;max-height:52px;background:linear-gradient(135deg,#1FC8C0,#8B5CF6);">${iniciales}</div>`;
+
+      const telDigits = (e.telefono || '').replace(/\D/g, '');
+      const waUrl = telDigits.length >= 10 ? `https://wa.me/${telDigits.length === 10 ? '57' + telDigits : telDigits}?text=${encodeURIComponent('Hola ' + (e.nombre || '') + ', te contactamos desde Fundación A+ por una oportunidad según tus habilidades registradas.')}` : null;
+
+      const searchContent = [
+        e.nombre || '',
+        e.email || '',
+        e.documento || '',
+        e.cohorte || '',
+        habs.join(' ')
+      ].join(' ').toLowerCase();
+
+      const skillsContent = habs.join(' ').toLowerCase();
+
+      return `
+        <div
+          class="talento-card admin-panel-card p-5 flex flex-col justify-between hover:shadow-lg transition-all duration-200 border border-gray-200/90 bg-white rounded-2xl h-full"
+          data-search="${escapeHtml(searchContent)}"
+          data-skills="${escapeHtml(skillsContent)}"
+          data-nombre="${escapeHtml(e.nombre || '')}"
+          data-email="${escapeHtml(e.email || '')}"
+          data-telefono="${escapeHtml(e.telefono || '')}"
+          data-cohorte="${escapeHtml(e.cohorte || '')}"
+        >
+          <div class="flex flex-col flex-1">
+            <!-- Cabecera de la Card -->
+            <div class="flex items-center gap-3.5 mb-3 min-w-0">
+              ${avatarHtml}
+              <div class="min-w-0 flex-1">
+                <h4 class="text-sm font-extrabold text-ink truncate hover:text-morado cursor-pointer leading-tight mb-1" onclick="abrirPerfilPersona('${e.id}')" title="${escapeHtml(e.nombre || 'Estudiante')}">
+                  ${escapeHtml(e.nombre || 'Estudiante')}
+                </h4>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md bg-morado/10 text-morado border border-morado/20 shrink-0">
+                    ${escapeHtml(e.cohorte || 'Sin cohorte')}
+                  </span>
+                  ${(e.estado || 'Activo').toLowerCase() === 'activo'
+                    ? '<span class="inline-flex items-center text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">Activo</span>'
+                    : '<span class="inline-flex items-center text-[10px] font-bold text-slate-500 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">Inactivo</span>'}
+                </div>
+              </div>
+            </div>
+
+            <!-- Datos de contacto -->
+            <div class="space-y-1.5 py-2.5 px-3 my-2 rounded-xl bg-gray-50/80 border border-gray-100 text-xs">
+              <div class="flex items-center gap-2 text-slate2 min-w-0">
+                <svg class="w-3.5 h-3.5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <a href="mailto:${escapeHtml(e.email || '')}" class="truncate text-slate-700 font-medium hover:text-morado hover:underline" title="${escapeHtml(e.email || '')}">${escapeHtml(e.email || 'Sin correo')}</a>
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-1.5 text-slate-600 min-w-0">
+                  <svg class="w-3.5 h-3.5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                  <span class="text-[11px] text-slate-600 truncate">Doc: <b class="text-slate-800 font-semibold">${escapeHtml(e.documento || 'No registrado')}</b></span>
+                </div>
+                ${waUrl ? `
+                  <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border border-emerald-200 hover:border-emerald-600 transition shrink-0 shadow-2xs" title="Enviar WhatsApp directo">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                    WhatsApp
+                  </a>` : '<span class="text-[10px] text-slate-400 italic">Sin tel.</span>'}
+              </div>
+            </div>
+
+            <!-- Chips de Habilidades del estudiante -->
+            <div class="pt-2 pb-1 flex-1 flex flex-col justify-start">
+              <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                <span>Habilidades (${habs.length})</span>
+              </div>
+              <div class="flex flex-wrap gap-1.5 min-h-[46px] items-start content-start">
+                ${habs.length ? habs.map(h => {
+                  const matchSel = state.habilidadSeleccionada && state.habilidadSeleccionada.toLowerCase() === h.toLowerCase();
+                  return `
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold ${matchSel ? 'bg-morado text-white border border-morado shadow-2xs' : 'bg-morado/10 text-morado border border-morado/20'}">
+                      ${escapeHtml(h)}
+                    </span>`;
+                }).join('') : '<span class="text-xs text-slate2 italic py-1">Sin habilidades registradas</span>'}
+              </div>
+            </div>
+          </div>
+
+          <!-- Acciones en el pie de la card -->
+          <div class="pt-3 mt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onclick="abrirPerfilPersona('${e.id}')"
+              class="px-3.5 py-1.5 rounded-xl text-xs font-bold text-morado bg-morado/10 hover:bg-morado hover:text-white transition cursor-pointer shadow-2xs"
+            >
+              Ver Perfil
+            </button>
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                onclick="abrirHistorialTrainee('${e.id}')"
+                class="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 bg-gray-100 hover:bg-gray-200 hover:text-ink transition cursor-pointer"
+                title="Historial de archivos y trainee"
+              >
+                Trainee
+              </button>
+              <button
+                type="button"
+                onclick="openModal('usuarios', '${e.id}')"
+                class="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 bg-gray-100 hover:bg-morado/10 hover:text-morado transition cursor-pointer"
+                title="Editar usuario y habilidades"
+              >
+                Editar
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    grid.innerHTML = cardsHtml;
+    const cont = document.getElementById('talentosContadorVisibles');
+    if (cont) cont.textContent = listaFiltrada.length;
+
+    // Si había un filtro de búsqueda por texto escrito, aplicarlo de inmediato
+    if (state.busqueda) {
+      filtrarTalentosDom();
+    }
   }
 
   // ---------- PERFILES Y PERMISOS (exclusivo Superadmin) ----------
@@ -6250,41 +10963,103 @@ Fundación A+`;
     toast('Perfil guardado', 'ok');
   }
 
-  // ---------- ADMINISTRADORES (apartado exclusivo del Superadmin) ----------
-  // A diferencia de "Usuarios" (Estudiantes/Docentes), este apartado solo
-  // existe para que el Superadmin cree, edite o elimine cuentas con rol
-  // "Coordinador" (mostradas aquí como "Administrador"). Reutiliza el mismo
-  // modal/CRUD de 'usuarios', pero con el rol fijo en 'Coordinador' y sin
-  // mostrar los campos de rol/cohorte (openModal('usuarios', id, 'Coordinador')).
+  // ---------- ADMINISTRADORES, ALIADOS Y DONANTES (apartado exclusivo del Superadmin) ----------
+  // Permite al Superadmin gestionar cuentas de Administradores (Coordinadores),
+  // Aliados Estratégicos y Donantes / Inversionistas.
+  let tabAdministradoresActivo = 'todos'; // 'todos' | 'administradores' | 'aliados' | 'donantes'
+  async function cambiarTabAdministradores(tab) {
+    tabAdministradoresActivo = tab;
+    if (typeof TableManager !== 'undefined' && TableManager.clearFilter) {
+      TableManager.clearFilter('table-administradores');
+    }
+    await renderAdministradores();
+  }
+  window.cambiarTabAdministradores = cambiarTabAdministradores;
+
   // async: 'usuarios' vía MySQL.
   async function renderAdministradores() {
-    const records = (await Store.list('usuarios')).filter(u => u.rol === 'Coordinador' || u.rol === 'Administrador');
-    const rows = records.map(u => `
-      <tr data-search="${escapeHtml((u.nombre + ' ' + u.email).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+    if (typeof Store.clearCache === 'function') Store.clearCache('usuarios');
+    const todosCuentas = (await Store.list('usuarios', { forceRefresh: true })).filter(u => u.rol === 'Coordinador' || u.rol === 'Administrador' || u.rol === 'Aliado' || u.rol === 'Donante');
+    const adminsList = todosCuentas.filter(u => u.rol === 'Coordinador' || u.rol === 'Administrador');
+    const aliadosList = todosCuentas.filter(u => u.rol === 'Aliado');
+    const donantesList = todosCuentas.filter(u => u.rol === 'Donante');
+
+    let records = todosCuentas;
+    if (tabAdministradoresActivo === 'administradores') records = adminsList;
+    else if (tabAdministradoresActivo === 'aliados') records = aliadosList;
+    else if (tabAdministradoresActivo === 'donantes') records = donantesList;
+
+    const rows = records.map(u => {
+      const esAliado = u.rol === 'Aliado';
+      const esDonante = u.rol === 'Donante';
+      let cohortesTxt = 'Todas las cohortes';
+      if (u.cohortesPermitidas && Array.isArray(u.cohortesPermitidas) && !u.cohortesPermitidas.includes('todas')) {
+        cohortesTxt = u.cohortesPermitidas.join(', ');
+      } else if (u.cohorte && u.cohorte !== 'Todas' && u.cohorte !== 'todas') {
+        cohortesTxt = u.cohorte;
+      }
+
+      let cohortesBadgeTxt = cohortesTxt;
+      if (esAliado && u.cohortesPermitidas && Array.isArray(u.cohortesPermitidas) && u.cohortesPermitidas.length > 2 && !u.cohortesPermitidas.includes('todas')) {
+        cohortesBadgeTxt = `${u.cohortesPermitidas.length} cohortes (${u.cohortesPermitidas.slice(0, 2).join(', ')}...)`;
+      }
+
+      let rolBadge;
+      if (esDonante) {
+        rolBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs cursor-default">
+             <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+             Donante / Inversor
+           </span>`;
+      } else if (esAliado) {
+        rolBadge = `<span title="${escapeHtml(cohortesTxt)}" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200 shadow-xs cursor-default">
+             <svg class="w-3.5 h-3.5 text-teal-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+             Aliado · ${escapeHtml(cohortesBadgeTxt)}
+           </span>`;
+      } else {
+        rolBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-morado/10 text-morado border border-morado/20 shadow-xs">
+             <svg class="w-3.5 h-3.5 text-morado shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+             Administrador
+           </span>`;
+      }
+
+      return `
+      <tr data-search="${escapeHtml((u.nombre + ' ' + u.email + ' ' + (u.rol || '') + ' ' + cohortesTxt).toLowerCase())}" class="border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition">
         <td class="py-3 px-4 text-sm font-semibold text-ink">${escapeHtml(u.nombre)}</td>
         <td class="py-3 px-4 text-sm text-slate2">${escapeHtml(u.email)}</td>
+        <td class="py-3 px-4">${rolBadge}</td>
         <td class="py-3 px-4">${statusPill(u.estado, ESTADO_COLORS)}</td>
         <td class="py-3 px-4 text-right whitespace-nowrap">
-          <button onclick="openModal('usuarios','${u.id}','Coordinador')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
+          <button onclick="openModal('usuarios','${u.id}','${u.rol}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
           <button onclick="askDelete('usuarios','${u.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
         </td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
+
+    const placeholderBusqueda = tabAdministradoresActivo === 'donantes' ? 'donantes...' : (tabAdministradoresActivo === 'aliados' ? 'aliados...' : (tabAdministradoresActivo === 'administradores' ? 'administradores...' : 'cuentas...'));
 
     document.getElementById('mount-administradores').innerHTML = `
       <div class="admin-panel-card p-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-gray-100">
           <div>
-            <h2 class="text-lg font-extrabold text-ink tracking-tight">Administradores</h2>
-            <p class="text-xs text-slate2 mt-0.5">${records.length} administrador${records.length === 1 ? '' : 'es'} con acceso al panel de Administración.</p>
+            <h2 class="text-lg font-extrabold text-ink tracking-tight">Administradores, Aliados y Donantes</h2>
+            <p class="text-xs text-slate2 mt-0.5">${todosCuentas.length} cuenta${todosCuentas.length === 1 ? '' : 's'} (${adminsList.length} administradores, ${aliadosList.length} aliados, ${donantesList.length} donantes).</p>
           </div>
           <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <div class="relative">
-              <input data-table="table-administradores" oninput="filterTable('administradores', this.value)" type="text" placeholder="Buscar..." class="rounded-xl border border-morado/30 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition text-ink" />
+              <input data-table="table-administradores" oninput="filterTable('administradores', this.value)" type="text" placeholder="Buscar ${placeholderBusqueda}" class="rounded-xl border border-morado/30 bg-morado/5 pl-9 pr-3 py-2 text-xs sm:text-sm w-44 sm:w-56 focus:bg-white focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition text-ink" />
               <svg class="w-4 h-4 text-morado absolute left-3 top-2.5 sm:top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
             <button onclick="recargarPanelActual()" title="Actualizar datos en vivo" class="rounded-xl border border-gray-200 text-slate2 hover:text-morado hover:bg-morado/5 text-xs sm:text-sm font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-sm">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               <span class="hidden md:inline">Actualizar</span>
+            </button>
+            <button onclick="openModal('usuarios', null, 'Donante')" class="rounded-xl border border-emerald-500/30 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs sm:text-sm font-bold px-3.5 py-2 transition flex items-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap">
+              <svg class="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              Nuevo donante
+            </button>
+            <button onclick="openModal('usuarios', null, 'Aliado')" class="rounded-xl border border-teal-500/30 bg-teal-50 text-teal-700 hover:bg-teal-100 text-xs sm:text-sm font-bold px-3.5 py-2 transition flex items-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap">
+              <svg class="w-4 h-4 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              Nuevo aliado
             </button>
             <button onclick="openModal('usuarios', null, 'Coordinador')" class="btn-glow-primary rounded-xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white text-xs sm:text-sm font-bold px-4 py-2 hover:opacity-95 transition flex items-center gap-1.5 shadow-md shadow-morado/20 hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
@@ -6292,12 +11067,40 @@ Fundación A+`;
             </button>
           </div>
         </div>
+
+        <!-- Pestañas de filtro interno: Todos / Administradores / Aliados / Donantes -->
+        <div class="flex items-center gap-1.5 p-1 bg-gray-100/80 rounded-xl w-fit mb-4 border border-gray-200/60 flex-wrap">
+          <button type="button" onclick="cambiarTabAdministradores('todos')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 ${tabAdministradoresActivo === 'todos' ? 'bg-white text-ink shadow-xs border border-gray-200/80' : 'text-slate2 hover:text-ink'}">
+            <span>Todos</span>
+            <span class="px-1.5 py-0.2 rounded-full text-[10px] ${tabAdministradoresActivo === 'todos' ? 'bg-morado/10 text-morado font-extrabold' : 'bg-gray-200 text-slate2'}">${todosCuentas.length}</span>
+          </button>
+          <button type="button" onclick="cambiarTabAdministradores('administradores')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 ${tabAdministradoresActivo === 'administradores' ? 'bg-white text-morado shadow-xs border border-gray-200/80' : 'text-slate2 hover:text-ink'}">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            <span>Administradores</span>
+            <span class="px-1.5 py-0.2 rounded-full text-[10px] ${tabAdministradoresActivo === 'administradores' ? 'bg-morado/10 text-morado font-extrabold' : 'bg-gray-200 text-slate2'}">${adminsList.length}</span>
+          </button>
+          <button type="button" onclick="cambiarTabAdministradores('aliados')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 ${tabAdministradoresActivo === 'aliados' ? 'bg-white text-teal-700 shadow-xs border border-gray-200/80' : 'text-slate2 hover:text-ink'}">
+            <svg class="w-3.5 h-3.5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+            <span>Aliados Estratégicos</span>
+            <span class="px-1.5 py-0.2 rounded-full text-[10px] ${tabAdministradoresActivo === 'aliados' ? 'bg-teal-50 text-teal-700 font-extrabold' : 'bg-gray-200 text-slate2'}">${aliadosList.length}</span>
+          </button>
+          <button type="button" onclick="cambiarTabAdministradores('donantes')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 ${tabAdministradoresActivo === 'donantes' ? 'bg-white text-emerald-700 shadow-xs border border-gray-200/80' : 'text-slate2 hover:text-ink'}">
+            <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span>Donantes / Inversores</span>
+            <span class="px-1.5 py-0.2 rounded-full text-[10px] ${tabAdministradoresActivo === 'donantes' ? 'bg-emerald-50 text-emerald-700 font-extrabold' : 'bg-gray-200 text-slate2'}">${donantesList.length}</span>
+          </button>
+        </div>
+
         <div class="table-responsive-container">
           <table id="table-administradores" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Nombre</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Estado</th><th class="py-2.5 px-4" data-no-sort="true"></th>
+              <th class="py-2.5 px-4">Nombre</th>
+              <th class="py-2.5 px-4">Correo</th>
+              <th class="py-2.5 px-4">Rol / Permiso</th>
+              <th class="py-2.5 px-4">Estado</th>
+              <th class="py-2.5 px-4 text-right" data-no-sort="true">Acciones</th>
             </tr></thead>
-            <tbody>${rows || emptyRow(4)}</tbody>
+            <tbody>${rows || emptyRow(5)}</tbody>
           </table>
         </div>
       </div>`;
@@ -6310,7 +11113,11 @@ Fundación A+`;
 
   // async: contarInscritos(), docentesDeCohorte() y 'modulos' vía MySQL.
   async function renderModulos() {
-    const cohortes = await Store.list('modulos');
+    let cohortes = await Store.list('modulos');
+    const permitidas = cohortesPermitidasParaUsuario(currentAdminUser);
+    if (permitidas) {
+      cohortes = cohortes.filter(m => permitidas.includes(m.nombre));
+    }
     if (!horarioState.cohorte && cohortes.length > 0) {
       horarioState.cohorte = cohortes[0].nombre;
     }
@@ -6348,8 +11155,9 @@ Fundación A+`;
         </td>
         <td class="py-3 px-4">${statusPill(m.estado, ESTADO_COLORS)}</td>
         <td class="py-3 px-4 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+          ${currentAdminRole === 'aliado' ? `<span class="text-xs text-slate2 font-medium">Solo lectura</span>` : `
           <button onclick="openModal('modulos','${m.id}')" class="text-xs font-semibold text-morado hover:underline mr-3">Editar</button>
-          <button onclick="askDelete('modulos','${m.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>
+          <button onclick="askDelete('modulos','${m.id}')" class="text-xs font-semibold text-coral hover:underline">Eliminar</button>`}
         </td>
       </tr>`;
     }).join('');
@@ -6493,22 +11301,27 @@ Fundación A+`;
           <div class="horario-franja-card rounded-2xl bg-white border border-gray-200/80 p-3.5 mb-2.5 shadow-2xs hover:shadow-sm transition ${inactiva ? 'opacity-55' : ''}" style="border-left:4px solid ${infoCamisa.franjaBorder};">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-bold text-ink leading-snug">${escapeHtml(f.curso || '(sin curso)')}</p>
+              ${currentAdminRole !== 'aliado' ? `
               <button onclick="eliminarFranjaHorario('${f.id}')" title="Eliminar franja" class="text-slate2 hover:text-coral transition shrink-0 -mt-0.5 -mr-0.5 cursor-pointer">
                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
+              </button>` : ''}
             </div>
             <div class="flex items-center gap-1.5 text-[11px] text-slate2 mt-1.5 font-medium">
               <svg class="w-3 h-3 text-slate2/80 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/></svg>
-              <span>${f.inicio} – ${f.fin} · <strong class="text-ink font-semibold">${horasFranja(f)} h</strong></span>
+              <span>${f.inicio} – ${f.fin} · <strong class="text-ink font-semibold" ${((minutosDesdeHora(f.fin) - minutosDesdeHora(f.inicio)) / 60 >= 8.5) ? 'title="Jornada completa: no se incluye hora de almuerzo (8h efectivas)"' : ''}>${horasFranja(f)} h</strong>${((minutosDesdeHora(f.fin) - minutosDesdeHora(f.inicio)) / 60 >= 8.5) ? ' <span class="text-[10px] text-slate2/80 font-normal" title="No se calcula la hora de almuerzo">(sin almuerzo)</span>' : ''}</span>
             </div>
             <div class="flex items-center gap-1.5 text-[11px] text-slate2 mt-1">
               <svg class="w-3 h-3 text-slate2/80 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
               <span class="truncate">${f.docente ? escapeHtml(f.docente) : '<span class="italic text-slate2/70">Sin trainer asignado</span>'}</span>
             </div>
             <div class="flex items-center justify-between gap-1 mt-2.5 pt-2 border-t border-gray-100">
+              ${currentAdminRole !== 'aliado' ? `
               <button onclick="toggleEstadoFranjaHorario('${f.id}')" class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full cursor-pointer transition ${inactiva ? 'bg-gray-100 text-slate2' : 'bg-turquesa/10 text-turquesa border border-turquesa/20'}">
                 ${f.estado || 'Activo'}
-              </button>
+              </button>` : `
+              <span class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${inactiva ? 'bg-gray-100 text-slate2' : 'bg-turquesa/10 text-turquesa border border-turquesa/20'}">
+                ${f.estado || 'Activo'}
+              </span>`}
               <span class="text-[10px] font-semibold text-slate2 flex items-center gap-1">
                 <span class="w-1.5 h-1.5 rounded-full ${infoCamisa.swatchClass}"></span>
                 ${escapeHtml(infoCamisa.nombre)}
@@ -6555,25 +11368,32 @@ Fundación A+`;
           </p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
-          <button type="button" onclick="abrirModalColoresCamisa('${escapeHtml(horarioState.cohorte)}')" title="Configurar qué color de camisa corresponde a cada día para esta cohorte" class="rounded-full border border-morado/30 text-morado bg-morado/5 hover:bg-morado/15 text-xs font-bold px-3.5 py-2 transition flex items-center gap-1.5 cursor-pointer shadow-2xs">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5l2.5 2.5h2.5l2.5 4.5-2.5 2-1-1v8h-8v-8l-1 1-2.5-2 2.5-4.5h2.5L12 4.5z" />
-            </svg>
-            <span>Código de vestimenta</span>
-          </button>
-          <button onclick="descargarPlantillaCSVHorario()" title="Descargar plantilla CSV" class="rounded-full border border-gray-200 bg-white text-slate2 hover:text-ink text-xs font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-2xs cursor-pointer">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
-            <span>Plantilla</span>
-          </button>
-          <button onclick="document.getElementById('horarioCsvInput').click()" title="Subir CSV de franjas" class="rounded-full border border-gray-200 bg-white text-slate2 hover:text-ink text-xs font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-2xs cursor-pointer">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21V9m0 0l-4 4m4-4l4 4M4 7V5a2 2 0 012-2h12a2 2 0 012 2v2"/></svg>
-            <span>Subir CSV</span>
-          </button>
-          <input id="horarioCsvInput" type="file" accept=".csv,text/csv" class="hidden" onchange="onSeleccionaCSVHorario(event)" />
-          <button onclick="abrirFormFranjaHorario()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-bold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5 shadow-sm cursor-pointer">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-            <span>Añadir franja</span>
-          </button>
+          ${currentAdminRole === 'aliado' ? `
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200">
+              <svg class="w-3.5 h-3.5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              Modo solo lectura
+            </span>
+          ` : `
+            <button type="button" onclick="abrirModalColoresCamisa('${escapeHtml(horarioState.cohorte)}')" title="Configurar qué color de camisa corresponde a cada día para esta cohorte" class="rounded-full border border-morado/30 text-morado bg-morado/5 hover:bg-morado/15 text-xs font-bold px-3.5 py-2 transition flex items-center gap-1.5 cursor-pointer shadow-2xs">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5l2.5 2.5h2.5l2.5 4.5-2.5 2-1-1v8h-8v-8l-1 1-2.5-2 2.5-4.5h2.5L12 4.5z" />
+              </svg>
+              <span>Código de vestimenta</span>
+            </button>
+            <button onclick="descargarPlantillaCSVHorario()" title="Descargar plantilla CSV" class="rounded-full border border-gray-200 bg-white text-slate2 hover:text-ink text-xs font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-2xs cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+              <span>Plantilla</span>
+            </button>
+            <button onclick="document.getElementById('horarioCsvInput').click()" title="Subir CSV de franjas" class="rounded-full border border-gray-200 bg-white text-slate2 hover:text-ink text-xs font-semibold px-3 py-2 transition flex items-center gap-1.5 shadow-2xs cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21V9m0 0l-4 4m4-4l4 4M4 7V5a2 2 0 012-2h12a2 2 0 012 2v2"/></svg>
+              <span>Subir CSV</span>
+            </button>
+            <input id="horarioCsvInput" type="file" accept=".csv,text/csv" class="hidden" onchange="onSeleccionaCSVHorario(event)" />
+            <button onclick="abrirFormFranjaHorario()" class="rounded-full bg-gradient-to-r from-morado to-turquesa text-white text-xs font-bold px-4 py-2 hover:opacity-90 transition flex items-center gap-1.5 shadow-sm cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              <span>Añadir franja</span>
+            </button>
+          `}
         </div>
       </div>
       <div id="horarioFormFranjaWrap" class="mb-4"></div>
@@ -6605,6 +11425,10 @@ Fundación A+`;
   // Formulario inline para añadir una franja nueva — fácil, rápido y filtrado
   // por los profesores asignados a la cohorte actual.
   async function abrirFormFranjaHorario() {
+    if (currentAdminRole === 'aliado') {
+      toast('Los aliados estratégicos tienen acceso de solo lectura', 'err');
+      return;
+    }
     horarioFormAbierto = true;
     const cohorteActual = horarioState.cohorte;
     const dias = horarioState.incluyeSabado ? DIAS_HORARIO : DIAS_HORARIO.slice(0, 5);
@@ -6671,6 +11495,7 @@ Fundación A+`;
           <button type="button" onclick="setHorarioRapido('14:00','16:00')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-turquesa/15 text-turquesa hover:bg-turquesa hover:text-white transition cursor-pointer">14:00–16:00 (2h)</button>
           <button type="button" onclick="setHorarioRapido('16:00','18:00')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-turquesa/15 text-turquesa hover:bg-turquesa hover:text-white transition cursor-pointer">16:00–18:00 (2h)</button>
           <button type="button" onclick="setHorarioRapido('08:00','12:00')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer">08:00–12:00 (4h)</button>
+          <button type="button" onclick="setHorarioRapido('08:00','17:00')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition cursor-pointer" title="Jornada completa: descuenta 1h de almuerzo (8 horas)">08:00–17:00 (8h · Día completo)</button>
         </div>
 
         <!-- Replicar en días adicionales para no repetir el proceso -->
@@ -6707,6 +11532,10 @@ Fundación A+`;
   // async: 'horarios' vía MySQL. Guarda franja principal y opcionalmente días adicionales seleccionados.
   // Mantiene el formulario abierto y avanza automáticamente las horas para que sea fácil agregar más franjas.
   async function guardarNuevaFranjaHorario() {
+    if (currentAdminRole === 'aliado') {
+      toast('Los aliados estratégicos tienen acceso de solo lectura', 'err');
+      return;
+    }
     if (!horarioState.cohorte || !horarioState.mes) { toast('Selecciona una cohorte y un mes primero', 'err'); return; }
     const diaPrincipal = document.getElementById('ff_dia').value;
     const curso = document.getElementById('ff_curso').value;
@@ -6810,6 +11639,10 @@ Fundación A+`;
   // franjasActivas()), pero queda en el historial de ese horario.
   // async: 'horarios' vía MySQL.
   async function toggleEstadoFranjaHorario(franjaId) {
+    if (currentAdminRole === 'aliado') {
+      toast('Los aliados estratégicos tienen acceso de solo lectura', 'err');
+      return;
+    }
     const registros = await Store.list('horarios');
     const horario = registros.find(h => h.cohorte === horarioState.cohorte && h.mes === horarioState.mes);
     if (!horario) return;
@@ -6826,6 +11659,10 @@ Fundación A+`;
 
   // async: 'horarios' vía MySQL.
   async function eliminarFranjaHorario(franjaId) {
+    if (currentAdminRole === 'aliado') {
+      toast('Los aliados estratégicos tienen acceso de solo lectura', 'err');
+      return;
+    }
     const registros = await Store.list('horarios');
     const horario = registros.find(h => h.cohorte === horarioState.cohorte && h.mes === horarioState.mes);
     if (!horario) return;
@@ -6945,6 +11782,11 @@ Fundación A+`;
   }
 
   function onSeleccionaCSVHorario(evt) {
+    if (currentAdminRole === 'aliado') {
+      toast('Los aliados estratégicos tienen acceso de solo lectura', 'err');
+      if (evt && evt.target) evt.target.value = '';
+      return;
+    }
     const input = evt.target;
     const file = input.files && input.files[0];
     if (!file) return;
@@ -7253,7 +12095,12 @@ Fundación A+`;
   window.cambiarFiltroSemaforoRiesgo = cambiarFiltroSemaforoRiesgo;
 
   async function renderSemaforo() {
-    const [data, modulos] = await Promise.all([computeSemaforo(), Store.list('modulos')]);
+    let [data, modulos] = await Promise.all([computeSemaforo(), Store.list('modulos')]);
+    const permitidas = cohortesPermitidasParaUsuario(currentAdminUser);
+    if (permitidas) {
+      modulos = modulos.filter(m => permitidas.includes(m.nombre));
+      data = data.filter(s => permitidas.includes(s.cohorte));
+    }
     const riesgoColor = { Verde: { bg: '#1FC8C01A', text: '#0f8f89', dot: '#1FC8C0' }, Amarillo: { bg: '#F5A6231A', text: '#b5790f', dot: '#F5A623' }, Rojo: { bg: '#F0455C1A', text: '#F0455C', dot: '#F0455C' } };
 
     // Lista ordenada de cohortes únicas disponibles
@@ -7882,7 +12729,11 @@ Fundación A+`;
 
   // async: 'modulos' vía MySQL.
   async function renderCalificaciones() {
-    const cohortes = await Store.list('modulos');
+    let cohortes = await Store.list('modulos');
+    const permitidas = cohortesPermitidasParaUsuario(currentAdminUser);
+    if (permitidas) {
+      cohortes = cohortes.filter(c => permitidas.includes(c.nombre));
+    }
     if (!calificacionesAdminState.cohorte && cohortes.length > 0) {
       calificacionesAdminState.cohorte = cohortes[0].nombre;
     }
@@ -8150,7 +13001,12 @@ Fundación A+`;
 
   // async: 'modulos' vía MySQL.
   async function renderInformesAdmin() {
-    const cohortes = await Store.list('modulos');
+    let cohortesRaw = await Store.list('modulos');
+    let cohortes = Array.isArray(cohortesRaw) ? cohortesRaw : [];
+    const permitidas = cohortesPermitidasParaUsuario(currentAdminUser);
+    if (permitidas) {
+      cohortes = cohortes.filter(c => permitidas.includes(c.nombre));
+    }
     if (!informesAdminState.cohorte && cohortes.length) {
       informesAdminState.cohorte = cohortes[0].nombre;
     }
@@ -8193,12 +13049,14 @@ Fundación A+`;
       return;
     }
     const meses = new Set();
-    const informes = await Store.list('informes_docente');
+    const informesRaw = await Store.list('informes_docente');
+    const informes = Array.isArray(informesRaw) ? informesRaw : [];
     informes
       .filter(i => i.cohorte === informesAdminState.cohorte && i.estado === 'Enviado' && i.fecha)
       .forEach(i => meses.add(i.fecha.slice(0, 7)));
 
-    const horarios = await Store.list('horarios');
+    const horariosRaw = await Store.list('horarios');
+    const horarios = Array.isArray(horariosRaw) ? horariosRaw : [];
     horarios
       .filter(h => h.cohorte === informesAdminState.cohorte && h.mes)
       .forEach(h => meses.add(h.mes));
@@ -8487,7 +13345,8 @@ Fundación A+`;
       return;
     }
 
-    const informes = (await Store.list('informes_docente')).filter(i =>
+    const informesRaw = await Store.list('informes_docente');
+    const informes = (Array.isArray(informesRaw) ? informesRaw : []).filter(i =>
       i.cohorte === informesAdminState.cohorte && i.estado === 'Enviado' &&
       (!informesAdminState.mes || (i.fecha || '').slice(0, 7) === informesAdminState.mes || i.mes === informesAdminState.mes)
     );
@@ -9536,7 +14395,7 @@ Fundación A+`;
                   <span class="text-[10px] font-bold px-2 py-0.5 rounded-md border ${badgePrioridadClase}">
                     Prioridad: ${n.prioridad}
                   </span>
-                  ${n.atendida ? '<span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">✓ Atendida</span>' : ''}
+                  ${n.atendida ? '<span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">Atendida</span>' : ''}
                 </div>
 
                 <div class="flex items-center gap-2">
@@ -9544,7 +14403,7 @@ Fundación A+`;
                     Ver detalles
                   </button>
                   <button type="button" onclick="window.marcarNotificacionAtendida('${n.id}', ${!n.atendida})" class="text-xs font-semibold text-slate2 hover:text-ink transition cursor-pointer" title="${n.atendida ? 'Reactivar' : 'Marcar atendida'}">
-                    ${n.atendida ? 'Reactivar' : '✓ Marcar'}
+                    ${n.atendida ? 'Reactivar' : 'Marcar'}
                   </button>
                   ${n.esComunicado ? `
                     <button type="button" onclick="window.eliminarComunicadoSuperadmin('${n.id}')" class="text-xs font-semibold text-slate2 hover:text-rose-600 transition cursor-pointer p-0.5" title="Eliminar comunicado">
@@ -10183,7 +15042,7 @@ Fundación A+`;
                   <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                   <div>
                     <p class="text-xs font-extrabold leading-tight">${escapeHtml(c.nombre)}</p>
-                    <p class="text-[10px] opacity-80 leading-tight">👥 ${c.count} estudiantes</p>
+                    <p class="text-[10px] opacity-80 leading-tight">${c.count} estudiantes</p>
                   </div>
                 </div>
               `).join('')}
@@ -10550,6 +15409,7 @@ Fundación A+`;
     resumen: renderResumen,
     notificaciones: renderNotificacionesAdmin,
     usuarios: renderUsuarios,
+    talentos: renderTalentos,
     perfiles: renderPerfiles,
     administradores: renderAdministradores,
     modulos: renderModulos,
@@ -10561,8 +15421,13 @@ Fundación A+`;
     memorandos: renderMemorandos,
     pqr: renderPqr,
     calificaciones: renderCalificaciones,
+    pagos: renderPanelPagos,
     informesAdmin: renderInformesAdmin,
-    encuestas: renderEncuestas,
+    proyectosFundacion: renderPanelProyectosFundacion,
+    proyectosEstudiantes: renderPanelProyectosEstudiantes,
+    recursos: async () => { if (typeof renderRecursos === 'function') await renderRecursos(); },
+    solicitudes_recursos: async () => { if (typeof renderSolicitudesAdmin === 'function') await renderSolicitudesAdmin(); },
+    asignaciones_recursos: async () => { if (typeof renderAsignacionesRecursos === 'function') await renderAsignacionesRecursos(); },
     formularios: async () => {
       let tries = 0;
       while (tries < 15 && !(typeof window !== 'undefined' && typeof window.renderFormularios === 'function') && typeof renderFormularios !== 'function') {
@@ -10597,10 +15462,9 @@ Fundación A+`;
         }
       }
     },
-    recursos: renderRecursos,
-    asignaciones_recursos: renderAsignacionesRecursos,
     auditoria: renderAuditoria,
     chatvoz: renderChatVozConocimiento,
+    chat_voz_conocimiento: renderChatVozConocimiento,
     configuracion: renderConfiguracion,
   };
 
@@ -10720,12 +15584,40 @@ Fundación A+`;
             <label class="block text-xs font-semibold text-slate2 mb-1.5">Correo electrónico</label>
             <input type="email" value="${escapeHtml(doc.email || '')}" disabled class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm bg-gray-50 text-slate2" />
           </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Documento de identidad</label>
+            <input id="perfil_documento" type="text" value="${escapeHtml(doc.documento || '')}" placeholder="Ej. CC 1023456789" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-turquesa/30" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Número de teléfono / WhatsApp</label>
+            <input id="perfil_telefono" type="tel" value="${escapeHtml(doc.telefono || '')}" placeholder="Ej. 300 123 4567" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-turquesa/30" />
+          </div>
         </div>
         <div class="mb-6">
           <label class="block text-xs font-semibold text-slate2 mb-1.5">Descripción breve</label>
           <textarea id="perfil_descripcion" rows="3" maxlength="280" placeholder="Ej: Docente de Desarrollo Web, apasionado por enseñar buenas prácticas de programación (opcional)" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-turquesa/30 resize-none">${escapeHtml(doc.descripcion || '')}</textarea>
           <p class="text-[11px] text-slate2 mt-1">Opcional · máx. 280 caracteres</p>
         </div>
+
+        <!-- Habilidades y Especialidades del Docente -->
+        <div class="mb-6 p-5 rounded-2xl bg-gradient-to-br from-purple-50/60 via-turquesa/5 to-transparent border border-purple-200/60">
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-purple-900">Especialidades y Habilidades</label>
+              <p class="text-[11px] text-slate2">Registra tus tecnologías, áreas de conocimiento y especialidades docentes.</p>
+            </div>
+          </div>
+          <div id="perfil_docente_habilidades_chips" class="flex flex-wrap gap-1.5 mb-3 min-h-[38px] p-2.5 bg-white rounded-xl border border-gray-200 shadow-2xs"></div>
+          <div class="flex gap-2 mb-2.5">
+            <input id="perfil_docente_nueva_habilidad" type="text" maxlength="40" placeholder="Escribe una especialidad (ej. React, Python, Inteligencia Artificial...) y presiona Enter" class="flex-1 rounded-xl border border-gray-200 px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.__agregarHabilidadDocente();}" />
+            <button type="button" onclick="window.__agregarHabilidadDocente()" class="px-4 py-2 rounded-xl text-xs font-bold bg-purple-700 text-white hover:bg-purple-800 transition shadow-sm cursor-pointer shrink-0">+ Añadir</button>
+          </div>
+          <div class="pt-2 border-t border-purple-100 flex flex-wrap gap-1.5 items-center">
+            <span class="text-[10px] font-bold text-slate2 uppercase tracking-wider mr-1">Sugerencias:</span>
+            ${['Python', 'JavaScript', 'React', 'Node.js', 'SQL', 'Bases de Datos', 'Inteligencia Artificial', 'Figma', 'Git', 'Metodologías Ágiles', 'Seguridad Web'].map(s => `<button type="button" onclick="window.__agregarHabilidadDocente('${escapeHtml(s)}')" class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white border border-gray-200 text-slate-700 hover:border-purple-600 hover:text-purple-700 transition cursor-pointer shadow-2xs">+ ${escapeHtml(s)}</button>`).join('')}
+          </div>
+        </div>
+
         <div class="border-t border-gray-100 pt-6">
           <p class="text-sm font-bold text-ink mb-3">Cambiar contraseña</p>
           <div class="grid sm:grid-cols-2 gap-4">
@@ -10735,6 +15627,37 @@ Fundación A+`;
         </div>
         <button onclick="guardarPerfilDocente()" class="mt-6 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition">Guardar cambios</button>
       </div>`;
+
+    window.__habilidadesDocenteActual = parsearHabilidades(doc.habilidades);
+    window.__refrescarChipsDocente = () => {
+      const cont = document.getElementById('perfil_docente_habilidades_chips');
+      if (!cont) return;
+      cont.innerHTML = window.__habilidadesDocenteActual.length
+        ? window.__habilidadesDocenteActual.map((h, idx) => `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">
+              <span>${escapeHtml(h)}</span>
+              <button type="button" onclick="window.__removerHabilidadDocente(${idx})" class="w-3.5 h-3.5 rounded-full hover:bg-purple-200 text-purple-800 inline-flex items-center justify-center cursor-pointer font-bold leading-none">&times;</button>
+            </span>`).join('')
+        : '<span class="text-xs text-slate2 italic">Sin especialidades registradas aún. Añade tus habilidades técnicas arriba.</span>';
+    };
+    window.__removerHabilidadDocente = (idx) => {
+      window.__habilidadesDocenteActual.splice(idx, 1);
+      window.__refrescarChipsDocente();
+    };
+    window.__agregarHabilidadDocente = (texto) => {
+      const input = document.getElementById('perfil_docente_nueva_habilidad');
+      const val = (texto || (input ? input.value : '')).trim();
+      if (!val) return;
+      const partes = val.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+      partes.forEach(p => {
+        if (!window.__habilidadesDocenteActual.some(h => h.toLowerCase() === p.toLowerCase())) {
+          window.__habilidadesDocenteActual.push(p);
+        }
+      });
+      window.__refrescarChipsDocente();
+      if (input) input.value = '';
+    };
+    setTimeout(window.__refrescarChipsDocente, 0);
     habilitarEnterEnFormulario('mount-t-perfil', null, false);
   }
 
@@ -10812,7 +15735,21 @@ Fundación A+`;
 
   // async: actualizarUsuarioDocenteActual ahora es async.
   async function guardarPerfilDocente() {
+    const inputNuevaHab = document.getElementById('perfil_docente_nueva_habilidad');
+    if (inputNuevaHab && inputNuevaHab.value.trim()) {
+      const partes = inputNuevaHab.value.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+      if (!Array.isArray(window.__habilidadesDocenteActual)) window.__habilidadesDocenteActual = [];
+      partes.forEach(p => {
+        if (!window.__habilidadesDocenteActual.some(h => h.toLowerCase() === p.toLowerCase())) {
+          window.__habilidadesDocenteActual.push(p);
+        }
+      });
+      inputNuevaHab.value = '';
+    }
+
     const nombre = document.getElementById('perfil_nombre').value.trim();
+    const documento = document.getElementById('perfil_documento') ? document.getElementById('perfil_documento').value.trim() : '';
+    const telefono = document.getElementById('perfil_telefono') ? document.getElementById('perfil_telefono').value.trim() : '';
     const descripcion = document.getElementById('perfil_descripcion').value.trim();
     const p1 = document.getElementById('perfil_pass1').value;
     const p2 = document.getElementById('perfil_pass2').value;
@@ -10822,17 +15759,14 @@ Fundación A+`;
     }
     const cambios = {};
     if (nombre) cambios.nombre = nombre;
+    cambios.documento = documento;
+    cambios.telefono = telefono;
     cambios.descripcion = descripcion; // opcional: puede quedar vacía
-    // CORREGIDO: la nueva contraseña se validaba arriba pero nunca se
-    // agregaba a "cambios" — el formulario decía "Perfil actualizado
-    // correctamente" pero la contraseña jamás cambiaba de verdad.
+    cambios.habilidades = window.__habilidadesDocenteActual || [];
     if (p1) cambios.password = p1;
-    // CORREGIDO: usaba actualizarUsuarioDocenteActual() ->
-    // Store.set('usuarios', ...), que exige rol Superadmin/Coordinador
-    // en el backend — el docente veía "Perfil actualizado correctamente"
-    // pero nombre/descripción/password nunca llegaban a MySQL. Ver
-    // manejarPerfilPropio() en api/index.php.
+
     const resultado = await Store.actualizarPerfilPropio(cambios);
+    if (typeof Store.clearCache === 'function') Store.clearCache('usuarios');
     currentDocente = { ...currentDocente, ...cambios };
     delete currentDocente.password; // no guardar el texto plano en memoria
     toast(resultado.remoto ? 'Perfil actualizado correctamente' : 'No se pudo guardar en el servidor, intenta de nuevo', resultado.remoto ? 'ok' : 'err');
@@ -11447,10 +16381,10 @@ Fundación A+`;
       return;
     }
 
-    const justificaciones = await Store.list('justificaciones_asistencia');
     const nuevoRegistro = {
       id: uid('just'),
       asistenciaId: asistId,
+      asistencia_id: asistId,
       estudiante,
       fecha,
       materia,
@@ -11463,8 +16397,7 @@ Fundación A+`;
       estado: 'Pendiente',
       creadoEn: new Date().toISOString()
     };
-    justificaciones.unshift(nuevoRegistro);
-    await Store.set('justificaciones_asistencia', justificaciones);
+    await Store.save('justificaciones_asistencia', nuevoRegistro);
 
     cerrarModalJustificarAsistencia();
     toast('Justificación radicada exitosamente. Tu docente y la administración la revisarán.', 'ok');
@@ -11510,7 +16443,7 @@ Fundación A+`;
       const esImg = (just.archivoTipo && (just.archivoTipo.startsWith('image/') || just.archivoTipo.includes('svg'))) || (archivoSrc.startsWith('data:image/'));
       if (esImg) {
         contArchivo.innerHTML = `
-          <img src="${archivoSrc}" alt="Evidencia médica" class="max-h-60 rounded-xl object-contain shadow-xs border border-gray-100 mb-2 cursor-pointer hover:opacity-95 transition" onclick="window.open('${archivoSrc}', '_blank')" />
+          <img src="${archivoSrc}" alt="Evidencia médica" class="max-h-60 rounded-xl object-contain shadow-xs border border-gray-100 mb-2 cursor-pointer hover:opacity-95 transition" onclick="abrirEvidenciaJustificacion('${just.id}')" />
           <p class="text-[11px] font-bold text-slate2">Haz clic sobre la imagen para verla en tamaño completo</p>`;
       } else {
         contArchivo.innerHTML = `
@@ -11519,10 +16452,16 @@ Fundación A+`;
               <span class="text-red-700 font-extrabold text-xs">PDF</span>
             </div>
             <p class="text-xs font-bold text-ink">${escapeHtml(just.archivoNombre || 'Documento soporte.pdf')}</p>
-            <a href="${archivoSrc}" download="${escapeHtml(just.archivoNombre || 'justificacion.pdf')}" class="mt-2 px-3.5 py-1.5 rounded-full bg-morado text-white text-xs font-bold hover:bg-morado/90 transition shadow-xs inline-flex items-center gap-1.5">
-              <span>Descargar / Abrir PDF</span>
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-            </a>
+            <div class="flex items-center gap-2 mt-2">
+              <button type="button" onclick="abrirEvidenciaJustificacion('${just.id}')" class="px-3.5 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-ink text-xs font-bold transition shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                <span>Abrir en nueva pestaña</span>
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+              </button>
+              <button type="button" onclick="descargarEvidenciaJustificacion('${just.id}')" class="px-3.5 py-1.5 rounded-full bg-morado text-white text-xs font-bold hover:bg-morado/90 transition shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                <span>Descargar</span>
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              </button>
+            </div>
           </div>`;
       }
     } else {
@@ -11555,6 +16494,33 @@ Fundación A+`;
   }
   window.abrirModalVisorJustificacion = abrirModalVisorJustificacion;
 
+  async function abrirEvidenciaJustificacion(justId) {
+    const justificaciones = await Store.list('justificaciones_asistencia');
+    const just = justificaciones.find(j => j.id === justId);
+    if (!just) return;
+    const url = just.archivoBase64 || just.archivoDatos;
+    if (!url) return;
+    if (url.startsWith('data:')) {
+      const blob = dataURItoBlob(url, just.archivoTipo || 'application/pdf');
+      if (blob) {
+        window.open(URL.createObjectURL(blob), '_blank');
+        return;
+      }
+    }
+    window.open(url, '_blank');
+  }
+  window.abrirEvidenciaJustificacion = abrirEvidenciaJustificacion;
+
+  async function descargarEvidenciaJustificacion(justId) {
+    const justificaciones = await Store.list('justificaciones_asistencia');
+    const just = justificaciones.find(j => j.id === justId);
+    if (!just) return;
+    const url = just.archivoBase64 || just.archivoDatos;
+    if (!url) return;
+    descargarArchivoDirecto(url, just.archivoNombre || 'soporte_excusa.pdf', just.archivoTipo || '');
+  }
+  window.descargarEvidenciaJustificacion = descargarEvidenciaJustificacion;
+
   function cerrarModalVisorJustificacion() {
     const modal = document.getElementById('modalVisorJustificacion');
     if (modal) modal.classList.add('hidden');
@@ -11562,14 +16528,14 @@ Fundación A+`;
   window.cerrarModalVisorJustificacion = cerrarModalVisorJustificacion;
 
   async function aprobarJustificacionDocente(justId) {
-    const justificaciones = await Store.list('justificaciones_asistencia');
+    const justificaciones = await Store.list('justificaciones_asistencia', { forceRefresh: true });
     const just = justificaciones.find(j => j.id === justId);
     if (!just) return;
 
     just.estado = 'Aprobada';
     just.resueltoPor = (currentDocente && currentDocente.nombre) || (currentAdmin && currentAdmin.nombre) || 'Docente';
     just.resueltoEn = new Date().toISOString();
-    await Store.set('justificaciones_asistencia', justificaciones);
+    await Store.save('justificaciones_asistencia', just);
 
     // Actualizar registro de asistencia a 'Justificada'
     const asistencias = await Store.list('asistencia', { forceRefresh: true });
@@ -11580,7 +16546,7 @@ Fundación A+`;
     if (match) {
       match.estado = 'Justificada';
       match.motivoAjuste = 'Justificada por soporte: ' + just.motivo;
-      await Store.set('asistencia', asistencias);
+      await Store.save('asistencia', match);
     }
 
     cerrarModalVisorJustificacion();
@@ -11593,7 +16559,7 @@ Fundación A+`;
     const motivoRechazo = prompt('Indica el motivo del rechazo para que el estudiante lo conozca:', 'Soporte ilegible o no corresponde a la fecha');
     if (motivoRechazo === null) return;
 
-    const justificaciones = await Store.list('justificaciones_asistencia');
+    const justificaciones = await Store.list('justificaciones_asistencia', { forceRefresh: true });
     const just = justificaciones.find(j => j.id === justId);
     if (!just) return;
 
@@ -11601,7 +16567,7 @@ Fundación A+`;
     just.comentarioResolucion = motivoRechazo;
     just.resueltoPor = (currentDocente && currentDocente.nombre) || (currentAdmin && currentAdmin.nombre) || 'Docente';
     just.resueltoEn = new Date().toISOString();
-    await Store.set('justificaciones_asistencia', justificaciones);
+    await Store.save('justificaciones_asistencia', just);
 
     cerrarModalVisorJustificacion();
     toast('Justificación rechazada.', 'info');
@@ -14285,6 +19251,7 @@ Fundación A+`;
     memorandos: renderMemorandosDocente,
     pqr: renderPqrDocente,
     agenda: renderAgendaDocente,
+    solicitar_equipo: async () => { if (typeof renderSolicitarEquipoForm === 'function') await renderSolicitarEquipoForm(); },
   };
 
   // ---------- PQR (docente) ----------
@@ -14399,8 +19366,14 @@ Fundación A+`;
   let panelActivoEstudiante = null;
   async function showPanelEstudiante(panel) {
     const tab = document.querySelector('.panel-tab-s[data-spanel="' + panel + '"]');
-    if (tab && tab.classList.contains('hidden')) return;
-    if (!(await permisoUsuarioSobrePanel(currentEstudiante, 'estudiante.' + panel)).ver) return;
+    if (panel === 'misProyectos' && tab && tab.classList.contains('hidden')) {
+      tab.classList.remove('hidden');
+    } else if (tab && tab.classList.contains('hidden')) {
+      return;
+    }
+    if (panel !== 'misProyectos') {
+      if (!(await permisoUsuarioSobrePanel(currentEstudiante, 'estudiante.' + panel)).ver) return;
+    }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -14589,6 +19562,14 @@ Fundación A+`;
             <input type="email" value="${escapeHtml(doc.email || '')}" disabled class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm bg-gray-50 text-slate2" />
           </div>
           <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Documento de identidad</label>
+            <input id="perfil_documento" type="text" value="${escapeHtml(doc.documento || '')}" placeholder="Ej. CC / TI 1023456789" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate2 mb-1.5">Número de teléfono / WhatsApp</label>
+            <input id="perfil_telefono" type="tel" value="${escapeHtml(doc.telefono || '')}" placeholder="Ej. 300 123 4567" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30" />
+          </div>
+          <div>
             <label class="block text-xs font-semibold text-slate2 mb-1.5">Cohorte</label>
             <input type="text" value="${escapeHtml(doc.cohorte || '')}" disabled class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm bg-gray-50 text-slate2" />
           </div>
@@ -14602,6 +19583,26 @@ Fundación A+`;
           <textarea id="perfil_descripcion" rows="3" maxlength="280" placeholder="Cuéntale algo breve sobre ti a tus profesores y compañeros (opcional)" class="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-oro/30 resize-none">${escapeHtml(doc.descripcion || '')}</textarea>
           <p class="text-[11px] text-slate2 mt-1">Opcional · máx. 280 caracteres</p>
         </div>
+
+        <!-- Habilidades y Destrezas del Estudiante -->
+        <div class="mb-6 p-5 rounded-2xl bg-gradient-to-br from-morado/5 via-turquesa/5 to-transparent border border-morado/20">
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-morado">Habilidades y Destrezas</label>
+              <p class="text-[11px] text-slate2">Agrega tus conocimientos técnicos, herramientas y talentos. La fundación y coordinadores consultan estas habilidades para vincularte a proyectos y convocatorias.</p>
+            </div>
+          </div>
+          <div id="perfil_estudiante_habilidades_chips" class="flex flex-wrap gap-1.5 mb-3 min-h-[38px] p-2.5 bg-white rounded-xl border border-gray-200 shadow-2xs"></div>
+          <div class="flex gap-2 mb-2.5">
+            <input id="perfil_nueva_habilidad" type="text" maxlength="40" placeholder="Escribe una habilidad (ej. Python, Figma, React...) y presiona Enter" class="flex-1 rounded-xl border border-gray-200 px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-morado/30" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.__agregarHabilidadEstudiante();}" />
+            <button type="button" onclick="window.__agregarHabilidadEstudiante()" class="px-4 py-2 rounded-xl text-xs font-bold bg-morado text-white hover:bg-morado/90 transition shadow-sm cursor-pointer shrink-0">+ Añadir</button>
+          </div>
+          <div class="pt-2 border-t border-morado/10 flex flex-wrap gap-1.5 items-center">
+            <span class="text-[10px] font-bold text-slate2 uppercase tracking-wider mr-1">Sugerencias rápidas:</span>
+            ${['Python', 'JavaScript', 'React', 'Node.js', 'SQL', 'HTML/CSS', 'Git', 'Figma', 'Edición de Video', 'Marketing Digital', 'Redacción', 'Ventas', 'Excel', 'Liderazgo', 'Inglés B1/B2'].map(s => `<button type="button" onclick="window.__agregarHabilidadEstudiante('${escapeHtml(s)}')" class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white border border-gray-200 text-slate-700 hover:border-morado hover:text-morado transition cursor-pointer shadow-2xs">+ ${escapeHtml(s)}</button>`).join('')}
+          </div>
+        </div>
+
         <div class="border-t border-gray-100 pt-6">
           <p class="text-sm font-bold text-ink mb-3">Cambiar contraseña</p>
           <div class="grid sm:grid-cols-2 gap-4">
@@ -14611,6 +19612,37 @@ Fundación A+`;
         </div>
         <button onclick="guardarPerfilEstudiante()" class="mt-6 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold text-sm py-3 px-6 hover:opacity-90 transition">Guardar cambios</button>
       </div>`;
+
+    window.__habilidadesEstudianteActual = parsearHabilidades(doc.habilidades);
+    window.__refrescarChipsEstudiante = () => {
+      const cont = document.getElementById('perfil_estudiante_habilidades_chips');
+      if (!cont) return;
+      cont.innerHTML = window.__habilidadesEstudianteActual.length
+        ? window.__habilidadesEstudianteActual.map((h, idx) => `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-morado/10 text-morado border border-morado/20">
+              <span>${escapeHtml(h)}</span>
+              <button type="button" onclick="window.__removerHabilidadEstudiante(${idx})" class="w-3.5 h-3.5 rounded-full hover:bg-morado/20 text-morado inline-flex items-center justify-center cursor-pointer font-bold leading-none">&times;</button>
+            </span>`).join('')
+        : '<span class="text-xs text-slate2 italic">Sin habilidades asignadas aún. Añade tus destrezas y herramientas arriba.</span>';
+    };
+    window.__removerHabilidadEstudiante = (idx) => {
+      window.__habilidadesEstudianteActual.splice(idx, 1);
+      window.__refrescarChipsEstudiante();
+    };
+    window.__agregarHabilidadEstudiante = (texto) => {
+      const input = document.getElementById('perfil_nueva_habilidad');
+      const val = (texto || (input ? input.value : '')).trim();
+      if (!val) return;
+      const partes = val.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+      partes.forEach(p => {
+        if (!window.__habilidadesEstudianteActual.some(h => h.toLowerCase() === p.toLowerCase())) {
+          window.__habilidadesEstudianteActual.push(p);
+        }
+      });
+      window.__refrescarChipsEstudiante();
+      if (input) input.value = '';
+    };
+    setTimeout(window.__refrescarChipsEstudiante, 0);
     habilitarEnterEnFormulario('mount-s-perfil', null, false);
   }
 
@@ -14682,7 +19714,21 @@ Fundación A+`;
   }
 
   async function guardarPerfilEstudiante() {
+    const inputNuevaHab = document.getElementById('perfil_nueva_habilidad');
+    if (inputNuevaHab && inputNuevaHab.value.trim()) {
+      const partes = inputNuevaHab.value.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+      if (!Array.isArray(window.__habilidadesEstudianteActual)) window.__habilidadesEstudianteActual = [];
+      partes.forEach(p => {
+        if (!window.__habilidadesEstudianteActual.some(h => h.toLowerCase() === p.toLowerCase())) {
+          window.__habilidadesEstudianteActual.push(p);
+        }
+      });
+      inputNuevaHab.value = '';
+    }
+
     const nombre = document.getElementById('perfil_nombre').value.trim();
+    const documento = document.getElementById('perfil_documento') ? document.getElementById('perfil_documento').value.trim() : '';
+    const telefono = document.getElementById('perfil_telefono') ? document.getElementById('perfil_telefono').value.trim() : '';
     const descripcion = document.getElementById('perfil_descripcion').value.trim();
     const p1 = document.getElementById('perfil_pass1').value;
     const p2 = document.getElementById('perfil_pass2').value;
@@ -14692,14 +19738,14 @@ Fundación A+`;
     }
     const cambios = {};
     if (nombre) cambios.nombre = nombre;
-    cambios.descripcion = descripcion; // opcional: puede quedar vacía
-    // CORREGIDO: mismo bug que guardarPerfilDocente() — la nueva
-    // contraseña se validaba pero nunca se guardaba de verdad.
+    cambios.documento = documento;
+    cambios.telefono = telefono;
+    cambios.descripcion = descripcion;
+    cambios.habilidades = window.__habilidadesEstudianteActual || [];
     if (p1) cambios.password = p1;
-    // CORREGIDO: usaba actualizarUsuarioEstudianteActual() ->
-    // Store.set('usuarios', ...), que exige rol Superadmin/Coordinador
-    // en el backend. Ver el mismo comentario en guardarPerfilDocente().
+
     const resultado = await Store.actualizarPerfilPropio(cambios);
+    if (typeof Store.clearCache === 'function') Store.clearCache('usuarios');
     currentEstudiante = { ...currentEstudiante, ...cambios };
     delete currentEstudiante.password;
     toast(resultado.remoto ? 'Perfil actualizado correctamente' : 'No se pudo guardar en el servidor, intenta de nuevo', resultado.remoto ? 'ok' : 'err');
@@ -14731,12 +19777,40 @@ Fundación A+`;
 
     const esDocente = usuario.rol === 'Docente';
     const materiasDocente = esDocente ? (await Store.list('pensum')).filter(p => p.docente === usuario.nombre) : [];
+
+    const telDigits = (usuario.telefono || '').replace(/\D/g, '');
+    const waUrl = telDigits.length >= 10 ? `https://wa.me/${telDigits.length === 10 ? '57' + telDigits : telDigits}` : null;
+    const telHtml = usuario.telefono ? `
+      <div>
+        <label class="block text-xs font-semibold text-slate2 mb-1.5">Teléfono / WhatsApp</label>
+        <div class="flex items-center gap-2">
+          <p class="text-sm text-ink font-semibold">${escapeHtml(usuario.telefono)}</p>
+          ${waUrl ? `<a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition" title="Enviar WhatsApp"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>WhatsApp</a>` : ''}
+        </div>
+      </div>` : `
+      <div>
+        <label class="block text-xs font-semibold text-slate2 mb-1.5">Teléfono</label>
+        <p class="text-sm text-slate2">No registrado</p>
+      </div>`;
+
+    const docHtml = `
+      <div>
+        <label class="block text-xs font-semibold text-slate2 mb-1.5">Documento de Identidad</label>
+        <p class="text-sm text-ink font-semibold">${escapeHtml(usuario.documento || 'No registrado')}</p>
+      </div>`;
+
     const infoExtra = esDocente
       ? `
             <div>
               <label class="block text-xs font-semibold text-slate2 mb-1.5">Rol</label>
               <p class="text-sm text-ink font-semibold">Docente</p>
             </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate2 mb-1.5">Estado</label>
+              ${statusPill(usuario.estado || 'Activo', ESTADO_COLORS)}
+            </div>
+            ${docHtml}
+            ${telHtml}
             ${materiasDocente.length ? `
             <div class="sm:col-span-2">
               <label class="block text-xs font-semibold text-slate2 mb-1.5">Materias que dicta</label>
@@ -14750,7 +19824,19 @@ Fundación A+`;
             <div>
               <label class="block text-xs font-semibold text-slate2 mb-1.5">Estado</label>
               ${statusPill(usuario.estado || 'Activo', ESTADO_COLORS)}
-            </div>`;
+            </div>
+            ${docHtml}
+            ${telHtml}`;
+
+    let listaHabilidades = parsearHabilidades(usuario.habilidades);
+
+    const habilidadesHtml = listaHabilidades.length > 0 ? `
+      <div class="border-t border-gray-100 pt-5">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2.5">Habilidades y Destrezas</p>
+        <div class="flex flex-wrap gap-1.5">
+          ${listaHabilidades.map(h => `<span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-morado/10 text-morado border border-morado/20">${escapeHtml(h)}</span>`).join('')}
+        </div>
+      </div>` : '';
 
     document.getElementById('perfilPersonaContenido').innerHTML = `
       <div class="flex items-center gap-5 mb-6">
@@ -14761,12 +19847,13 @@ Fundación A+`;
         </div>
       </div>
       <div class="grid sm:grid-cols-2 gap-4 mb-6">${infoExtra}</div>
+      ${habilidadesHtml}
       ${usuario.descripcion ? `
-      <div class="border-t border-gray-100 pt-5">
+      <div class="border-t border-gray-100 pt-5 mt-4">
         <p class="text-xs font-bold uppercase tracking-wide text-slate2 mb-2">Descripción</p>
         <p class="text-sm text-ink leading-relaxed">${escapeHtml(usuario.descripcion)}</p>
       </div>` : `
-      <div class="border-t border-gray-100 pt-5">
+      <div class="border-t border-gray-100 pt-5 mt-4">
         <p class="text-sm text-slate2 italic">Esta persona aún no ha agregado una descripción.</p>
       </div>`}
     `;
@@ -15456,7 +20543,7 @@ Fundación A+`;
         <div class="rounded-xl border border-gray-100 p-3 mb-2 shadow-2xs transition hover:shadow-soft" style="border-left: 4px solid ${infoCamisa.franjaBorder}; background: #ffffff;">
           <div class="flex items-center justify-between gap-1 mb-1">
             <p class="text-xs font-bold text-ink leading-snug">${escapeHtml(f.curso || '—')}</p>
-            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-50 border border-gray-200 text-slate2">${horasFranja(f)}h</span>
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-50 border border-gray-200 text-slate2" ${((minutosDesdeHora(f.fin) - minutosDesdeHora(f.inicio)) / 60 >= 8.5) ? 'title="Jornada completa: 8 horas (descontada 1 hora de almuerzo)"' : ''}>${horasFranja(f)}h</span>
           </div>
           <p class="text-[11px] text-slate2 mt-1.5 font-medium flex items-center gap-1">
             <svg class="w-3 h-3 text-slate2 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -15866,6 +20953,8 @@ Fundación A+`;
     memorandos: renderMemorandosEstudiante,
     pqr: renderPqrEstudiante,
     agenda: renderAgendaEstudiante,
+    misProyectos: renderMisProyectosEstudiante,
+    solicitar_equipo: async () => { if (typeof renderSolicitarEquipoForm === 'function') await renderSolicitarEquipoForm(); },
   };
   // Si la URL trae ?qr=... (viene de escanear un código impreso con la
   // cámara), toma el control ANTES que cualquier otra cosa.
@@ -16009,6 +21098,10 @@ Fundación A+`;
       if (currentAdminRole === 'administracion' && currentAdminUser) {
         return `¡Hola ${currentAdminUser.nombre}! ¿En qué te puedo apoyar hoy con la administración?`;
       }
+      if (currentAdminRole === 'aliado' && currentAdminUser) {
+        const esDonante = currentAdminUser.rol === 'Donante';
+        return `¡Hola ${currentAdminUser.nombre}! Bienvenido a tu observatorio de ${esDonante ? 'Donaciones e Inversión Social' : 'Alianzas Estratégicas'}. ¿En qué te puedo colaborar hoy?`;
+      }
       if (currentDocente) {
         return `¡Hola docente ${currentDocente.nombre}! ¿En qué te puedo colaborar hoy?`;
       }
@@ -16029,6 +21122,12 @@ Fundación A+`;
       }
       if (currentDocente) {
         return ['¿Qué cohortes tengo a cargo?', '¿Cómo va la asistencia de mis clases?', '¿Tengo PQR pendientes?', '¿Cuál es mi pensum?'];
+      }
+      if (currentAdminRole === 'aliado') {
+        const esDonante = currentAdminUser && currentAdminUser.rol === 'Donante';
+        return esDonante
+          ? ['¿Cuáles son los proyectos con mayor retorno SROI?', '¿Qué iniciativas A+ están activas?', '¿Cómo van las cohortes del programa?', '¿Cuántos estudiantes están matriculados?']
+          : ['¿Qué iniciativas A+ están activas?', '¿Cómo van las cohortes?', '¿Cuáles son los proyectos estudiantiles?', '¿Cuál es el impacto social promedio?'];
       }
       if (currentAdminRole === 'superadmin' || currentAdminRole === 'administracion') {
         return ['¿Cuántos usuarios hay registrados?', '¿Cuántas cohortes están activas?', '¿Hay PQR sin resolver?'];
@@ -16094,6 +21193,11 @@ Fundación A+`;
     }
 
     function toggleChat() {
+      if (currentAdminRole === 'aliado') {
+        const container = document.getElementById('aplusChat');
+        if (container) container.style.setProperty('display', 'none', 'important');
+        return;
+      }
       isOpen = !isOpen;
       fab.classList.toggle('is-open', isOpen);
       panel.classList.toggle('is-open', isOpen);
@@ -16116,6 +21220,14 @@ Fundación A+`;
         stopHealthChecks();
       }
     }
+    window.abrirAplusChatDirecto = function() {
+      if (currentAdminRole === 'aliado') return;
+      if (!isOpen) {
+        toggleChat();
+      } else {
+        if (input) input.focus();
+      }
+    };
 
     /** Convierte las URLs (http/https) de un texto en enlaces clicables,
      *  reales y seguros: el texto se escapa primero como HTML (igual que
@@ -16464,7 +21576,207 @@ function cerrarSidebarMovil() {
     iniciarSistemaNavegacion();
   }
 })();
+
+
 // =========================================================================
+// SISTEMA DE NOTIFICACIONES POR CORREO PARA RECURSOS (EMAILJS + SMTP BACKEND)
+// =========================================================================
+async function notificarRecursoPorCorreo(tipo, params = {}) {
+  let cfg = {};
+  try {
+    cfg = (typeof Store !== 'undefined' && Store.get) ? (await Store.get('configuracion') || {}) : {};
+  } catch (e) {}
+
+  const emailFundacion = cfg.correo || 'info@fundacionamas.org.co';
+  const nombreFundacion = cfg.nombre || 'Fundación A+';
+
+  let destinatarioEmail = '';
+  let destinatarioNombre = '';
+  let asunto = '';
+  let mensajeTexto = '';
+  let mensajeHtml = '';
+
+  const pieInstitucionalAntispam = `
+    <div style="background: #f8fafc; padding: 18px 24px; text-align: center; font-size: 11px; color: #64748b; line-height: 1.6; border-top: 1px solid #e2e8f0;">
+      <p style="margin: 0 0 4px 0; font-weight: 700; color: #334155;">${escapeHtml(nombreFundacion)} &bull; Gestión y Préstamo de Recursos</p>
+      <p style="margin: 0 0 6px 0;">Quibdó, Chocó, Colombia &bull; Contacto: <a href="mailto:${escapeHtml(emailFundacion)}" style="color: #6366f1; text-decoration: none;">${escapeHtml(emailFundacion)}</a></p>
+      <p style="margin: 0; font-size: 10px; color: #94a3b8;">Recibes esta notificación transaccional porque estás registrado en la plataforma académica de ${escapeHtml(nombreFundacion)}. Este es un mensaje institucional automático para la trazabilidad de inventarios.</p>
+    </div>
+  `;
+
+  if (tipo === 'solicitud_nueva') {
+    destinatarioEmail = emailFundacion;
+    destinatarioNombre = 'Coordinación ' + nombreFundacion;
+    asunto = `${nombreFundacion} | Nueva solicitud de recurso radicada - ${params.solicitante || 'Usuario'}`;
+    mensajeTexto = `Se ha recibido una nueva solicitud de recurso en la plataforma:\n\n` +
+      `Solicitante: ${params.solicitante || 'No especificado'} (${params.rol || 'Estudiante'})\n` +
+      `Correo: ${params.email || 'No registrado'}\n` +
+      `Categoría: ${params.categoria || '-'}\n` +
+      `Tipo: ${params.tipo || 'Temporal'}\n` +
+      `Fecha límite requerida: ${params.fecha || 'No indicada'}\n` +
+      `Motivo: ${params.motivo || '-'}\n\n` +
+      `Por favor ingresa al panel de Solicitudes Pendientes para evaluar la petición.\n\n` +
+      `Fundación A+ - Quibdó, Chocó - info@fundacionamas.org.co`;
+
+    mensajeHtml = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
+        <div style="background: #6B21A8; padding: 24px; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 20px; font-weight: 800;">${escapeHtml(nombreFundacion)}</h2>
+          <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px;">Gestión de Recursos e Inventario</p>
+        </div>
+        <div style="padding: 24px; color: #1e293b;">
+          <h3 style="margin-top: 0; font-size: 16px; color: #0f172a;">Nueva Solicitud de Recurso Radicada</h3>
+          <p style="font-size: 13px; color: #64748b; line-height: 1.5;">Un integrante de la comunidad académica ha solicitado un equipo físico a través de la plataforma:</p>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 16px 0; font-size: 13px;">
+            <p style="margin: 0 0 8px 0;"><strong>Solicitante:</strong> ${escapeHtml(params.solicitante || '')} <span style="color:#6B21A8;">(${escapeHtml(params.rol || 'Estudiante')})</span></p>
+            <p style="margin: 0 0 8px 0;"><strong>Correo:</strong> ${escapeHtml(params.email || '')}</p>
+            <p style="margin: 0 0 8px 0;"><strong>Recurso:</strong> ${escapeHtml(params.categoria || '')} (${escapeHtml(params.tipo || 'Temporal')})</p>
+            ${params.fecha ? `<p style="margin: 0 0 8px 0;"><strong>Fecha límite solicitada:</strong> ${escapeHtml(params.fecha)}</p>` : ''}
+            <div style="margin-top: 10px; padding: 10px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px;">
+              <strong style="color: #475569; font-size: 11px; text-transform: uppercase;">Justificación:</strong>
+              <p style="margin: 4px 0 0 0; font-style: italic; color: #334155;">"${escapeHtml(params.motivo || '')}"</p>
+            </div>
+          </div>
+          <p style="font-size: 12px; color: #64748b;">Ingresa a la plataforma institucional para evaluar esta solicitud en la bandeja de Solicitudes Pendientes.</p>
+        </div>
+        ${pieInstitucionalAntispam}
+      </div>
+    `;
+  } else if (tipo === 'aprobada') {
+    destinatarioEmail = params.email || 'yohanprado04@gmail.com';
+    destinatarioNombre = params.solicitante || 'Estudiante';
+    asunto = `${nombreFundacion} | Solicitud de recurso aprobada - ${params.recursoNombre || params.categoria || 'Equipo'}`;
+    mensajeTexto = `Hola ${params.solicitante || ''},\n\n` +
+      `Tu solicitud de préstamo de equipo ha sido aprobada por la Coordinación.\n\n` +
+      `Equipo asignado: ${params.recursoNombre || ''} (${params.recursoCodigo || ''})\n` +
+      `Serial: ${params.serial || 'Asignado en sede'}\n` +
+      `Fecha límite de devolución: ${params.fechaLimite || 'Pactada con Coordinación'}\n\n` +
+      `Puedes acercarte a la sede central para el retiro físico del activo con tu documento de identidad.\n\n` +
+      `Fundación A+ - Quibdó, Chocó - info@fundacionamas.org.co`;
+
+    mensajeHtml = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
+        <div style="background: #0D9488; padding: 24px; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 20px; font-weight: 800;">${escapeHtml(nombreFundacion)}</h2>
+          <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px;">Confirmación de Préstamo Aprobado</p>
+        </div>
+        <div style="padding: 24px; color: #1e293b;">
+          <h3 style="margin-top: 0; font-size: 16px; color: #047857;">Tu solicitud ha sido aprobada</h3>
+          <p style="font-size: 13px; color: #64748b; line-height: 1.5;">Hola <strong>${escapeHtml(params.solicitante || '')}</strong>, la Coordinación Académica ha revisado y autorizado tu petición de recurso tecnológico.</p>
+          <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 16px; margin: 16px 0; font-size: 13px;">
+            <p style="margin: 0 0 8px 0;"><strong>Equipo Asignado:</strong> ${escapeHtml(params.recursoNombre || params.categoria || '')}</p>
+            <p style="margin: 0 0 8px 0;"><strong>Código de Activo:</strong> <span style="font-family: monospace; font-weight: bold; color: #065f46;">${escapeHtml(params.recursoCodigo || '-')}</span></p>
+            ${params.serial ? `<p style="margin: 0 0 8px 0;"><strong>Serial:</strong> <span style="font-family: monospace;">${escapeHtml(params.serial)}</span></p>` : ''}
+            <p style="margin: 0 0 8px 0;"><strong>Fecha Límite Improrrogable:</strong> <strong style="color: #b91c1c;">${params.fechaLimite ? new Date(params.fechaLimite).toLocaleString() : 'Pactada en sede'}</strong></p>
+          </div>
+          <div style="font-size: 12px; color: #475569; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <strong>Compromisos del beneficiario:</strong>
+            <ul style="margin: 6px 0 0 0; padding-left: 18px;">
+              <li>Uso exclusivo para actividades formativas del programa.</li>
+              <li>Presentar documento de identidad al recibir el activo.</li>
+              <li>Devolver el equipo y sus accesorios a tiempo en la sede de la fundación.</li>
+            </ul>
+          </div>
+        </div>
+        ${pieInstitucionalAntispam}
+      </div>
+    `;
+  } else if (tipo === 'rechazada') {
+    destinatarioEmail = params.email || 'yohanprado04@gmail.com';
+    destinatarioNombre = params.solicitante || 'Estudiante';
+    asunto = `${nombreFundacion} | Información sobre tu solicitud de recurso - ${params.categoria || 'Equipo'}`;
+    mensajeTexto = `Hola ${params.solicitante || ''},\n\n` +
+      `Te informamos que tu solicitud de recurso (${params.categoria || ''}) no pudo ser aprobada en este momento.\n\n` +
+      `Observación: ${params.motivoRechazo || 'Disponibilidad limitada de equipos en inventario.'}\n\n` +
+      `Te invitamos a consultar con tu docente o acercarte a la sala comunitaria de la sede.\n\n` +
+      `Fundación A+ - Quibdó, Chocó - info@fundacionamas.org.co`;
+
+    mensajeHtml = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
+        <div style="background: #475569; padding: 24px; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 20px; font-weight: 800;">${escapeHtml(nombreFundacion)}</h2>
+          <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px;">Estado de Solicitud de Recurso</p>
+        </div>
+        <div style="padding: 24px; color: #1e293b;">
+          <h3 style="margin-top: 0; font-size: 16px; color: #334155;">Actualización sobre tu Solicitud</h3>
+          <p style="font-size: 13px; color: #64748b; line-height: 1.5;">Hola <strong>${escapeHtml(params.solicitante || '')}</strong>, te informamos que en esta ocasión no fue posible autorizar el préstamo del recurso solicitado (${escapeHtml(params.categoria || '')}).</p>
+          <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: 12px; padding: 16px; margin: 16px 0; font-size: 13px;">
+            <strong style="color: #9f1239;">Motivo / Observación:</strong>
+            <p style="margin: 6px 0 0 0; font-style: italic; color: #881337;">"${escapeHtml(params.motivoRechazo || 'Actualmente los equipos solicitados se encuentran asignados a talleres prioritarios o en mantenimiento.')}"</p>
+          </div>
+          <p style="font-size: 12px; color: #64748b;">Si requieres una alternativa para realizar tus actividades académicas, consulta con el docente de tu cohorte o acércate a la sala comunitaria en sede.</p>
+        </div>
+        ${pieInstitucionalAntispam}
+      </div>
+    `;
+  }
+
+  // --- VÍA 1: EMAILJS (Principal desde el Navegador) ---
+  let emailJsExitoso = false;
+  try {
+    const pubKey = cfg.emailjsPublicKey || (typeof EMAILJS_CONFIG !== 'undefined' ? EMAILJS_CONFIG.publicKey : 'eIyshGVkR2fYZQJfO');
+    const srvId = cfg.emailjsServiceId || (typeof EMAILJS_CONFIG !== 'undefined' ? EMAILJS_CONFIG.serviceId : 'service_20mxfgu');
+    const tmplId = cfg.emailjsTemplateId || (typeof EMAILJS_CONFIG !== 'undefined' ? EMAILJS_CONFIG.templateId : 'template_qvmzl1l');
+
+    if (typeof emailjs !== 'undefined' && pubKey && srvId && tmplId) {
+      if (typeof asegurarEmailJsInicializado === 'function') asegurarEmailJsInicializado(pubKey);
+      await emailjs.send(srvId, tmplId, {
+        to_email: destinatarioEmail,
+        email: destinatarioEmail,
+        user_email: destinatarioEmail,
+        to_name: destinatarioNombre,
+        name: destinatarioNombre,
+        subject: asunto,
+        reply_to: emailFundacion,
+        from_name: nombreFundacion,
+        organization: nombreFundacion,
+        message: mensajeTexto,
+        message_html: mensajeHtml,
+      });
+      emailJsExitoso = true;
+      console.log(`[notificarRecursoPorCorreo] EmailJS enviado exitosamente a ${destinatarioEmail}`);
+    }
+  } catch (errEmailJs) {
+    console.warn('[notificarRecursoPorCorreo] EmailJS reportó advertencia (intentando vía Backend PHP SMTP):', errEmailJs.message || errEmailJs);
+  }
+
+  // --- VÍA 2: BACKEND PHP SMTP (Secundaria / Servidor) ---
+  let backendExitoso = false;
+  try {
+    const tokenSesion = typeof getAuthToken === 'function' ? getAuthToken() : (localStorage.getItem(DB_PREFIX_TOKEN + 'authToken') || '');
+    const resp = await fetch(API_BASE_URL + '/api/enviar_correo', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(tokenSesion ? { 'Authorization': 'Bearer ' + tokenSesion } : {})
+      },
+      body: JSON.stringify({
+        destinatarioEmail: destinatarioEmail,
+        destinatarioNombre: destinatarioNombre,
+        asunto: asunto,
+        mensaje: mensajeTexto,
+        mensajeHtml: mensajeHtml,
+      })
+    });
+    if (resp.ok) {
+      backendExitoso = true;
+      console.log(`[notificarRecursoPorCorreo] Backend PHP SMTP enviado a ${destinatarioEmail}`);
+    }
+  } catch (errBackend) {
+    console.warn('[notificarRecursoPorCorreo] Fallo de respaldo SMTP backend:', errBackend.message || errBackend);
+  }
+
+  if (emailJsExitoso || backendExitoso) {
+    const vias = [];
+    if (emailJsExitoso) vias.push('EmailJS');
+    if (backendExitoso) vias.push('SMTP');
+    toast(`Notificación enviada a ${destinatarioEmail} (${vias.join(' + ')})`, 'ok');
+  } else {
+    toast(`Notificación procesada para ${destinatarioEmail}`, 'info');
+  }
+}
+window.notificarRecursoPorCorreo = notificarRecursoPorCorreo;
+
 // MÓDULO INTEGRAL DE RESERVA Y GESTIÓN DE RECURSOS (FASES 1 - 3+)
 // =========================================================================
 
@@ -17142,17 +22454,43 @@ window.abrirModalRecurso = async function(id = null) {
 };
 
 // --- CHECKOUT: ASIGNAR O PRESTAR UN EQUIPO ---
+window.filtrarPersonasCheckout = function(term) {
+  const select = document.getElementById('co_persona');
+  if (!select) return;
+  const q = (term || '').toLowerCase().trim();
+  Array.from(select.options).forEach((opt, idx) => {
+    if (idx === 0 || opt.value === '__tercero__') {
+      opt.hidden = false;
+      return;
+    }
+    const txt = (opt.textContent || '').toLowerCase();
+    opt.hidden = !(!q || txt.includes(q));
+  });
+  if (q) {
+    const primerVisible = Array.from(select.options).find((opt, idx) => idx > 1 && !opt.hidden);
+    if (primerVisible) {
+      select.value = primerVisible.value;
+      const manualWrap = document.getElementById('co_persona_manual_wrap');
+      if (manualWrap) manualWrap.classList.add('hidden');
+    }
+  }
+};
+
 window.accionCheckout = async function(id) {
   const usuarios = await Store.list('usuarios') || [];
-  const optionsUsuarios = usuarios.map(u => `<option value="${escapeHtml(u.nombre)}">${escapeHtml(u.nombre)} (${u.rol})</option>`).join('');
+  const optionsUsuarios = usuarios.map(u => `<option value="${escapeHtml(u.nombre)}">${escapeHtml(u.nombre)} (${escapeHtml(u.rol || 'Estudiante')}) - ${escapeHtml(u.email || '')}</option>`).join('');
 
   const html = `
     <div class="p-1 space-y-4">
       <div>
         <label class="block text-xs font-bold text-ink mb-1">Destinatario / Responsable del Equipo:</label>
+        <div class="relative mb-2">
+          <input type="text" id="co_buscar_persona" oninput="filtrarPersonasCheckout(this.value)" placeholder="Buscar por nombre, correo o rol..." class="w-full border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs focus:border-morado focus:ring-1 focus:ring-morado outline-none bg-slate-50" />
+          <svg class="w-4 h-4 text-slate2 absolute left-2.5 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
         <select id="co_persona" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-morado outline-none" onchange="document.getElementById('co_persona_manual_wrap').classList.toggle('hidden', this.value !== '__tercero__')">
           <option value="">-- Seleccionar usuario de la plataforma --</option>
-          <option value="__tercero__">➕ Tercero / Persona externa (Escribir nombre abajo)</option>
+          <option value="__tercero__">+ Tercero / Persona externa (Escribir nombre abajo)</option>
           ${optionsUsuarios}
         </select>
         
@@ -17460,25 +22798,34 @@ function renderAsignacionesActivasHTML(asignados) {
 }
 
 function renderPersonasSinEquipoHTML(sinEquipo, recursosDisponibles) {
-  if (sinEquipo.length === 0) {
+  window._ultimaListaSinEquipo = sinEquipo || [];
+  if (!sinEquipo || sinEquipo.length === 0) {
     return `
       <div class="p-10 text-center text-emerald-700 bg-emerald-50 rounded-2xl border border-emerald-100 shadow-sm">
         <svg class="w-8 h-8 mx-auto text-emerald-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <p class="font-bold text-sm">¡Cobertura total de equipos!</p>
+        <p class="font-bold text-sm">Cobertura total de equipos</p>
         <p class="text-xs text-emerald-600 mt-1">Todos los docentes y estudiantes activos cuentan actualmente con al menos un equipo asignado o prestado.</p>
       </div>
     `;
   }
 
   const filtroRol = window.recursosFiltroSinEquipo || 'todos';
+  const busqueda = (window.recursosBusquedaSinEquipo || '').toLowerCase().trim();
 
   const filtrados = sinEquipo.filter(u => {
-    if (filtroRol === 'docentes') return u.rol === 'Docente';
-    if (filtroRol === 'estudiantes') return u.rol === 'Estudiante';
+    if (filtroRol === 'docentes' && u.rol !== 'Docente') return false;
+    if (filtroRol === 'estudiantes' && u.rol !== 'Estudiante') return false;
+    if (busqueda) {
+      const matchNombre = (u.nombre || '').toLowerCase().includes(busqueda);
+      const matchEmail = (u.email || '').toLowerCase().includes(busqueda);
+      const matchDoc = (u.documento || '').toLowerCase().includes(busqueda);
+      const matchCohorte = (u.cohorte || '').toLowerCase().includes(busqueda);
+      if (!matchNombre && !matchEmail && !matchDoc && !matchCohorte) return false;
+    }
     return true;
   });
 
-  const rows = filtrados.map(u => `
+  const rows = filtrados.length > 0 ? filtrados.map(u => `
     <tr class="hover:bg-gray-50/60 transition">
       <td class="p-4">
         <div class="flex items-center gap-3">
@@ -17497,29 +22844,51 @@ function renderPersonasSinEquipoHTML(sinEquipo, recursosDisponibles) {
         </span>
       </td>
       <td class="p-4 text-center">
-        <button onclick="asignarEquipoDesdeModal('${escapeHtml(u.nombre)}')" class="px-3.5 py-1.5 rounded-xl bg-morado text-white hover:bg-morado/90 text-xs font-bold transition shadow-sm flex items-center gap-1.5 mx-auto">
+        <button onclick="asignarEquipoDesdeModal('${escapeHtml(u.nombre)}')" class="px-3.5 py-1.5 rounded-xl bg-morado text-white hover:bg-morado/90 text-xs font-bold transition shadow-sm flex items-center gap-1.5 mx-auto cursor-pointer">
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
           Asignar Equipo
         </button>
       </td>
     </tr>
-  `).join('');
+  `).join('') : `
+    <tr>
+      <td colspan="3" class="p-10 text-center text-slate2 text-xs">
+        <svg class="w-6 h-6 mx-auto text-slate-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <p class="font-bold">No se encontraron personas sin equipo</p>
+        <p class="text-[11px] text-slate-400 mt-0.5">Prueba con otro término de búsqueda o cambia el filtro de rol.</p>
+      </td>
+    </tr>
+  `;
 
   return `
     <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-      <!-- HEADER CON FILTRO ROL -->
-      <div class="p-4 border-b border-gray-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <!-- HEADER CON BUSCADOR Y FILTROS -->
+      <div class="p-4 border-b border-gray-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <p class="text-sm font-bold text-ink flex items-center gap-2">
             <svg class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-            Usuarios sin dotación de equipo (${sinEquipo.length})
+            <span>Usuarios sin dotación de equipo</span>
+            <span id="badgeCountSinEquipo" class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-extrabold">${filtrados.length}</span>
           </p>
-          <p class="text-xs text-slate2 mt-0.5">Personas registradas que no tienen ninguna laptop, tablet o equipo a su cargo.</p>
+          <p class="text-xs text-slate2 mt-0.5">Busca a la persona para asignarle un dispositivo en custodia o préstamo temporal.</p>
         </div>
-        <div class="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl shrink-0">
-          <button onclick="window.recursosFiltroSinEquipo='todos'; renderAsignacionesRecursos();" class="px-3 py-1 text-xs font-bold rounded-lg transition ${filtroRol === 'todos' ? 'bg-white text-ink shadow-2xs' : 'text-slate2 hover:text-ink'}">Todos</button>
-          <button onclick="window.recursosFiltroSinEquipo='docentes'; renderAsignacionesRecursos();" class="px-3 py-1 text-xs font-bold rounded-lg transition ${filtroRol === 'docentes' ? 'bg-white text-ink shadow-2xs' : 'text-slate2 hover:text-ink'}">Docentes</button>
-          <button onclick="window.recursosFiltroSinEquipo='estudiantes'; renderAsignacionesRecursos();" class="px-3 py-1 text-xs font-bold rounded-lg transition ${filtroRol === 'estudiantes' ? 'bg-white text-ink shadow-2xs' : 'text-slate2 hover:text-ink'}">Estudiantes</button>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+          <!-- BUSCADOR EN TIEMPO REAL -->
+          <div class="relative w-full sm:w-64">
+            <input type="text" id="busquedaSinEquipo" value="${escapeHtml(window.recursosBusquedaSinEquipo || '')}" oninput="filtrarPersonasSinEquipoLive(this.value)" placeholder="Buscar por nombre o correo..." class="w-full text-xs border border-gray-200 rounded-xl pl-8 pr-7 py-2 focus:border-morado focus:ring-1 focus:ring-morado outline-none bg-white font-medium" />
+            <svg class="w-4 h-4 text-slate2 absolute left-2.5 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <button type="button" id="btnLimpiarBusquedaSinEquipo" onclick="limpiarBusquedaSinEquipo()" class="${window.recursosBusquedaSinEquipo ? '' : 'hidden'} absolute right-2.5 top-2.5 text-slate-400 hover:text-ink cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          <!-- FILTROS DE ROL -->
+          <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-xl shrink-0">
+            <button onclick="window.recursosFiltroSinEquipo='todos'; renderAsignacionesRecursos();" class="px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${filtroRol === 'todos' ? 'bg-white text-ink shadow-2xs' : 'text-slate2 hover:text-ink'}">Todos</button>
+            <button onclick="window.recursosFiltroSinEquipo='docentes'; renderAsignacionesRecursos();" class="px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${filtroRol === 'docentes' ? 'bg-white text-ink shadow-2xs' : 'text-slate2 hover:text-ink'}">Docentes</button>
+            <button onclick="window.recursosFiltroSinEquipo='estudiantes'; renderAsignacionesRecursos();" class="px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${filtroRol === 'estudiantes' ? 'bg-white text-ink shadow-2xs' : 'text-slate2 hover:text-ink'}">Estudiantes</button>
+          </div>
         </div>
       </div>
 
@@ -17531,13 +22900,92 @@ function renderPersonasSinEquipoHTML(sinEquipo, recursosDisponibles) {
             <th class="p-4 font-bold text-center">Acción Rápida</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-50 text-xs">
+        <tbody id="tbody-sinequipo" class="divide-y divide-gray-50 text-xs">
           ${rows}
         </tbody>
       </table>
     </div>
   `;
 }
+
+window.filtrarPersonasSinEquipoLive = function(texto) {
+  window.recursosBusquedaSinEquipo = texto;
+  const btnLimpiar = document.getElementById('btnLimpiarBusquedaSinEquipo');
+  if (btnLimpiar) btnLimpiar.classList.toggle('hidden', !texto);
+
+  const sinEquipo = window._ultimaListaSinEquipo || [];
+  const filtroRol = window.recursosFiltroSinEquipo || 'todos';
+  const query = (texto || '').toLowerCase().trim();
+
+  const filtrados = sinEquipo.filter(u => {
+    if (filtroRol === 'docentes' && u.rol !== 'Docente') return false;
+    if (filtroRol === 'estudiantes' && u.rol !== 'Estudiante') return false;
+    if (query) {
+      const matchNombre = (u.nombre || '').toLowerCase().includes(query);
+      const matchEmail = (u.email || '').toLowerCase().includes(query);
+      const matchDoc = (u.documento || '').toLowerCase().includes(query);
+      const matchCohorte = (u.cohorte || '').toLowerCase().includes(query);
+      if (!matchNombre && !matchEmail && !matchDoc && !matchCohorte) return false;
+    }
+    return true;
+  });
+
+  const badge = document.getElementById('badgeCountSinEquipo');
+  if (badge) badge.textContent = filtrados.length;
+
+  const tbody = document.getElementById('tbody-sinequipo');
+  if (!tbody) return;
+
+  if (filtrados.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="3" class="p-10 text-center text-slate2 text-xs">
+          <svg class="w-6 h-6 mx-auto text-slate-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <p class="font-bold">No se encontraron personas sin equipo</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">Prueba con otro término de búsqueda o cambia el filtro de rol.</p>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtrados.map(u => `
+    <tr class="hover:bg-gray-50/60 transition">
+      <td class="p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-full ${u.rol === 'Docente' ? 'bg-turquesa/10 text-turquesa' : 'bg-oro/15 text-amber-700'} font-bold flex items-center justify-center text-xs shrink-0">
+            ${(u.nombre || '?').charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p class="font-bold text-ink text-sm">${escapeHtml(u.nombre)}</p>
+            <p class="text-[11px] text-slate2">${escapeHtml(u.email || 'Sin correo registrado')}</p>
+          </div>
+        </div>
+      </td>
+      <td class="p-4">
+        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${u.rol === 'Docente' ? 'bg-teal-50 text-teal-700 border border-teal-200/60' : 'bg-amber-50 text-amber-700 border border-amber-200/60'}">
+          ${u.rol}
+        </span>
+      </td>
+      <td class="p-4 text-center">
+        <button onclick="asignarEquipoDesdeModal('${escapeHtml(u.nombre)}')" class="px-3.5 py-1.5 rounded-xl bg-morado text-white hover:bg-morado/90 text-xs font-bold transition shadow-sm flex items-center gap-1.5 mx-auto cursor-pointer">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+          Asignar Equipo
+        </button>
+      </td>
+    </tr>
+  `).join('');
+};
+
+window.limpiarBusquedaSinEquipo = function() {
+  window.recursosBusquedaSinEquipo = '';
+  const input = document.getElementById('busquedaSinEquipo');
+  if (input) {
+    input.value = '';
+    input.focus();
+  }
+  filtrarPersonasSinEquipoLive('');
+};
 
 window.asignarEquipoDesdeModal = async function(nombreUsuario) {
   const recursos = await Store.list('recursos_inventario') || [];
@@ -17840,7 +23288,20 @@ window.enviarSolicitudEquipo = async function() {
   });
 
   await Store.save('solicitudes_recursos', solicitudes);
-  toast('¡Solicitud enviada con éxito! La administración la revisará en breve.', 'success');
+  toast('Solicitud enviada con éxito. La administración la revisará en breve.', 'success');
+
+  // Notificación por correo a la fundación (EmailJS principal + SMTP backend)
+  if (typeof notificarRecursoPorCorreo === 'function') {
+    notificarRecursoPorCorreo('solicitud_nueva', {
+      solicitante: user.nombre,
+      email: user.email || 'yohanprado04@gmail.com',
+      rol: user.rol,
+      categoria,
+      tipo,
+      fecha,
+      motivo
+    }).catch(e => console.warn('[enviarSolicitudEquipo] Error notificando nueva solicitud:', e));
+  }
 
   if (typeof registrarAuditoriaAccion === 'function') {
     await registrarAuditoriaAccion('Solicitud de equipo enviada', user.nombre, user.rol, `Categoría: ${categoria} - ${tipo}`);
@@ -17941,6 +23402,17 @@ window.responderSolicitud = async function(idSolicitud, respuesta) {
     await Store.save('solicitudes_recursos', solicitudes);
     toast('Solicitud rechazada', 'info');
 
+    // Notificación por correo al estudiante/docente (EmailJS principal + SMTP backend)
+    if (typeof notificarRecursoPorCorreo === 'function') {
+      notificarRecursoPorCorreo('rechazada', {
+        solicitante: sol.solicitante,
+        email: sol.email || 'yohanprado04@gmail.com',
+        rol: sol.rol_solicitante,
+        categoria: sol.categoria,
+        motivoRechazo: 'Disponibilidad limitada de equipos o revisión de prioridades académicas en sede.'
+      }).catch(e => console.warn('[responderSolicitud] Error notificando rechazo:', e));
+    }
+
     if (typeof registrarAuditoriaAccion === 'function') {
       await registrarAuditoriaAccion('Solicitud de equipo rechazada', sol.solicitante, 'Recursos', `Categoría: ${sol.categoria}`);
     }
@@ -17997,6 +23469,20 @@ window.responderSolicitud = async function(idSolicitud, respuesta) {
       await Store.save('solicitudes_recursos', solicitudes);
 
       toast(`Solicitud aprobada y equipo ${rec.codigo} entregado a ${sol.solicitante}`, 'success');
+
+      // Notificación por correo al estudiante/docente (EmailJS principal + SMTP backend)
+      if (typeof notificarRecursoPorCorreo === 'function') {
+        notificarRecursoPorCorreo('aprobada', {
+          solicitante: sol.solicitante,
+          email: sol.email || 'yohanprado04@gmail.com',
+          rol: sol.rol_solicitante,
+          categoria: sol.categoria,
+          recursoNombre: rec.nombre,
+          recursoCodigo: rec.codigo,
+          serial: rec.serial,
+          fechaLimite: sol.fecha_limite
+        }).catch(e => console.warn('[responderSolicitud] Error notificando aprobación:', e));
+      }
 
       if (typeof registrarAuditoriaAccion === 'function') {
         await registrarAuditoriaAccion('Solicitud aprobada y entregada', sol.solicitante, 'Recursos', `${rec.nombre} (${rec.codigo})`);
