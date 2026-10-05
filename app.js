@@ -10181,6 +10181,7 @@ Fundación A+`;
             asunto: subject,
             mensaje: message,
             mensajeHtml: messageHtml,
+            esPrueba: !!extras.esPrueba,
           })
         });
         const res = await resp.json().catch(() => ({}));
@@ -13885,7 +13886,7 @@ Fundación A+`;
 
         <!-- Probar envío de correo -->
         <div class="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <input id="cfg_correoPrueba" type="email" placeholder="Ingresa tu correo para probar envío" class="rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-morado/30 flex-1" />
+          <input id="cfg_correoPrueba" type="email" value="yohanprado04@gmail.com" placeholder="yohanprado04@gmail.com" class="rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-morado/30 flex-1" />
           <button type="button" onclick="probarEnvioCorreoTest()" class="rounded-xl bg-morado/10 hover:bg-morado/20 text-morado font-bold text-xs px-4 py-2.5 transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
             <span>Probar envío de correo</span>
@@ -13941,17 +13942,19 @@ Fundación A+`;
 
   async function probarEnvioCorreoTest() {
     const emailInput = document.getElementById('cfg_correoPrueba');
-    const email = (emailInput ? emailInput.value : '').trim();
-    if (!email) {
-      toast('Ingresa un correo electrónico para enviar la prueba.', 'err');
-      if (emailInput) emailInput.focus();
-      return;
+    let email = (emailInput ? emailInput.value : '').trim();
+    // Directriz estricta: NUNCA hacer pruebas con el correo de la fundación.
+    // Todas las pruebas se realizan exclusivamente con yohanprado04@gmail.com
+    if (!email || email.toLowerCase().includes('fundacionamas.org.co')) {
+      email = 'yohanprado04@gmail.com';
+      if (emailInput) emailInput.value = email;
     }
-    toast('Enviando correo de prueba...', 'ok');
+    toast('Enviando correo de prueba a ' + email + '...', 'ok');
     const res = await notificarEstadoRegistroPorCorreo(email, 'Usuario de Prueba', 'aprobado', {
       password: 'DemoPassword123*',
       passwordModificada: true,
       cohorte: 'Cohorte 1 (Demostración)',
+      esPrueba: true
     });
     if (res && res.ok) {
       toast('¡Correo de prueba enviado con éxito a ' + email + '!', 'ok');

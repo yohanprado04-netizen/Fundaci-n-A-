@@ -3,7 +3,7 @@
  * Optimización de velocidad, resiliencia y actualización instantánea sin bloqueos de caché.
  */
 
-const CACHE_NAME = 'fundacion-aplus-v8.8-talentos';
+const CACHE_NAME = 'fundacion-aplus-v8.9-email-safeguards';
 const CORE_ASSETS = [
   './logo.jpg',
   './logo.webp',
