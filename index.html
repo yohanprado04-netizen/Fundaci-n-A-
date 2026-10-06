@@ -13,6 +13,7 @@
 <meta name="copyright" content="Fundación A+">
 <meta name="application-name" content="Fundación A+">
 <link rel="canonical" href="https://fundacionamas.org.co/">
+<meta name="google-site-verification" content="google12a3451cce7b8647">
 
 <!-- Directivas para Motores de Búsqueda (Google, Bing, Yahoo, etc.) -->
 <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
@@ -315,8 +316,8 @@
     color: #FFFFFF !important;
   }
 </style>
-<link rel="stylesheet" href="style.css?v=20261004-v75">
-<link rel="stylesheet" href="modulo-aplus/css/aplus-module.css">
+<link rel="stylesheet" href="style.css?v=20261005-v94">
+<link rel="stylesheet" href="aplus-module.css?v=20261005-v94">
 </head>
 <body class="bg-white text-ink antialiased">
 
@@ -3001,9 +3002,19 @@
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-<script defer src="db.js?v=20261005-v90"></script>
-<script defer src="app.js?v=20261005-v90"></script>
-<script defer src="forms.js?v=20261005-v90"></script>
+<script defer src="db.js?v=20261006-v100"></script>
+<script defer src="app.js?v=20261006-v100"></script>
+<script defer src="forms.js?v=20261006-v100"></script>
+<script defer src="recursos.js?v=20261006-v100"></script>
+<script defer src="comunicados.js?v=20261006-v100"></script>
+<script defer src="pagos.js?v=20261006-v100"></script>
+<script defer src="proyectos.js?v=20261006-v100"></script>
+<script defer src="trainee.js?v=20261006-v100"></script>
+<script defer src="chat.js?v=20261006-v100"></script>
+<script defer src="asistencia.js?v=20261006-v100"></script>
+<script defer src="docentes.js?v=20261006-v100"></script>
+<script defer src="estudiantes.js?v=20261006-v100"></script>
+<script defer src="semaforo.js?v=20261006-v100"></script>
 
 <!-- Registro de Service Worker para carga instantánea y caché inteligente -->
 <script>
@@ -3012,11 +3023,11 @@
       if ('caches' in window) {
         caches.keys().then(keys => {
           keys.forEach(k => {
-            if (k !== 'fundacion-aplus-v9.0-historial-prestamos') caches.delete(k);
+            if (k !== 'fundacion-aplus-v10.0-cache') caches.delete(k);
           });
         });
       }
-      navigator.serviceWorker.register('./sw.js?v=20261005-v90').then((reg) => {
+      navigator.serviceWorker.register('./sw.js?v=20261006-v100').then((reg) => {
         reg.update();
       }).catch((err) => {
         console.warn('[SW] Registro de Service Worker omitido:', err);

@@ -3,7 +3,7 @@
  * Optimización de velocidad, resiliencia y actualización instantánea sin bloqueos de caché.
  */
 
-const CACHE_NAME = 'fundacion-aplus-v9.0-historial-prestamos';
+const CACHE_NAME = 'fundacion-aplus-v10.0-cache';
 const CORE_ASSETS = [
   './logo.jpg',
   './logo.webp',

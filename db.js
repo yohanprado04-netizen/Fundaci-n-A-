@@ -47,6 +47,10 @@ const API_BASE_URL = (function() {
   return '';
 })();
 
+if (typeof window !== 'undefined') {
+  window.API_BASE_URL = API_BASE_URL;
+}
+
 // DB_PREFIX_TOKEN: nombre distinto al DB_PREFIX que ya declara app.js (const
 // DB_PREFIX = 'aplus_admin_v1_'; dentro de su IIFE) — este archivo se carga
 // en un <script> normal, en el MISMO scope global que app.js, así que dos
@@ -73,6 +77,7 @@ function setAuthToken(token) {
 function getAuthToken() {
   return authToken;
 }
+if (typeof window !== 'undefined') window.getAuthToken = getAuthToken;
 
 /**
  * POST /api/auth/login — reemplaza la comparación en memoria que hacía
@@ -148,6 +153,9 @@ async function apiFetch(entidad, opciones = {}) {
   }
   return datos;
 }
+if (typeof window !== 'undefined') {
+  window.apiFetch = apiFetch;
+}
 
 // ── Entidades migradas a MySQL ────────────────────────────────────────
 const ENTIDADES_MYSQL = new Set([
@@ -166,12 +174,14 @@ const ENTIDADES_MYSQL = new Set([
   'chat_voz_conocimiento',   // base de conocimiento en MySQL
   'trainee_archivos',        // historial de archivos del estudiante en MySQL
   'comunicados',             // comunicados institucionales y notificaciones
+  'notificaciones',          // controlador modular de notificaciones
   'pagos_docentes',          // honorarios y pagos de docentes confidencial
   'pagos_estudiantes',       // matrículas y pagos de estudiantes con comprobante
   'justificaciones_asistencia', // excusas médicas / laborales de asistencia en MySQL
   'proyectos_fundacion',     // portafolio de proyectos e iniciativas A+ de la Fundación
   'proyectos_estudiantes',   // proyectos de desarrollo creados por estudiantes
   'historial_prestamos',     // trazabilidad e historial de préstamos y custodias de equipos
+  'seguimiento_alertas',     // bitácora de intervenciones y acciones tutoriales del semáforo en riesgo
 ]);
 
 // Entidades que son objetos únicos (no arrays).
@@ -228,7 +238,7 @@ function _invalidateCache(entity) {
  * está apagado o en mantenimiento, cuenta con respaldo automático a localStorage
  * para que la interfaz nunca se rompa.
  */
-const Store = {
+var Store = {
   get(entity, opciones = {}) {
     const forceRefresh = opciones.forceRefresh === true;
     if (ENTIDADES_MYSQL.has(entity)) {
@@ -351,6 +361,10 @@ const Store = {
     _invalidateCache(entity);
   },
 
+  invalidate(entity) {
+    _invalidateCache(entity);
+  },
+
   /**
    * Obtiene un archivo/documento puntual bajo demanda por su ID.
    * Evita transferir archivos pesados en listados.
@@ -427,6 +441,11 @@ const Store = {
     });
   },
 };
+
+// Exportar Store al scope global para que los módulos IIFE lo encuentren por window.Store
+if (typeof window !== 'undefined') {
+  window.Store = Store;
+}
 
 // Migración transparente: si hay archivos guardados en localStorage,
 // se envían a MySQL SOLO si el usuario ya tiene sesión iniciada.

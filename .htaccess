@@ -74,6 +74,21 @@ AddDefaultCharset UTF-8
   ExpiresByType font/woff2 "access plus 1 year"
 </IfModule>
 
+<IfModule mod_headers.c>
+  # Respuestas dinámicas y API en PHP: No almacenar en caché intermedia
+  <FilesMatch "\.(php)$">
+    Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+
+  # Service Worker: Debe revalidarse siempre para activar nuevas versiones de la app
+  <FilesMatch "sw\.js$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate, max-age=0"
+    Header set Pragma "no-cache"
+  </FilesMatch>
+</IfModule>
+
 # ------------------------------------------------------------------------------
 # 4. Encabezados de Seguridad y Endurecimiento HTTP (Hardening)
 # ------------------------------------------------------------------------------

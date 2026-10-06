@@ -8,3 +8,16 @@ api/*.log
 .DS_Store
 Thumbs.db
 scratch/
+ejecutar_pruebas.bat
+
+# Archivos y scripts locales de desarrollo omitidos de GitHub
+modulo-aplus/
+modulo-api/
+abrir_puerto_firewall.bat
+abrir_puerto_firewall.ps1
+auditar_red.bat
+auditar_red.ps1
+iniciar_chat.bat
+iniciar_servidor.bat
+router.php
+server.js

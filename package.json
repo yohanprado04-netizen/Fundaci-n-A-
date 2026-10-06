@@ -2,9 +2,9 @@
   "name": "fundacion-api",
   "version": "1.0.0",
   "description": "Plataforma de Gestion Educativa - Fundacion A+",
-  "main": "server.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node server.js"
+    "test": "php tests/run_all.php"
   },
   "keywords": [],
   "author": "",

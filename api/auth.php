@@ -157,7 +157,10 @@ if (!empty($usuario['habilidades'])) {
 }
 
 $token = generarToken([
-    'id' => $usuario['id'], 'email' => $usuario['email'], 'rol' => $usuario['rol'],
+    'id' => $usuario['id'],
+    'nombre' => $usuario['nombre'],
+    'email' => $usuario['email'],
+    'rol' => $usuario['rol'],
     'cohorte' => $usuario['cohorte'],
     'cohortes_permitidas' => $cohortesPermitidas,
     'v' => (int)($usuario['token_version'] ?? 1),

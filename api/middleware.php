@@ -304,3 +304,50 @@ if (!function_exists('limpiarRateLimit')) {
         } catch (Exception $e) {}
     }
 }
+
+if (!function_exists('obtenerRestriccionCohortes')) {
+    /**
+     * Determina si la sesión actual tiene restricción de cohortes (ej. Aliados y Donantes con cohortes asignadas).
+     * Retorna array de strings con nombres de cohorte permitidos, o null si tiene acceso total.
+     */
+    function obtenerRestriccionCohortes(array $sesion, PDO $pdo): ?array {
+        $rol = $sesion['rol'] ?? '';
+        if ($rol === 'Superadmin' || $rol === 'Coordinador') {
+            return null;
+        }
+        if ($rol === 'Aliado' || $rol === 'Donante') {
+            $cohortes = $sesion['cohortes_permitidas'] ?? null;
+            if ($cohortes === null && !empty($sesion['id'])) {
+                $stmt = $pdo->prepare('SELECT cohortes_permitidas FROM usuarios WHERE id = ? LIMIT 1');
+                $stmt->execute([$sesion['id']]);
+                $val = $stmt->fetchColumn();
+                if ($val) {
+                    $dec = json_decode($val, true);
+                    $cohortes = is_array($dec) ? $dec : array_map('trim', explode(',', $val));
+                }
+            }
+            if (is_array($cohortes)) {
+                if (in_array('todas', $cohortes, true) || empty($cohortes)) {
+                    return null;
+                }
+                return array_values($cohortes);
+            }
+        }
+        return null;
+    }
+}
+
+if (!function_exists('prepararReemplazoGenerico')) {
+    /**
+     * Exige sesión válida (cualquier rol o especificados) y decodifica el body como array para
+     * un POST/PUT masivo común.
+     */
+    function prepararReemplazoGenerico(array $rolesPermitidos = []): array {
+        exigirSesion($rolesPermitidos);
+        $datos = leerBodyJson();
+        if (!is_array($datos)) {
+            responderError('Se esperaba un array en el body.', 400);
+        }
+        return $datos;
+    }
+}
