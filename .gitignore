@@ -8,6 +8,8 @@ api/*.log
 .DS_Store
 Thumbs.db
 scratch/
+node_modules/
+dist/
 ejecutar_pruebas.bat
 
 # Archivos y scripts locales de desarrollo omitidos de GitHub
