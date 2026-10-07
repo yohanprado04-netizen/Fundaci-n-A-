@@ -2398,3 +2398,1849 @@ html.dark #studentView .fixed.inset-0 .bg-white {
   text-overflow: ellipsis;
   vertical-align: top;
 }
+
+/* ==========================================================================
+   ESTILOS ADICIONALES: PROYECTOS Y OPORTUNIDADES A+
+   ========================================================================== */
+﻿/* =============================================================================
+   Módulo "Proyectos y Oportunidades A+"
+   -----------------------------------------------------------------------------
+   Hoja de estilos única y encapsulada:
+     - Todos los selectores nacen bajo #aplus-module-root.
+     - Todas las clases llevan el prefijo aplus-.
+     - Cero dependencias: tipografía del sistema, iconos SVG inline.
+
+   Índice
+     1. Variables (tokens de diseño)
+     2. Base / reset encapsulado
+     3. Layout (contenedor, encabezado, métricas)
+     4. Componentes
+        4.1 Iconos y botones
+        4.2 Barra de búsqueda y filtros
+        4.3 Contador de resultados y rejilla / lista
+        4.4 Tarjeta de proyecto
+        4.5 Badges, estados, KPIs y medidor de impacto
+        4.6 Paginación
+     5. Estados (skeleton, vacío, error)
+     6. Modal de detalle
+     7. Responsive
+     8. Movimiento reducido
+   ========================================================================== */
+
+
+/* =============================================================================
+   1. VARIABLES
+   -----------------------------------------------------------------------------
+   Se declaran en `:root, #aplus-module-root` para que funcionen en la página
+   independiente y al incrustar el módulo. Para personalizarlo desde la web
+   anfitriona, sobrescríbelas SOLO bajo `#aplus-module-root { ... }` (no en
+   :root), así nunca afectan al resto de la plataforma. Ejemplo:
+
+     #aplus-module-root {
+       --aplus-color-primary: #2563EB;
+       --aplus-color-on-primary: #FFFFFF;
+       --aplus-color-primary-border: #2563EB;
+       --aplus-color-primary-hover: #1D4ED8;
+       --aplus-color-ink: #1D4ED8;
+     }
+   ========================================================================== */
+
+:root,
+#aplus-module-root {
+  /* --- Paleta Institucional Fundación A+ (Inspirada en el Logo) --------------
+     Colores: Morado (#8B5CF6), Turquesa (#1FC8C0), Coral (#F0455C), Oro (#F5A623) */
+  --aplus-color-morado: #8B5CF6;
+  --aplus-color-morado-dark: #6D28D9;
+  --aplus-color-morado-soft: #F5F3FF;
+  --aplus-color-turquesa: #1FC8C0;
+  --aplus-color-turquesa-dark: #0D9488;
+  --aplus-color-turquesa-soft: #F0FDFA;
+  --aplus-color-coral: #F0455C;
+  --aplus-color-coral-dark: #BE123C;
+  --aplus-color-coral-soft: #FFF1F2;
+  --aplus-color-oro: #F5A623;
+  --aplus-color-oro-dark: #B45309;
+  --aplus-color-oro-soft: #FFFBEB;
+  --aplus-color-marron: #9A5B3F;
+
+  /* --- Botones y estados activos (Estilo institucional Fundación A+) -------- */
+  --aplus-color-primary: #8B5CF6;
+  --aplus-color-on-primary: #FFFFFF;
+  --aplus-color-primary-border: transparent;
+  --aplus-color-primary-hover: #7C3AED;
+  --aplus-color-on-primary-hover: #FFFFFF;
+  --aplus-color-ink: #7C3AED;                /* estados activos (vista, página) */
+  --aplus-color-on-ink: #FFFFFF;
+  --aplus-color-focus: #8B5CF6;              /* anillo de foco                  */
+  --aplus-color-focus-ring: rgba(139, 92, 246, 0.25);
+
+  /* --- Neutros ------------------------------------------------------------- */
+  --aplus-color-bg: #F8FAFC;
+  --aplus-color-surface: #FFFFFF;
+  --aplus-color-surface-muted: #F1F5F9;
+  --aplus-color-surface-hover: #F8FAFC;
+  --aplus-color-border: #E2E8F0;
+  --aplus-color-border-strong: #CBD5E1;
+  --aplus-color-text: #0F172A;
+  --aplus-color-text-muted: #475569;
+  --aplus-color-text-subtle: #64748B;
+
+  /* --- Acento A+ (Gradiente Morado, Turquesa y Coral del Logo) -------------- */
+  --aplus-gradient-aplus: linear-gradient(90deg, #8B5CF6 0%, #1FC8C0 55%, #F0455C 100%);
+  --aplus-gradient-aplus-soft: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(31, 200, 192, 0.1) 100%);
+  --aplus-aplus-border: rgba(139, 92, 246, 0.35);
+  --aplus-aplus-glow: 0 0 0 1px rgba(139, 92, 246, 0.18), 0 10px 28px -12px rgba(139, 92, 246, 0.35);
+
+  /* --- Estados de proyecto (texto / fondo) -------------------------------- */
+  --aplus-status-evaluacion: #B45309;
+  --aplus-status-evaluacion-bg: #FFFBEB;
+  --aplus-status-aprobado: #6D28D9;
+  --aplus-status-aprobado-bg: #F5F3FF;
+  --aplus-status-ejecucion: #0D9488;
+  --aplus-status-ejecucion-bg: #F0FDFA;
+  --aplus-status-completado: #334155;
+  --aplus-status-completado-bg: #F1F5F9;
+  --aplus-status-pausa: #BE123C;
+  --aplus-status-pausa-bg: #FFF1F2;
+
+  /* --- Medidor de impacto -------------------------------------------------- */
+  --aplus-meter-track: #E2E8F0;
+  --aplus-meter-fill: linear-gradient(90deg, #8B5CF6 0%, #1FC8C0 100%);
+
+  /* --- Skeleton ------------------------------------------------------------ */
+  --aplus-skeleton-base: #E9EEF4;
+  --aplus-skeleton-shine: #F8FAFC;
+
+  /* --- Tipografía (Moderna y Premium) -------------------------------------- */
+  --aplus-font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --aplus-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --aplus-text-xs: 0.8125rem;   /* 13px */
+  --aplus-text-sm: 0.9375rem;   /* 15px */
+  --aplus-text-base: 1.0625rem; /* 17px */
+  --aplus-text-lg: 1.25rem;     /* 20px */
+  --aplus-text-xl: 1.5rem;      /* 24px */
+  --aplus-text-2xl: 2rem;       /* 32px */
+
+  /* --- Espaciado, radios y sombras (Más amplios y modernos) --------------- */
+  --aplus-space-1: 0.3125rem;
+  --aplus-space-2: 0.625rem;
+  --aplus-space-3: 0.875rem;
+  --aplus-space-4: 1.25rem;
+  --aplus-space-5: 1.5rem;
+  --aplus-space-6: 2rem;
+  --aplus-space-8: 2.75rem;
+  --aplus-radius-sm: 10px;
+  --aplus-radius-md: 14px;
+  --aplus-radius-lg: 20px;
+  --aplus-radius-xl: 28px;
+  --aplus-radius-pill: 999px;
+  --aplus-shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.04);
+  --aplus-shadow-md: 0 4px 18px -2px rgba(15, 23, 42, 0.06), 0 2px 8px -1px rgba(15, 23, 42, 0.03);
+  --aplus-shadow-lg: 0 16px 36px -6px rgba(15, 23, 42, 0.09), 0 6px 16px -2px rgba(15, 23, 42, 0.04);
+  --aplus-shadow-xl: 0 28px 72px -12px rgba(15, 23, 42, 0.28);
+
+  /* --- Movimiento y capas -------------------------------------------------- */
+  --aplus-duration: 220ms;
+  --aplus-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --aplus-z-modal: 1000;
+  --aplus-max-width: 1420px;
+  --aplus-backdrop: rgba(15, 23, 42, 0.65);
+}
+
+
+/* =============================================================================
+   2. BASE / RESET ENCAPSULADO
+   -----------------------------------------------------------------------------
+   `#aplus-module-root :where(...)` tiene especificidad (1,0,0): neutraliza los
+   estilos genéricos de la web anfitriona (h1, p, button…) pero siempre pierde
+   frente a las clases de componente `#aplus-module-root .aplus-*` (1,1,0).
+   ========================================================================== */
+
+#aplus-module-root {
+  font-family: var(--aplus-font-sans);
+  font-size: var(--aplus-text-base);
+  line-height: 1.5;
+  color: var(--aplus-color-text);
+  background: var(--aplus-color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+#aplus-module-root :where(*, *::before, *::after) {
+  box-sizing: border-box;
+}
+
+#aplus-module-root :where(h1, h2, h3, h4, p, ul, ol, dl, dd, figure, blockquote) {
+  margin: 0;
+}
+
+#aplus-module-root :where(h1, h2, h3, h4) {
+  font-weight: 700;
+  line-height: 1.25;
+  color: inherit;
+  letter-spacing: -0.01em;
+}
+
+#aplus-module-root :where(ul, ol) {
+  list-style: none;
+  padding: 0;
+}
+
+#aplus-module-root :where(button, input, select, textarea) {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  margin: 0;
+}
+
+#aplus-module-root :where(button) {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-transform: none;
+}
+
+#aplus-module-root :where(a) {
+  color: inherit;
+}
+
+#aplus-module-root :where(svg) {
+  display: block;
+  max-width: 100%;
+}
+
+#aplus-module-root [hidden] {
+  display: none !important;
+}
+
+#aplus-module-root :focus-visible {
+  outline: 2px solid var(--aplus-color-focus);
+  outline-offset: 2px;
+}
+
+#aplus-module-root .aplus-sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+
+/* =============================================================================
+   3. LAYOUT
+   ========================================================================== */
+
+#aplus-module-root .aplus-module {
+  max-width: var(--aplus-max-width);
+  margin-inline: auto;
+  padding: clamp(2rem, 4vw, 3.5rem) clamp(1.25rem, 4vw, 3rem) clamp(3rem, 6vw, 5rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--aplus-space-8);
+}
+
+/* --- Encabezado ------------------------------------------------------------ */
+
+#aplus-module-root .aplus-header {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--aplus-space-3);
+}
+
+#aplus-module-root .aplus-header__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: flex-start;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--aplus-radius-pill);
+  background: var(--aplus-color-morado-soft);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  font-size: var(--aplus-text-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--aplus-color-morado-dark);
+}
+
+#aplus-module-root .aplus-header__eyebrow::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--aplus-color-morado);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
+}
+
+#aplus-module-root .aplus-header__title {
+  font-size: clamp(2.25rem, 1.8rem + 2.2vw, 3.5rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--aplus-color-text);
+  overflow-wrap: break-word;
+}
+
+#aplus-module-root .aplus-header__subtitle {
+  max-width: 76ch;
+  font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem);
+  line-height: 1.65;
+  color: var(--aplus-color-text-muted);
+}
+
+/* --- Resumen métrico ------------------------------------------------------- */
+
+#aplus-module-root .aplus-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  gap: var(--aplus-space-4);
+  margin-top: var(--aplus-space-4);
+}
+
+#aplus-module-root .aplus-metrics:empty {
+  display: none;
+}
+
+#aplus-module-root .aplus-metric {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--aplus-space-4);
+  min-width: 0;
+  padding: 1.35rem 1.6rem;
+  background: var(--aplus-color-surface);
+  border: 1px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-lg);
+  box-shadow: var(--aplus-shadow-sm);
+  transition:
+    transform var(--aplus-duration) var(--aplus-ease),
+    box-shadow var(--aplus-duration) var(--aplus-ease),
+    border-color var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-metric:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--aplus-shadow-md);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+#aplus-module-root .aplus-metric__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: var(--aplus-radius-md);
+  background: linear-gradient(135deg, #F5F3FF 0%, #EEF2FF 100%);
+  color: var(--aplus-color-morado);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+#aplus-module-root .aplus-metric__icon svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+#aplus-module-root .aplus-metric__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+#aplus-module-root .aplus-metric__label {
+  font-size: var(--aplus-text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--aplus-color-text-subtle);
+}
+
+#aplus-module-root .aplus-metric__value {
+  font-size: clamp(1.25rem, 1.1rem + 0.4vw, 1.65rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  color: var(--aplus-color-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#aplus-module-root .aplus-metric--aplus {
+  border-color: var(--aplus-aplus-border);
+  background: linear-gradient(145deg, #FFFFFF 0%, #FAF5FF 60%, #F0FDFA 100%);
+  box-shadow: var(--aplus-shadow-md);
+}
+
+#aplus-module-root .aplus-metric--aplus .aplus-metric__icon {
+  background: linear-gradient(135deg, #8B5CF6 0%, #1FC8C0 100%);
+  color: #FFFFFF;
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
+}
+
+#aplus-module-root .aplus-metric--aplus .aplus-metric__value {
+  color: var(--aplus-color-morado-dark);
+}
+
+#aplus-module-root .aplus-metric--skeleton {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--aplus-space-3);
+  min-height: 5.75rem;
+  justify-content: center;
+}
+
+/* --- Mensaje sin JavaScript ------------------------------------------------ */
+
+#aplus-module-root .aplus-noscript {
+  padding: var(--aplus-space-4) var(--aplus-space-5);
+  border: 1px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-md);
+  background: var(--aplus-color-surface);
+  color: var(--aplus-color-text-muted);
+}
+
+
+/* =============================================================================
+   4. COMPONENTES
+   ========================================================================== */
+
+/* --- 4.1 Iconos y botones -------------------------------------------------- */
+
+#aplus-module-root .aplus-icon {
+  width: 1.25em;
+  height: 1.25em;
+  flex-shrink: 0;
+}
+
+#aplus-module-root .aplus-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.875rem;
+  padding: 0.65rem 1.45rem;
+  border: 1px solid transparent;
+  border-radius: var(--aplus-radius-md);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--aplus-duration) var(--aplus-ease),
+    color var(--aplus-duration) var(--aplus-ease),
+    border-color var(--aplus-duration) var(--aplus-ease),
+    box-shadow var(--aplus-duration) var(--aplus-ease),
+    transform var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-btn .aplus-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+#aplus-module-root .aplus-btn--primary {
+  background: linear-gradient(90deg, #8B5CF6 0%, #1FC8C0 100%);
+  color: #FFFFFF;
+  border-color: transparent;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
+  font-weight: 700;
+}
+
+#aplus-module-root .aplus-btn--primary:hover {
+  background: linear-gradient(90deg, #7C3AED 0%, #0D9488 100%);
+  color: #FFFFFF;
+  border-color: transparent;
+  box-shadow: 0 8px 26px rgba(139, 92, 246, 0.45);
+  transform: translateY(-2px);
+}
+
+#aplus-module-root .aplus-btn--primary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 10px rgba(139, 92, 246, 0.25);
+}
+
+#aplus-module-root .aplus-btn--primary .aplus-icon {
+  transition: transform var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-btn--primary:hover .aplus-icon:last-child {
+  transform: translateX(2px);
+}
+
+#aplus-module-root .aplus-btn--ghost {
+  background: transparent;
+  color: var(--aplus-color-text-muted);
+  border-color: var(--aplus-color-border);
+}
+
+#aplus-module-root .aplus-btn--ghost:hover:not(:disabled) {
+  background: var(--aplus-color-surface-muted);
+  color: var(--aplus-color-text);
+  border-color: var(--aplus-color-border-strong);
+}
+
+#aplus-module-root .aplus-btn:disabled,
+#aplus-module-root .aplus-btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* --- 4.2 Barra de búsqueda y filtros --------------------------------------- */
+
+#aplus-module-root .aplus-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--aplus-space-4);
+  padding: 1.5rem 1.75rem;
+  background: var(--aplus-color-surface);
+  border: 1px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-lg);
+  box-shadow: var(--aplus-shadow-md);
+}
+
+#aplus-module-root .aplus-filters__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--aplus-space-3);
+  min-width: 0;
+}
+
+#aplus-module-root .aplus-filters__row--primary {
+  align-items: center;
+}
+
+#aplus-module-root .aplus-filters__row--secondary {
+  align-items: flex-end;
+  padding-top: var(--aplus-space-4);
+  border-top: 1px solid var(--aplus-color-border);
+}
+
+/* Búsqueda */
+#aplus-module-root .aplus-search {
+  position: relative;
+  flex: 1 1 340px;
+  min-width: 0;
+}
+
+#aplus-module-root .aplus-search__icon {
+  position: absolute;
+  top: 50%;
+  left: 1.1rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  color: var(--aplus-color-text-subtle);
+  pointer-events: none;
+}
+
+#aplus-module-root .aplus-search__icon .aplus-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+#aplus-module-root .aplus-search__input,
+#aplus-module-root .aplus-select {
+  width: 100%;
+  min-height: 3.25rem;
+  border: 1.5px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-md);
+  background-color: var(--aplus-color-surface);
+  color: var(--aplus-color-text);
+  font-size: 1rem;
+  font-weight: 500;
+  transition:
+    border-color var(--aplus-duration) var(--aplus-ease),
+    box-shadow var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-search__input {
+  padding: 0.75rem 1rem 0.75rem 3.1rem;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+#aplus-module-root .aplus-search__input::placeholder {
+  color: var(--aplus-color-text-subtle);
+  opacity: 1;
+}
+
+#aplus-module-root .aplus-search__input:hover,
+#aplus-module-root .aplus-select:hover {
+  border-color: var(--aplus-color-border-strong);
+}
+
+#aplus-module-root .aplus-search__input:focus,
+#aplus-module-root .aplus-select:focus {
+  outline: none;
+  border-color: var(--aplus-color-focus);
+  box-shadow: 0 0 0 3px var(--aplus-color-focus-ring);
+}
+
+/* Switch "Solo Iniciativas A+" */
+#aplus-module-root .aplus-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--aplus-space-3);
+  min-height: 3.25rem;
+  padding: 0.5rem 1.25rem 0.5rem 1rem;
+  border: 1.5px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-pill);
+  background: var(--aplus-color-surface);
+  color: var(--aplus-color-text);
+  font-size: var(--aplus-text-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  transition:
+    background-color var(--aplus-duration) var(--aplus-ease),
+    border-color var(--aplus-duration) var(--aplus-ease),
+    box-shadow var(--aplus-duration) var(--aplus-ease),
+    color var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-switch:hover {
+  border-color: var(--aplus-color-border-strong);
+  background: var(--aplus-color-surface-hover);
+}
+
+#aplus-module-root .aplus-switch__track {
+  position: relative;
+  flex-shrink: 0;
+  width: 2.75rem;
+  height: 1.5rem;
+  border-radius: var(--aplus-radius-pill);
+  background: var(--aplus-color-border-strong);
+  transition: background var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-switch__thumb {
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  background: var(--aplus-color-surface);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.3);
+  transition: transform var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-switch[aria-checked="true"] {
+  border-color: var(--aplus-color-morado);
+  background: var(--aplus-gradient-aplus-soft);
+  color: var(--aplus-color-morado-dark);
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.25), 0 4px 14px rgba(139, 92, 246, 0.15);
+}
+
+#aplus-module-root .aplus-switch[aria-checked="true"] .aplus-switch__track {
+  background: linear-gradient(90deg, #8B5CF6 0%, #1FC8C0 100%);
+}
+
+#aplus-module-root .aplus-switch[aria-checked="true"] .aplus-switch__thumb {
+  transform: translateX(1.25rem);
+}
+
+/* Campos y selects */
+#aplus-module-root .aplus-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--aplus-space-1);
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+#aplus-module-root .aplus-field__label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--aplus-color-text-muted);
+}
+
+#aplus-module-root .aplus-select {
+  padding: 0.65rem 2.5rem 0.65rem 1rem;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1.15rem 1.15rem;
+}
+
+/* Acciones: alternador de vista + limpiar */
+#aplus-module-root .aplus-filters__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--aplus-space-3);
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+#aplus-module-root .aplus-view-toggle {
+  display: inline-flex;
+  padding: 4px;
+  gap: 3px;
+  border: 1px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-md);
+  background: var(--aplus-color-surface-muted);
+}
+
+#aplus-module-root .aplus-view-toggle__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 8px;
+  color: var(--aplus-color-text-muted);
+  transition:
+    background-color var(--aplus-duration) var(--aplus-ease),
+    color var(--aplus-duration) var(--aplus-ease),
+    box-shadow var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-view-toggle__btn .aplus-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+#aplus-module-root .aplus-view-toggle__btn:hover {
+  color: var(--aplus-color-text);
+  background: var(--aplus-color-surface);
+}
+
+#aplus-module-root .aplus-view-toggle__btn[aria-pressed="true"],
+#aplus-module-root .aplus-view-toggle__btn.is-active {
+  background: #6D28D9 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 2px 8px rgba(109, 40, 217, 0.35);
+}
+
+#aplus-module-root .aplus-view-toggle__btn[aria-pressed="false"]:not(.is-active) {
+  background: transparent !important;
+  color: var(--aplus-color-text-muted) !important;
+}
+
+/* --- 4.3 Contador de resultados y rejilla / lista --------------------------- */
+
+#aplus-module-root .aplus-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--aplus-space-4);
+}
+
+#aplus-module-root .aplus-results__count {
+  font-size: var(--aplus-text-base);
+  font-weight: 600;
+  color: var(--aplus-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+#aplus-module-root .aplus-grid {
+  display: grid;
+  gap: 1.75rem;
+}
+
+#aplus-module-root [data-view="grid"] .aplus-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+}
+
+#aplus-module-root [data-view="list"] .aplus-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--aplus-space-4);
+}
+
+#aplus-module-root .aplus-grid__item {
+  display: flex;
+  min-width: 0;
+}
+
+/* --- 4.4 Tarjeta de proyecto ----------------------------------------------- */
+
+#aplus-module-root .aplus-card {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.75rem;
+  background: var(--aplus-color-surface);
+  border: 1px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-lg);
+  box-shadow: var(--aplus-shadow-md);
+  transition:
+    transform var(--aplus-duration) var(--aplus-ease),
+    box-shadow var(--aplus-duration) var(--aplus-ease),
+    border-color var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-card:not(.aplus-card--skeleton):hover {
+  transform: translateY(-4px);
+  box-shadow: var(--aplus-shadow-lg);
+  border-color: var(--aplus-color-border-strong);
+}
+
+/* Tarjeta A+: borde morado distintivo, sutil gradiente y barra de acento */
+#aplus-module-root .aplus-card--aplus {
+  border-color: rgba(139, 92, 246, 0.45);
+  background: linear-gradient(175deg, #FFFFFF 0%, #FAF8FF 70%, #F0FDFA 100%);
+  box-shadow: 0 10px 30px -8px rgba(139, 92, 246, 0.2), 0 2px 8px -2px rgba(31, 200, 192, 0.12);
+}
+
+#aplus-module-root .aplus-card--aplus::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  height: 5px;
+  border-radius: var(--aplus-radius-lg) var(--aplus-radius-lg) 0 0;
+  background: var(--aplus-gradient-aplus);
+  box-shadow: 0 2px 10px rgba(139, 92, 246, 0.4);
+  pointer-events: none;
+}
+
+#aplus-module-root .aplus-card--aplus:not(.aplus-card--skeleton):hover {
+  border-color: var(--aplus-color-morado);
+  box-shadow: 0 18px 45px -8px rgba(139, 92, 246, 0.32), 0 4px 14px -2px rgba(31, 200, 192, 0.22);
+}
+
+#aplus-module-root .aplus-card__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--aplus-space-2);
+  min-width: 0;
+}
+
+#aplus-module-root .aplus-card__code {
+  font-family: var(--aplus-font-mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--aplus-color-text-subtle);
+  background: var(--aplus-color-surface-muted);
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--aplus-radius-sm);
+  white-space: nowrap;
+}
+
+#aplus-module-root .aplus-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--aplus-space-2);
+  min-width: 0;
+}
+
+#aplus-module-root .aplus-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--aplus-space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#aplus-module-root .aplus-card__title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+  color: var(--aplus-color-text);
+  overflow-wrap: break-word;
+}
+
+#aplus-module-root .aplus-card__summary {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--aplus-color-text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+#aplus-module-root .aplus-card__indicators {
+  display: flex;
+  flex-direction: column;
+  gap: var(--aplus-space-3);
+  padding: 1.25rem 1.35rem;
+  border-radius: var(--aplus-radius-md);
+  background: var(--aplus-color-surface-muted);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  min-width: 0;
+}
+
+#aplus-module-root .aplus-card--aplus .aplus-card__indicators {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(139, 92, 246, 0.2);
+  backdrop-filter: blur(4px);
+}
+
+#aplus-module-root .aplus-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--aplus-space-3);
+  padding-top: var(--aplus-space-4);
+  border-top: 1px solid var(--aplus-color-border);
+}
+
+/* --- 4.5 Badges, estados, KPIs y medidor ------------------------------------ */
+
+#aplus-module-root .aplus-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.75rem;
+  border: 1px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-pill);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+#aplus-module-root .aplus-badge--category {
+  background: var(--aplus-color-surface-muted);
+  color: var(--aplus-color-text-muted);
+}
+
+/* Categorías temáticas con la paleta de la Fundación A+ */
+#aplus-module-root .aplus-badge--sostenibilidad-becas {
+  background: #FFFBEB;
+  color: #B45309;
+  border-color: rgba(245, 166, 35, 0.3);
+}
+
+#aplus-module-root .aplus-badge--infraestructura-conectividad {
+  background: #F0FDFA;
+  color: #0D9488;
+  border-color: rgba(31, 200, 192, 0.3);
+}
+
+#aplus-module-root .aplus-badge--innovacion-social {
+  background: #F5F3FF;
+  color: #6D28D9;
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+#aplus-module-root .aplus-badge--impacto-comunitario {
+  background: #FFF1F2;
+  color: #BE123C;
+  border-color: rgba(240, 69, 92, 0.3);
+}
+
+#aplus-module-root .aplus-badge--educacion-ia {
+  background: #EEF2FF;
+  color: #4338CA;
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+#aplus-module-root .aplus-badge--empleabilidad-tech {
+  background: #F0F9FF;
+  color: #0369A1;
+  border-color: rgba(14, 165, 233, 0.3);
+}
+
+#aplus-module-root .aplus-badge--aplus {
+  background: var(--aplus-gradient-aplus-soft);
+  border-color: var(--aplus-aplus-border);
+  color: var(--aplus-color-morado-dark);
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(139, 92, 246, 0.18);
+}
+
+#aplus-module-root .aplus-badge--aplus .aplus-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  color: var(--aplus-color-oro);
+  filter: drop-shadow(0 0 1px rgba(245, 166, 35, 0.4));
+}
+
+/* Píldora de estado (una variante por slug) */
+#aplus-module-root .aplus-status {
+  --aplus-status-color: var(--aplus-color-text-muted);
+  --aplus-status-bg: var(--aplus-color-surface-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.32rem 0.85rem;
+  border-radius: var(--aplus-radius-pill);
+  background: var(--aplus-status-bg);
+  color: var(--aplus-status-color);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+#aplus-module-root .aplus-status__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+#aplus-module-root .aplus-status--en-evaluacion {
+  --aplus-status-color: var(--aplus-status-evaluacion);
+  --aplus-status-bg: var(--aplus-status-evaluacion-bg);
+}
+
+#aplus-module-root .aplus-status--aprobado {
+  --aplus-status-color: var(--aplus-status-aprobado);
+  --aplus-status-bg: var(--aplus-status-aprobado-bg);
+}
+
+#aplus-module-root .aplus-status--en-ejecucion {
+  --aplus-status-color: var(--aplus-status-ejecucion);
+  --aplus-status-bg: var(--aplus-status-ejecucion-bg);
+}
+
+#aplus-module-root .aplus-status--completado {
+  --aplus-status-color: var(--aplus-status-completado);
+  --aplus-status-bg: var(--aplus-status-completado-bg);
+}
+
+#aplus-module-root .aplus-status--en-pausa {
+  --aplus-status-color: var(--aplus-status-pausa);
+  --aplus-status-bg: var(--aplus-status-pausa-bg);
+}
+
+/* KPIs de la tarjeta */
+#aplus-module-root .aplus-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--aplus-space-3);
+}
+
+#aplus-module-root .aplus-kpis__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+#aplus-module-root .aplus-kpis__item dt {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--aplus-color-text-subtle);
+}
+
+#aplus-module-root .aplus-kpis__item dd {
+  font-size: 1.0625rem;
+  font-weight: 800;
+  color: var(--aplus-color-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#aplus-module-root .aplus-kpis__item--roi dd {
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+
+#aplus-module-root .aplus-card--aplus .aplus-kpis__item--roi dd {
+  color: var(--aplus-color-morado-dark);
+}
+
+/* Medidor del índice de impacto: el ancho viene de --aplus-meter-value */
+#aplus-module-root .aplus-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+#aplus-module-root .aplus-meter__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--aplus-space-2);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--aplus-color-text-muted);
+}
+
+#aplus-module-root .aplus-meter__label strong {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--aplus-color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+#aplus-module-root .aplus-meter__track {
+  position: relative;
+  height: 8px;
+  border-radius: var(--aplus-radius-pill);
+  background: var(--aplus-meter-track);
+  overflow: hidden;
+}
+
+#aplus-module-root .aplus-meter__fill {
+  display: block;
+  height: 100%;
+  width: var(--aplus-meter-value, 0%);
+  border-radius: inherit;
+  background: var(--aplus-meter-fill);
+  transform-origin: left center;
+  animation: aplus-meter-grow 700ms var(--aplus-ease) both;
+}
+
+#aplus-module-root .aplus-card--aplus .aplus-meter__fill,
+#aplus-module-root .aplus-detail__header--aplus ~ .aplus-detail__section .aplus-meter__fill {
+  background: var(--aplus-gradient-aplus);
+}
+
+@keyframes aplus-meter-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* --- 4.6 Paginación --------------------------------------------------------- */
+
+#aplus-module-root .aplus-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--aplus-space-2);
+  padding-top: var(--aplus-space-3);
+}
+
+#aplus-module-root .aplus-pagination__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-md);
+  background: var(--aplus-color-surface);
+  color: var(--aplus-color-text);
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color var(--aplus-duration) var(--aplus-ease),
+    border-color var(--aplus-duration) var(--aplus-ease),
+    color var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-pagination__btn--nav {
+  padding: 0;
+}
+
+#aplus-module-root .aplus-pagination__btn:hover:not(:disabled):not([aria-current="page"]) {
+  background: var(--aplus-color-surface-muted);
+  border-color: var(--aplus-color-border-strong);
+}
+
+#aplus-module-root .aplus-pagination__btn[aria-current="page"] {
+  background: var(--aplus-color-ink);
+  border-color: var(--aplus-color-ink);
+  color: var(--aplus-color-on-ink);
+  cursor: default;
+}
+
+#aplus-module-root .aplus-pagination__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#aplus-module-root .aplus-pagination__gap {
+  min-width: 1.5rem;
+  text-align: center;
+  color: var(--aplus-color-text-subtle);
+}
+
+
+/* =============================================================================
+   5. ESTADOS
+   ========================================================================== */
+
+/* --- Skeleton Loader -------------------------------------------------------- */
+
+#aplus-module-root .aplus-skeleton {
+  display: block;
+  width: 100%;
+  height: 0.75rem;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--aplus-skeleton-base) 25%,
+    var(--aplus-skeleton-shine) 37%,
+    var(--aplus-skeleton-base) 63%
+  );
+  background-size: 400% 100%;
+  animation: aplus-shimmer 1.4s ease-in-out infinite;
+}
+
+#aplus-module-root .aplus-skeleton--line { height: 0.75rem; }
+#aplus-module-root .aplus-skeleton--title { height: 1.25rem; width: 75%; margin-bottom: 0.25rem; }
+#aplus-module-root .aplus-skeleton--pill { height: 1.5rem; width: 6rem; border-radius: var(--aplus-radius-pill); }
+#aplus-module-root .aplus-skeleton--block { height: 4.75rem; border-radius: var(--aplus-radius-sm); }
+#aplus-module-root .aplus-skeleton--button { height: 2.5rem; width: 8rem; border-radius: var(--aplus-radius-sm); }
+#aplus-module-root .aplus-skeleton--metric { height: 1.75rem; width: 45%; }
+
+#aplus-module-root .aplus-skeleton[data-w="28"] { width: 28%; }
+#aplus-module-root .aplus-skeleton[data-w="50"] { width: 50%; }
+#aplus-module-root .aplus-skeleton[data-w="60"] { width: 60%; }
+
+#aplus-module-root .aplus-card--skeleton {
+  box-shadow: var(--aplus-shadow-sm);
+}
+
+#aplus-module-root .aplus-card--skeleton .aplus-card__indicators {
+  padding: 0;
+  background: none;
+}
+
+@keyframes aplus-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* --- Estado vacío / error --------------------------------------------------- */
+
+#aplus-module-root .aplus-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--aplus-space-3);
+  padding: clamp(2rem, 6vw, 4rem) var(--aplus-space-6);
+  border: 1px dashed var(--aplus-color-border-strong);
+  border-radius: var(--aplus-radius-lg);
+  background: var(--aplus-color-surface);
+  text-align: center;
+}
+
+#aplus-module-root .aplus-state__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-bottom: var(--aplus-space-2);
+  border-radius: 50%;
+  background: var(--aplus-color-surface-muted);
+  color: var(--aplus-color-text-muted);
+}
+
+#aplus-module-root .aplus-state__icon .aplus-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+#aplus-module-root .aplus-state__title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--aplus-color-text);
+}
+
+#aplus-module-root .aplus-state__text {
+  max-width: 46ch;
+  font-size: var(--aplus-text-sm);
+  color: var(--aplus-color-text-muted);
+}
+
+#aplus-module-root .aplus-state .aplus-btn {
+  margin-top: var(--aplus-space-2);
+}
+
+
+/* =============================================================================
+   6. MODAL DE DETALLE
+   -----------------------------------------------------------------------------
+   El JS quita [hidden], fuerza un reflow y añade .is-open (entrada). Al cerrar
+   quita .is-open y espera 200 ms antes de volver a ocultarlo (salida).
+   ========================================================================== */
+
+#aplus-module-root .aplus-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--aplus-z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(0.75rem, 3vw, 2rem);
+  opacity: 0;
+  transition: opacity var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-modal.is-open {
+  opacity: 1;
+}
+
+#aplus-module-root .aplus-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--aplus-backdrop);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+#aplus-module-root .aplus-modal__dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 920px;
+  max-height: 90vh;
+  max-height: 90dvh;
+  overflow: hidden;
+  background: var(--aplus-color-surface);
+  border: 1px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-xl);
+  box-shadow: var(--aplus-shadow-xl);
+  transform: translateY(16px) scale(0.98);
+  transition: transform var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-modal.is-open .aplus-modal__dialog {
+  transform: none;
+}
+
+#aplus-module-root .aplus-modal__dialog:focus {
+  outline: none;
+}
+
+#aplus-module-root .aplus-modal__close {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--aplus-color-border);
+  border-radius: 50%;
+  background: var(--aplus-color-surface);
+  color: var(--aplus-color-text-muted);
+  box-shadow: var(--aplus-shadow-sm);
+  transition:
+    background-color var(--aplus-duration) var(--aplus-ease),
+    color var(--aplus-duration) var(--aplus-ease),
+    border-color var(--aplus-duration) var(--aplus-ease);
+}
+
+#aplus-module-root .aplus-modal__close:hover {
+  background: var(--aplus-color-ink);
+  border-color: var(--aplus-color-ink);
+  color: var(--aplus-color-on-ink);
+}
+
+#aplus-module-root .aplus-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  padding: 2.25rem 2.5rem;
+}
+
+#aplus-module-root .aplus-modal__footer {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--aplus-space-4);
+  padding: 1.25rem 2.5rem;
+  border-top: 1px solid var(--aplus-color-border);
+  background: var(--aplus-color-surface-hover);
+}
+
+/* --- Contenido del detalle -------------------------------------------------- */
+
+#aplus-module-root .aplus-detail__header {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--aplus-space-3);
+  padding-right: 3.5rem; /* espacio para el botón de cierre */
+}
+
+#aplus-module-root .aplus-detail__header--aplus::before {
+  content: "";
+  display: block;
+  width: 3.5rem;
+  height: 5px;
+  border-radius: var(--aplus-radius-pill);
+  background: var(--aplus-gradient-aplus);
+}
+
+#aplus-module-root .aplus-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#aplus-module-root .aplus-detail__title {
+  font-size: clamp(1.625rem, 1.3rem + 1.2vw, 2.25rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--aplus-color-text);
+  overflow-wrap: break-word;
+}
+
+#aplus-module-root .aplus-detail__lead {
+  font-size: 1.1rem;
+  line-height: 1.65;
+  color: var(--aplus-color-text-muted);
+}
+
+#aplus-module-root .aplus-detail__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--aplus-space-4);
+  padding-top: var(--aplus-space-6);
+  border-top: 1px solid var(--aplus-color-border);
+}
+
+#aplus-module-root .aplus-detail__heading {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--aplus-color-text-subtle);
+}
+
+#aplus-module-root .aplus-detail__kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: var(--aplus-space-3);
+}
+
+#aplus-module-root .aplus-detail__kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--aplus-space-1);
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-md);
+  background: var(--aplus-color-surface-hover);
+  min-width: 0;
+}
+
+#aplus-module-root .aplus-detail__kpi dt {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--aplus-color-text-subtle);
+}
+
+#aplus-module-root .aplus-detail__kpi dd {
+  font-size: 1.55rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--aplus-color-text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+#aplus-module-root .aplus-detail__kpi--roi {
+  border-color: rgba(139, 92, 246, 0.3);
+  background: var(--aplus-color-morado-soft);
+}
+
+#aplus-module-root .aplus-detail__kpi--roi dd {
+  color: var(--aplus-color-morado-dark);
+}
+
+#aplus-module-root .aplus-detail__impact {
+  max-width: 420px;
+}
+
+#aplus-module-root .aplus-detail__breakdown {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-md);
+  overflow: hidden;
+}
+
+#aplus-module-root .aplus-detail__breakdown li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--aplus-space-4);
+  padding: var(--aplus-space-3) var(--aplus-space-4);
+  font-size: var(--aplus-text-sm);
+  color: var(--aplus-color-text-muted);
+}
+
+#aplus-module-root .aplus-detail__breakdown li + li {
+  border-top: 1px solid var(--aplus-color-border);
+}
+
+#aplus-module-root .aplus-detail__breakdown strong {
+  color: var(--aplus-color-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#aplus-module-root .aplus-detail__text {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--aplus-color-text-muted);
+}
+
+#aplus-module-root .aplus-detail__highlights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--aplus-space-2) var(--aplus-space-5);
+}
+
+#aplus-module-root .aplus-detail__highlights li {
+  position: relative;
+  padding-left: 1.75rem;
+  font-size: var(--aplus-text-sm);
+  line-height: 1.55;
+  color: var(--aplus-color-text);
+}
+
+#aplus-module-root .aplus-detail__highlights li::before {
+  content: "";
+  position: absolute;
+  top: 0.15rem;
+  left: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237C3AED' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E")
+    center / 0.75rem no-repeat,
+    var(--aplus-color-morado-soft);
+}
+
+#aplus-module-root .aplus-detail__specs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  border: 1px solid var(--aplus-color-border);
+  border-radius: var(--aplus-radius-md);
+  overflow: hidden;
+  background: var(--aplus-color-border);
+  gap: 1px;
+}
+
+#aplus-module-root .aplus-detail__specs > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: var(--aplus-space-3) var(--aplus-space-4);
+  background: var(--aplus-color-surface);
+  min-width: 0;
+}
+
+#aplus-module-root .aplus-detail__specs dt {
+  font-size: var(--aplus-text-xs);
+  font-weight: 600;
+  color: var(--aplus-color-text-subtle);
+}
+
+#aplus-module-root .aplus-detail__specs dd {
+  font-size: var(--aplus-text-sm);
+  font-weight: 600;
+  color: var(--aplus-color-text);
+  overflow-wrap: break-word;
+}
+
+#aplus-module-root .aplus-detail__owner {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--aplus-text-sm);
+  color: var(--aplus-color-text-muted);
+}
+
+#aplus-module-root .aplus-detail__owner strong {
+  color: var(--aplus-color-text);
+}
+
+#aplus-module-root .aplus-detail__owner-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--aplus-color-text-subtle);
+}
+
+#aplus-module-root .aplus-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--aplus-space-3);
+}
+
+
+/* =============================================================================
+   7. RESPONSIVE
+   ========================================================================== */
+
+/* --- Vista Lista: filas horizontales desde tablet ---------------------------- */
+
+@media (min-width: 768px) {
+  #aplus-module-root [data-view="list"] .aplus-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+    grid-template-areas:
+      "top    indicators"
+      "body   indicators"
+      "footer footer";
+    column-gap: var(--aplus-space-6);
+    row-gap: var(--aplus-space-3);
+    align-items: start;
+  }
+
+  #aplus-module-root [data-view="list"] .aplus-card__top { grid-area: top; justify-content: flex-start; }
+  #aplus-module-root [data-view="list"] .aplus-card__badges { justify-content: flex-start; }
+  #aplus-module-root [data-view="list"] .aplus-card__body { grid-area: body; }
+  #aplus-module-root [data-view="list"] .aplus-card__indicators { grid-area: indicators; align-self: center; }
+  #aplus-module-root [data-view="list"] .aplus-card__footer { grid-area: footer; padding-top: var(--aplus-space-3); }
+
+  #aplus-module-root [data-view="list"] .aplus-card__summary {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+
+  #aplus-module-root [data-view="list"] .aplus-card--aplus::before {
+    top: -1px;
+    bottom: -1px;
+    left: -1px;
+    right: auto;
+    width: 4px;
+    height: auto;
+    border-radius: var(--aplus-radius-lg) 0 0 var(--aplus-radius-lg);
+    background: linear-gradient(180deg, #8B5CF6 0%, #1FC8C0 50%, #F0455C 100%);
+  }
+}
+
+@media (min-width: 1024px) {
+  #aplus-module-root [data-view="list"] .aplus-card {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 300px) auto;
+    grid-template-areas:
+      "top  indicators footer"
+      "body indicators footer";
+    align-items: center;
+  }
+
+  #aplus-module-root [data-view="list"] .aplus-card__top,
+  #aplus-module-root [data-view="list"] .aplus-card__body {
+    align-self: start;
+  }
+
+  #aplus-module-root [data-view="list"] .aplus-card__footer {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    justify-content: center;
+    align-self: stretch;
+    padding-top: 0;
+    padding-left: var(--aplus-space-6);
+    border-top: 0;
+    border-left: 1px solid var(--aplus-color-border);
+  }
+}
+
+/* --- Tablet y móvil ------------------------------------------------------- */
+
+@media (max-width: 767px) {
+  #aplus-module-root .aplus-filters__actions {
+    flex: 1 1 100%;
+    justify-content: space-between;
+    margin-left: 0;
+  }
+
+  #aplus-module-root .aplus-modal__body {
+    padding: var(--aplus-space-6) var(--aplus-space-5);
+  }
+
+  #aplus-module-root .aplus-modal__footer {
+    padding: var(--aplus-space-4) var(--aplus-space-5);
+  }
+}
+
+@media (max-width: 639px) {
+  #aplus-module-root .aplus-filters {
+    padding: var(--aplus-space-4);
+  }
+
+  #aplus-module-root .aplus-search {
+    flex-basis: 100%;
+  }
+
+  #aplus-module-root .aplus-switch {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  #aplus-module-root .aplus-field {
+    flex-basis: 100%;
+  }
+
+  #aplus-module-root .aplus-card {
+    padding: var(--aplus-space-4);
+  }
+
+  #aplus-module-root .aplus-card__footer .aplus-btn {
+    flex: 1 1 auto;
+  }
+
+  /* Métricas en 2 columnas compactas (sin icono) */
+  #aplus-module-root .aplus-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--aplus-space-3);
+  }
+
+  #aplus-module-root .aplus-metric {
+    align-items: flex-start;
+    padding: var(--aplus-space-3) var(--aplus-space-4);
+  }
+
+  #aplus-module-root .aplus-metric__icon {
+    display: none;
+  }
+
+  #aplus-module-root .aplus-metric__value {
+    font-size: 1.25rem;
+  }
+
+  #aplus-module-root .aplus-metric--skeleton {
+    min-height: 4.5rem;
+  }
+
+  #aplus-module-root .aplus-detail__kpi {
+    padding: var(--aplus-space-3);
+  }
+
+  #aplus-module-root .aplus-detail__kpi dd {
+    font-size: 1.125rem;
+  }
+
+  /* Modal como bottom sheet */
+  #aplus-module-root .aplus-modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  #aplus-module-root .aplus-modal__dialog {
+    max-width: none;
+    max-height: 92vh;
+    max-height: 92dvh;
+    border-radius: var(--aplus-radius-lg) var(--aplus-radius-lg) 0 0;
+    border-bottom: 0;
+    transform: translateY(100%);
+  }
+
+  #aplus-module-root .aplus-modal__dialog::before {
+    content: "";
+    position: absolute;
+    top: 0.5rem;
+    left: 50%;
+    width: 2.5rem;
+    height: 4px;
+    margin-left: -1.25rem;
+    border-radius: var(--aplus-radius-pill);
+    background: var(--aplus-color-border-strong);
+    z-index: 2;
+  }
+
+  #aplus-module-root .aplus-modal__close {
+    top: var(--aplus-space-5);
+    right: var(--aplus-space-4);
+  }
+
+  #aplus-module-root .aplus-modal__body {
+    padding: var(--aplus-space-8) var(--aplus-space-4) var(--aplus-space-6);
+  }
+
+  #aplus-module-root .aplus-modal__footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--aplus-space-3);
+    padding: var(--aplus-space-3) var(--aplus-space-4) max(var(--aplus-space-3), env(safe-area-inset-bottom));
+  }
+
+  #aplus-module-root .aplus-detail__owner {
+    flex-direction: row;
+    flex-wrap: wrap;
+    column-gap: var(--aplus-space-2);
+    align-items: baseline;
+  }
+
+  #aplus-module-root .aplus-detail__owner-label {
+    flex-basis: 100%;
+  }
+
+  #aplus-module-root .aplus-detail__actions {
+    flex-wrap: nowrap;
+  }
+
+  #aplus-module-root .aplus-detail__actions .aplus-btn--primary {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  #aplus-module-root .aplus-pagination__btn {
+    min-width: 2.25rem;
+    height: 2.25rem;
+    padding: 0 0.5rem;
+  }
+}
+
+
+/* =============================================================================
+   8. MOVIMIENTO REDUCIDO
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  #aplus-module-root *,
+  #aplus-module-root *::before,
+  #aplus-module-root *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  #aplus-module-root .aplus-card:not(.aplus-card--skeleton):hover {
+    transform: none;
+  }
+
+  #aplus-module-root .aplus-skeleton {
+    animation: none;
+    background: var(--aplus-skeleton-base);
+  }
+}

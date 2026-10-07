@@ -12,7 +12,10 @@ node_modules/
 dist/
 ejecutar_pruebas.bat
 
-# Archivos y scripts locales de desarrollo omitidos de GitHub
+# Archivos y suites locales omitidos de GitHub
+tests/
+aplus-module.css
+modulo_seguimiento_alertas/
 modulo-aplus/
 modulo-api/
 abrir_puerto_firewall.bat
