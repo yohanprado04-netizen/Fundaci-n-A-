@@ -44,7 +44,7 @@ La arquitectura de la solucion se compone de tres capas principales desacopladas
 - **Contextualizacion Dinamica:** Lectura directa de la base de conocimiento institucional almacenada en la base de datos relacional.
 
 ### 2.4. Base de Datos Relacional (MySQL / MariaDB)
-- **Esquema:** Modelo relacional con 38 tablas operativas, restricciones de clave foranea e indices optimizados (`schema_mysql.sql` y `schema.sql`).
+- **Esquema:** Modelo relacional con 38 tablas operativas, restricciones de clave foranea e indices optimizados (`schema_mysql.sql`).
 - **Semillas de Datos:** Cuentas administrativas base, perfiles preconfigurados y comunicados institucionales iniciales.
 
 ---
