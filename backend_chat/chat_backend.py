@@ -171,7 +171,13 @@ GROQ_MODEL = "openai/gpt-oss-20b"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "qwen/qwen3.8-27b:free")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")
+OPENROUTER_FALLBACK_MODELS = [
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "dots-studio/dots-3-note-preview:free",
+    "nvidia/nemotron-3.5-lightning:free",
+]
 
 
 
@@ -491,67 +497,45 @@ class LoginResponse(BaseModel):
 
 
 def llamar_openrouter(messages: list, system_prompt: str) -> str:
-    """Proveedor PRINCIPAL del chat. Usa la misma API compatible con OpenAI
-    que Groq/Gemini imitan, así que la estructura del payload es idéntica
-    — solo cambia la URL, la key y el modelo. Ver llamar_groq() para el
-    detalle de por qué solo se manda el historial reciente."""
+    """Proveedor PRINCIPAL del chat. Usa la API de OpenRouter con reintentos
+    y rotación automática ante modelos saturados o dados de baja."""
     historial_reciente = messages[-8:]
-    payload = {
-        "model": OPENROUTER_MODEL,
-        "messages": [{"role": "system", "content": system_prompt}] + [
-            {"role": m.role, "content": m.content} for m in historial_reciente
-        ],
-        "max_tokens": 1200,
-        "temperature": 0.6,
-    }
-    body = json.dumps(payload).encode("utf-8")
+    modelos = [OPENROUTER_MODEL] + [m for m in OPENROUTER_FALLBACK_MODELS if m != OPENROUTER_MODEL]
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        # OpenRouter recomienda estas dos cabeceras (no obligatorias, pero
-        # ayudan a que el proveedor identifique de dónde viene el tráfico
-        # en su panel de uso/rankings) — ver https://openrouter.ai/docs
         "HTTP-Referer": "https://fundacionamas.org.co",
         "X-Title": "Fundacion A+",
     }
 
-    # Mismo reintento ante 429 que en llamar_groq(): un solo reintento
-    # automático antes de pasar el error hacia arriba (y de ahí, al
-    # siguiente proveedor de la cadena — ver chat()).
-    intentos = 0
-    while True:
-        intentos += 1
+    ultimo_error = None
+    for modelo in modelos:
+        payload = {
+            "model": modelo,
+            "messages": [{"role": "system", "content": system_prompt}] + [
+                {"role": m.role, "content": m.content} for m in historial_reciente
+            ],
+            "max_tokens": 1200,
+            "temperature": 0.6,
+        }
+        body = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url="https://openrouter.ai/api/v1/chat/completions", data=body, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=25) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 return data["choices"][0]["message"]["content"].strip()
-        except urllib.error.HTTPError as e:
-            if e.code == 429 and intentos < 2:
-                espera = e.headers.get("retry-after")
-                try:
-                    espera = float(espera) if espera else 2.0
-                except ValueError:
-                    espera = 2.0
-                time.sleep(min(espera, 5.0))
-                continue
-            raise
+        except Exception as e:
+            ultimo_error = e
+            print(f"Advertencia OpenRouter con modelo '{modelo}': {e}, intentando siguiente modelo...")
+            continue
+    if ultimo_error:
+        raise ultimo_error
 
 
 def llamar_openrouter_stream(messages: list, system_prompt: str):
-    """Igual que llamar_openrouter(), pero en modo streaming (SSE) — ver
-    llamar_groq_stream() para el formato exacto de los fragmentos."""
+    """Igual que llamar_openrouter(), pero en modo streaming (SSE) con fallback de modelos."""
     historial_reciente = messages[-8:]
-    payload = {
-        "model": OPENROUTER_MODEL,
-        "messages": [{"role": "system", "content": system_prompt}] + [
-            {"role": m.role, "content": m.content} for m in historial_reciente
-        ],
-        "max_tokens": 1200,
-        "temperature": 0.6,
-        "stream": True,
-    }
-    body = json.dumps(payload).encode("utf-8")
+    modelos = [OPENROUTER_MODEL] + [m for m in OPENROUTER_FALLBACK_MODELS if m != OPENROUTER_MODEL]
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
@@ -559,22 +543,46 @@ def llamar_openrouter_stream(messages: list, system_prompt: str):
         "X-Title": "Fundacion A+",
         "Accept": "text/event-stream",
     }
-    req = urllib.request.Request(url="https://openrouter.ai/api/v1/chat/completions", data=body, headers=headers)
-    with urllib.request.urlopen(req, timeout=25) as resp:
-        for raw_line in resp:
-            line = raw_line.decode("utf-8").strip()
-            if not line or not line.startswith("data: "):
-                continue
-            data_str = line[len("data: "):]
-            if data_str == "[DONE]":
-                break
-            try:
-                chunk = json.loads(data_str)
-                delta = chunk["choices"][0]["delta"].get("content")
-                if delta:
-                    yield delta
-            except (json.JSONDecodeError, KeyError, IndexError):
-                continue
+
+    ultimo_error = None
+    for modelo in modelos:
+        payload = {
+            "model": modelo,
+            "messages": [{"role": "system", "content": system_prompt}] + [
+                {"role": m.role, "content": m.content} for m in historial_reciente
+            ],
+            "max_tokens": 1200,
+            "temperature": 0.6,
+            "stream": True,
+        }
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url="https://openrouter.ai/api/v1/chat/completions", data=body, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=25) as resp:
+                hubo_algo = False
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line or not line.startswith("data: "):
+                        continue
+                    data_str = line[len("data: "):]
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                        delta = chunk["choices"][0]["delta"].get("content")
+                        if delta:
+                            hubo_algo = True
+                            yield delta
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
+                if hubo_algo:
+                    return
+        except Exception as e:
+            ultimo_error = e
+            print(f"Advertencia OpenRouter stream con modelo '{modelo}': {e}, probando alternativo...")
+            continue
+    if ultimo_error:
+        raise ultimo_error
 
 
 def llamar_groq(messages: list, system_prompt: str) -> str:
@@ -728,7 +736,19 @@ async def generar_stream_sse(request: "ChatRequest") -> AsyncGenerator[bytes, No
 
     hubo_contenido = False
 
-    # 1. Intentar con Groq (ultra rápido: <300ms a ~950 tokens/seg)
+    # 1. Intentar con OpenRouter (modelo activo y verificado)
+    if OPENROUTER_API_KEY:
+        try:
+            for fragmento in llamar_openrouter_stream(request.messages, system_prompt):
+                hubo_contenido = True
+                yield sse({"delta": fragmento})
+            if hubo_contenido:
+                yield sse({"done": True})
+                return
+        except Exception as e:
+            print(f"Advertencia en OpenRouter (stream): {e}, intentando Groq...")
+
+    # 2. Respaldo: Groq
     if GROQ_API_KEY:
         try:
             for fragmento in llamar_groq_stream(request.messages, system_prompt):
@@ -740,7 +760,7 @@ async def generar_stream_sse(request: "ChatRequest") -> AsyncGenerator[bytes, No
         except Exception as e:
             print(f"Advertencia en Groq (stream): {e}, intentando Gemini...")
 
-    # 2. Respaldo: Gemini
+    # 3. Respaldo: Gemini
     if GEMINI_API_KEY:
         try:
             async for fragmento in llamar_gemini_stream(request.messages, system_prompt):
@@ -750,22 +770,10 @@ async def generar_stream_sse(request: "ChatRequest") -> AsyncGenerator[bytes, No
                 yield sse({"done": True})
                 return
         except Exception as e:
-            print(f"Advertencia en Gemini (stream): {e}, intentando OpenRouter...")
-
-    # 3. Respaldo: OpenRouter
-    if OPENROUTER_API_KEY:
-        try:
-            for fragmento in llamar_openrouter_stream(request.messages, system_prompt):
-                hubo_contenido = True
-                yield sse({"delta": fragmento})
-            if hubo_contenido:
-                yield sse({"done": True})
-                return
-        except Exception as e:
-            print(f"Advertencia en OpenRouter (stream): {e}")
+            print(f"Advertencia en Gemini (stream): {e}")
 
     if not hubo_contenido:
-        yield sse({"error": "Ningún proveedor de IA pudo responder en este momento (Groq/Gemini/OpenRouter)."})
+        yield sse({"error": "Ningún proveedor de IA pudo responder en este momento (OpenRouter/Groq/Gemini)."})
 
 
 @app.post("/auth/login", response_model=LoginResponse)
@@ -826,7 +834,16 @@ def chat(request: ChatRequest, req: Request):
             + contexto_en_vivo.strip()
         )
 
-    # 1. Intentar con Groq (ultra rápido: <300ms)
+    # 1. Intentar con OpenRouter (modelo activo y verificado)
+    if OPENROUTER_API_KEY:
+        try:
+            reply = llamar_openrouter(request.messages, system_prompt)
+            if reply:
+                return ChatResponse(reply=reply)
+        except Exception as e:
+            print(f"Advertencia en OpenRouter: {e}, intentando Groq...")
+
+    # 2. Respaldo: Groq
     if GROQ_API_KEY:
         try:
             reply = llamar_groq(request.messages, system_prompt)
@@ -835,7 +852,7 @@ def chat(request: ChatRequest, req: Request):
         except Exception as e:
             print(f"Advertencia en Groq: {e}, intentando Gemini...")
 
-    # 2. Respaldo: Gemini
+    # 3. Respaldo: Gemini
     if GEMINI_API_KEY:
         try:
             from google import genai
@@ -859,20 +876,11 @@ def chat(request: ChatRequest, req: Request):
             if reply:
                 return ChatResponse(reply=reply)
         except Exception as e:
-            print(f"Advertencia en Gemini: {e}, intentando OpenRouter...")
-
-    # 3. Respaldo: OpenRouter
-    if OPENROUTER_API_KEY:
-        try:
-            reply = llamar_openrouter(request.messages, system_prompt)
-            if reply:
-                return ChatResponse(reply=reply)
-        except Exception as e:
-            print(f"Advertencia en OpenRouter: {e}")
+            print(f"Advertencia en Gemini: {e}")
 
     raise HTTPException(
         status_code=503,
-        detail="Ningún proveedor de IA pudo responder en este momento (Groq/Gemini/OpenRouter)."
+        detail="Ningún proveedor de IA pudo responder en este momento (OpenRouter/Groq/Gemini)."
     )
 
 
