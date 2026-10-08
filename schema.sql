@@ -187,7 +187,7 @@ CREATE TABLE `configuracion` (
   `postulacion_slug` varchar(120) DEFAULT 'postulaciones',
   `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `email_metodo` varchar(20) DEFAULT 'emailjs',
-  `emailjs_public_key` varchar(100) DEFAULT 'elyshGVkR2fYZQJfO',
+  `emailjs_public_key` varchar(100) DEFAULT 'eIyshGVkR2fYZQJfO',
   `emailjs_service_id` varchar(100) DEFAULT 'service_20mxfgu',
   `emailjs_template_id` varchar(100) DEFAULT 'template_qvmzl1l',
   `smtp_host` varchar(150) DEFAULT 'smtp.gmail.com',
