@@ -17,11 +17,6 @@ function enviarCorreoSmtp(array $config, string $destinatarioEmail, string $dest
     $destinatarioNombre = sanitizarCabeceraMail($destinatarioNombre);
     $asunto = sanitizarCabeceraMail($asunto);
 
-    // Salvaguarda institucional: NUNCA hacer pruebas con el correo oficial de la fundación.
-    // Todas las pruebas se canalizan estrictamente a yohanprado04@gmail.com
-    if (stripos($destinatarioEmail, 'fundacionamas.org.co') !== false && (stripos($asunto, 'prueba') !== false || stripos($asunto, 'test') !== false || stripos($cuerpoTexto, 'prueba') !== false || stripos($cuerpoTexto, 'test') !== false)) {
-        $destinatarioEmail = 'yohanprado04@gmail.com';
-    }
 
     $host = trim($config['smtp_host'] ?? 'smtp.gmail.com');
     $port = (int)($config['smtp_port'] ?? 465);

@@ -22,13 +22,6 @@ function manejarEnviarCorreo(PDO $pdo): void {
     $asunto = trim($body['asunto'] ?? 'Notificación Fundación A+');
     $mensaje = trim($body['mensaje'] ?? '');
     $mensajeHtml = trim($body['mensajeHtml'] ?? '');
-    $esPrueba = !empty($body['esPrueba']);
-
-    // Directriz estricta: NUNCA hacer pruebas con el correo de la fundación.
-    // Todas las pruebas se realizan exclusivamente con yohanprado04@gmail.com
-    if ($esPrueba || (stripos($destinatarioEmail, 'fundacionamas.org.co') !== false && (stripos($asunto, 'prueba') !== false || stripos($asunto, 'test') !== false || stripos($mensaje, 'prueba') !== false))) {
-        $destinatarioEmail = 'yohanprado04@gmail.com';
-    }
 
     if (!$destinatarioEmail || !filter_var($destinatarioEmail, FILTER_VALIDATE_EMAIL)) {
         responderError('El correo del destinatario es inválido o está vacío.', 400);

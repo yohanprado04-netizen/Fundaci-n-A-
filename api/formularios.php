@@ -991,9 +991,8 @@ function notificarNuevaPostulacionPorCorreo(PDO $pdo, array $f, string $respuest
         $cfg = $stmtCfg ? $stmtCfg->fetch(PDO::FETCH_ASSOC) : null;
         if (!$cfg) return null;
 
-        // El correo institucional público de la Fundación es $cfg['correo'] (info@fundacionamas.org.co).
-        // Las alertas de nuevas postulaciones se envían a yohanprado04@gmail.com sin alterar el contacto del sitio web.
-        $destinatario = !empty($cfg['correo_postulaciones']) ? trim($cfg['correo_postulaciones']) : 'yohanprado04@gmail.com';
+        // Alertas de nuevas postulaciones dirigidas al correo institucional de la Fundación
+        $destinatario = !empty($cfg['correo_postulaciones']) ? trim($cfg['correo_postulaciones']) : (!empty($cfg['correo']) ? trim($cfg['correo']) : 'info@fundacionamas.org.co');
         
         $nombreAspirante = '';
         $documento = '';

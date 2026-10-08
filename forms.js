@@ -1297,8 +1297,9 @@ async function despacharNotificacionesPostulacion(notif) {
     const envios = [];
 
     // 1. Correo a la Fundación (datos completos del aspirante)
+    const correoInstitucional = (window.CONFIG_INSTITUCIONAL && (window.CONFIG_INSTITUCIONAL.correo_postulaciones || window.CONFIG_INSTITUCIONAL.correo)) || 'info@fundacionamas.org.co';
     const notifFund = notif.notificacionFundacion || {
-      destinatario: notif.destinatario || 'yohanprado04@gmail.com',
+      destinatario: notif.destinatario || correoInstitucional,
       nombre: 'Fundación A+',
       asunto: notif.asunto || 'Nueva postulación recibida en tiempo real',
       mensaje: notif.mensaje || '',

@@ -90,7 +90,7 @@ async function notificarRecursoPorCorreo(tipo, params = {}) {
       </div>
     `;
   } else if (tipo === 'aprobada') {
-    destinatarioEmail = params.email || 'yohanprado04@gmail.com';
+    destinatarioEmail = (params.email || '').trim();
     destinatarioNombre = params.solicitante || 'Estudiante';
     asunto = `${nombreFundacion} | Solicitud de recurso aprobada - ${params.recursoNombre || params.categoria || 'Equipo'}`;
     mensajeTexto = `Hola ${params.solicitante || ''},\n\n` +
@@ -129,7 +129,7 @@ async function notificarRecursoPorCorreo(tipo, params = {}) {
       </div>
     `;
   } else if (tipo === 'rechazada') {
-    destinatarioEmail = params.email || 'yohanprado04@gmail.com';
+    destinatarioEmail = (params.email || '').trim();
     destinatarioNombre = params.solicitante || 'Estudiante';
     asunto = `${nombreFundacion} | Información sobre tu solicitud de recurso - ${params.categoria || 'Equipo'}`;
     mensajeTexto = `Hola ${params.solicitante || ''},\n\n` +
@@ -156,6 +156,11 @@ async function notificarRecursoPorCorreo(tipo, params = {}) {
         ${pieInstitucionalAntispam}
       </div>
     `;
+  }
+
+  if (!destinatarioEmail || !destinatarioEmail.includes('@')) {
+    console.warn('[notificarRecursoPorCorreo] Destinatario sin correo válido:', destinatarioEmail);
+    return { ok: false, error: 'Sin correo de destinatario válido' };
   }
 
   // --- VÍA 1: EMAILJS (Principal desde el Navegador) ---
@@ -2229,7 +2234,7 @@ window.enviarSolicitudEquipo = async function() {
   if (typeof notificarRecursoPorCorreo === 'function') {
     notificarRecursoPorCorreo('solicitud_nueva', {
       solicitante: user.nombre,
-      email: user.email || 'yohanprado04@gmail.com',
+      email: user.email || '',
       rol: user.rol,
       categoria,
       tipo,
@@ -2359,7 +2364,7 @@ window.responderSolicitud = async function(idSolicitud, respuesta) {
     if (typeof notificarRecursoPorCorreo === 'function') {
       notificarRecursoPorCorreo('rechazada', {
         solicitante: sol.solicitante,
-        email: sol.email || 'yohanprado04@gmail.com',
+        email: sol.email || '',
         rol: sol.rol_solicitante,
         categoria: sol.categoria,
         motivoRechazo: 'Disponibilidad limitada de equipos o revisión de prioridades académicas en sede.'
@@ -2436,7 +2441,7 @@ window.responderSolicitud = async function(idSolicitud, respuesta) {
       if (typeof notificarRecursoPorCorreo === 'function') {
         notificarRecursoPorCorreo('aprobada', {
           solicitante: sol.solicitante,
-          email: sol.email || 'yohanprado04@gmail.com',
+          email: sol.email || '',
           rol: sol.rol_solicitante,
           categoria: sol.categoria,
           recursoNombre: rec.nombre,
