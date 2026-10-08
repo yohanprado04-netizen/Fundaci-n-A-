@@ -129,9 +129,12 @@ function enviarCorreoSmtp(array $config, string $destinatarioEmail, string $dest
     $msgDomain = (explode('@', $from)[1] ?? 'fundacionamas.org.co');
     $messageId = '<' . bin2hex(random_bytes(16)) . '.' . time() . '@' . $msgDomain . '>';
 
+    $replyTo = !empty($config['reply_to']) ? sanitizarCabeceraMail($config['reply_to']) : (!empty($config['smtp_from']) ? sanitizarCabeceraMail($config['smtp_from']) : 'info@fundacionamas.org.co');
+    $replyToName = !empty($config['reply_to_name']) ? sanitizarCabeceraMail($config['reply_to_name']) : $fromName;
+
     $headers = [];
     $headers[] = 'From: =?UTF-8?B?' . base64_encode($fromName) . '?= <' . $from . '>';
-    $headers[] = 'Reply-To: =?UTF-8?B?' . base64_encode($fromName) . '?= <info@fundacionamas.org.co>';
+    $headers[] = 'Reply-To: =?UTF-8?B?' . base64_encode($replyToName) . '?= <' . $replyTo . '>';
     $headers[] = 'Return-Path: <' . $from . '>';
     $headers[] = 'To: =?UTF-8?B?' . base64_encode($destinatarioNombre) . '?= <' . $destinatarioEmail . '>';
     $headers[] = 'Subject: =?UTF-8?B?' . base64_encode($asunto) . '?=';

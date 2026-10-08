@@ -40,6 +40,7 @@ function manejarEnviarCorreo(PDO $pdo): void {
     $metodoEnvio = $fila['email_metodo'] ?? 'emailjs';
 
     if ($metodoEnvio === 'smtp') {
+        $replyTo = trim($body['replyTo'] ?? '');
         $res = enviarCorreoSmtp([
             'smtp_host' => $fila['smtp_host'] ?? '',
             'smtp_port' => (int)($fila['smtp_port'] ?? 465),
@@ -48,6 +49,7 @@ function manejarEnviarCorreo(PDO $pdo): void {
             'smtp_from' => $fila['smtp_from'] ?? 'info@fundacionamas.org.co',
             'smtp_from_name' => $fila['nombre'] ?? 'Fundación A+',
             'smtp_secure' => $fila['smtp_secure'] ?? 'ssl',
+            'reply_to' => ($replyTo && filter_var($replyTo, FILTER_VALIDATE_EMAIL)) ? $replyTo : (!empty($fila['correo']) ? $fila['correo'] : ($fila['smtp_from'] ?? 'info@fundacionamas.org.co')),
         ], $destinatarioEmail, $destinatarioNombre, $asunto, $mensaje, $mensajeHtml);
 
         if (!$res['ok']) {

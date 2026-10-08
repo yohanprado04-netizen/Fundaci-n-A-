@@ -1240,7 +1240,12 @@ function notificarNuevaPostulacionPorCorreo(PDO $pdo, array $f, string $respuest
                 'smtp_from_name' => $cfg['nombre'] ?? 'Fundación A+',
                 'smtp_secure' => $cfg['smtp_secure'] ?? 'ssl',
             ];
-            $resFund = enviarCorreoSmtp($smtpConfig, $destinatario, 'Fundación A+', $asunto, $mensajeTexto, $mensajeHtml);
+            $smtpConfigFund = $smtpConfig;
+            if ($correoAspirante && filter_var($correoAspirante, FILTER_VALIDATE_EMAIL)) {
+                $smtpConfigFund['reply_to'] = $correoAspirante;
+                $smtpConfigFund['reply_to_name'] = $nombreAspirante ?: 'Aspirante';
+            }
+            $resFund = enviarCorreoSmtp($smtpConfigFund, $destinatario, 'Fundación A+', $asunto, $mensajeTexto, $mensajeHtml);
             if ($correoAspirante && filter_var($correoAspirante, FILTER_VALIDATE_EMAIL)) {
                 enviarCorreoSmtp($smtpConfig, $correoAspirante, $nombreAspirante, $asuntoAspirante, $mensajeTextoAspirante, $mensajeHtmlAspirante);
             }
