@@ -373,29 +373,29 @@ class FundacionPulseApp {
       const canAct = user?.role !== 'estudiante';
 
       return `
-        <div class="py-5 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-orange-50/40 rounded-2xl px-5 transition cursor-pointer alert-row gap-3" data-name="${alt.studentName}">
-          <div class="flex items-start sm:items-center space-x-4">
-            <span class="w-4 h-4 rounded-full ${dotColor} flex-shrink-0 mt-1 sm:mt-0 ring-4 ring-orange-100"></span>
+        <div class="py-3.5 px-4 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-orange-50/50 rounded-xl transition cursor-pointer alert-row gap-3 border border-transparent hover:border-orange-100" data-name="${alt.studentName}">
+          <div class="flex items-start sm:items-center space-x-3.5">
+            <span class="w-3 h-3 rounded-full ${dotColor} flex-shrink-0 mt-1 sm:mt-0 ring-4 ring-orange-50"></span>
             <div>
-              <div class="flex flex-wrap items-center gap-2.5">
-                <span class="text-lg font-bold text-slate-900 font-['Rubik',sans-serif]">${alt.studentName}</span>
-                <span class="text-xs sm:text-sm font-extrabold ${badgeStyle} px-3 py-1 rounded-full flex items-center space-x-1.5">
-                  <span class="w-2 h-2 rounded-full ${dotColor}"></span>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm sm:text-base font-bold text-slate-900">${alt.studentName}</span>
+                <span class="text-xs font-semibold ${badgeStyle} px-2.5 py-0.5 rounded-full flex items-center space-x-1">
+                  <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
                   <span>${severityLabel}</span>
                 </span>
               </div>
-              <p class="text-sm sm:text-base text-slate-600 mt-1 leading-snug">${alt.title}</p>
+              <p class="text-xs sm:text-sm text-slate-500 mt-0.5 leading-normal">${alt.title}</p>
             </div>
           </div>
-          <div class="flex items-center space-x-2.5 self-end sm:self-center">
-            <span class="text-xs sm:text-sm font-semibold text-slate-400 mr-2">${alt.timestamp || 'Hoy'}</span>
+          <div class="flex items-center space-x-2 self-end sm:self-center">
+            <span class="text-xs font-medium text-slate-400 mr-1.5">${alt.timestamp || 'Hoy'}</span>
             ${canAct ? `
-              <button class="quick-intervene-btn px-4 py-2 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#fb5373] border border-orange-200 text-xs sm:text-sm font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-xs" data-name="${alt.studentName}">
-                <i data-lucide="edit-3" class="w-4 h-4"></i>
+              <button class="quick-intervene-btn h-8 px-3 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#fb5373] border border-orange-200 text-xs font-semibold transition flex items-center space-x-1 cursor-pointer" data-name="${alt.studentName}">
+                <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
                 <span>Atender Caso</span>
               </button>
             ` : ''}
-            <button class="view-student-sheet-btn px-4 py-2 rounded-xl border border-slate-200 hover:border-[#fd7f60] hover:text-[#fb5373] text-slate-700 text-xs sm:text-sm font-bold transition cursor-pointer bg-white shadow-xs" data-name="${alt.studentName}">
+            <button class="view-student-sheet-btn h-8 px-3 rounded-lg border border-slate-200 hover:border-[#fd7f60] hover:text-[#fb5373] text-slate-700 text-xs font-semibold transition cursor-pointer bg-white" data-name="${alt.studentName}">
               Ver Ficha 360°
             </button>
           </div>
@@ -689,35 +689,35 @@ class FundacionPulseApp {
       else if (attPct < 85) attBarColor = 'bg-[#ffab4d]';
 
       return `
-        <tr class="hover:bg-orange-50/40 transition cursor-pointer student-table-row" data-id="${studentId}">
-          <td class="py-4 px-5 flex items-center space-x-4">
-            <img src="${student.avatar}" alt="${student.name}" class="w-11 h-11 rounded-2xl object-cover shadow-xs ring-2 ring-orange-200 flex-shrink-0">
+        <tr class="hover:bg-orange-50/40 transition cursor-pointer student-table-row border-b border-slate-100 last:border-b-0" data-id="${studentId}">
+          <td class="py-3 px-4 flex items-center space-x-3">
+            <img src="${student.avatar}" alt="${student.name}" class="w-9 h-9 rounded-xl object-cover ring-1 ring-orange-200 flex-shrink-0">
             <div>
-              <span class="font-bold text-slate-900 text-base sm:text-lg block font-['Rubik',sans-serif]">${student.name}</span>
-              <span class="text-xs sm:text-sm text-slate-500 font-normal">${student.email || 'estudiante@fundacion.org'}</span>
+              <span class="font-bold text-slate-900 text-sm sm:text-base block">${student.name}</span>
+              <span class="text-xs text-slate-500 font-normal">${student.email || 'estudiante@fundacion.org'}</span>
             </div>
           </td>
-          <td class="py-4 px-5 text-sm sm:text-base font-semibold text-slate-700">${student.program}</td>
-          <td class="py-4 px-5">${riskPill}</td>
-          <td class="py-4 px-5 font-black text-slate-900 text-base sm:text-lg">
-            ${(student.gpa || 3.0).toFixed(1)} <span class="text-xs sm:text-sm font-normal text-slate-400">/ 5.0</span>
+          <td class="py-3 px-4 text-xs sm:text-sm font-semibold text-slate-700">${student.program}</td>
+          <td class="py-3 px-4">${riskPill}</td>
+          <td class="py-3 px-4 font-bold text-slate-900 text-sm sm:text-base">
+            ${(student.gpa || 3.0).toFixed(1)} <span class="text-xs font-normal text-slate-400">/ 5.0</span>
           </td>
-          <td class="py-4 px-5 text-right font-bold text-base">
-            <div class="flex items-center justify-end space-x-2">
+          <td class="py-3 px-4 text-right">
+            <div class="flex items-center justify-end space-x-1.5 font-bold text-xs sm:text-sm">
               <span class="${attPct < 75 ? 'text-[#fb5373]' : 'text-slate-800'}">${attPct}%</span>
             </div>
-            <div class="w-24 bg-slate-100 rounded-full h-2 ml-auto mt-1 overflow-hidden">
-              <div class="${attBarColor} h-2 rounded-full" style="width: ${attPct}%"></div>
+            <div class="w-20 bg-slate-100 rounded-full h-1.5 ml-auto mt-1 overflow-hidden">
+              <div class="${attBarColor} h-1.5 rounded-full" style="width: ${attPct}%"></div>
             </div>
           </td>
-          <td class="py-4 px-5 text-center">
-            <div class="flex items-center justify-center space-x-2">
+          <td class="py-3 px-4 text-center">
+            <div class="flex items-center justify-center space-x-1.5">
               ${canIntervene ? `
-                <button class="px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#fb5373] border border-orange-200 text-xs sm:text-sm font-bold transition table-action-intervene cursor-pointer shadow-xs" data-id="${studentId}" title="Registrar intervención directa">
+                <button class="h-8 px-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#fb5373] border border-orange-200 text-xs font-semibold transition table-action-intervene cursor-pointer" data-id="${studentId}" title="Registrar intervención directa">
                   Intervenir
                 </button>
               ` : ''}
-              <button class="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-[#fd7f60] hover:text-[#fb5373] text-slate-700 text-xs sm:text-sm font-bold transition view-detail-btn cursor-pointer bg-white shadow-xs" data-id="${studentId}">
+              <button class="h-8 px-2.5 rounded-lg border border-slate-200 hover:border-[#fd7f60] hover:text-[#fb5373] text-slate-700 text-xs font-semibold transition view-detail-btn cursor-pointer bg-white" data-id="${studentId}">
                 Ficha 360°
               </button>
             </div>
@@ -948,42 +948,42 @@ class FundacionPulseApp {
       const threshold = cond.threshold !== undefined ? cond.threshold : 3.0;
 
       return `
-        <div class="p-6 rounded-3xl bg-slate-50 border border-slate-200/90 hover:border-orange-200 hover:shadow-md transition space-y-4 relative flex flex-col justify-between">
-          <div class="space-y-3.5">
-            <div class="flex items-start justify-between">
-              <div class="space-y-1">
+        <div class="p-5 rounded-2xl bg-slate-50/80 border border-slate-200/90 hover:border-orange-200 hover:shadow-xs transition space-y-3.5 relative flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="flex items-start justify-between gap-2">
+              <div class="space-y-0.5">
                 <span class="text-xs font-mono font-bold text-slate-400 block">${rule.code}</span>
-                <h4 class="font-bold text-slate-900 text-base sm:text-lg leading-snug font-['Rubik',sans-serif]">${rule.name}</h4>
+                <h4 class="font-bold text-slate-900 text-sm sm:text-base leading-snug">${rule.name}</h4>
               </div>
-              <div class="flex flex-col items-end space-y-1.5">
-                <span class="text-xs font-bold ${sevBadgeColor} border px-2.5 py-0.5 rounded-full uppercase">
+              <div class="flex flex-col items-end space-y-1 flex-shrink-0">
+                <span class="text-xs font-semibold ${sevBadgeColor} border px-2 py-0.5 rounded-full uppercase">
                   ${rule.defaultSeverity}
                 </span>
                 ${activeBadge}
               </div>
             </div>
 
-            <div class="p-4 bg-white rounded-2xl border border-slate-100 flex items-center justify-between shadow-xs">
+            <div class="p-3 bg-white rounded-xl border border-slate-100 flex items-center justify-between">
               <div class="space-y-0.5">
-                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Criterio Numérico</span>
-                <div class="text-sm sm:text-base font-bold text-slate-800">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Criterio Numérico</span>
+                <div class="text-xs sm:text-sm font-bold text-slate-800">
                   ${metricLabel} <span class="font-mono text-[#fb5373]">${operator}</span> ${threshold}
                 </div>
               </div>
-              <div class="w-10 h-10 rounded-xl bg-orange-50 text-[#fd7f60] flex items-center justify-center">
-                <i data-lucide="zap" class="w-5 h-5"></i>
+              <div class="w-8 h-8 rounded-lg bg-orange-50 text-[#fd7f60] flex items-center justify-center">
+                <i data-lucide="zap" class="w-4 h-4"></i>
               </div>
             </div>
 
-            <p class="text-sm text-slate-600 leading-relaxed">
+            <p class="text-xs sm:text-sm text-slate-500 leading-relaxed">
               ${rule.description || 'Dispara notificación inmediata y actualiza el expediente del estudiante en el sistema.'}
             </p>
           </div>
 
-          <div class="pt-4 border-t border-slate-200/80 flex items-center justify-between">
+          <div class="pt-3 border-t border-slate-200/80 flex items-center justify-between">
             <span class="text-xs text-slate-400 font-medium">Motor Determinista</span>
-            <button class="edit-rule-btn px-4 py-2 rounded-xl bg-white hover:bg-orange-50 text-slate-700 hover:text-[#fb5373] border border-slate-200 hover:border-orange-200 font-bold text-xs sm:text-sm transition flex items-center space-x-2 cursor-pointer shadow-xs" data-id="${rule._id || rule.id}">
-              <i data-lucide="edit-3" class="w-4 h-4"></i>
+            <button class="edit-rule-btn h-8 px-3 rounded-lg bg-white hover:bg-orange-50 text-slate-700 hover:text-[#fb5373] border border-slate-200 hover:border-orange-200 font-semibold text-xs transition flex items-center space-x-1.5 cursor-pointer" data-id="${rule._id || rule.id}">
+              <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
               <span>Editar Regla</span>
             </button>
           </div>
@@ -1177,31 +1177,31 @@ class FundacionPulseApp {
       }
 
       return `
-        <div class="p-7 rounded-3xl bg-white border border-slate-200/90 hover:shadow-lg transition-all duration-200 space-y-4">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div class="flex items-center space-x-3.5">
-              <span class="w-4 h-4 rounded-full bg-gradient-amas flex-shrink-0 shadow-xs"></span>
-              <h4 class="font-bold text-slate-900 text-lg sm:text-xl font-['Rubik',sans-serif]">${log.studentName}</h4>
-              <span class="text-sm text-slate-500 font-medium">• Registrado por <strong class="text-slate-800">${log.teacherName}</strong></span>
+        <div class="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200/90 hover:border-orange-200 transition-all space-y-3.5">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div class="flex items-center space-x-3">
+              <span class="w-3 h-3 rounded-full bg-gradient-amas flex-shrink-0"></span>
+              <h4 class="font-bold text-slate-900 text-base sm:text-lg">${log.studentName}</h4>
+              <span class="text-xs sm:text-sm text-slate-500 font-medium">• Registrado por <strong class="text-slate-800">${log.teacherName}</strong></span>
             </div>
-            <div class="flex items-center space-x-2.5">
-              <span class="text-xs sm:text-sm font-bold ${badgeStyle} px-4 py-1 rounded-full">
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-semibold ${badgeStyle} px-3 py-0.5 rounded-full">
                 ${log.newStatus}
               </span>
-              <span class="text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 flex items-center space-x-1.5">
-                <i data-lucide="mail-check" class="w-4 h-4 text-emerald-600"></i>
+              <span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center space-x-1">
+                <i data-lucide="mail-check" class="w-3.5 h-3.5 text-emerald-600"></i>
                 <span>Copia despachada</span>
               </span>
             </div>
           </div>
           
-          <p class="text-base text-slate-700 leading-relaxed font-normal bg-slate-50/80 p-4 rounded-2xl border border-slate-100">
+          <p class="text-xs sm:text-sm text-slate-700 leading-relaxed font-normal bg-slate-50 p-3.5 rounded-xl border border-slate-100">
             ${log.observations}
           </p>
           
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between pt-3 border-t border-slate-100 text-sm text-slate-500 font-medium gap-2">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between pt-2.5 border-t border-slate-100 text-xs sm:text-sm text-slate-500 font-medium gap-1.5">
             <span>Intervención: <strong class="text-slate-800 font-semibold">${log.interventionType}</strong></span>
-            <span>Próximo seguimiento: <strong class="text-[#fb5373] font-bold">${log.nextFollowupDate}</strong></span>
+            <span>Próximo seguimiento: <strong class="text-[#fb5373] font-semibold">${log.nextFollowupDate}</strong></span>
           </div>
         </div>
       `;
