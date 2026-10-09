@@ -11,8 +11,8 @@
   }
 
   html {
-    /* Sistema de escala tipográfica base 16px (múltiplos de 4/8px para UI consistente) */
-    font-size: 16px;
+    /* Escala ergonómica enriquecida para máxima legibilidad y presencia visual */
+    font-size: 17.5px;
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
   }

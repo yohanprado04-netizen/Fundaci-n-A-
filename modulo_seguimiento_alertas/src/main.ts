@@ -948,42 +948,42 @@ class FundacionPulseApp {
       const threshold = cond.threshold !== undefined ? cond.threshold : 3.0;
 
       return `
-        <div class="p-5 rounded-2xl bg-slate-50/80 border border-slate-200/90 hover:border-orange-200 hover:shadow-xs transition space-y-3.5 relative flex flex-col justify-between">
-          <div class="space-y-3">
-            <div class="flex items-start justify-between gap-2">
-              <div class="space-y-0.5">
+        <div class="p-6 rounded-2xl bg-white border border-slate-200/90 hover:border-orange-200 hover:shadow-md transition space-y-4 relative flex flex-col justify-between">
+          <div class="space-y-3.5">
+            <div class="flex items-start justify-between gap-3">
+              <div class="space-y-1">
                 <span class="text-xs font-mono font-bold text-slate-400 block">${rule.code}</span>
-                <h4 class="font-bold text-slate-900 text-sm sm:text-base leading-snug">${rule.name}</h4>
+                <h4 class="font-bold text-slate-900 text-base sm:text-lg leading-snug font-['Rubik',sans-serif]">${rule.name}</h4>
               </div>
-              <div class="flex flex-col items-end space-y-1 flex-shrink-0">
-                <span class="text-xs font-semibold ${sevBadgeColor} border px-2 py-0.5 rounded-full uppercase">
+              <div class="flex flex-col items-end space-y-1.5 flex-shrink-0">
+                <span class="text-xs sm:text-sm font-bold ${sevBadgeColor} border px-3 py-1 rounded-full uppercase">
                   ${rule.defaultSeverity}
                 </span>
                 ${activeBadge}
               </div>
             </div>
 
-            <div class="p-3 bg-white rounded-xl border border-slate-100 flex items-center justify-between">
+            <div class="p-4 bg-orange-50/40 rounded-xl border border-orange-100/80 flex items-center justify-between">
               <div class="space-y-0.5">
-                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Criterio Numérico</span>
-                <div class="text-xs sm:text-sm font-bold text-slate-800">
-                  ${metricLabel} <span class="font-mono text-[#fb5373]">${operator}</span> ${threshold}
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Criterio Numérico</span>
+                <div class="text-sm sm:text-base font-bold text-slate-800">
+                  ${metricLabel} <span class="font-mono text-[#fb5373] text-base">${operator}</span> <span class="text-base">${threshold}</span>
                 </div>
               </div>
-              <div class="w-8 h-8 rounded-lg bg-orange-50 text-[#fd7f60] flex items-center justify-center">
-                <i data-lucide="zap" class="w-4 h-4"></i>
+              <div class="w-10 h-10 rounded-xl bg-orange-100/70 text-[#fd7f60] flex items-center justify-center">
+                <i data-lucide="zap" class="w-5 h-5"></i>
               </div>
             </div>
 
-            <p class="text-xs sm:text-sm text-slate-500 leading-relaxed">
+            <p class="text-sm text-slate-600 leading-relaxed font-normal">
               ${rule.description || 'Dispara notificación inmediata y actualiza el expediente del estudiante en el sistema.'}
             </p>
           </div>
 
-          <div class="pt-3 border-t border-slate-200/80 flex items-center justify-between">
+          <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
             <span class="text-xs text-slate-400 font-medium">Motor Determinista</span>
-            <button class="edit-rule-btn h-8 px-3 rounded-lg bg-white hover:bg-orange-50 text-slate-700 hover:text-[#fb5373] border border-slate-200 hover:border-orange-200 font-semibold text-xs transition flex items-center space-x-1.5 cursor-pointer" data-id="${rule._id || rule.id}">
-              <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+            <button class="edit-rule-btn h-9 px-3.5 rounded-xl bg-white hover:bg-orange-50 text-slate-700 hover:text-[#fb5373] border border-slate-200 hover:border-orange-200 font-bold text-xs sm:text-sm transition flex items-center space-x-2 cursor-pointer shadow-xs" data-id="${rule._id || rule.id}">
+              <i data-lucide="edit-3" class="w-4 h-4"></i>
               <span>Editar Regla</span>
             </button>
           </div>
