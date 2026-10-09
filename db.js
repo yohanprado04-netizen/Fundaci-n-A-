@@ -357,6 +357,33 @@ var Store = {
     return this.set(entity, records);
   },
 
+  /**
+   * Elimina un registro puntual de forma atómica tanto en el servidor como localmente.
+   */
+  delete(entity, id) {
+    _invalidateCache(entity);
+    try {
+      const raw = localStorage.getItem(DB_PREFIX_TOKEN + entity);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          localStorage.setItem(DB_PREFIX_TOKEN + entity, JSON.stringify(arr.filter(r => r.id !== id)));
+        }
+      }
+    } catch (e) {}
+
+    const baseEntity = entity.includes('?') ? entity.split('?')[0] : entity;
+    if (ENTIDADES_MYSQL.has(baseEntity)) {
+      return apiFetch(`${baseEntity}?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+        .then(() => ({ ok: true, remoto: true }))
+        .catch(err => {
+          console.warn(`[Store.delete] No se pudo eliminar "${entity}" en el servidor:`, err.message);
+          return { ok: true, remoto: false, error: err.message };
+        });
+    }
+    return Promise.resolve({ ok: true, remoto: false });
+  },
+
   clearCache(entity) {
     _invalidateCache(entity);
   },

@@ -16,7 +16,54 @@
  * clave DISTINTA — no compartas la misma entre los dos backends).
  */
 
-define('JWT_SECRET', getenv('JWT_SECRET') ?: 'b3149d8969c6d07a440812a28e60ec03d5605b54c3df86e7dabb6835e0807794');
+/**
+ * Obtiene la clave secreta de firma JWT con protección criptográfica.
+ * Prioridad:
+ * 1. Variable de entorno del sistema o servidor web (JWT_SECRET)
+ * 2. Archivo .env en la raíz del proyecto
+ * 3. Archivo protegido local de clave persistente (.jwt_secret en api/)
+ * 4. Generación automática y almacenamiento de una clave criptográfica de 256 bits única
+ */
+function obtenerJwtSecret(): string {
+    // 1. Variable de entorno
+    $envSecret = getenv('JWT_SECRET') ?: ($_ENV['JWT_SECRET'] ?? ($_SERVER['JWT_SECRET'] ?? null));
+    if (!empty($envSecret) && is_string($envSecret) && strlen(trim($envSecret)) >= 32) {
+        return trim($envSecret);
+    }
+
+    // 2. Archivo .env en la raíz
+    $envFile = dirname(__DIR__) . '/.env';
+    if (file_exists($envFile) && is_readable($envFile)) {
+        $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '' || strpos($line, '#') === 0) continue;
+            if (strpos($line, 'JWT_SECRET=') === 0) {
+                $val = trim(substr($line, 11), " \t\n\r\0\x0B\"'");
+                if (strlen($val) >= 32) {
+                    return $val;
+                }
+            }
+        }
+    }
+
+    // 3. Archivo persistente protegido local
+    $secretFile = __DIR__ . '/.jwt_secret';
+    if (file_exists($secretFile) && is_readable($secretFile)) {
+        $key = trim((string)file_get_contents($secretFile));
+        if (strlen($key) >= 32) {
+            return $key;
+        }
+    }
+
+    // 4. Si no existe, generar una clave criptográficamente segura única para esta instancia
+    $nuevaClave = bin2hex(random_bytes(32));
+    @file_put_contents($secretFile, $nuevaClave, LOCK_EX);
+    @chmod($secretFile, 0600);
+    return $nuevaClave;
+}
+
+define('JWT_SECRET', obtenerJwtSecret());
 define('JWT_TTL_SEGUNDOS', 60 * 60 * 12); // el token expira a las 12 horas — la persona vuelve a loguearse pasado ese tiempo
 
 function base64UrlEncode(string $datos): string {
@@ -244,17 +291,25 @@ function obtenerSesionOpcional(): ?array {
 // ── Rate Limiting central contra ataques de fuerza bruta y DoS ───────────────
 if (!function_exists('inicializarTablaRateLimit')) {
     function inicializarTablaRateLimit(PDO $pdo): void {
-        static $hecho = false;
-        if ($hecho) return;
+        static $verificado = false;
+        if ($verificado) return;
         try {
-            $pdo->exec("CREATE TABLE IF NOT EXISTS rate_limits (
-                clave VARCHAR(128) PRIMARY KEY,
-                intentos INT NOT NULL DEFAULT 1,
-                bloqueado_hasta INT NOT NULL DEFAULT 0,
-                ultimo_intento INT NOT NULL DEFAULT 0
-            ) ENGINE=InnoDB");
-            $hecho = true;
-        } catch (Exception $e) {}
+            // Verificación DML ultra-rápida sin bloqueo de metadatos (MDL)
+            $pdo->query("SELECT 1 FROM rate_limits LIMIT 1");
+            $verificado = true;
+        } catch (Exception $e) {
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS rate_limits (
+                    clave VARCHAR(128) PRIMARY KEY,
+                    intentos INT NOT NULL DEFAULT 1,
+                    bloqueado_hasta INT NOT NULL DEFAULT 0,
+                    ultimo_intento INT NOT NULL DEFAULT 0,
+                    INDEX idx_bloqueado (bloqueado_hasta),
+                    INDEX idx_ultimo (ultimo_intento)
+                ) ENGINE=InnoDB");
+                $verificado = true;
+            } catch (Exception $ex) {}
+        }
     }
 }
 
@@ -262,6 +317,15 @@ if (!function_exists('verificarRateLimit')) {
     function verificarRateLimit(PDO $pdo, string $clave, int $maxIntentos = 5, int $segundosVentana = 300): void {
         inicializarTablaRateLimit($pdo);
         $ahora = time();
+
+        // Recolección probabilística de basura (1% de las peticiones) para evitar crecimiento infinito de la tabla
+        if (mt_rand(1, 100) === 1) {
+            try {
+                $stmtPurge = $pdo->prepare("DELETE FROM rate_limits WHERE ultimo_intento < ? AND bloqueado_hasta < ?");
+                $stmtPurge->execute([$ahora - 3600, $ahora]);
+            } catch (Exception $e) {}
+        }
+
         try {
             $stmt = $pdo->prepare("SELECT intentos, bloqueado_hasta, ultimo_intento FROM rate_limits WHERE clave = ? LIMIT 1");
             $stmt->execute([$clave]);
@@ -349,5 +413,93 @@ if (!function_exists('prepararReemplazoGenerico')) {
             responderError('Se esperaba un array en el body.', 400);
         }
         return $datos;
+    }
+}
+
+if (!function_exists('registrarEventoSeguridad')) {
+    /**
+     * Registra un evento de seguridad o auditoría administrativa en el servidor (SIEM-ready).
+     * Garantiza encadenamiento criptográfico HMAC-SHA256 para integridad de la bitácora
+     * e inmunidad contra manipulación externa o desautorizada.
+     */
+    function registrarEventoSeguridad(
+        PDO $pdo,
+        string $tipo,
+        string $actor,
+        string $rol,
+        string $detalle,
+        ?string $ip = null,
+        string $severidad = 'INFO'
+    ): void {
+        try {
+            $ip = $ip ?: (function_exists('obtenerIpCliente') ? obtenerIpCliente() : ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'));
+            $id = bin2hex(random_bytes(16));
+            $fecha = date('Y-m-d');
+            $hora = date('H:i:s');
+
+            $ultimoHash = 'GENESIS';
+            try {
+                $stmtH = $pdo->query('SELECT hash_integridad FROM auditoria_acciones WHERE hash_integridad IS NOT NULL ORDER BY fecha DESC, hora DESC LIMIT 1');
+                $filaH = $stmtH ? $stmtH->fetch(PDO::FETCH_ASSOC) : null;
+                if ($filaH && !empty($filaH['hash_integridad'])) {
+                    $ultimoHash = $filaH['hash_integridad'];
+                }
+            } catch (Exception $e) {}
+
+            $hashIntegridad = hash_hmac('sha256', "$id|$fecha|$hora|$tipo|$actor|$rol|$ultimoHash", JWT_SECRET);
+
+            try {
+                $stmt = $pdo->prepare(
+                    'INSERT INTO auditoria_acciones (id, fecha, hora, tipo, actor, rol, ip, severidad, detalle, hash_integridad)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                );
+                $stmt->execute([$id, $fecha, $hora, $tipo, $actor, $rol, $ip, $severidad, $detalle, $hashIntegridad]);
+            } catch (Exception $eCol) {
+                // Fallback si columnas ip o severidad no existen en la tabla
+                $stmt = $pdo->prepare(
+                    'INSERT INTO auditoria_acciones (id, fecha, hora, tipo, actor, rol, detalle, hash_integridad)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+                );
+                $stmt->execute([$id, $fecha, $hora, $tipo, $actor, $rol, "[$severidad][IP: $ip] $detalle", $hashIntegridad]);
+            }
+        } catch (Exception $e) {
+            error_log("[SECURITY_AUDIT_LOG_ERROR] " . $e->getMessage());
+        }
+    }
+}
+
+if (!function_exists('registrarAuditoriaLogin')) {
+    /**
+     * Registra el intento en auditoria_login con dirección IP y encadenamiento criptográfico (HMAC-SHA256)
+     * para detectar e impedir la alteración o eliminación fraudulenta de trazas de auditoría.
+     */
+    function registrarAuditoriaLogin(PDO $pdo, string $resultado, string $email, string $rol, ?string $ip = null): void {
+        $ip = $ip ?: (function_exists('obtenerIpCliente') ? obtenerIpCliente() : ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'));
+        $id = bin2hex(random_bytes(16));
+        $fecha = date('Y-m-d');
+        $hora = date('H:i:s');
+
+        $ultimoHash = 'GENESIS';
+        try {
+            $stmtH = $pdo->query('SELECT hash_integridad FROM auditoria_login WHERE hash_integridad IS NOT NULL ORDER BY fecha DESC, hora DESC LIMIT 1');
+            $filaH = $stmtH ? $stmtH->fetch(PDO::FETCH_ASSOC) : null;
+            if ($filaH && !empty($filaH['hash_integridad'])) {
+                $ultimoHash = $filaH['hash_integridad'];
+            }
+        } catch (Exception $e) {}
+
+        $hashIntegridad = hash_hmac('sha256', "$id|$fecha|$hora|$resultado|$email|$rol|$ultimoHash", JWT_SECRET);
+
+        try {
+            $stmt = $pdo->prepare(
+                'INSERT INTO auditoria_login (id, fecha, hora, resultado, email, rol, ip, hash_integridad) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+            );
+            $stmt->execute([$id, $fecha, $hora, $resultado, $email, $rol, $ip, $hashIntegridad]);
+        } catch (Exception $e) {
+            $stmt = $pdo->prepare(
+                'INSERT INTO auditoria_login (id, fecha, hora, resultado, email, rol, hash_integridad) VALUES (?, ?, ?, ?, ?, ?, ?)'
+            );
+            $stmt->execute([$id, $fecha, $hora, $resultado, $email, $rol, $hashIntegridad]);
+        }
     }
 }

@@ -191,7 +191,7 @@ function manejarConfiguracion(PDO $pdo): void {
             'smtpHost'              => $fila['smtp_host'] ?? 'smtp.gmail.com',
             'smtpPort'              => (int)($fila['smtp_port'] ?? 465),
             'smtpUser'              => $fila['smtp_user'] ?? '',
-            'smtpPass'              => $fila['smtp_pass'] ?? '',
+            'smtpPass'              => !empty($fila['smtp_pass']) ? '••••••••' : '',
             'smtpFrom'              => $fila['smtp_from'] ?? 'info@fundacionamas.org.co',
             'smtpSecure'            => $fila['smtp_secure'] ?? 'ssl',
         ]]);
@@ -214,6 +214,16 @@ function manejarConfiguracion(PDO $pdo): void {
             $postulacionSlug = 'postulaciones';
         }
         $postulacionUrl = '#formulario/' . $postulacionSlug;
+
+        // Si la contraseña SMTP viene vacía o con la máscara '••••••••'/'********', conservar la existente en la BD
+        $passEnviada = trim((string)($cfg['smtpPass'] ?? ''));
+        if ($passEnviada === '' || $passEnviada === '••••••••' || $passEnviada === '********') {
+            $stmtPrev = $pdo->query("SELECT smtp_pass FROM configuracion WHERE id = 1");
+            $passExistente = $stmtPrev ? $stmtPrev->fetchColumn() : '';
+            $smtpPassFinal = $passExistente ?: '';
+        } else {
+            $smtpPassFinal = $passEnviada;
+        }
 
         $stmt = $pdo->prepare(
             "INSERT INTO configuracion
@@ -264,10 +274,19 @@ function manejarConfiguracion(PDO $pdo): void {
             $cfg['smtpHost'] ?? 'smtp.gmail.com',
             (int)($cfg['smtpPort'] ?? 465),
             $cfg['smtpUser'] ?? '',
-            $cfg['smtpPass'] ?? '',
+            $smtpPassFinal,
             $cfg['smtpFrom'] ?? 'info@fundacionamas.org.co',
             $cfg['smtpSecure'] ?? 'ssl',
         ]);
+        registrarEventoSeguridad(
+            $pdo,
+            'Seguridad: Configuración del Sistema',
+            $sesion['email'] ?? 'Superadmin',
+            'Superadmin',
+            'Parámetros globales y configuración institucional actualizados',
+            null,
+            'SECURITY_ALERT'
+        );
         responderJson(['ok' => true]);
         return;
     }

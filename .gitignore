@@ -3,6 +3,10 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+.jwt_secret
+api/.jwt_secret
+*.secret
+*.key
 api/*.log
 *.log
 .DS_Store

@@ -936,9 +936,11 @@ def health():
             knowledge_entries = len(db.obtener_base_conocimiento())
             base_datos_conectada = True
         except Exception as e:
-            error_conexion = str(e)
+            # Registrar el detalle internamente en el servidor sin exponerlo a clientes externos (CWE-209)
+            print(f"[HEALTHCHECK_DB_ERROR] {e}")
+            base_datos_conectada = False
 
-    resultado = {
+    return {
         "status": "ok",
         "openrouter_configurado": bool(OPENROUTER_API_KEY),
         "groq_configurado": bool(GROQ_API_KEY),
@@ -952,6 +954,3 @@ def health():
         "base_datos_conectada": base_datos_conectada,
         "knowledge_entries": knowledge_entries,
     }
-    if error_conexion:
-        resultado["base_datos_error"] = error_conexion
-    return resultado

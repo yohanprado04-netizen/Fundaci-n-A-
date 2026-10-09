@@ -4098,8 +4098,8 @@ if (window.top !== window.self) {
     closeConfirm();
 
     try {
-      if (entity === 'chat_voz_conocimiento') {
-        await apiFetch(`chat_voz_conocimiento?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+      if (typeof ENTIDADES_MYSQL !== 'undefined' && ENTIDADES_MYSQL.has(entity)) {
+        await apiFetch(`${entity}?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
       }
     } catch (e) {}
 
@@ -9131,23 +9131,30 @@ Fundación A+`;
       : logins.filter(l => l.resultado === auditoriaLoginFiltro);
 
     const filasLogin = loginsFiltrados.map(l => `
-      <tr data-search="${escapeHtml((l.fecha + ' ' + l.hora + ' ' + (l.rol || '') + ' ' + l.email + ' ' + l.resultado).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+      <tr data-search="${escapeHtml((l.fecha + ' ' + l.hora + ' ' + (l.rol || '') + ' ' + l.email + ' ' + (l.ip || '') + ' ' + l.resultado).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(l.fecha)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(l.hora)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(l.rol || 'Superadmin')}</td>
         <td class="py-2.5 px-4 text-sm text-ink font-semibold">${escapeHtml(l.email)}</td>
+        <td class="py-2.5 px-4 text-xs font-mono text-slate2 whitespace-nowrap">${escapeHtml(l.ip || '—')}</td>
         <td class="py-2.5 px-4">${statusPill(l.resultado, { 'Exitoso': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Fallido': { bg: '#F0455C1A', text: '#F0455C' } })}</td>
       </tr>`).join('');
 
-    const filasAcciones = acciones.map(a => `
-      <tr data-search="${escapeHtml((a.fecha + ' ' + a.hora + ' ' + (a.rol || '') + ' ' + a.actor + ' ' + a.tipo + ' ' + (a.detalle || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+    const filasAcciones = acciones.map(a => {
+      const sev = a.severidad || 'INFO';
+      const sevColor = sev === 'SECURITY_ALERT' ? 'bg-rose-100 text-rose-700 border-rose-200' : (sev === 'WARN' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-blue-50 text-blue-600 border-blue-200');
+      return `
+      <tr data-search="${escapeHtml((a.fecha + ' ' + a.hora + ' ' + (a.rol || '') + ' ' + a.actor + ' ' + a.tipo + ' ' + (a.ip || '') + ' ' + (a.detalle || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(a.fecha)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(a.hora)}</td>
+        <td class="py-2.5 px-4"><span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${sevColor}">${escapeHtml(sev)}</span></td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(a.rol || '—')}</td>
         <td class="py-2.5 px-4 text-sm text-ink font-semibold">${escapeHtml(a.actor)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(a.tipo)}</td>
+        <td class="py-2.5 px-4 text-xs font-mono text-slate2 whitespace-nowrap">${escapeHtml(a.ip || '—')}</td>
         <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(a.detalle || '—')}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     const filasCambios = cambios.map(c => `
       <tr data-search="${escapeHtml((c.fecha + ' ' + c.hora + ' ' + c.autor + ' ' + c.cohorte + ' ' + c.mes + ' ' + c.franja + ' ' + c.campo + ' ' + c.valorAnterior + ' ' + c.valorNuevo).toLowerCase())}" class="border-b border-gray-50 last:border-0">
@@ -9193,9 +9200,9 @@ Fundación A+`;
         <div class="table-responsive-container">
           <table id="table-auditoria-login" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Resultado</th>
+              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">IP</th><th class="py-2.5 px-4">Resultado</th>
             </tr></thead>
-            <tbody>${filasLogin || emptyRow(5)}</tbody>
+            <tbody>${filasLogin || emptyRow(6)}</tbody>
           </table>
         </div>
       </div>
@@ -9217,9 +9224,9 @@ Fundación A+`;
         <div class="table-responsive-container">
           <table id="table-auditoria-acciones" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Quién</th><th class="py-2.5 px-4">Acción</th><th class="py-2.5 px-4">Detalle</th>
+              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Nivel</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Quién</th><th class="py-2.5 px-4">Acción</th><th class="py-2.5 px-4">IP</th><th class="py-2.5 px-4">Detalle</th>
             </tr></thead>
-            <tbody>${filasAcciones || emptyRow(6)}</tbody>
+            <tbody>${filasAcciones || emptyRow(8)}</tbody>
           </table>
         </div>
       </div>

@@ -41,6 +41,7 @@ function manejarSuperadminCredentials(PDO $pdo): void {
             );
             $stmt->execute([$email]);
         }
+        registrarEventoSeguridad($pdo, 'Seguridad: Credenciales Superadmin', $email, 'Superadmin', "Credenciales Superadmin actualizadas ($email). Token version incrementada.", null, 'SECURITY_ALERT');
         responderJson(['ok' => true]);
         return;
     }
@@ -82,10 +83,36 @@ function manejarPerfiles(PDO $pdo): void {
         return;
     }
 
-    if ($metodo === 'POST') {
+    if ($metodo === 'DELETE') {
+        $sesion = exigirSesion(['Superadmin']);
+        $rawId = trim((string)($_GET['id'] ?? (leerBodyJson()['id'] ?? '')));
+        $id = validarIdentificador($rawId);
+        if (!$id) {
+            responderError('Falta el ID del perfil a eliminar.', 400);
+        }
+        $stmtCheck = $pdo->prepare("SELECT es_sistema FROM perfiles WHERE id = ? LIMIT 1");
+        $stmtCheck->execute([$id]);
+        $esSistema = $stmtCheck->fetchColumn();
+        if ($esSistema === false) {
+            responderError('Perfil no encontrado.', 404);
+        }
+        if ((int)$esSistema === 1) {
+            responderError('No se pueden eliminar los perfiles de sistema.', 403);
+        }
+        $stmtDel = $pdo->prepare("DELETE FROM perfiles WHERE id = ? AND es_sistema = 0");
+        $stmtDel->execute([$id]);
+        registrarEventoSeguridad($pdo, 'Perfiles: Eliminación de Perfil', $sesion['email'] ?? 'Superadmin', 'Superadmin', "Perfil de acceso eliminado (ID: $id)", null, 'WARN');
+        responderJson(['ok' => true, 'mensaje' => 'Perfil eliminado correctamente.']);
+        return;
+    }
+
+    if ($metodo === 'POST' || $metodo === 'PUT') {
         exigirSesion(['Superadmin']);
-        $perfiles = prepararReemplazoGenerico();
-        if (!is_array($perfiles)) responderError('Se esperaba un array de perfiles.', 400);
+        $body = leerBodyJson();
+        if (!is_array($body)) responderError('Se esperaba un objeto o array de perfiles.', 400);
+
+        $perfiles = isset($body[0]) ? $body : [$body];
+        $debePodar = isset($_GET['prune']) && $_GET['prune'] === '1';
 
         $pdo->beginTransaction();
         try {
@@ -112,12 +139,14 @@ function manejarPerfiles(PDO $pdo): void {
                     json_encode($p['permisos'] ?? [], JSON_UNESCAPED_UNICODE),
                 ]);
             }
-            if (!empty($ids)) {
-                $placeholders = implode(',', array_fill(0, count($ids), '?'));
-                $stmtPrune = $pdo->prepare("DELETE FROM perfiles WHERE es_sistema = 0 AND id NOT IN ($placeholders)");
-                $stmtPrune->execute(array_values($ids));
-            } else {
-                $pdo->exec("DELETE FROM perfiles WHERE es_sistema = 0");
+            if ($debePodar) {
+                if (!empty($ids)) {
+                    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+                    $stmtPrune = $pdo->prepare("DELETE FROM perfiles WHERE es_sistema = 0 AND id NOT IN ($placeholders)");
+                    $stmtPrune->execute(array_values($ids));
+                } else {
+                    $pdo->exec("DELETE FROM perfiles WHERE es_sistema = 0");
+                }
             }
             $pdo->commit();
             responderJson(['ok' => true, 'total' => count($perfiles)]);
@@ -255,8 +284,38 @@ function manejarUsuarios(PDO $pdo): void {
             $pdo->query("DELETE FROM usuarios WHERE id = 'us_lorenliseth'");
         } catch (Exception $e) {}
 
+        $miId = $sesion['id'] ?? null;
+        $miEmail = $sesion['email'] ?? null;
+        $miRol = $sesion['rol'] ?? '';
+        $miCohorte = trim((string)($sesion['cohorte'] ?? ''));
+
         $restriccion = obtenerRestriccionCohortes($sesion, $pdo);
-        if ($restriccion !== null) {
+        if ($miRol === 'Estudiante') {
+            // Protección de Privacidad: Estudiantes solo pueden consultar a sus compañeros de cohorte y personal/docentes
+            if ($miCohorte !== '') {
+                $stmt = $pdo->prepare(
+                    "SELECT id, nombre, email, rol, estado, estado_registro,
+                            cohorte, cohortes_permitidas, telefono, documento, habilidades, fue_estudiante, foto_url, descripcion,
+                            tarifa_hora, banco, tipo_cuenta, numero_cuenta, titular_cuenta, documento_cuenta,
+                            creado_en, actualizado_en
+                     FROM usuarios
+                     WHERE (rol = 'Estudiante' AND cohorte = ?) OR rol != 'Estudiante'"
+                );
+                $stmt->execute([$miCohorte]);
+                $filas = $stmt->fetchAll();
+            } else {
+                $stmt = $pdo->prepare(
+                    "SELECT id, nombre, email, rol, estado, estado_registro,
+                            cohorte, cohortes_permitidas, telefono, documento, habilidades, fue_estudiante, foto_url, descripcion,
+                            tarifa_hora, banco, tipo_cuenta, numero_cuenta, titular_cuenta, documento_cuenta,
+                            creado_en, actualizado_en
+                     FROM usuarios
+                     WHERE id = ? OR rol != 'Estudiante'"
+                );
+                $stmt->execute([$miId ?: '']);
+                $filas = $stmt->fetchAll();
+            }
+        } elseif ($restriccion !== null) {
             $inQuery = implode(',', array_fill(0, count($restriccion), '?'));
             $stmt = $pdo->prepare(
                 "SELECT id, nombre, email, rol, estado, estado_registro,
@@ -285,18 +344,79 @@ function manejarUsuarios(PDO $pdo): void {
         foreach ($pdo->query('SELECT usuario_id, perfil_id FROM usuario_perfiles')->fetchAll() as $rel) {
             $perfilesPorUsuario[$rel['usuario_id']][] = $rel['perfil_id'];
         }
-        responderJson(mapearUsuariosACamelCase($filas, $perfilesPorUsuario, $esAdmin));
+        responderJson(mapearUsuariosACamelCase($filas, $perfilesPorUsuario, $esAdmin, $miId, $miEmail));
         return;
     }
 
-    if ($metodo === 'POST') {
-        exigirSesion(['Superadmin', 'Coordinador']);
-        $usuariosNuevos = leerBodyJson();
-        if (!is_array($usuariosNuevos)) {
-            responderError('Se esperaba un array de usuarios en el body.', 400);
+    if ($metodo === 'DELETE') {
+        $sesion = exigirSesion(['Superadmin', 'Coordinador']);
+        $rawId = trim((string)($_GET['id'] ?? (leerBodyJson()['id'] ?? '')));
+        $id = validarIdentificador($rawId);
+        if (!$id) {
+            responderError('Falta el ID del usuario a eliminar.', 400);
         }
-        reemplazarTablaUsuarios($pdo, $usuariosNuevos);
-        responderJson(['ok' => true, 'total' => count($usuariosNuevos)]);
+
+        $stmtCheck = $pdo->prepare("SELECT nombre, email, rol FROM usuarios WHERE id = ? LIMIT 1");
+        $stmtCheck->execute([$id]);
+        $uTarget = $stmtCheck->fetch();
+        if (!$uTarget) {
+            responderError('Usuario no encontrado.', 404);
+        }
+        if ($uTarget['rol'] === 'Superadmin') {
+            responderError('No se puede eliminar la cuenta de Superadmin.', 403);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $stmtDelPerfil = $pdo->prepare("DELETE FROM usuario_perfiles WHERE usuario_id = ?");
+            $stmtDelPerfil->execute([$id]);
+
+            $stmtDel = $pdo->prepare("DELETE FROM usuarios WHERE id = ? AND rol != 'Superadmin'");
+            $stmtDel->execute([$id]);
+            $pdo->commit();
+
+            registrarEventoSeguridad(
+                $pdo,
+                'Usuarios: Eliminación de Cuenta',
+                $sesion['email'] ?? ($sesion['nombre'] ?? 'Administrador'),
+                $sesion['rol'] ?? 'Coordinador',
+                "Usuario eliminado: {$uTarget['nombre']} ({$uTarget['email']}, Rol: {$uTarget['rol']}, ID: $id)",
+                null,
+                'WARN'
+            );
+
+            responderJson(['ok' => true, 'mensaje' => 'Usuario eliminado correctamente.']);
+            return;
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            responderErrorDb($e, 'eliminar el usuario');
+        }
+    }
+
+    if ($metodo === 'POST' || $metodo === 'PUT') {
+        exigirSesion(['Superadmin', 'Coordinador']);
+        $body = leerBodyJson();
+        if (!is_array($body)) {
+            responderError('Se esperaba un objeto o array de usuarios en el body.', 400);
+        }
+
+        // Si es un objeto individual de usuario (no un array indexado por enteros)
+        if (!empty($body) && !isset($body[0])) {
+            $pdo->beginTransaction();
+            try {
+                $resultado = guardarUsuarioIndividual($pdo, $body);
+                $pdo->commit();
+                responderJson($resultado);
+                return;
+            } catch (Exception $e) {
+                $pdo->rollBack();
+                responderErrorDb($e, 'guardar el usuario');
+            }
+        }
+
+        $debePodar = isset($_GET['prune']) && $_GET['prune'] === '1';
+        reemplazarTablaUsuarios($pdo, $body, $debePodar);
+        responderJson(['ok' => true, 'total' => count($body)]);
         return;
     }
 
@@ -312,8 +432,9 @@ function manejarUsuarios(PDO $pdo): void {
  * de app.js.
  */
 
-function mapearUsuariosACamelCase(array $filas, array $perfilesPorUsuario = [], bool $esAdmin = false): array {
-    return array_map(function ($fila) use ($perfilesPorUsuario, $esAdmin) {
+function mapearUsuariosACamelCase(array $filas, array $perfilesPorUsuario = [], bool $esAdmin = false, ?string $miId = null, ?string $miEmail = null): array {
+    $miEmailNorm = strtolower(trim((string)$miEmail));
+    return array_map(function ($fila) use ($perfilesPorUsuario, $esAdmin, $miId, $miEmailNorm) {
         $cohortesPermitidas = ['todas'];
         if (!empty($fila['cohortes_permitidas'])) {
             $dec = json_decode($fila['cohortes_permitidas'], true);
@@ -324,6 +445,16 @@ function mapearUsuariosACamelCase(array $filas, array $perfilesPorUsuario = [], 
             $decHab = json_decode($fila['habilidades'], true);
             $habilidadesArr = is_array($decHab) ? $decHab : array_values(array_filter(array_map('trim', explode(',', $fila['habilidades']))));
         }
+
+        // Protección PII (Habeas Data): Documento de identidad y teléfono solo visibles para Admins o para el usuario dueño del registro
+        $esPropio = false;
+        if (!empty($miId) && ($fila['id'] ?? '') === $miId) {
+            $esPropio = true;
+        } elseif (!empty($miEmailNorm) && strtolower(trim((string)($fila['email'] ?? ''))) === $miEmailNorm) {
+            $esPropio = true;
+        }
+        $puedeVerPii = $esAdmin || $esPropio;
+
         return [
             'id' => $fila['id'],
             'nombre' => $fila['nombre'],
@@ -335,8 +466,8 @@ function mapearUsuariosACamelCase(array $filas, array $perfilesPorUsuario = [], 
             'estadoRegistro' => $fila['estado_registro'],
             'cohorte' => $fila['cohorte'],
             'cohortesPermitidas' => $cohortesPermitidas,
-            'telefono' => $fila['telefono'] ?? '',
-            'documento' => $fila['documento'] ?? '',
+            'telefono' => $puedeVerPii ? ($fila['telefono'] ?? '') : '',
+            'documento' => $puedeVerPii ? ($fila['documento'] ?? '') : '',
             'habilidades' => $habilidadesArr,
             'fueEstudiante' => (bool)$fila['fue_estudiante'],
             'fotoUrl' => $fila['foto_url'] ?? '',
@@ -383,7 +514,140 @@ function mapearUsuariosACamelCase(array $filas, array $perfilesPorUsuario = [], 
  * perfiles asignados y la app decía "tu cuenta no tiene perfil asignado".
  */
 
-function reemplazarTablaUsuarios(PDO $pdo, array $usuarios): void {
+/**
+ * Guarda o actualiza un único usuario de forma atómica y aislada (REST atómico),
+ * sin bloquear ni podar la tabla completa de usuarios.
+ */
+function guardarUsuarioIndividual(PDO $pdo, array $u): array {
+    $idUsuario = $u['id'] ?? bin2hex(random_bytes(16));
+    $passRecibido = trim((string)($u['password'] ?? ''));
+
+    $passwordFinal = '';
+    if ($passRecibido === '') {
+        $stmtOldPass = $pdo->prepare("SELECT password FROM usuarios WHERE id = ? LIMIT 1");
+        $stmtOldPass->execute([$idUsuario]);
+        $passwordFinal = $stmtOldPass->fetchColumn() ?: '';
+    } elseif (esHashBcrypt($passRecibido)) {
+        $passwordFinal = $passRecibido;
+    } else {
+        $passwordFinal = password_hash($passRecibido, PASSWORD_BCRYPT);
+    }
+
+    $cPerm = null;
+    if (!empty($u['cohortesPermitidas'])) {
+        $cPerm = is_array($u['cohortesPermitidas']) ? json_encode(array_values($u['cohortesPermitidas']), JSON_UNESCAPED_UNICODE) : (string)$u['cohortesPermitidas'];
+    }
+
+    $habRaw = $u['habilidades'] ?? null;
+    $habVal = null;
+    if ($habRaw !== null) {
+        if (is_array($habRaw)) {
+            $habVal = !empty($habRaw) ? json_encode(array_values(array_filter(array_map('trim', $habRaw))), JSON_UNESCAPED_UNICODE) : '[]';
+        } else if (is_string($habRaw)) {
+            $trimmed = trim($habRaw);
+            if ($trimmed === '' || $trimmed === '[]') {
+                $habVal = '[]';
+            } else {
+                $dec = json_decode($trimmed, true);
+                if (is_array($dec)) {
+                    $habVal = json_encode(array_values(array_filter(array_map('trim', $dec))), JSON_UNESCAPED_UNICODE);
+                } else {
+                    $partes = array_values(array_filter(array_map('trim', explode(',', $trimmed))));
+                    $habVal = json_encode($partes, JSON_UNESCAPED_UNICODE);
+                }
+            }
+        }
+    }
+    $docVal = !empty($u['documento']) ? trim((string)$u['documento']) : null;
+    $telVal = !empty($u['telefono']) ? trim((string)$u['telefono']) : null;
+
+    $stmt = $pdo->prepare(
+        'INSERT INTO usuarios
+            (id, nombre, email, password, password_plano, rol, estado, estado_registro, cohorte, cohortes_permitidas, telefono, documento, habilidades, fue_estudiante, foto_url, descripcion, tarifa_hora, banco, tipo_cuenta, numero_cuenta, titular_cuenta, documento_cuenta)
+         VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+            nombre = VALUES(nombre),
+            email = VALUES(email),
+            password = VALUES(password),
+            password_plano = NULL,
+            rol = VALUES(rol),
+            estado = VALUES(estado),
+            estado_registro = VALUES(estado_registro),
+            cohorte = VALUES(cohorte),
+            cohortes_permitidas = VALUES(cohortes_permitidas),
+            telefono = VALUES(telefono),
+            documento = VALUES(documento),
+            habilidades = VALUES(habilidades),
+            fue_estudiante = VALUES(fue_estudiante),
+            foto_url = COALESCE(VALUES(foto_url), foto_url),
+            descripcion = COALESCE(VALUES(descripcion), descripcion),
+            tarifa_hora = COALESCE(VALUES(tarifa_hora), tarifa_hora),
+            banco = COALESCE(VALUES(banco), banco),
+            tipo_cuenta = COALESCE(VALUES(tipo_cuenta), tipo_cuenta),
+            numero_cuenta = COALESCE(VALUES(numero_cuenta), numero_cuenta),
+            titular_cuenta = COALESCE(VALUES(titular_cuenta), titular_cuenta),
+            documento_cuenta = COALESCE(VALUES(documento_cuenta), documento_cuenta),
+            token_version = IF(password != VALUES(password) OR estado != VALUES(estado), token_version + 1, token_version)'
+    );
+
+    $stmt->execute([
+        $idUsuario,
+        $u['nombre'] ?? '',
+        strtolower($u['email'] ?? ''),
+        $passwordFinal,
+        $u['rol'] ?? 'Estudiante',
+        $u['estado'] ?? 'Activo',
+        $u['estadoRegistro'] ?? null,
+        $u['cohorte'] ?? null,
+        $cPerm,
+        $telVal,
+        $docVal,
+        $habVal,
+        !empty($u['fueEstudiante']) ? 1 : 0,
+        $u['fotoUrl'] ?? null,
+        $u['descripcion'] ?? null,
+        (float)($u['tarifaHora'] ?? $u['tarifa_hora'] ?? 0),
+        (string)($u['banco'] ?? ''),
+        (string)($u['tipoCuenta'] ?? $u['tipo_cuenta'] ?? ''),
+        (string)($u['numeroCuenta'] ?? $u['numero_cuenta'] ?? ''),
+        (string)($u['titularCuenta'] ?? $u['titular_cuenta'] ?? ''),
+        (string)($u['documentoCuenta'] ?? $u['documento_cuenta'] ?? ''),
+    ]);
+
+    if (isset($u['perfiles']) && is_array($u['perfiles'])) {
+        $perfilesValidos = array_column($pdo->query('SELECT id FROM perfiles')->fetchAll(), 'id');
+        $stmtPerfilDelete = $pdo->prepare('DELETE FROM usuario_perfiles WHERE usuario_id = ?');
+        $stmtPerfilDelete->execute([$idUsuario]);
+        $stmtPerfil = $pdo->prepare('INSERT INTO usuario_perfiles (usuario_id, perfil_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE perfil_id=VALUES(perfil_id)');
+        foreach (array_unique($u['perfiles']) as $perfilId) {
+            if (in_array($perfilId, $perfilesValidos, true)) {
+                $stmtPerfil->execute([$idUsuario, $perfilId]);
+            }
+        }
+    }
+
+    $sesion = obtenerSesionOpcional();
+    $actor = $sesion['email'] ?? ($sesion['nombre'] ?? 'Sistema');
+    $rolActor = $sesion['rol'] ?? 'Admin';
+    $nomTarget = $u['nombre'] ?? '';
+    $emailTarget = $u['email'] ?? '';
+    $rolTarget = $u['rol'] ?? 'Estudiante';
+    $estadoTarget = $u['estado'] ?? 'Activo';
+
+    registrarEventoSeguridad(
+        $pdo,
+        'Usuarios: Modificación de Cuenta',
+        $actor,
+        $rolActor,
+        "Guardada cuenta: $nomTarget ($emailTarget, Rol: $rolTarget, Estado: $estadoTarget, ID: $idUsuario)",
+        null,
+        'INFO'
+    );
+
+    return ['ok' => true, 'id' => $idUsuario];
+}
+
+function reemplazarTablaUsuarios(PDO $pdo, array $usuarios, bool $debePodar = false): void {
     $pdo->beginTransaction();
     try {
         $passPrevioMap = [];
@@ -509,13 +773,16 @@ function reemplazarTablaUsuarios(PDO $pdo, array $usuarios): void {
             }
         }
 
-        // Poda segura de usuarios eliminados explícitamente desde la interfaz (nunca toca al Superadmin)
-        if (!empty($idsUsuariosEnviados)) {
-            $inPlaceholders = implode(',', array_fill(0, count($idsUsuariosEnviados), '?'));
-            $stmtPrune = $pdo->prepare("DELETE FROM usuarios WHERE rol != 'Superadmin' AND id NOT IN ($inPlaceholders)");
-            $stmtPrune->execute(array_values($idsUsuariosEnviados));
-        } else {
-            $pdo->exec("DELETE FROM usuarios WHERE rol != 'Superadmin'");
+        // Poda segura de usuarios: SOLO se ejecuta si se solicita explícitamente mediante query param ?prune=1.
+        // Por defecto, se realiza UPSERT atómico sin borrar concurrentemente a otros usuarios (Anti-Race-Condition).
+        if ($debePodar) {
+            if (!empty($idsUsuariosEnviados)) {
+                $inPlaceholders = implode(',', array_fill(0, count($idsUsuariosEnviados), '?'));
+                $stmtPrune = $pdo->prepare("DELETE FROM usuarios WHERE rol != 'Superadmin' AND id NOT IN ($inPlaceholders)");
+                $stmtPrune->execute(array_values($idsUsuariosEnviados));
+            } else {
+                $pdo->exec("DELETE FROM usuarios WHERE rol != 'Superadmin'");
+            }
         }
         $pdo->commit();
     } catch (Exception $e) {
@@ -641,10 +908,12 @@ function manejarPerfilPropio(PDO $pdo): void {
             $valores[] = null;
         }
     }
+    $cambioClave = false;
     if (array_key_exists('password', $cambios) && (string)$cambios['password'] !== '') {
         $campos[] = 'password = ?';
         $valores[] = password_hash((string)$cambios['password'], PASSWORD_BCRYPT);
         $campos[] = 'token_version = token_version + 1';
+        $cambioClave = true;
     }
     if (!$campos) {
         responderError('Nada para actualizar.', 400);
@@ -668,6 +937,10 @@ function manejarPerfilPropio(PDO $pdo): void {
         $stmtEmail->execute($valoresWithEmail);
     } else {
         responderError('Identificador de usuario no válido en sesión.', 401);
+    }
+
+    if ($cambioClave) {
+        registrarEventoSeguridad($pdo, 'Seguridad: Cambio de Contraseña', $email ?: $id, 'Usuario', "Contraseña actualizada para cuenta " . ($email ?: $id) . ". Sesiones previas revocadas.", null, 'WARN');
     }
 
     responderJson(['ok' => true]);

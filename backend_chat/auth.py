@@ -39,8 +39,41 @@ from db import buscar_usuario_por_credenciales
 # siempre conviene definir SECRET_KEY explícitamente en el .env real.
 load_dotenv()
 
+def _obtener_php_jwt_secret() -> Optional[str]:
+    # 1. Variable de entorno directa
+    env_secret = os.getenv("PHP_JWT_SECRET") or os.getenv("JWT_SECRET")
+    if env_secret and len(env_secret.strip()) >= 32:
+        return env_secret.strip()
+
+    # 2. Archivo protegido .jwt_secret en api/ (despliegue local conjunto)
+    posible_jwt_secret_path = os.path.join(os.path.dirname(__file__), "..", "api", ".jwt_secret")
+    if os.path.exists(posible_jwt_secret_path):
+        try:
+            with open(posible_jwt_secret_path, "r", encoding="utf-8") as f:
+                contenido = f.read().strip()
+                if len(contenido) >= 32:
+                    return contenido
+        except Exception:
+            pass
+
+    # 3. Archivo .env en la raíz del proyecto
+    posible_env_root = os.path.join(os.path.dirname(__file__), "..", ".env")
+    if os.path.exists(posible_env_root):
+        try:
+            with open(posible_env_root, "r", encoding="utf-8") as f:
+                for linea in f:
+                    linea = linea.strip()
+                    if linea.startswith("JWT_SECRET="):
+                        val = linea.split("=", 1)[1].strip(" '\"")
+                        if len(val) >= 32:
+                            return val
+        except Exception:
+            pass
+
+    return None
+
 SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
-PHP_JWT_SECRET = os.getenv("PHP_JWT_SECRET", "b3149d8969c6d07a440812a28e60ec03d5605b54c3df86e7dabb6835e0807794")
+PHP_JWT_SECRET = _obtener_php_jwt_secret()
 ALGORITHM = "HS256"
 HORAS_EXPIRACION = 8
 
@@ -77,31 +110,32 @@ def verificar_token(token: str) -> Optional[dict]:
     except jwt.PyJWTError:
         pass
 
-    # 2. Respaldo: intentar con JWT_SECRET de la aplicación web PHP (api/middleware.php)
-    try:
-        payload = jwt.decode(token, PHP_JWT_SECRET, algorithms=[ALGORITHM])
-        if not payload.get("nombre"):
-            from db import db_configurada, get_connection
-            if db_configurada():
-                try:
-                    with get_connection() as conn, conn.cursor() as cur:
-                        if payload.get("rol") == "Superadmin":
-                            payload["nombre"] = "Superadmin"
-                        else:
-                            cur.execute(
-                                "SELECT nombre, cohorte FROM usuarios WHERE LOWER(email) = %s LIMIT 1",
-                                ((payload.get("email") or "").strip().lower(),),
-                            )
-                            row = cur.fetchone()
-                            if row:
-                                payload["nombre"] = row.get("nombre", "")
-                                if not payload.get("cohorte"):
-                                    payload["cohorte"] = row.get("cohorte")
-                except Exception:
-                    pass
-        return payload
-    except Exception:
-        return None
+    # 2. Respaldo: intentar con JWT_SECRET de la aplicación web PHP si está configurado
+    if PHP_JWT_SECRET:
+        try:
+            payload = jwt.decode(token, PHP_JWT_SECRET, algorithms=[ALGORITHM])
+            if not payload.get("nombre"):
+                from db import db_configurada, get_connection
+                if db_configurada():
+                    try:
+                        with get_connection() as conn, conn.cursor() as cur:
+                            if payload.get("rol") == "Superadmin":
+                                payload["nombre"] = "Superadmin"
+                            else:
+                                cur.execute(
+                                    "SELECT nombre, cohorte FROM usuarios WHERE LOWER(email) = %s LIMIT 1",
+                                    ((payload.get("email") or "").strip().lower(),),
+                                )
+                                row = cur.fetchone()
+                                if row:
+                                    payload["nombre"] = row.get("nombre", "")
+                                    if not payload.get("cohorte"):
+                                        payload["cohorte"] = row.get("cohorte")
+                    except Exception:
+                        pass
+            return payload
+        except Exception:
+            return None
 
 
 def intentar_login(email: str, password: str) -> Optional[str]:

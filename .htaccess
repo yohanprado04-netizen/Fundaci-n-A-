@@ -113,7 +113,7 @@ ServerSignature Off
 # ------------------------------------------------------------------------------
 # 5. Bloqueo de Archivos Sensibles, Privados y Protección contra Ejecución en Cargas
 # ------------------------------------------------------------------------------
-<FilesMatch "^\.env|^\.git|composer\.(json|lock)|package(-lock)?\.json|\.pem$|\.log$|\.sql$|\.bat$|\.ps1$|\.py$">
+<FilesMatch "^\.|\.env|\.jwt_secret|\.key$|\.secret$|composer\.(json|lock)|package(-lock)?\.json|\.pem$|\.log$|\.sql$|\.bat$|\.ps1$|\.py$">
   Require all denied
   Order allow,deny
   Deny from all

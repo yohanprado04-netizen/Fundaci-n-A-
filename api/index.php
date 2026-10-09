@@ -31,7 +31,7 @@ $rutasPublicas = ['public_info', 'registro', 'qr_asistencia', 'formulario_public
 if (!in_array($entidad, $rutasPublicas, true)) {
     // Matriz de permisos RBAC para mutaciones (POST, PUT, DELETE)
     $rolesMutacionPorEntidad = [
-        'usuarios'                   => ['Superadmin'],
+        'usuarios'                   => ['Superadmin', 'Coordinador'],
         'superadmin_credentials'     => ['Superadmin'],
         'configuracion'              => ['Superadmin'],
         'perfiles'                   => ['Superadmin'],
@@ -142,6 +142,7 @@ if (!isset($rutasEntidades[$entidad])) {
 // ── Conexión a Base de Datos y Despacho al Controlador ────────────────────────
 try {
     $pdo = obtenerConexion();
+    asegurarIndicesRendimiento($pdo);
 } catch (PDOException $e) {
     responderError('No se pudo conectar a la base de datos. Verifica que MySQL esté corriendo y los datos en config.php.', 500);
 }

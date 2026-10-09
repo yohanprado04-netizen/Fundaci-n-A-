@@ -49,7 +49,7 @@ function manejarAuditoriaLogin(PDO $pdo): void {
             $conds[] = 'fecha = ?';
             $params[] = $_GET['fecha'];
         }
-        $sql = 'SELECT id, fecha, hora, resultado, email, rol, hash_integridad FROM auditoria_login';
+        $sql = 'SELECT id, fecha, hora, resultado, email, rol, ip, hash_integridad FROM auditoria_login';
         if (!empty($conds)) {
             $sql .= ' WHERE ' . implode(' AND ', $conds);
         }
@@ -110,11 +110,15 @@ function manejarAuditoriaAcciones(PDO $pdo): void {
             $conds[] = 'tipo = ?';
             $params[] = $_GET['tipo'];
         }
+        if (!empty($_GET['severidad'])) {
+            $conds[] = 'severidad = ?';
+            $params[] = $_GET['severidad'];
+        }
         if (!empty($_GET['fecha'])) {
             $conds[] = 'fecha = ?';
             $params[] = $_GET['fecha'];
         }
-        $sql = 'SELECT id, fecha, hora, tipo, actor, rol, detalle, hash_integridad FROM auditoria_acciones';
+        $sql = 'SELECT id, fecha, hora, tipo, actor, rol, ip, severidad, detalle, hash_integridad FROM auditoria_acciones';
         if (!empty($conds)) {
             $sql .= ' WHERE ' . implode(' AND ', $conds);
         }
@@ -126,6 +130,7 @@ function manejarAuditoriaAcciones(PDO $pdo): void {
     }
     if ($metodo === 'POST') {
         $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador', 'Docente']);
+        $ipCliente = obtenerIpCliente();
         $pdo->beginTransaction();
         try {
             $ultimoHash = 'GENESIS';
@@ -138,14 +143,16 @@ function manejarAuditoriaAcciones(PDO $pdo): void {
             } catch (Exception $e) {}
 
             $stmt = $pdo->prepare(
-                'INSERT INTO auditoria_acciones (id, fecha, hora, tipo, actor, rol, detalle, hash_integridad)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                'INSERT INTO auditoria_acciones (id, fecha, hora, tipo, actor, rol, ip, severidad, detalle, hash_integridad)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                     fecha = VALUES(fecha),
                     hora = VALUES(hora),
                     tipo = VALUES(tipo),
                     actor = VALUES(actor),
                     rol = VALUES(rol),
+                    ip = VALUES(ip),
+                    severidad = VALUES(severidad),
                     detalle = VALUES(detalle),
                     hash_integridad = VALUES(hash_integridad)'
             );
@@ -156,12 +163,14 @@ function manejarAuditoriaAcciones(PDO $pdo): void {
                 $rTipo = $r['tipo'] ?? '';
                 $rActor = $r['actor'] ?? '—';
                 $rRol = $r['rol'] ?? '—';
+                $rIp = $r['ip'] ?? $ipCliente;
+                $rSev = $r['severidad'] ?? 'INFO';
                 $rDetalle = $r['detalle'] ?? '';
                 $hashIntegridad = hash_hmac('sha256', "$rId|$rFecha|$rHora|$rTipo|$rActor|$rRol|$ultimoHash", JWT_SECRET);
                 $ultimoHash = $hashIntegridad;
 
                 $stmt->execute([
-                    $rId, $rFecha, $rHora, $rTipo, $rActor, $rRol, $rDetalle, $hashIntegridad,
+                    $rId, $rFecha, $rHora, $rTipo, $rActor, $rRol, $rIp, $rSev, $rDetalle, $hashIntegridad,
                 ]);
             }
             $pdo->commit();

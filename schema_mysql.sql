@@ -84,11 +84,15 @@ CREATE TABLE `auditoria_acciones` (
   `tipo` varchar(60) NOT NULL,
   `actor` varchar(150) NOT NULL DEFAULT '—',
   `rol` varchar(30) NOT NULL DEFAULT '—',
+  `ip` varchar(45) DEFAULT NULL,
+  `severidad` varchar(20) NOT NULL DEFAULT 'INFO',
   `detalle` text DEFAULT NULL,
   `hash_integridad` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_auditoria_acciones_fecha` (`fecha`),
-  KEY `idx_audit_acc_actor_fecha` (`actor`,`fecha`)
+  KEY `idx_audit_acc_actor_fecha` (`actor`,`fecha`),
+  KEY `idx_audit_acc_severidad` (`severidad`),
+  KEY `idx_audit_acc_ip` (`ip`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- -----------------------------------------------------------------------------
@@ -121,10 +125,12 @@ CREATE TABLE `auditoria_login` (
   `resultado` varchar(30) NOT NULL,
   `email` varchar(150) NOT NULL,
   `rol` varchar(30) NOT NULL DEFAULT 'Superadmin',
+  `ip` varchar(45) DEFAULT NULL,
   `hash_integridad` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_auditoria_login_fecha` (`fecha`),
-  KEY `idx_audit_login_email_fecha` (`email`,`fecha`)
+  KEY `idx_audit_login_email_fecha` (`email`,`fecha`),
+  KEY `idx_audit_login_ip` (`ip`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- -----------------------------------------------------------------------------
