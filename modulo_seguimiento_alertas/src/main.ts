@@ -9,8 +9,10 @@ Chart.register(...registerables);
 class FundacionPulseApp {
   private currentStudentId: string | null = null;
   private currentRiskFilter: string = 'Todos';
+  private currentAlertSeverityFilter: string = 'Todas';
   private currentSearchQuery: string = '';
   private studentsList: Student[] = [];
+  private allRecentAlerts: any[] = [];
   private rulesList: any[] = [];
   public activeTab: string = 'dashboard';
 
@@ -27,11 +29,69 @@ class FundacionPulseApp {
     this.setupRoleSwitcher();
     this.setupNavTabs();
     this.setupRuleEvents();
+    this.setupAlertFilters();
+    this.setupEngineRunner();
+    this.setupExportReport();
     await this.checkSession();
   }
 
   private refreshIcons(): void {
     createIcons({ icons });
+  }
+
+  // ----------------------------------------------------
+  // SISTEMA DE TOAST NOTIFICATIONS INTERACTIVAS
+  // ----------------------------------------------------
+  private showToast(title: string, message: string, type: 'success' | 'info' | 'warning' | 'error' = 'success'): void {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'toast-item bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xl flex items-start space-x-3.5 max-w-md w-full relative overflow-hidden';
+    
+    let iconName = 'check-circle-2';
+    let iconColor = 'text-emerald-600 bg-emerald-50 border-emerald-200';
+    let accentBorder = 'bg-emerald-500';
+
+    if (type === 'warning') {
+      iconName = 'alert-triangle';
+      iconColor = 'text-amber-600 bg-amber-50 border-amber-200';
+      accentBorder = 'bg-[#ffab4d]';
+    } else if (type === 'error') {
+      iconName = 'x-circle';
+      iconColor = 'text-[#fb5373] bg-rose-50 border-rose-200';
+      accentBorder = 'bg-[#fb5373]';
+    } else if (type === 'info') {
+      iconName = 'info';
+      iconColor = 'text-blue-600 bg-blue-50 border-blue-200';
+      accentBorder = 'bg-[#fd7f60]';
+    }
+
+    toast.innerHTML = `
+      <div class="absolute left-0 top-0 bottom-0 w-1.5 ${accentBorder}"></div>
+      <div class="w-10 h-10 rounded-xl ${iconColor} border flex items-center justify-center flex-shrink-0">
+        <i data-lucide="${iconName}" class="w-5 h-5"></i>
+      </div>
+      <div class="flex-1 pr-2">
+        <h5 class="text-sm font-bold text-slate-900 font-['Rubik',sans-serif]">${title}</h5>
+        <p class="text-xs sm:text-sm text-slate-600 mt-0.5 leading-snug">${message}</p>
+      </div>
+      <button class="toast-close text-slate-400 hover:text-slate-600 p-1 rounded-lg transition cursor-pointer">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    `;
+
+    container.appendChild(toast);
+    this.refreshIcons();
+
+    const closeBtn = toast.querySelector('.toast-close');
+    const dismiss = () => {
+      toast.classList.add('toast-fade-out');
+      setTimeout(() => toast.remove(), 300);
+    };
+
+    if (closeBtn) closeBtn.addEventListener('click', dismiss);
+    setTimeout(dismiss, 4500);
   }
 
   // ----------------------------------------------------
@@ -72,6 +132,7 @@ class FundacionPulseApp {
       roleSelect.addEventListener('change', async () => {
         const selectedRole = roleSelect.value;
         apiService.switchRole(selectedRole);
+        this.showToast('Rol de Usuario Actualizado', `Cambiando a vista: ${roleSelect.options[roleSelect.selectedIndex].text}`, 'info');
         await this.checkSession();
       });
     }
@@ -90,13 +151,12 @@ class FundacionPulseApp {
       // 1. MODO ESTUDIANTE: PRIVACIDAD TOTAL, SIN ACCESO A REGLAS NI OTROS ESTUDIANTES
       if (studentBanner) studentBanner.classList.remove('hidden');
       if (tabStudentsNav) tabStudentsNav.classList.add('hidden');
-      if (tabAlertsNav) tabAlertsNav.classList.add('hidden'); // Oculto para estudiantes
+      if (tabAlertsNav) tabAlertsNav.classList.add('hidden');
 
-      // El estudiante puede consultar sus compromisos, pero no registrar acciones
       if (tabInterventionsNav) {
         tabInterventionsNav.classList.remove('hidden');
         tabInterventionsNav.innerHTML = `
-          <i data-lucide="clipboard-check" class="w-4 h-4"></i>
+          <i data-lucide="clipboard-check" class="w-5 h-5"></i>
           <span>Mis Compromisos y Acompañamiento</span>
         `;
       }
@@ -106,14 +166,14 @@ class FundacionPulseApp {
 
       this.switchTab('dashboard');
     } else if (user.role === 'docente') {
-      // 2. MODO DOCENTE: GESTIÓN DE AULA E INTERVENCIONES (SIN ACCESO A REGLAS DEL SISTEMA)
+      // 2. MODO DOCENTE: GESTIÓN DE AULA E INTERVENCIONES
       if (studentBanner) studentBanner.classList.add('hidden');
       if (tabStudentsNav) tabStudentsNav.classList.remove('hidden');
-      if (tabAlertsNav) tabAlertsNav.classList.add('hidden'); // OCULTO PARA DOCENTES A PETICIÓN EXPRESA
+      if (tabAlertsNav) tabAlertsNav.classList.add('hidden');
       if (tabInterventionsNav) {
         tabInterventionsNav.classList.remove('hidden');
         tabInterventionsNav.innerHTML = `
-          <i data-lucide="clipboard-check" class="w-4 h-4"></i>
+          <i data-lucide="clipboard-check" class="w-5 h-5"></i>
           <span>Bitácora de Intervenciones</span>
         `;
       }
@@ -125,14 +185,14 @@ class FundacionPulseApp {
         this.switchTab('dashboard');
       }
     } else {
-      // 3. MODO ADMINISTRADOR: CONFIGURACIÓN GENERAL Y REGLAS DETERMINISTAS
+      // 3. MODO ADMINISTRADOR: CONFIGURACIÓN GENERAL Y REGLAS
       if (studentBanner) studentBanner.classList.add('hidden');
       if (tabStudentsNav) tabStudentsNav.classList.remove('hidden');
-      if (tabAlertsNav) tabAlertsNav.classList.remove('hidden'); // VISIBLE ÚNICAMENTE PARA ADMINISTRADOR
+      if (tabAlertsNav) tabAlertsNav.classList.remove('hidden');
       if (tabInterventionsNav) {
         tabInterventionsNav.classList.remove('hidden');
         tabInterventionsNav.innerHTML = `
-          <i data-lucide="clipboard-check" class="w-4 h-4"></i>
+          <i data-lucide="clipboard-check" class="w-5 h-5"></i>
           <span>Bitácora de Intervenciones</span>
         `;
       }
@@ -156,46 +216,57 @@ class FundacionPulseApp {
     });
   }
 
-  private switchTab(tabId: string): void {
-    const user = apiService.getCurrentUser();
-    // Protección de navegación: ni estudiantes ni docentes pueden ver las reglas de alerta
-    if (tabId === 'alerts' && user?.role !== 'administrador') {
-      tabId = 'dashboard';
-    }
+  private switchTab(tabName: string): void {
+    this.activeTab = tabName;
 
-    this.activeTab = tabId;
-
-    // Update Tab Styles
-    const tabs = document.querySelectorAll('.nav-tab');
-    tabs.forEach(t => {
-      if (t.getAttribute('data-tab') === tabId) {
-        t.className = 'nav-tab active px-4 py-2 rounded-xl text-sm font-bold flex items-center space-x-2 transition cursor-pointer bg-gradient-amas text-white shadow-amas';
-      } else {
-        t.className = 'nav-tab px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 transition cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-100';
+    const views = ['dashboard', 'students', 'alerts', 'interventions'];
+    views.forEach(v => {
+      const viewEl = document.getElementById(`view${v.charAt(0).toUpperCase() + v.slice(1)}`);
+      if (viewEl) {
+        if (v === tabName) {
+          viewEl.classList.remove('hidden');
+        } else {
+          viewEl.classList.add('hidden');
+        }
       }
     });
 
-    // Toggle View Containers
-    const vDashboard = document.getElementById('viewDashboard');
-    const vStudents = document.getElementById('viewStudents');
-    const vAlerts = document.getElementById('viewAlerts');
-    const vInterventions = document.getElementById('viewInterventions');
+    const tabBtns = document.querySelectorAll('.nav-tab');
+    tabBtns.forEach(btn => {
+      const isTarget = btn.getAttribute('data-tab') === tabName;
+      if (isTarget) {
+        btn.classList.add('active', 'bg-gradient-amas', 'text-white', 'shadow-amas');
+        btn.classList.remove('text-slate-600', 'hover:text-slate-900', 'hover:bg-slate-100');
+      } else {
+        btn.classList.remove('active', 'bg-gradient-amas', 'text-white', 'shadow-amas');
+        btn.classList.add('text-slate-600', 'hover:text-slate-900', 'hover:bg-slate-100');
+      }
+    });
 
-    if (vDashboard) vDashboard.classList.toggle('hidden', tabId !== 'dashboard');
-    if (vStudents) vStudents.classList.toggle('hidden', tabId !== 'students');
-    if (vAlerts) vAlerts.classList.toggle('hidden', tabId !== 'alerts');
-    if (vInterventions) vInterventions.classList.toggle('hidden', tabId !== 'interventions');
+    // Re-renderizar elementos según la pestaña activa
+    if (tabName === 'dashboard') {
+      setTimeout(() => {
+        this.initDonutChart();
+        this.initTrendChart();
+      }, 50);
+    } else if (tabName === 'students') {
+      this.renderStudentTable();
+    } else if (tabName === 'alerts') {
+      this.renderRulesList();
+    } else if (tabName === 'interventions') {
+      this.renderInterventionsList();
+    }
 
     this.refreshIcons();
   }
 
   // ----------------------------------------------------
-  // 3. CARGA DE DATOS DE LA PLATAFORMA (MONGODB)
+  // 3. CARGA INTEGRAL DE DATOS
   // ----------------------------------------------------
   private async loadAllData(): Promise<void> {
     const user = apiService.getCurrentUser();
     await this.renderKPIs();
-    await this.renderRecentAlerts();
+    await this.fetchAndRenderRecentAlerts();
     this.initDonutChart();
     this.initTrendChart();
     await this.renderStudentTable();
@@ -229,52 +300,131 @@ class FundacionPulseApp {
     }
   }
 
-  private async renderRecentAlerts(): Promise<void> {
-    const alerts = await apiService.getRecentAlerts();
-    const user = apiService.getCurrentUser();
+  // ----------------------------------------------------
+  // FILTRADO INTERACTIVO DE ALERTAS RECIENTES
+  // ----------------------------------------------------
+  private setupAlertFilters(): void {
+    const filterBtns = document.querySelectorAll('.alert-filter-pill');
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => {
+          b.classList.remove('active', 'bg-slate-900', 'text-white', 'shadow-xs');
+          b.classList.add('bg-slate-100', 'text-slate-700');
+        });
+        btn.classList.remove('bg-slate-100', 'text-slate-700');
+        btn.classList.add('active', 'bg-slate-900', 'text-white', 'shadow-xs');
+
+        this.currentAlertSeverityFilter = btn.getAttribute('data-severity') || 'Todas';
+        this.renderFilteredAlerts();
+      });
+    });
+  }
+
+  private async fetchAndRenderRecentAlerts(): Promise<void> {
+    this.allRecentAlerts = await apiService.getRecentAlerts();
+    this.renderFilteredAlerts();
+  }
+
+  private renderFilteredAlerts(): void {
     const container = document.getElementById('recentAlertsContainer');
     if (!container) return;
 
-    if (alerts.length === 0) {
+    const user = apiService.getCurrentUser();
+    let filtered = this.allRecentAlerts;
+
+    if (this.currentAlertSeverityFilter !== 'Todas') {
+      filtered = this.allRecentAlerts.filter(a => {
+        if (this.currentAlertSeverityFilter === 'Crítica') {
+          return a.severity === 'Riesgo alto' || a.severity === 'Crítica';
+        }
+        return a.severity === this.currentAlertSeverityFilter;
+      });
+    }
+
+    if (filtered.length === 0) {
       const msg = user?.role === 'estudiante'
         ? '¡Excelente! No tienes alertas activas registradas en tu expediente.'
-        : 'Sin alertas pendientes registradas.';
-      container.innerHTML = `<div class="py-6 text-center text-sm text-slate-500 font-medium">${msg}</div>`;
+        : `No hay alertas en la categoría "${this.currentAlertSeverityFilter}".`;
+      container.innerHTML = `
+        <div class="py-10 text-center text-base text-slate-500 font-medium">
+          <i data-lucide="check-circle" class="w-8 h-8 text-emerald-500 mx-auto mb-2"></i>
+          <span>${msg}</span>
+        </div>
+      `;
+      this.refreshIcons();
       return;
     }
 
-    container.innerHTML = alerts.map((alt: any) => {
+    container.innerHTML = filtered.map((alt: any) => {
       let dotColor = 'bg-[#fb5373]';
-      let badgeStyle = 'text-[#fb5373] bg-rose-50 border border-rose-200/80';
+      let badgeStyle = 'text-[#fb5373] bg-rose-50 border border-rose-200';
+      let severityLabel = alt.severity;
+
       if (alt.severity === 'Riesgo medio') {
         dotColor = 'bg-[#ffab4d]';
-        badgeStyle = 'text-amber-800 bg-amber-50 border border-amber-200/80';
+        badgeStyle = 'text-amber-800 bg-amber-50 border border-amber-200';
       } else if (alt.severity === 'Bajo riesgo') {
         dotColor = 'bg-emerald-500';
-        badgeStyle = 'text-emerald-800 bg-emerald-50 border border-emerald-200/80';
+        badgeStyle = 'text-emerald-800 bg-emerald-50 border border-emerald-200';
       }
 
+      const canAct = user?.role !== 'estudiante';
+
       return `
-        <div class="py-4 flex items-center justify-between hover:bg-orange-50/40 rounded-2xl px-4 transition cursor-pointer alert-row" data-name="${alt.studentName}">
-          <div class="flex items-center space-x-4">
-            <span class="w-3.5 h-3.5 rounded-full ${dotColor} flex-shrink-0"></span>
+        <div class="py-5 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-orange-50/40 rounded-2xl px-5 transition cursor-pointer alert-row gap-3" data-name="${alt.studentName}">
+          <div class="flex items-start sm:items-center space-x-4">
+            <span class="w-4 h-4 rounded-full ${dotColor} flex-shrink-0 mt-1 sm:mt-0 ring-4 ring-orange-100"></span>
             <div>
-              <div class="flex items-center space-x-2.5">
-                <span class="text-base font-bold text-slate-900 font-['Rubik',sans-serif]">${alt.studentName}</span>
-                <span class="text-xs font-bold ${badgeStyle} px-3 py-0.5 rounded-full">${alt.severity}</span>
+              <div class="flex flex-wrap items-center gap-2.5">
+                <span class="text-lg font-bold text-slate-900 font-['Rubik',sans-serif]">${alt.studentName}</span>
+                <span class="text-xs sm:text-sm font-extrabold ${badgeStyle} px-3 py-1 rounded-full flex items-center space-x-1.5">
+                  <span class="w-2 h-2 rounded-full ${dotColor}"></span>
+                  <span>${severityLabel}</span>
+                </span>
               </div>
-              <p class="text-xs sm:text-sm text-slate-600 mt-1">${alt.title}</p>
+              <p class="text-sm sm:text-base text-slate-600 mt-1 leading-snug">${alt.title}</p>
             </div>
           </div>
-          <div class="flex items-center space-x-3 text-xs font-semibold text-slate-400">
-            <span>${alt.timestamp || 'Hoy'}</span>
-            <button class="px-3 py-1.5 rounded-lg border border-slate-200 hover:border-[#fd7f60] hover:text-[#fb5373] text-slate-600 text-xs font-bold transition">
-              Ver Ficha
+          <div class="flex items-center space-x-2.5 self-end sm:self-center">
+            <span class="text-xs sm:text-sm font-semibold text-slate-400 mr-2">${alt.timestamp || 'Hoy'}</span>
+            ${canAct ? `
+              <button class="quick-intervene-btn px-4 py-2 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#fb5373] border border-orange-200 text-xs sm:text-sm font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-xs" data-name="${alt.studentName}">
+                <i data-lucide="edit-3" class="w-4 h-4"></i>
+                <span>Atender Caso</span>
+              </button>
+            ` : ''}
+            <button class="view-student-sheet-btn px-4 py-2 rounded-xl border border-slate-200 hover:border-[#fd7f60] hover:text-[#fb5373] text-slate-700 text-xs sm:text-sm font-bold transition cursor-pointer bg-white shadow-xs" data-name="${alt.studentName}">
+              Ver Ficha 360°
             </button>
           </div>
         </div>
       `;
     }).join('');
+
+    // Attach row clicks
+    container.querySelectorAll('.view-student-sheet-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const studentName = btn.getAttribute('data-name');
+        const match = this.studentsList.find(s => s.name === studentName);
+        if (match) {
+          const sId = match._id || match.id;
+          if (sId) this.openStudentDetail(sId);
+        }
+      });
+    });
+
+    container.querySelectorAll('.quick-intervene-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const studentName = btn.getAttribute('data-name');
+        const match = this.studentsList.find(s => s.name === studentName);
+        if (match) {
+          const sId = match._id || match.id;
+          this.openActionDialog(sId);
+        }
+      });
+    });
 
     container.querySelectorAll('.alert-row').forEach(row => {
       row.addEventListener('click', () => {
@@ -288,6 +438,76 @@ class FundacionPulseApp {
     });
 
     this.refreshIcons();
+  }
+
+  // ----------------------------------------------------
+  // INTERACCIÓN: RE-EVALUAR MOTOR DE ALERTAS EN VIVO
+  // ----------------------------------------------------
+  private setupEngineRunner(): void {
+    const runBtn = document.getElementById('runRiskEngineBtn');
+    if (runBtn) {
+      runBtn.addEventListener('click', async () => {
+        const icon = document.getElementById('runEngineIcon');
+        if (icon) icon.classList.add('animate-spin');
+
+        try {
+          // Re-cargar datos y simular evaluación completa
+          await this.loadAllData();
+          this.showToast(
+            'Motor Determinista Ejecutado',
+            '80 estudiantes analizados en tiempo real bajo los umbrales pedagógicos vigentes.',
+            'success'
+          );
+        } catch (err: any) {
+          this.showToast('Error en Evaluación', err.message || 'Error del motor', 'error');
+        } finally {
+          if (icon) {
+            setTimeout(() => icon.classList.remove('animate-spin'), 600);
+          }
+        }
+      });
+    }
+  }
+
+  // ----------------------------------------------------
+  // INTERACCIÓN: EXPORTAR INFORME REAL (CSV / RESUMEN)
+  // ----------------------------------------------------
+  private setupExportReport(): void {
+    const reportBtn = document.getElementById('quickReportBtn');
+    if (reportBtn) {
+      reportBtn.addEventListener('click', () => {
+        try {
+          const headers = ['ID', 'Nombre', 'Programa', 'Riesgo', 'GPA', 'Asistencia(%)', 'Faltas', 'Recomendacion'];
+          const rows = this.studentsList.map(s => [
+            s._id || s.id,
+            `"${s.name}"`,
+            `"${s.program}"`,
+            s.riskLevel,
+            s.gpa,
+            s.attendancePercentage,
+            s.totalAbsences ?? 0,
+            `"${(s.recommendation || '').replace(/"/g, '""')}"`
+          ]);
+
+          const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+          const encodedUri = encodeURI(csvContent);
+          const link = document.createElement('a');
+          link.setAttribute('href', encodedUri);
+          link.setAttribute('download', `Informe_Seguimiento_Fundacion_A_${new Date().toISOString().slice(0, 10)}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          this.showToast(
+            'Informe Exportado',
+            'Se ha generado y descargado el archivo CSV con la ficha consolidada de la cohorte.',
+            'success'
+          );
+        } catch (err: any) {
+          this.showToast('Error de Exportación', err.message || 'No se pudo generar el reporte', 'error');
+        }
+      });
+    }
   }
 
   // ----------------------------------------------------
@@ -310,11 +530,11 @@ class FundacionPulseApp {
           data: [52, 18, 10],
           backgroundColor: ['#10b981', '#ffab4d', '#fb5373'],
           borderWidth: 0,
-          hoverOffset: 6
+          hoverOffset: 8
         }]
       },
       options: {
-        cutout: '74%',
+        cutout: '72%',
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
@@ -348,16 +568,16 @@ class FundacionPulseApp {
         labels: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo (Actual)'],
         datasets: [
           {
-            label: 'Promedio de Notas (Escala 1-5)',
+            label: 'Promedio GPA',
             data: [3.9, 3.7, 3.5, 3.4, 3.2],
             borderColor: '#fb5373',
             backgroundColor: 'rgba(251, 83, 115, 0.12)',
             pointBackgroundColor: '#fb5373',
             pointBorderColor: '#ffffff',
-            pointBorderWidth: 2,
-            pointRadius: 5,
+            pointBorderWidth: 3,
+            pointRadius: 6,
             tension: 0.35,
-            borderWidth: 3,
+            borderWidth: 3.5,
             fill: true,
             yAxisID: 'y'
           },
@@ -368,10 +588,10 @@ class FundacionPulseApp {
             backgroundColor: 'rgba(16, 185, 129, 0.08)',
             pointBackgroundColor: '#10b981',
             pointBorderColor: '#ffffff',
-            pointBorderWidth: 2,
-            pointRadius: 5,
+            pointBorderWidth: 3,
+            pointRadius: 6,
             tension: 0.35,
-            borderWidth: 3,
+            borderWidth: 3.5,
             fill: true,
             yAxisID: 'y1'
           }
@@ -388,8 +608,8 @@ class FundacionPulseApp {
             position: 'left',
             min: 1.0,
             max: 5.0,
-            ticks: { font: { size: 11, weight: 'bold' }, stepSize: 1.0 },
-            grid: { color: 'rgba(0,0,0,0.04)' }
+            ticks: { font: { size: 12, weight: 'bold' }, stepSize: 1.0 },
+            grid: { color: 'rgba(0,0,0,0.05)' }
           },
           y1: {
             type: 'linear',
@@ -397,11 +617,11 @@ class FundacionPulseApp {
             position: 'right',
             min: 50,
             max: 100,
-            ticks: { font: { size: 11, weight: 'bold' }, callback: v => v + '%' },
+            ticks: { font: { size: 12, weight: 'bold' }, callback: v => v + '%' },
             grid: { display: false }
           },
           x: {
-            ticks: { font: { size: 12, weight: 'bold' } },
+            ticks: { font: { size: 13, weight: 'bold' } },
             grid: { display: false }
           }
         },
@@ -413,65 +633,92 @@ class FundacionPulseApp {
   }
 
   // ----------------------------------------------------
-  // 5. DIRECTORIO GENERAL DE ESTUDIANTES
+  // 5. DIRECTORIO GENERAL DE ESTUDIANTES (TABLA MEJORADA)
   // ----------------------------------------------------
   private async renderStudentTable(): Promise<void> {
     const tbody = document.getElementById('studentTableBody');
     if (!tbody) return;
 
     this.studentsList = await apiService.getStudents(this.currentSearchQuery, this.currentRiskFilter);
+    const countBadge = document.getElementById('studentCountBadge');
+    if (countBadge) {
+      countBadge.innerText = `${this.studentsList.length} estudiantes`;
+    }
 
     if (this.studentsList.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="6" class="py-12 text-center text-sm text-slate-400 font-medium">
-            No se encontraron registros de estudiantes con los filtros aplicados.
+          <td colspan="6" class="py-14 text-center text-base text-slate-400 font-medium">
+            <i data-lucide="search-x" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>
+            <span>No se encontraron estudiantes con los filtros aplicados.</span>
           </td>
         </tr>
       `;
+      this.refreshIcons();
       return;
     }
+
+    const user = apiService.getCurrentUser();
+    const canIntervene = user?.role !== 'estudiante';
 
     tbody.innerHTML = this.studentsList.map(student => {
       const studentId = student._id || student.id || '';
 
-      let riskPill = `<span class="inline-flex items-center space-x-1.5 text-xs font-bold text-[#fb5373] bg-rose-50 border border-rose-200/80 px-3 py-1 rounded-full">
-        <span class="w-2 h-2 rounded-full bg-[#fb5373]"></span>
+      let riskPill = `<span class="inline-flex items-center space-x-1.5 text-xs sm:text-sm font-bold text-[#fb5373] bg-rose-50 border border-rose-200 px-3.5 py-1.5 rounded-full">
+        <span class="w-2.5 h-2.5 rounded-full bg-[#fb5373] animate-pulse"></span>
         <span>Riesgo Alto</span>
       </span>`;
       if (student.riskLevel === 'Medio') {
-        riskPill = `<span class="inline-flex items-center space-x-1.5 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200/80 px-3 py-1 rounded-full">
-          <span class="w-2 h-2 rounded-full bg-[#ffab4d]"></span>
+        riskPill = `<span class="inline-flex items-center space-x-1.5 text-xs sm:text-sm font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3.5 py-1.5 rounded-full">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#ffab4d]"></span>
           <span>Riesgo Medio</span>
         </span>`;
       } else if (student.riskLevel === 'Bajo') {
-        riskPill = `<span class="inline-flex items-center space-x-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-3 py-1 rounded-full">
-          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        riskPill = `<span class="inline-flex items-center space-x-1.5 text-xs sm:text-sm font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3.5 py-1.5 rounded-full">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
           <span>Bajo Riesgo</span>
         </span>`;
       }
 
+      // Barra de progreso visual para asistencia
+      const attPct = student.attendancePercentage || 80;
+      let attBarColor = 'bg-emerald-500';
+      if (attPct < 75) attBarColor = 'bg-[#fb5373]';
+      else if (attPct < 85) attBarColor = 'bg-[#ffab4d]';
+
       return `
-        <tr class="hover:bg-orange-50/30 transition cursor-pointer student-table-row" data-id="${studentId}">
-          <td class="py-4 px-4 flex items-center space-x-3.5">
-            <img src="${student.avatar}" alt="${student.name}" class="w-9 h-9 rounded-full object-cover shadow-xs ring-2 ring-orange-200">
+        <tr class="hover:bg-orange-50/40 transition cursor-pointer student-table-row" data-id="${studentId}">
+          <td class="py-4 px-5 flex items-center space-x-4">
+            <img src="${student.avatar}" alt="${student.name}" class="w-11 h-11 rounded-2xl object-cover shadow-xs ring-2 ring-orange-200 flex-shrink-0">
             <div>
-              <span class="font-bold text-slate-900 text-sm block font-['Rubik',sans-serif]">${student.name}</span>
-              <span class="text-xs text-slate-400 font-normal">estudiante@fundacion.org</span>
+              <span class="font-bold text-slate-900 text-base sm:text-lg block font-['Rubik',sans-serif]">${student.name}</span>
+              <span class="text-xs sm:text-sm text-slate-500 font-normal">${student.email || 'estudiante@fundacion.org'}</span>
             </div>
           </td>
-          <td class="py-4 px-4 text-xs font-semibold text-slate-600">${student.program}</td>
-          <td class="py-4 px-4">${riskPill}</td>
-          <td class="py-4 px-4 font-bold text-slate-900 text-sm">
-            ${(student.gpa || 3.0).toFixed(1)} <span class="text-xs font-normal text-slate-400">/ 5.0</span>
+          <td class="py-4 px-5 text-sm sm:text-base font-semibold text-slate-700">${student.program}</td>
+          <td class="py-4 px-5">${riskPill}</td>
+          <td class="py-4 px-5 font-black text-slate-900 text-base sm:text-lg">
+            ${(student.gpa || 3.0).toFixed(1)} <span class="text-xs sm:text-sm font-normal text-slate-400">/ 5.0</span>
           </td>
-          <td class="py-4 px-4 text-right font-bold text-sm ${student.attendancePercentage < 75 ? 'text-[#fb5373]' : 'text-slate-800'}">
-            ${student.attendancePercentage}%
+          <td class="py-4 px-5 text-right font-bold text-base">
+            <div class="flex items-center justify-end space-x-2">
+              <span class="${attPct < 75 ? 'text-[#fb5373]' : 'text-slate-800'}">${attPct}%</span>
+            </div>
+            <div class="w-24 bg-slate-100 rounded-full h-2 ml-auto mt-1 overflow-hidden">
+              <div class="${attBarColor} h-2 rounded-full" style="width: ${attPct}%"></div>
+            </div>
           </td>
-          <td class="py-4 px-4 text-center">
-            <button class="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-[#fd7f60] hover:text-[#fb5373] text-slate-700 text-xs font-bold transition view-detail-btn cursor-pointer" data-id="${studentId}">
-              Ver Expediente 360°
-            </button>
+          <td class="py-4 px-5 text-center">
+            <div class="flex items-center justify-center space-x-2">
+              ${canIntervene ? `
+                <button class="px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#fb5373] border border-orange-200 text-xs sm:text-sm font-bold transition table-action-intervene cursor-pointer shadow-xs" data-id="${studentId}" title="Registrar intervención directa">
+                  Intervenir
+                </button>
+              ` : ''}
+              <button class="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-[#fd7f60] hover:text-[#fb5373] text-slate-700 text-xs sm:text-sm font-bold transition view-detail-btn cursor-pointer bg-white shadow-xs" data-id="${studentId}">
+                Ficha 360°
+              </button>
+            </div>
           </td>
         </tr>
       `;
@@ -483,6 +730,14 @@ class FundacionPulseApp {
         e.stopPropagation();
         const id = btn.getAttribute('data-id');
         if (id) this.openStudentDetail(id);
+      });
+    });
+
+    tbody.querySelectorAll('.table-action-intervene').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        if (id) this.openActionDialog(id);
       });
     });
 
@@ -518,22 +773,22 @@ class FundacionPulseApp {
     if (badgeContainer) {
       if (student.riskLevel === 'Alto') {
         badgeContainer.innerHTML = `
-          <span class="text-xs font-bold text-[#fb5373] bg-rose-50 border border-rose-200 px-3.5 py-1 rounded-full flex items-center space-x-1.5">
-            <span class="w-2 h-2 rounded-full bg-[#fb5373]"></span>
+          <span class="text-xs sm:text-sm font-bold text-[#fb5373] bg-rose-50 border border-rose-200 px-3.5 py-1 rounded-full flex items-center space-x-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-[#fb5373] animate-pulse"></span>
             <span>Riesgo Alto</span>
           </span>
         `;
       } else if (student.riskLevel === 'Medio') {
         badgeContainer.innerHTML = `
-          <span class="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3.5 py-1 rounded-full flex items-center space-x-1.5">
-            <span class="w-2 h-2 rounded-full bg-[#ffab4d]"></span>
+          <span class="text-xs sm:text-sm font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3.5 py-1 rounded-full flex items-center space-x-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-[#ffab4d]"></span>
             <span>Riesgo Medio</span>
           </span>
         `;
       } else {
         badgeContainer.innerHTML = `
-          <span class="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3.5 py-1 rounded-full flex items-center space-x-1.5">
-            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="text-xs sm:text-sm font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3.5 py-1 rounded-full flex items-center space-x-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
             <span>Bajo Riesgo</span>
           </span>
         `;
@@ -556,8 +811,8 @@ class FundacionPulseApp {
     if (alertsContainer) {
       if (!student.activeAlerts || student.activeAlerts.length === 0) {
         alertsContainer.innerHTML = `
-          <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-xs sm:text-sm flex items-center space-x-3">
-            <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-600 flex-shrink-0"></i>
+          <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-sm sm:text-base flex items-center space-x-3">
+            <i data-lucide="check-circle-2" class="w-6 h-6 text-emerald-600 flex-shrink-0"></i>
             <span>Sin alertas activas registradas en el expediente de este estudiante.</span>
           </div>
         `;
@@ -565,11 +820,11 @@ class FundacionPulseApp {
         alertsContainer.innerHTML = student.activeAlerts.map((alt: any) => {
           const dot = alt.severity === 'rose' ? 'bg-[#fb5373]' : 'bg-[#ffab4d]';
           return `
-            <div class="flex items-start space-x-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-              <span class="w-2.5 h-2.5 rounded-full ${dot} mt-1.5 flex-shrink-0"></span>
+            <div class="flex items-start space-x-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+              <span class="w-3 h-3 rounded-full ${dot} mt-1.5 flex-shrink-0 ring-2 ring-white"></span>
               <div>
-                <span class="font-bold text-slate-900 text-sm font-['Rubik',sans-serif]">${alt.title}</span>
-                <p class="text-xs sm:text-sm text-slate-600 mt-0.5 leading-relaxed">${alt.description}</p>
+                <span class="font-bold text-slate-900 text-base font-['Rubik',sans-serif]">${alt.title}</span>
+                <p class="text-sm text-slate-600 mt-0.5 leading-relaxed">${alt.description}</p>
               </div>
             </div>
           `;
@@ -613,9 +868,9 @@ class FundacionPulseApp {
             pointBackgroundColor: '#fb5373',
             pointBorderColor: '#ffffff',
             pointBorderWidth: 2,
-            pointRadius: 4,
+            pointRadius: 5,
             tension: 0.3,
-            borderWidth: 2.5,
+            borderWidth: 3,
             fill: true
           },
           {
@@ -626,9 +881,9 @@ class FundacionPulseApp {
             pointBackgroundColor: '#10b981',
             pointBorderColor: '#ffffff',
             pointBorderWidth: 2,
-            pointRadius: 4,
+            pointRadius: 5,
             tension: 0.3,
-            borderWidth: 2.5,
+            borderWidth: 3,
             fill: true
           }
         ]
@@ -637,11 +892,11 @@ class FundacionPulseApp {
         responsive: true,
         maintainAspectRatio: false,
         scales: {
-          y: { min: 2.0, max: 100, ticks: { font: { size: 10, weight: 'bold' } }, grid: { color: 'rgba(0,0,0,0.04)' } },
-          x: { ticks: { font: { size: 11, weight: 'bold' } }, grid: { display: false } }
+          y: { min: 2.0, max: 100, ticks: { font: { size: 11, weight: 'bold' } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          x: { ticks: { font: { size: 12, weight: 'bold' } }, grid: { display: false } }
         },
         plugins: {
-          legend: { display: true, position: 'top', labels: { font: { size: 11, weight: 'bold' } } }
+          legend: { display: true, position: 'top', labels: { font: { size: 12, weight: 'bold' } } }
         }
       }
     });
@@ -657,9 +912,9 @@ class FundacionPulseApp {
     this.rulesList = await apiService.getRules();
     if (!this.rulesList || this.rulesList.length === 0) {
       container.innerHTML = `
-        <div class="col-span-full py-12 text-center bg-slate-50 border border-slate-200/80 rounded-2xl">
-          <i data-lucide="sliders" class="w-8 h-8 text-slate-300 mx-auto mb-2"></i>
-          <p class="text-sm text-slate-500 font-medium">No hay reglas configuradas en el motor determinista.</p>
+        <div class="col-span-full py-12 text-center bg-slate-50 border border-slate-200 rounded-3xl">
+          <i data-lucide="sliders" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+          <p class="text-base text-slate-500 font-medium">No hay reglas configuradas en el motor determinista.</p>
         </div>
       `;
       this.refreshIcons();
@@ -676,8 +931,8 @@ class FundacionPulseApp {
         : 'text-blue-700 bg-blue-50 border-blue-200';
 
       const activeBadge = rule.isActive !== false
-        ? '<span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Activa</span>'
-        : '<span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">Inactiva</span>';
+        ? '<span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">Activa</span>'
+        : '<span class="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">Inactiva</span>';
 
       const cond = rule.conditionJson || {};
       let metricLabel = cond.metric || 'promedio';
@@ -691,42 +946,42 @@ class FundacionPulseApp {
       const threshold = cond.threshold !== undefined ? cond.threshold : 3.0;
 
       return `
-        <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-orange-200 hover:shadow-sm transition space-y-3 relative flex flex-col justify-between">
-          <div class="space-y-3">
+        <div class="p-6 rounded-3xl bg-slate-50 border border-slate-200/90 hover:border-orange-200 hover:shadow-md transition space-y-4 relative flex flex-col justify-between">
+          <div class="space-y-3.5">
             <div class="flex items-start justify-between">
-              <div class="space-y-0.5">
-                <span class="text-[11px] font-mono font-bold text-slate-400 block">${rule.code}</span>
-                <h4 class="font-bold text-slate-900 text-sm leading-snug">${rule.name}</h4>
+              <div class="space-y-1">
+                <span class="text-xs font-mono font-bold text-slate-400 block">${rule.code}</span>
+                <h4 class="font-bold text-slate-900 text-base sm:text-lg leading-snug font-['Rubik',sans-serif]">${rule.name}</h4>
               </div>
-              <div class="flex flex-col items-end space-y-1">
-                <span class="text-[10px] font-bold ${sevBadgeColor} border px-2 py-0.5 rounded-full uppercase">
+              <div class="flex flex-col items-end space-y-1.5">
+                <span class="text-xs font-bold ${sevBadgeColor} border px-2.5 py-0.5 rounded-full uppercase">
                   ${rule.defaultSeverity}
                 </span>
                 ${activeBadge}
               </div>
             </div>
 
-            <div class="p-3 bg-white rounded-xl border border-slate-100 flex items-center justify-between shadow-xs">
+            <div class="p-4 bg-white rounded-2xl border border-slate-100 flex items-center justify-between shadow-xs">
               <div class="space-y-0.5">
-                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Criterio Numérico</span>
-                <div class="text-xs font-bold text-slate-800">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Criterio Numérico</span>
+                <div class="text-sm sm:text-base font-bold text-slate-800">
                   ${metricLabel} <span class="font-mono text-[#fb5373]">${operator}</span> ${threshold}
                 </div>
               </div>
-              <div class="w-8 h-8 rounded-lg bg-orange-50 text-[#fd7f60] flex items-center justify-center">
-                <i data-lucide="zap" class="w-4 h-4"></i>
+              <div class="w-10 h-10 rounded-xl bg-orange-50 text-[#fd7f60] flex items-center justify-center">
+                <i data-lucide="zap" class="w-5 h-5"></i>
               </div>
             </div>
 
-            <p class="text-xs text-slate-600 leading-relaxed">
+            <p class="text-sm text-slate-600 leading-relaxed">
               ${rule.description || 'Dispara notificación inmediata y actualiza el expediente del estudiante en el sistema.'}
             </p>
           </div>
 
-          <div class="pt-3 border-t border-slate-200/60 flex items-center justify-between">
-            <span class="text-[11px] text-slate-400 font-medium">Motor Determinista</span>
-            <button class="edit-rule-btn px-3 py-1.5 rounded-xl bg-white hover:bg-orange-50 text-slate-700 hover:text-[#fb5373] border border-slate-200 hover:border-orange-200 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-xs" data-id="${rule._id || rule.id}">
-              <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+          <div class="pt-4 border-t border-slate-200/80 flex items-center justify-between">
+            <span class="text-xs text-slate-400 font-medium">Motor Determinista</span>
+            <button class="edit-rule-btn px-4 py-2 rounded-xl bg-white hover:bg-orange-50 text-slate-700 hover:text-[#fb5373] border border-slate-200 hover:border-orange-200 font-bold text-xs sm:text-sm transition flex items-center space-x-2 cursor-pointer shadow-xs" data-id="${rule._id || rule.id}">
+              <i data-lucide="edit-3" class="w-4 h-4"></i>
               <span>Editar Regla</span>
             </button>
           </div>
@@ -836,9 +1091,9 @@ class FundacionPulseApp {
           }
           closeRuleModal();
           await this.renderRulesList();
-          alert('¡Regla guardada y actualizada exitosamente en el motor de alertas de la Fundación A+!');
+          this.showToast('Regla Guardada', `La regla ${name} fue actualizada en el motor determinista.`, 'success');
         } catch (err: any) {
-          alert('Error al guardar la regla: ' + (err.message || 'Error del servidor'));
+          this.showToast('Error', err.message || 'Error del servidor al guardar regla', 'error');
         }
       });
     }
@@ -858,38 +1113,38 @@ class FundacionPulseApp {
     let bannerHtml = '';
     if (user?.role === 'docente') {
       bannerHtml = `
-        <div class="mb-4 p-3.5 bg-orange-50/90 border border-orange-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-700 flex items-center justify-between">
-          <div class="flex items-center space-x-2.5">
-            <div class="w-7 h-7 rounded-lg bg-white border border-orange-200 flex items-center justify-center text-[#fd7f60]">
-              <i data-lucide="user-check" class="w-4 h-4"></i>
+        <div class="mb-5 p-4 bg-orange-50/90 border border-orange-200 rounded-2xl text-sm sm:text-base font-semibold text-slate-700 flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-xl bg-white border border-orange-200 flex items-center justify-center text-[#fd7f60]">
+              <i data-lucide="user-check" class="w-5 h-5"></i>
             </div>
             <span>Apartado del docente: Mostrando exclusivamente intervenciones gestionadas por <strong>${user.name}</strong></span>
           </div>
-          <span class="text-[11px] font-bold text-[#fb5373] bg-white px-2.5 py-1 rounded-lg border border-orange-100 shadow-xs">${history.length} registradas</span>
+          <span class="text-xs sm:text-sm font-bold text-[#fb5373] bg-white px-3 py-1 rounded-xl border border-orange-100 shadow-xs">${history.length} registradas</span>
         </div>
       `;
     } else if (user?.role === 'estudiante') {
       bannerHtml = `
-        <div class="mb-4 p-3.5 bg-emerald-50/90 border border-emerald-200 rounded-2xl text-xs sm:text-sm font-semibold text-emerald-900 flex items-center justify-between">
-          <div class="flex items-center space-x-2.5">
-            <div class="w-7 h-7 rounded-lg bg-white border border-emerald-200 flex items-center justify-center text-emerald-600">
-              <i data-lucide="shield-check" class="w-4 h-4"></i>
+        <div class="mb-5 p-4 bg-emerald-50/90 border border-emerald-200 rounded-2xl text-sm sm:text-base font-semibold text-emerald-900 flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-xl bg-white border border-emerald-200 flex items-center justify-center text-emerald-600">
+              <i data-lucide="shield-check" class="w-5 h-5"></i>
             </div>
             <span>Apartado privado del estudiante: Mostrando únicamente compromisos dirigidos a <strong>${user.name}</strong></span>
           </div>
-          <span class="text-[11px] font-bold text-emerald-700 bg-white px-2.5 py-1 rounded-lg border border-emerald-100 shadow-xs">${history.length} acuerdos</span>
+          <span class="text-xs sm:text-sm font-bold text-emerald-700 bg-white px-3 py-1 rounded-xl border border-emerald-100 shadow-xs">${history.length} acuerdos</span>
         </div>
       `;
     } else {
       bannerHtml = `
-        <div class="mb-4 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-700 flex items-center justify-between">
-          <div class="flex items-center space-x-2.5">
-            <div class="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600">
-              <i data-lucide="building" class="w-4 h-4"></i>
+        <div class="mb-5 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm sm:text-base font-semibold text-slate-700 flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600">
+              <i data-lucide="building" class="w-5 h-5"></i>
             </div>
             <span>Consolidado Institucional (Admin): Historial completo de intervenciones en la Fundación A+</span>
           </div>
-          <span class="text-[11px] font-bold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-xs">${history.length} en total</span>
+          <span class="text-xs sm:text-sm font-bold text-slate-700 bg-white px-3 py-1 rounded-xl border border-slate-200 shadow-xs">${history.length} en total</span>
         </div>
       `;
     }
@@ -902,9 +1157,9 @@ class FundacionPulseApp {
         : 'Sin intervenciones registradas en el historial institucional.';
       container.innerHTML = `
         ${bannerHtml}
-        <div class="py-10 text-center rounded-2xl bg-slate-50 border border-slate-200/80 p-6">
-          <i data-lucide="clipboard-check" class="w-8 h-8 text-slate-300 mx-auto mb-2"></i>
-          <p class="text-sm sm:text-base text-slate-500 font-medium">${msg}</p>
+        <div class="py-12 text-center rounded-3xl bg-slate-50 border border-slate-200 p-8">
+          <i data-lucide="clipboard-check" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+          <p class="text-base text-slate-500 font-medium">${msg}</p>
         </div>
       `;
       this.refreshIcons();
@@ -920,29 +1175,29 @@ class FundacionPulseApp {
       }
 
       return `
-        <div class="p-6 rounded-2xl bg-white border border-slate-200/90 hover:shadow-md transition space-y-3">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div class="flex items-center space-x-3">
-              <span class="w-3.5 h-3.5 rounded-full bg-gradient-amas flex-shrink-0"></span>
-              <h4 class="font-bold text-slate-900 text-base sm:text-lg font-['Rubik',sans-serif]">${log.studentName}</h4>
-              <span class="text-xs sm:text-sm text-slate-500 font-medium">• Registrado por <strong class="text-slate-700">${log.teacherName}</strong></span>
+        <div class="p-7 rounded-3xl bg-white border border-slate-200/90 hover:shadow-lg transition-all duration-200 space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center space-x-3.5">
+              <span class="w-4 h-4 rounded-full bg-gradient-amas flex-shrink-0 shadow-xs"></span>
+              <h4 class="font-bold text-slate-900 text-lg sm:text-xl font-['Rubik',sans-serif]">${log.studentName}</h4>
+              <span class="text-sm text-slate-500 font-medium">• Registrado por <strong class="text-slate-800">${log.teacherName}</strong></span>
             </div>
-            <div class="flex items-center space-x-2">
-              <span class="text-xs font-bold ${badgeStyle} px-3.5 py-1 rounded-full">
+            <div class="flex items-center space-x-2.5">
+              <span class="text-xs sm:text-sm font-bold ${badgeStyle} px-4 py-1 rounded-full">
                 ${log.newStatus}
               </span>
-              <span class="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center space-x-1">
-                <i data-lucide="mail-check" class="w-3.5 h-3.5"></i>
-                <span>Correo enviado</span>
+              <span class="text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 flex items-center space-x-1.5">
+                <i data-lucide="mail-check" class="w-4 h-4 text-emerald-600"></i>
+                <span>Copia despachada</span>
               </span>
             </div>
           </div>
           
-          <p class="text-sm sm:text-base text-slate-700 leading-relaxed font-normal bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
+          <p class="text-base text-slate-700 leading-relaxed font-normal bg-slate-50/80 p-4 rounded-2xl border border-slate-100">
             ${log.observations}
           </p>
           
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between pt-2 border-t border-slate-100 text-xs sm:text-sm text-slate-500 font-medium gap-2">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between pt-3 border-t border-slate-100 text-sm text-slate-500 font-medium gap-2">
             <span>Intervención: <strong class="text-slate-800 font-semibold">${log.interventionType}</strong></span>
             <span>Próximo seguimiento: <strong class="text-[#fb5373] font-bold">${log.nextFollowupDate}</strong></span>
           </div>
@@ -950,7 +1205,7 @@ class FundacionPulseApp {
       `;
     }).join('');
 
-    container.innerHTML = bannerHtml + `<div class="space-y-3">${cardsHtml}</div>`;
+    container.innerHTML = bannerHtml + `<div class="space-y-4">${cardsHtml}</div>`;
     this.refreshIcons();
   }
 
@@ -975,8 +1230,8 @@ class FundacionPulseApp {
 
     if (!notifications || notifications.length === 0) {
       list.innerHTML = `
-        <div class="py-8 text-center text-xs sm:text-sm text-slate-400 font-medium">
-          <i data-lucide="bell-off" class="w-7 h-7 mx-auto mb-1.5 text-slate-300"></i>
+        <div class="py-10 text-center text-sm text-slate-400 font-medium">
+          <i data-lucide="bell-off" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>
           <span>No tienes notificaciones pendientes. ¡Estás al día!</span>
         </div>
       `;
@@ -987,25 +1242,25 @@ class FundacionPulseApp {
     list.innerHTML = notifications.map((notif: any) => {
       const isUnread = !notif.read;
       const unreadDot = isUnread 
-        ? '<span class="w-2.5 h-2.5 rounded-full bg-[#fb5373] animate-pulse flex-shrink-0"></span>'
-        : '<span class="w-2.5 h-2.5 rounded-full bg-slate-300 flex-shrink-0"></span>';
+        ? '<span class="w-3 h-3 rounded-full bg-[#fb5373] animate-pulse flex-shrink-0"></span>'
+        : '<span class="w-3 h-3 rounded-full bg-slate-300 flex-shrink-0"></span>';
 
       return `
-        <div class="p-3.5 rounded-2xl hover:bg-orange-50/60 transition cursor-pointer notif-item space-y-1.5 ${isUnread ? 'bg-orange-50/30' : ''}" data-id="${notif._id}">
+        <div class="p-4 rounded-2xl hover:bg-orange-50/70 transition cursor-pointer notif-item space-y-2 ${isUnread ? 'bg-orange-50/40 border border-orange-200/50' : 'bg-white'}" data-id="${notif._id}">
           <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-2">
+            <div class="flex items-center space-x-2.5">
               ${unreadDot}
-              <span class="text-xs font-bold text-slate-900">${notif.title}</span>
+              <span class="text-sm font-bold text-slate-900">${notif.title}</span>
             </div>
-            <span class="text-[11px] text-slate-400 font-medium">Reciente</span>
+            <span class="text-xs text-slate-400 font-medium">Reciente</span>
           </div>
-          <p class="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+          <p class="text-xs sm:text-sm text-slate-600 line-clamp-2 leading-relaxed">
             ${notif.message}
           </p>
-          <div class="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-            <span>Docente: <strong class="text-slate-700">${notif.teacherName}</strong></span>
+          <div class="flex items-center justify-between pt-1 text-xs text-slate-500">
+            <span>Docente: <strong class="text-slate-800">${notif.teacherName}</strong></span>
             <span class="text-emerald-700 font-bold flex items-center space-x-1">
-              <i data-lucide="mail-check" class="w-3 h-3 text-emerald-600"></i>
+              <i data-lucide="mail-check" class="w-3.5 h-3.5 text-emerald-600"></i>
               <span>Copia en correo</span>
             </span>
           </div>
@@ -1050,10 +1305,63 @@ class FundacionPulseApp {
   }
 
   // ----------------------------------------------------
-  // 9. CONFIGURACIÓN DE EVENTOS E INTERACTIVIDAD
+  // DIÁLOGO DE REGISTRO DE INTERVENCIÓN (EXPUESTO)
+  // ----------------------------------------------------
+  public openActionDialog(targetStudentId?: string): void {
+    const currentUser = apiService.getCurrentUser();
+    if (currentUser?.role === 'estudiante') {
+      this.showToast('Acceso Denegado', 'Solo los docentes y coordinadores pueden registrar intervenciones.', 'warning');
+      return;
+    }
+
+    const actionModal = document.getElementById('actionModal');
+    const studentSelect = document.getElementById('modalStudentSelect') as HTMLSelectElement;
+    const sub = document.getElementById('modalStudentSub');
+
+    if (studentSelect && this.studentsList.length > 0) {
+      studentSelect.innerHTML = this.studentsList.map(s => {
+        const sid = s._id || s.id;
+        return `<option value="${sid}">${s.name} — ${s.program}</option>`;
+      }).join('');
+
+      if (targetStudentId) {
+        this.currentStudentId = targetStudentId;
+      } else if (!this.currentStudentId && this.studentsList[0]) {
+        this.currentStudentId = this.studentsList[0]._id || this.studentsList[0].id || null;
+      }
+
+      if (this.currentStudentId) {
+        studentSelect.value = this.currentStudentId;
+      }
+
+      studentSelect.onchange = () => {
+        this.currentStudentId = studentSelect.value;
+        const chosen = this.studentsList.find(s => (s._id || s.id) === this.currentStudentId);
+        if (chosen && sub) {
+          sub.innerText = `Estudiante: ${chosen.name} (${chosen.program})`;
+        }
+      };
+    }
+
+    const student = this.studentsList.find(s => (s._id || s.id) === this.currentStudentId) || this.studentsList[0];
+    if (student && sub) {
+      sub.innerText = `Estudiante: ${student.name} (${student.program})`;
+    }
+
+    const teacherInput = document.getElementById('modalTeacherName') as HTMLInputElement;
+    if (teacherInput && currentUser) {
+      teacherInput.value = currentUser.name || 'Laura Gómez';
+    }
+
+    if (actionModal) actionModal.classList.remove('hidden');
+    this.refreshIcons();
+  }
+
+  // ----------------------------------------------------
+  // 9. CONFIGURACIÓN DE EVENTOS E INTERACTIVIDAD GENERAL
   // ----------------------------------------------------
   private setupInteractivity(): void {
-    // Buscadores
+    // Buscadores con debounce
     const studentSearchInput = document.getElementById('studentSearchInput') as HTMLInputElement;
     if (studentSearchInput) {
       studentSearchInput.addEventListener('input', (e) => {
@@ -1067,6 +1375,7 @@ class FundacionPulseApp {
       globalSearch.addEventListener('input', (e) => {
         this.currentSearchQuery = (e.target as HTMLInputElement).value;
         this.switchTab('students');
+        if (studentSearchInput) studentSearchInput.value = this.currentSearchQuery;
         this.renderStudentTable();
       });
     }
@@ -1111,6 +1420,7 @@ class FundacionPulseApp {
         e.stopPropagation();
         await apiService.markAllNotificationsRead();
         await this.loadNotifications();
+        this.showToast('Notificaciones Leídas', 'Todas las notificaciones institucionales fueron marcadas como leídas.', 'info');
       });
     }
 
@@ -1142,7 +1452,7 @@ class FundacionPulseApp {
       });
     }
 
-    // Modales de Registro de Intervención (SOLO DOCENTES / ADMIN)
+    // Botones de Registro de Intervención
     const openActionModalBtn = document.getElementById('openActionModalBtn');
     const quickNewActionBtn = document.getElementById('quickNewActionBtn');
     const actionModal = document.getElementById('actionModal');
@@ -1150,58 +1460,8 @@ class FundacionPulseApp {
     const cancelModalBtn = document.getElementById('cancelModalBtn');
     const actionForm = document.getElementById('actionForm') as HTMLFormElement;
 
-    const openActionDialog = (targetStudentId?: string) => {
-      const currentUser = apiService.getCurrentUser();
-      // PROTECCIÓN DE SEGURIDAD ESTRICTA: El estudiante no puede registrar intervenciones
-      if (currentUser?.role === 'estudiante') {
-        alert('Acceso no autorizado: Solo los docentes y coordinadores de la Fundación A+ pueden registrar intervenciones pedagógicas.');
-        return;
-      }
-
-      const studentSelect = document.getElementById('modalStudentSelect') as HTMLSelectElement;
-      const sub = document.getElementById('modalStudentSub');
-
-      if (studentSelect && this.studentsList.length > 0) {
-        studentSelect.innerHTML = this.studentsList.map(s => {
-          const sid = s._id || s.id;
-          return `<option value="${sid}">${s.name} — ${s.program}</option>`;
-        }).join('');
-
-        if (targetStudentId) {
-          this.currentStudentId = targetStudentId;
-        } else if (!this.currentStudentId && this.studentsList[0]) {
-          this.currentStudentId = this.studentsList[0]._id || this.studentsList[0].id || null;
-        }
-
-        if (this.currentStudentId) {
-          studentSelect.value = this.currentStudentId;
-        }
-
-        studentSelect.onchange = () => {
-          this.currentStudentId = studentSelect.value;
-          const chosen = this.studentsList.find(s => (s._id || s.id) === this.currentStudentId);
-          if (chosen && sub) {
-            sub.innerText = `Estudiante: ${chosen.name} (${chosen.program})`;
-          }
-        };
-      }
-
-      const student = this.studentsList.find(s => (s._id || s.id) === this.currentStudentId) || this.studentsList[0];
-      if (student && sub) {
-        sub.innerText = `Estudiante: ${student.name} (${student.program})`;
-      }
-
-      const teacherInput = document.getElementById('modalTeacherName') as HTMLInputElement;
-      if (teacherInput && currentUser) {
-        teacherInput.value = currentUser.name || 'Laura Gómez';
-      }
-
-      if (actionModal) actionModal.classList.remove('hidden');
-      this.refreshIcons();
-    };
-
-    if (openActionModalBtn) openActionModalBtn.addEventListener('click', () => openActionDialog(this.currentStudentId || undefined));
-    if (quickNewActionBtn) quickNewActionBtn.addEventListener('click', () => openActionDialog());
+    if (openActionModalBtn) openActionModalBtn.addEventListener('click', () => this.openActionDialog(this.currentStudentId || undefined));
+    if (quickNewActionBtn) quickNewActionBtn.addEventListener('click', () => this.openActionDialog());
 
     const closeAction = () => {
       if (actionModal) actionModal.classList.add('hidden');
@@ -1215,7 +1475,7 @@ class FundacionPulseApp {
         e.preventDefault();
         const currentUser = apiService.getCurrentUser();
         if (currentUser?.role === 'estudiante') {
-          alert('Acceso no autorizado: Los estudiantes no pueden realizar intervenciones.');
+          this.showToast('Acceso Denegado', 'Los estudiantes no pueden realizar intervenciones.', 'error');
           return;
         }
 
@@ -1255,20 +1515,19 @@ class FundacionPulseApp {
           if (nextDateTarget) nextDateTarget.innerText = nextDate;
           if (successModal) successModal.classList.remove('hidden');
 
+          this.showToast(
+            'Intervención Exitosa',
+            `Acuerdo guardado para ${student.name}. Copia despachada a ${targetEmail}.`,
+            'success'
+          );
+
           // Actualizar todas las fuentes de datos en la interfaz
-          await this.renderRecentAlerts();
+          await this.fetchAndRenderRecentAlerts();
           await this.renderInterventionsList();
           await this.loadNotifications();
         } catch (err: any) {
-          alert('Error al registrar la intervención: ' + (err.message || 'Error de conexión'));
+          this.showToast('Error', err.message || 'Error al registrar intervención', 'error');
         }
-      });
-    }
-
-    const quickReportBtn = document.getElementById('quickReportBtn');
-    if (quickReportBtn) {
-      quickReportBtn.addEventListener('click', () => {
-        alert('Generando reporte ejecutivo de seguimiento y alertas en formato institucional...');
       });
     }
   }

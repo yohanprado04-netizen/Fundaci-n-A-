@@ -10,88 +10,89 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Rubik:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./src/style.css">
 </head>
-<body class="bg-[#f8fafc] text-slate-800 antialiased font-['Plus_Jakarta_Sans',sans-serif] min-h-screen">
+<body class="bg-[#f8fafc] text-slate-800 antialiased font-['Plus_Jakarta_Sans',sans-serif] min-h-screen text-base">
 
   <!-- ======================================================== -->
   <!-- DASHBOARD INTEGRAL (ACCESO DIRECTO A LA PLATAFORMA)      -->
   <!-- ======================================================== -->
   <div id="dashboardScreen" class="min-h-screen flex flex-col bg-[#f8fafc]">
 
-    <!-- Barra de Acento Superior Oficial Fundación A+ -->
-    <div class="h-1.5 w-full bg-gradient-amas flex-shrink-0"></div>
+    <!-- Barra de Acento Superior Oficial Fundación A+ con brillo sutil -->
+    <div class="h-2 w-full bg-gradient-amas flex-shrink-0 shadow-xs"></div>
 
-    <!-- 1. ENCABEZADO INSTITUCIONAL SUPERIOR (NAVBAR MODERNO) -->
-    <header class="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-xs">
-      <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+    <!-- 1. ENCABEZADO INSTITUCIONAL SUPERIOR (NAVBAR ELEGANTE Y AMPLIADO) -->
+    <header class="bg-white border-b border-slate-200/90 sticky top-0 z-30 shadow-xs backdrop-blur-md bg-white/95">
+      <div class="max-w-7xl mx-auto px-6 h-22 flex items-center justify-between">
         
-        <!-- Logo y Módulo -->
+        <!-- Logo y Módulo con badges de gran tamaño -->
         <div class="flex items-center space-x-4">
-          <img src="/logo_fundacion_amas.png" alt="Fundación A+" class="h-10 w-auto object-contain filter brightness-105">
-          <div class="h-7 w-[1.5px] bg-slate-200 hidden sm:block"></div>
-          <div class="hidden sm:flex items-center space-x-2">
-            <span class="px-3 py-1 rounded-full bg-orange-50 border border-orange-200/80 text-xs font-bold text-[#fb5373] tracking-wide">
-              Módulo SAI
+          <img src="/logo_fundacion_amas.png" alt="Fundación A+" class="h-12 w-auto object-contain filter brightness-105 transition hover:scale-105 duration-200">
+          <div class="h-8 w-[1.5px] bg-slate-200 hidden sm:block"></div>
+          <div class="hidden sm:flex items-center space-x-2.5">
+            <span class="px-3.5 py-1.5 rounded-full bg-orange-50 border border-orange-200 text-sm font-extrabold text-[#fb5373] tracking-wide shadow-xs flex items-center space-x-1.5">
+              <span class="w-2 h-2 rounded-full bg-[#fb5373] animate-pulse"></span>
+              <span>Módulo SAI</span>
             </span>
-            <span class="text-xs text-slate-500 font-medium">TrAIning de 100 a 1000+</span>
+            <span class="text-sm text-slate-600 font-bold">TrAIning de 100 a 1000+</span>
           </div>
         </div>
 
-        <!-- Buscador Global Central -->
-        <div class="hidden lg:block w-96 relative">
-          <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
-          <input type="text" id="globalSearchInput" placeholder="Buscar estudiante, programa o alerta..." 
-                 class="w-full pl-10 pr-4 py-2 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#fd7f60] focus:border-[#fd7f60] focus:bg-white transition-all">
+        <!-- Buscador Global Central Ampliado e Interactivo -->
+        <div class="hidden lg:block w-[420px] relative">
+          <i data-lucide="search" class="w-5 h-5 absolute left-4 top-3.5 text-slate-400"></i>
+          <input type="text" id="globalSearchInput" placeholder="Buscar estudiante, programa o alerta en vivo..." 
+                 class="w-full pl-12 pr-4 py-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-2xl text-base focus:outline-none focus:ring-2 focus:ring-[#fd7f60] focus:border-[#fd7f60] focus:bg-white transition-all shadow-xs">
         </div>
 
         <!-- Acciones del Usuario & Perfil -->
         <div class="flex items-center space-x-4">
           <!-- Centro de Notificaciones Interactivo (Campana) -->
           <div class="relative" id="notificationsMenuContainer">
-            <button id="notificationsBtn" class="relative p-2.5 text-slate-600 hover:text-[#fb5373] hover:bg-orange-50 rounded-xl transition cursor-pointer" title="Centro de Notificaciones y Correo">
-              <i data-lucide="bell" class="w-5 h-5"></i>
-              <span id="unreadNotificationsBadge" class="hidden absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-amas text-white text-[11px] font-black rounded-full flex items-center justify-center shadow-amas ring-2 ring-white">0</span>
+            <button id="notificationsBtn" class="relative p-3 text-slate-600 hover:text-[#fb5373] hover:bg-orange-50/80 rounded-2xl transition cursor-pointer border border-transparent hover:border-orange-200" title="Centro de Notificaciones y Correo">
+              <i data-lucide="bell" class="w-6 h-6"></i>
+              <span id="unreadNotificationsBadge" class="hidden absolute -top-1 -right-1 min-w-[22px] h-[22px] px-1 bg-gradient-amas text-white text-xs font-black rounded-full flex items-center justify-center shadow-amas ring-2 ring-white">0</span>
             </button>
 
             <!-- Dropdown Popover de Notificaciones -->
-            <div id="notificationsDropdown" class="hidden absolute right-0 mt-3 w-96 sm:w-[420px] bg-white rounded-3xl shadow-2xl border border-slate-200/90 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-              <div class="p-4 bg-gradient-to-r from-orange-50/90 via-white to-rose-50/90 border-b border-slate-100 flex items-center justify-between">
-                <div class="flex items-center space-x-2.5">
-                  <div class="w-8 h-8 rounded-xl bg-gradient-amas text-white flex items-center justify-center shadow-amas">
-                    <i data-lucide="bell-ring" class="w-4 h-4"></i>
+            <div id="notificationsDropdown" class="hidden absolute right-0 mt-3 w-96 sm:w-[460px] bg-white rounded-3xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+              <div class="p-5 bg-gradient-to-r from-orange-50/90 via-white to-rose-50/90 border-b border-slate-100 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <div class="w-10 h-10 rounded-2xl bg-gradient-amas text-white flex items-center justify-center shadow-amas">
+                    <i data-lucide="bell-ring" class="w-5 h-5"></i>
                   </div>
                   <div>
-                    <h4 class="font-bold text-slate-900 text-sm font-['Rubik',sans-serif]">Notificaciones Institucionales</h4>
-                    <p class="text-[11px] text-slate-500 font-medium">Intervenciones docentes y avisos oficiales</p>
+                    <h4 class="font-bold text-slate-900 text-base font-['Rubik',sans-serif]">Notificaciones Institucionales</h4>
+                    <p class="text-xs text-slate-500 font-medium">Intervenciones docentes y avisos oficiales</p>
                   </div>
                 </div>
-                <button id="markAllReadBtn" class="text-xs font-bold text-[#fd7f60] hover:text-[#fb5373] transition cursor-pointer hover:underline">
+                <button id="markAllReadBtn" class="text-xs font-bold text-[#fd7f60] hover:text-[#fb5373] transition cursor-pointer hover:underline px-2.5 py-1 bg-white rounded-lg border border-orange-100 shadow-xs">
                   Marcar leídas
                 </button>
               </div>
 
               <!-- Lista de Notificaciones Dinámica -->
-              <div id="notificationsList" class="max-h-[380px] overflow-y-auto divide-y divide-slate-100 custom-scrollbar p-2 space-y-1">
+              <div id="notificationsList" class="max-h-[380px] overflow-y-auto divide-y divide-slate-100 custom-scrollbar p-3 space-y-2">
                 <!-- Se inyectan dinámicamente -->
               </div>
 
               <!-- Pie informativo sobre envío de correos -->
-              <div class="p-3 bg-slate-50 border-t border-slate-100 text-center text-xs text-slate-500 font-medium flex items-center justify-center space-x-2">
-                <i data-lucide="mail-check" class="w-4 h-4 text-emerald-600"></i>
+              <div class="p-4 bg-slate-50 border-t border-slate-100 text-center text-xs sm:text-sm text-slate-600 font-medium flex items-center justify-center space-x-2">
+                <i data-lucide="mail-check" class="w-5 h-5 text-emerald-600"></i>
                 <span>Copia enviada a tu correo institucional</span>
               </div>
             </div>
           </div>
 
           <!-- Perfil Pill & Selector de Rol / Vista -->
-          <div class="flex items-center space-x-3 pl-3 border-l border-slate-200">
-            <img src="" alt="Usuario" class="w-10 h-10 rounded-full object-cover ring-2 ring-orange-200 shadow-xs" id="topbarAvatar">
+          <div class="flex items-center space-x-3.5 pl-3.5 border-l border-slate-200">
+            <img src="" alt="Usuario" class="w-11 h-11 rounded-full object-cover ring-2 ring-orange-200 shadow-sm" id="topbarAvatar">
             <div class="hidden sm:block text-left">
-              <span class="text-sm font-bold text-slate-900 block leading-tight font-['Rubik',sans-serif]" id="topbarUserName">Administrador General</span>
-              <span class="text-xs text-[#fb5373] font-bold uppercase tracking-wider" id="topbarUserRole">Administrador</span>
+              <span class="text-base font-bold text-slate-900 block leading-tight font-['Rubik',sans-serif]" id="topbarUserName">Administrador General</span>
+              <span class="text-xs text-[#fb5373] font-extrabold uppercase tracking-wider" id="topbarUserRole">Administrador</span>
             </div>
             <!-- Selector dinámico de modo de vista -->
             <div class="flex items-center space-x-1.5 ml-1">
-              <select id="roleSwitcherSelect" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer focus:ring-2 focus:ring-[#fd7f60] transition shadow-xs" title="Cambiar modo de vista">
+              <select id="roleSwitcherSelect" class="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-2xl text-xs sm:text-sm font-bold text-slate-700 cursor-pointer focus:ring-2 focus:ring-[#fd7f60] transition shadow-xs" title="Cambiar modo de vista">
                 <option value="administrador">👑 Vista Administrador</option>
                 <option value="docente">👩‍🏫 Vista Docente (Laura Gómez)</option>
                 <option value="estudiante_ana">🎓 Vista Estudiante (Ana Torres)</option>
@@ -103,23 +104,23 @@
 
       </div>
 
-      <!-- Barra de Pestañas de Navegación de la Aplicación -->
+      <!-- Barra de Pestañas de Navegación de la Aplicación (Diseño Segmented Píldora Ampliado) -->
       <div class="bg-white border-t border-slate-100">
-        <div class="max-w-7xl mx-auto px-6 flex items-center space-x-2 sm:space-x-4 overflow-x-auto py-2.5" id="navTabsContainer">
-          <button class="nav-tab active px-4 py-2 rounded-xl text-sm font-bold flex items-center space-x-2 transition cursor-pointer bg-gradient-amas text-white shadow-amas" data-tab="dashboard">
-            <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <div class="max-w-7xl mx-auto px-6 flex items-center space-x-2 sm:space-x-3 overflow-x-auto py-3" id="navTabsContainer">
+          <button class="nav-tab active px-5 py-2.5 rounded-2xl text-base font-bold flex items-center space-x-2.5 transition cursor-pointer bg-gradient-amas text-white shadow-amas" data-tab="dashboard">
+            <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
             <span>Panel de Control</span>
           </button>
-          <button class="nav-tab px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 transition cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-100" data-tab="students" id="tabStudentsNav">
-            <i data-lucide="users" class="w-4 h-4"></i>
+          <button class="nav-tab px-5 py-2.5 rounded-2xl text-base font-semibold flex items-center space-x-2.5 transition cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-100" data-tab="students" id="tabStudentsNav">
+            <i data-lucide="users" class="w-5 h-5"></i>
             <span>Directorio de Estudiantes</span>
           </button>
-          <button class="nav-tab px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 transition cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-100 hidden" data-tab="alerts" id="tabAlertsNav">
-            <i data-lucide="sliders" class="w-4 h-4"></i>
+          <button class="nav-tab px-5 py-2.5 rounded-2xl text-base font-semibold flex items-center space-x-2.5 transition cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-100 hidden" data-tab="alerts" id="tabAlertsNav">
+            <i data-lucide="sliders" class="w-5 h-5"></i>
             <span>Reglas y Disparadores (Admin)</span>
           </button>
-          <button class="nav-tab px-4 py-2 rounded-xl text-sm font-semibold flex items-center space-x-2 transition cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-100" data-tab="interventions" id="tabInterventionsNav">
-            <i data-lucide="clipboard-check" class="w-4 h-4"></i>
+          <button class="nav-tab px-5 py-2.5 rounded-2xl text-base font-semibold flex items-center space-x-2.5 transition cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-100" data-tab="interventions" id="tabInterventionsNav">
+            <i data-lucide="clipboard-check" class="w-5 h-5"></i>
             <span>Bitácora de Intervenciones</span>
           </button>
         </div>
@@ -130,20 +131,20 @@
     <main class="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-8">
 
       <!-- BANNER DE PRIVACIDAD PARA ESTUDIANTE (AISLAMIENTO TOTAL) -->
-      <div id="studentRoleBanner" class="hidden p-5 bg-gradient-to-r from-orange-50/90 via-amber-50/70 to-rose-50/90 border border-orange-200/80 rounded-2xl flex items-center justify-between shadow-sm">
+      <div id="studentRoleBanner" class="hidden p-6 bg-gradient-to-r from-orange-50/90 via-amber-50/70 to-rose-50/90 border border-orange-200 rounded-3xl flex flex-col md:flex-row md:items-center justify-between shadow-xs gap-4">
         <div class="flex items-center space-x-4">
-          <div class="w-12 h-12 rounded-2xl bg-gradient-amas text-white flex items-center justify-center font-bold shadow-amas flex-shrink-0">
-            <i data-lucide="shield-check" class="w-6 h-6"></i>
+          <div class="w-14 h-14 rounded-2xl bg-gradient-amas text-white flex items-center justify-center font-bold shadow-amas flex-shrink-0">
+            <i data-lucide="shield-check" class="w-7 h-7"></i>
           </div>
           <div>
-            <h4 class="text-base font-bold text-slate-900 font-['Rubik',sans-serif]">Portal Personal del Estudiante — Privacidad Activa</h4>
-            <p class="text-sm text-slate-600 leading-normal">
-              Por políticas de privacidad institucional de la Fundación A+, estás visualizando <strong>exclusivamente tu propio seguimiento, alertas personales y calificaciones</strong>.
+            <h4 class="text-lg sm:text-xl font-bold text-slate-900 font-['Rubik',sans-serif]">Portal Personal del Estudiante — Privacidad Activa</h4>
+            <p class="text-base text-slate-600 leading-normal mt-0.5">
+              Por políticas institucionales de la Fundación A+, estás visualizando <strong>exclusivamente tu propio seguimiento, alertas personales y calificaciones</strong>.
             </p>
           </div>
         </div>
-        <span class="text-xs font-bold text-[#fb5373] bg-white px-4 py-2 rounded-full border border-orange-200 shadow-sm flex items-center space-x-1.5 flex-shrink-0">
-          <span class="w-2 h-2 rounded-full bg-[#fb5373] animate-pulse"></span>
+        <span class="text-sm font-bold text-[#fb5373] bg-white px-4 py-2 rounded-full border border-orange-200 shadow-xs flex items-center space-x-2 flex-shrink-0 self-start md:self-auto">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#fb5373] animate-pulse"></span>
           <span>Aislamiento 100% Protegido</span>
         </span>
       </div>
@@ -151,85 +152,116 @@
       <!-- VISTA A: PANEL GENERAL (DASHBOARD) -->
       <div id="viewDashboard" class="space-y-8">
         
-        <!-- Hero de Bienvenida y Filtro de Convocatoria -->
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
+        <!-- Hero de Bienvenida y Acciones Rápidas -->
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-5 bg-white p-7 sm:p-8 rounded-3xl border border-slate-200/90 shadow-xs hover-elevate">
           <div>
-            <h2 class="text-2xl sm:text-3xl font-black text-slate-900 font-['Rubik',sans-serif] tracking-tight">
+            <div class="flex items-center space-x-3 mb-1.5">
+              <span class="px-3 py-1 bg-orange-100/70 text-[#fb5373] text-xs font-bold rounded-lg border border-orange-200">
+                Plataforma A+ Pulse
+              </span>
+              <span class="text-xs text-slate-500 font-semibold flex items-center space-x-1">
+                <i data-lucide="activity" class="w-3.5 h-3.5 text-emerald-500"></i>
+                <span>Monitoreo Activo</span>
+              </span>
+            </div>
+            <h2 class="text-3xl sm:text-4xl font-black text-slate-900 font-['Rubik',sans-serif] tracking-tight">
               Centro de Seguimiento y Acompañamiento
             </h2>
-            <p class="text-sm text-slate-600 mt-1">
-              Monitoreo analítico y detección temprana para la retención académica en la Fundación A+.
+            <p class="text-base sm:text-lg text-slate-600 mt-1 max-w-3xl">
+              Monitoreo analítico, detección temprana y retención formativa para los programas de la Fundación A+.
             </p>
           </div>
-          <div class="flex items-center space-x-3">
-            <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200/80 px-4 py-2 rounded-xl text-xs font-semibold text-slate-700">
+
+          <!-- Botones de Acción Interactiva del Header -->
+          <div class="flex flex-wrap items-center gap-3">
+            <button class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-slate-700 text-sm font-bold rounded-2xl transition cursor-pointer flex items-center space-x-2 shadow-xs" id="runRiskEngineBtn" title="Re-evaluar reglas sobre todos los estudiantes en tiempo real">
+              <i data-lucide="play-circle" class="w-4 h-4 text-[#fd7f60]" id="runEngineIcon"></i>
+              <span>Ejecutar Motor en Vivo</span>
+            </button>
+            <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold text-slate-700">
               <i data-lucide="layers" class="w-4 h-4 text-[#fd7f60]"></i>
-              <span>Cohorte: <strong class="text-slate-900">TrAIning 100 a 1000+ (2026)</strong></span>
+              <span>Cohorte: <strong class="text-slate-900">TrAIning 100 a 1000+</strong></span>
             </div>
-            <button class="px-4 py-2 bg-gradient-amas text-white text-xs font-bold rounded-xl shadow-amas hover:opacity-95 transition cursor-pointer flex items-center space-x-1.5" id="quickReportBtn">
-              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <button class="px-5 py-2.5 bg-gradient-amas text-white text-sm font-bold rounded-2xl shadow-amas hover:opacity-95 transition cursor-pointer flex items-center space-x-2" id="quickReportBtn">
+              <i data-lucide="file-down" class="w-4 h-4"></i>
               <span>Exportar Informe</span>
             </button>
           </div>
         </div>
 
-        <!-- 4 Tarjetas Métricas KPI -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <!-- 4 Tarjetas Métricas KPI Rediseñadas con Barras de Acento y Tipografía Grande -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <!-- Total -->
-          <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition">
+          <div class="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs hover-elevate relative overflow-hidden group">
+            <div class="h-1.5 w-full bg-slate-400 absolute top-0 left-0"></div>
             <div class="flex items-center justify-between mb-4">
-              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Estudiantes</span>
-              <div class="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200/60 flex items-center justify-center text-[#fd7f60]">
-                <i data-lucide="users" class="w-6 h-6"></i>
+              <span class="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Total Estudiantes</span>
+              <div class="w-13 h-13 rounded-2xl bg-orange-50 border border-orange-200/80 flex items-center justify-center text-[#fd7f60] transition group-hover:scale-110">
+                <i data-lucide="users" class="w-7 h-7"></i>
               </div>
             </div>
-            <p class="text-3xl sm:text-4xl font-black text-slate-900 font-['Rubik',sans-serif]" id="kpiTotal">80</p>
-            <p class="text-xs text-slate-500 font-medium mt-1">Total matriculados en cohorte</p>
+            <p class="text-4xl sm:text-5xl font-black text-slate-900 font-['Rubik',sans-serif]" id="kpiTotal">80</p>
+            <div class="mt-3 flex items-center justify-between text-xs sm:text-sm text-slate-500 font-medium">
+              <span>Matriculados activos</span>
+              <span class="text-slate-700 font-bold">100% cohorte</span>
+            </div>
           </div>
 
           <!-- Bajo Riesgo -->
-          <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition">
+          <div class="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs hover-elevate relative overflow-hidden group">
+            <div class="h-1.5 w-full bg-emerald-500 absolute top-0 left-0"></div>
             <div class="flex items-center justify-between mb-4">
-              <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Bajo Riesgo</span>
-              <div class="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-600">
-                <i data-lucide="smile" class="w-6 h-6"></i>
+              <span class="text-xs sm:text-sm font-bold text-emerald-700 uppercase tracking-wider">Bajo Riesgo</span>
+              <div class="w-13 h-13 rounded-2xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-600 transition group-hover:scale-110">
+                <i data-lucide="smile" class="w-7 h-7"></i>
               </div>
             </div>
-            <div class="flex items-baseline space-x-2">
-              <span class="text-3xl sm:text-4xl font-black text-slate-900 font-['Rubik',sans-serif]" id="kpiLow">52</span>
-              <span class="text-sm text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">65%</span>
+            <div class="flex items-baseline space-x-3">
+              <span class="text-4xl sm:text-5xl font-black text-slate-900 font-['Rubik',sans-serif]" id="kpiLow">52</span>
+              <span class="text-sm font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">65%</span>
             </div>
-            <p class="text-xs text-slate-500 font-medium mt-1">Progreso y asistencia óptimos</p>
+            <div class="mt-3 flex items-center justify-between text-xs sm:text-sm text-slate-500 font-medium">
+              <span>Progreso y asistencia óptimos</span>
+              <span class="text-emerald-600 font-bold">Sin alertas</span>
+            </div>
           </div>
 
           <!-- Riesgo Medio -->
-          <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition">
+          <div class="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs hover-elevate relative overflow-hidden group">
+            <div class="h-1.5 w-full bg-[#ffab4d] absolute top-0 left-0"></div>
             <div class="flex items-center justify-between mb-4">
-              <span class="text-xs font-bold text-amber-600 uppercase tracking-wider">Riesgo Medio</span>
-              <div class="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-500">
-                <i data-lucide="alert-circle" class="w-6 h-6"></i>
+              <span class="text-xs sm:text-sm font-bold text-amber-700 uppercase tracking-wider">Riesgo Medio</span>
+              <div class="w-13 h-13 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-600 transition group-hover:scale-110">
+                <i data-lucide="alert-circle" class="w-7 h-7"></i>
               </div>
             </div>
-            <div class="flex items-baseline space-x-2">
-              <span class="text-3xl sm:text-4xl font-black text-slate-900 font-['Rubik',sans-serif]" id="kpiMedium">18</span>
-              <span class="text-sm text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-full">22%</span>
+            <div class="flex items-baseline space-x-3">
+              <span class="text-4xl sm:text-5xl font-black text-slate-900 font-['Rubik',sans-serif]" id="kpiMedium">18</span>
+              <span class="text-sm font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">22%</span>
             </div>
-            <p class="text-xs text-slate-500 font-medium mt-1">Requiere tutoría y seguimiento</p>
+            <div class="mt-3 flex items-center justify-between text-xs sm:text-sm text-slate-500 font-medium">
+              <span>Requiere tutoría pedagógica</span>
+              <span class="text-amber-600 font-bold">En observación</span>
+            </div>
           </div>
 
           <!-- Riesgo Alto -->
-          <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition">
+          <div class="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs hover-elevate relative overflow-hidden group">
+            <div class="h-1.5 w-full bg-[#fb5373] absolute top-0 left-0"></div>
             <div class="flex items-center justify-between mb-4">
-              <span class="text-xs font-bold text-[#fb5373] uppercase tracking-wider">Riesgo Crítico</span>
-              <div class="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200/60 flex items-center justify-center text-[#fb5373]">
-                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+              <span class="text-xs sm:text-sm font-bold text-[#fb5373] uppercase tracking-wider">Riesgo Crítico</span>
+              <div class="w-13 h-13 rounded-2xl bg-rose-50 border border-rose-200/80 flex items-center justify-center text-[#fb5373] transition group-hover:scale-110">
+                <i data-lucide="alert-triangle" class="w-7 h-7"></i>
               </div>
             </div>
-            <div class="flex items-baseline space-x-2">
-              <span class="text-3xl sm:text-4xl font-black text-slate-900 font-['Rubik',sans-serif]" id="kpiHigh">10</span>
-              <span class="text-sm text-[#fb5373] font-bold bg-rose-50 px-2 py-0.5 rounded-full">13%</span>
+            <div class="flex items-baseline space-x-3">
+              <span class="text-4xl sm:text-5xl font-black text-slate-900 font-['Rubik',sans-serif]" id="kpiHigh">10</span>
+              <span class="text-sm font-extrabold text-[#fb5373] bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full">13%</span>
             </div>
-            <p class="text-xs text-slate-500 font-medium mt-1">Intervención prioritaria inmediata</p>
+            <div class="mt-3 flex items-center justify-between text-xs sm:text-sm text-slate-500 font-medium">
+              <span>Intervención prioritaria</span>
+              <span class="text-[#fb5373] font-bold">Atención hoy</span>
+            </div>
           </div>
         </div>
 
@@ -237,93 +269,115 @@
         <div class="grid grid-cols-12 gap-6">
           
           <!-- Gráfico de Evolución Temporal (7 cols) -->
-          <div class="col-span-12 lg:col-span-7 bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs">
-            <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+          <div class="col-span-12 lg:col-span-7 bg-white p-7 sm:p-8 rounded-3xl border border-slate-200/90 shadow-xs hover-elevate">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-4 border-b border-slate-100 gap-2">
               <div>
-                <h3 class="text-lg font-bold text-slate-900 font-['Rubik',sans-serif]">
+                <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-['Rubik',sans-serif]">
                   Tendencia Semestral de Rendimiento y Asistencia
                 </h3>
-                <p class="text-xs text-slate-500 mt-0.5">Evolución mensual comparada (Enero - Mayo)</p>
+                <p class="text-sm text-slate-500 mt-1">Evolución mensual comparada (Enero - Mayo 2026)</p>
               </div>
-              <div class="flex items-center space-x-3 text-xs font-bold">
-                <span class="flex items-center space-x-1.5 text-[#fb5373]">
-                  <span class="w-2.5 h-2.5 rounded-full bg-[#fb5373]"></span>
-                  <span>Calificaciones</span>
+              <div class="flex items-center space-x-4 text-xs sm:text-sm font-bold">
+                <span class="flex items-center space-x-2 text-[#fb5373] bg-rose-50 px-3 py-1 rounded-full border border-rose-100">
+                  <span class="w-3 h-3 rounded-full bg-[#fb5373]"></span>
+                  <span>Calificaciones GPA</span>
                 </span>
-                <span class="flex items-center space-x-1.5 text-emerald-600">
-                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span class="flex items-center space-x-2 text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                  <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
                   <span>Asistencia (%)</span>
                 </span>
               </div>
             </div>
-            <div class="h-64 w-full">
+            <div class="h-72 w-full">
               <canvas id="gradesLineChart"></canvas>
             </div>
           </div>
 
           <!-- Gráfico Donut de Riesgo y Tipología de Alertas (5 cols) -->
-          <div class="col-span-12 lg:col-span-5 bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <div class="col-span-12 lg:col-span-5 bg-white p-7 sm:p-8 rounded-3xl border border-slate-200/90 shadow-xs hover-elevate flex flex-col justify-between">
             <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
               <div>
-                <h3 class="text-lg font-bold text-slate-900 font-['Rubik',sans-serif]">
+                <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-['Rubik',sans-serif]">
                   Distribución Global de Riesgo
                 </h3>
-                <p class="text-xs text-slate-500 mt-0.5">Semáforo de acompañamiento en tiempo real</p>
+                <p class="text-sm text-slate-500 mt-1">Semáforo de acompañamiento en tiempo real</p>
               </div>
             </div>
 
             <div class="flex items-center justify-around py-4">
-              <div class="w-44 h-44 relative flex items-center justify-center">
+              <div class="w-48 h-48 relative flex items-center justify-center">
                 <canvas id="riskDonutChart"></canvas>
                 <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span class="text-3xl font-black text-slate-900 leading-none font-['Rubik',sans-serif]">80</span>
-                  <span class="text-xs text-slate-500 uppercase font-bold tracking-wider mt-1">alumnos</span>
+                  <span class="text-4xl font-black text-slate-900 leading-none font-['Rubik',sans-serif]">80</span>
+                  <span class="text-xs text-slate-500 uppercase font-extrabold tracking-wider mt-1">estudiantes</span>
                 </div>
               </div>
 
-              <!-- Leyenda Desglosada -->
-              <div class="space-y-3.5 text-sm">
-                <div class="flex items-center space-x-3">
-                  <span class="w-3 h-3 rounded-full bg-emerald-500 flex-shrink-0"></span>
-                  <span class="text-slate-600 font-semibold">Bajo riesgo</span>
-                  <span class="font-bold text-slate-900 ml-auto">52 (65%)</span>
+              <!-- Leyenda Desglosada con badges grandes -->
+              <div class="space-y-4 text-sm sm:text-base">
+                <div class="flex items-center space-x-3.5">
+                  <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                  <span class="text-slate-600 font-medium">Bajo riesgo</span>
+                  <span class="font-extrabold text-slate-900 ml-auto">52 (65%)</span>
                 </div>
-                <div class="flex items-center space-x-3">
-                  <span class="w-3 h-3 rounded-full bg-[#ffab4d] flex-shrink-0"></span>
-                  <span class="text-slate-600 font-semibold">Riesgo medio</span>
-                  <span class="font-bold text-slate-900 ml-auto">18 (22%)</span>
+                <div class="flex items-center space-x-3.5">
+                  <span class="w-3.5 h-3.5 rounded-full bg-[#ffab4d] flex-shrink-0"></span>
+                  <span class="text-slate-600 font-medium">Riesgo medio</span>
+                  <span class="font-extrabold text-slate-900 ml-auto">18 (22%)</span>
                 </div>
-                <div class="flex items-center space-x-3">
-                  <span class="w-3 h-3 rounded-full bg-[#fb5373] flex-shrink-0"></span>
-                  <span class="text-slate-600 font-semibold">Riesgo alto</span>
-                  <span class="font-bold text-slate-900 ml-auto">10 (13%)</span>
+                <div class="flex items-center space-x-3.5">
+                  <span class="w-3.5 h-3.5 rounded-full bg-[#fb5373] flex-shrink-0"></span>
+                  <span class="text-slate-600 font-medium">Riesgo alto</span>
+                  <span class="font-extrabold text-slate-900 ml-auto">10 (13%)</span>
                 </div>
               </div>
             </div>
 
             <!-- Resumen Rápido -->
-            <div class="mt-4 p-4 rounded-2xl bg-orange-50/70 border border-orange-200/70 flex items-center justify-between text-xs">
-              <span class="font-bold text-slate-700">87.5% de efectividad en intervenciones pedagógicas</span>
-              <span class="font-bold text-[#fb5373]">A+ Pulse</span>
+            <div class="mt-4 p-4 rounded-2xl bg-orange-50/80 border border-orange-200/80 flex items-center justify-between text-xs sm:text-sm">
+              <span class="font-bold text-slate-700 flex items-center space-x-2">
+                <i data-lucide="check-circle-2" class="w-4 h-4 text-[#fb5373]"></i>
+                <span>87.5% de efectividad en intervenciones pedagógicas</span>
+              </span>
+              <span class="font-black text-[#fb5373] bg-white px-2.5 py-1 rounded-lg border border-orange-200 shadow-xs">A+ Pulse</span>
             </div>
           </div>
 
         </div>
 
-        <!-- Alertas Recientes y Acciones Rápidas -->
-        <div class="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-xs">
-          <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+        <!-- Alertas Recientes y Acciones Rápidas (Interactivo con Filtros en Vivo) -->
+        <div class="bg-white p-7 sm:p-9 rounded-3xl border border-slate-200/90 shadow-xs hover-elevate space-y-6">
+          <div class="flex flex-col md:flex-row md:items-center justify-between pb-5 border-b border-slate-100 gap-4">
             <div>
-              <h3 class="text-xl font-bold text-slate-900 font-['Rubik',sans-serif]">
-                Alertas Activas y Casos Prioritarios
-              </h3>
-              <p class="text-xs text-slate-500 mt-0.5">Estudiantes que requieren atención o contacto pedagógico inmediato</p>
+              <div class="flex items-center space-x-3">
+                <h3 class="text-2xl sm:text-3xl font-black text-slate-900 font-['Rubik',sans-serif]">
+                  Alertas Activas y Casos Prioritarios
+                </h3>
+                <span class="text-xs font-bold text-[#fb5373] bg-rose-50 px-3 py-1 rounded-full border border-rose-200 animate-pulse">
+                  Tiempo Real
+                </span>
+              </div>
+              <p class="text-sm sm:text-base text-slate-500 mt-1">Estudiantes que requieren atención o contacto pedagógico inmediato</p>
             </div>
-            <span class="text-xs font-bold text-[#fb5373] bg-rose-50 px-3 py-1.5 rounded-full border border-rose-200">
-              Actualización en Tiempo Real
-            </span>
+
+            <!-- Filtro Interactivo de Severidad de Alertas -->
+            <div class="flex items-center space-x-2 overflow-x-auto pb-1" id="alertSeverityFilterContainer">
+              <button class="alert-filter-pill active px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 text-white transition cursor-pointer shadow-xs" data-severity="Todas">
+                Todas las Alertas
+              </button>
+              <button class="alert-filter-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer" data-severity="Crítica">
+                🚨 Críticas
+              </button>
+              <button class="alert-filter-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer" data-severity="Riesgo medio">
+                ⚠️ Medias
+              </button>
+              <button class="alert-filter-pill px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer" data-severity="Bajo riesgo">
+                ✅ Bajas
+              </button>
+            </div>
           </div>
 
+          <!-- Contenedor dinámico de alertas -->
           <div class="divide-y divide-slate-100" id="recentAlertsContainer">
             <!-- Dynamic alerts injected here -->
           </div>
@@ -334,45 +388,50 @@
       <!-- VISTA B: DIRECTORIO DE ESTUDIANTES (TABLA MODERNA FULL-WIDTH) -->
       <div id="viewStudents" class="space-y-6 hidden">
         
-        <div class="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-xs space-y-6">
+        <div class="bg-white p-7 sm:p-9 rounded-3xl border border-slate-200/90 shadow-xs hover-elevate space-y-6">
           
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pb-4 border-b border-slate-100">
             <div>
-              <h3 class="text-xl font-bold text-slate-900 font-['Rubik',sans-serif]">
-                Directorio General de la Cohorte
-              </h3>
-              <p class="text-xs text-slate-500 mt-0.5">Consulta la ficha, promedio y asistencias de los estudiantes monitoreados.</p>
+              <div class="flex items-center space-x-3">
+                <h3 class="text-2xl sm:text-3xl font-black text-slate-900 font-['Rubik',sans-serif]">
+                  Directorio General de la Cohorte
+                </h3>
+                <span id="studentCountBadge" class="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
+                  80 estudiantes
+                </span>
+              </div>
+              <p class="text-sm sm:text-base text-slate-500 mt-1">Ficha completa, promedio, asistencias y acompañamiento individualizado.</p>
             </div>
 
-            <!-- Buscador y Filtros Píldora -->
+            <!-- Buscador y Filtros Píldora Más Amplios -->
             <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <div class="relative w-full sm:w-64">
-                <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+              <div class="relative w-full sm:w-80">
+                <i data-lucide="search" class="w-5 h-5 absolute left-3.5 top-3.5 text-slate-400"></i>
                 <input type="text" id="studentSearchInput" placeholder="Buscar por nombre o correo..." 
-                       class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#fd7f60] transition">
+                       class="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:outline-none focus:ring-2 focus:ring-[#fd7f60] transition shadow-xs">
               </div>
 
               <!-- Píldoras de Filtro -->
-              <div class="flex items-center space-x-1.5 overflow-x-auto pb-1" id="filterPillsContainer">
-                <button data-filter="Todos" class="filter-pill px-3.5 py-1.5 bg-gradient-amas text-white rounded-full font-bold text-xs shadow-amas transition cursor-pointer">Todos</button>
-                <button data-filter="Bajo riesgo" class="filter-pill px-3.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-full font-semibold text-xs transition cursor-pointer">Bajo riesgo</button>
-                <button data-filter="Riesgo medio" class="filter-pill px-3.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-full font-semibold text-xs transition cursor-pointer">Riesgo medio</button>
-                <button data-filter="Riesgo alto" class="filter-pill px-3.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-full font-semibold text-xs transition cursor-pointer">Riesgo alto</button>
+              <div class="flex items-center space-x-2 overflow-x-auto pb-1" id="filterPillsContainer">
+                <button data-filter="Todos" class="filter-pill px-4 py-2.5 bg-gradient-amas text-white rounded-2xl font-bold text-sm shadow-amas transition cursor-pointer">Todos</button>
+                <button data-filter="Bajo riesgo" class="filter-pill px-4 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-2xl font-semibold text-sm transition cursor-pointer">Bajo riesgo</button>
+                <button data-filter="Riesgo medio" class="filter-pill px-4 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-2xl font-semibold text-sm transition cursor-pointer">Riesgo medio</button>
+                <button data-filter="Riesgo alto" class="filter-pill px-4 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-2xl font-semibold text-sm transition cursor-pointer">Riesgo alto</button>
               </div>
             </div>
           </div>
 
-          <!-- Tabla Completa de Estudiantes -->
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm">
+          <!-- Tabla Completa de Estudiantes con Tipografía Grande y Espaciosa -->
+          <div class="overflow-x-auto custom-scrollbar">
+            <table class="w-full text-left text-base">
               <thead>
-                <tr class="text-slate-500 font-bold border-b border-slate-200 pb-3 text-xs uppercase tracking-wider">
-                  <th class="py-3 px-4 font-bold">Estudiante</th>
-                  <th class="py-3 px-4 font-bold">Programa</th>
-                  <th class="py-3 px-4 font-bold">Semáforo de Riesgo</th>
-                  <th class="py-3 px-4 font-bold">Promedio</th>
-                  <th class="py-3 px-4 font-bold text-right">Asistencia</th>
-                  <th class="py-3 px-4 font-bold text-center">Acciones</th>
+                <tr class="text-slate-500 font-extrabold border-b border-slate-200 pb-4 text-xs sm:text-sm uppercase tracking-wider bg-slate-50/60 rounded-xl">
+                  <th class="py-4 px-5 font-extrabold rounded-l-xl">Estudiante</th>
+                  <th class="py-4 px-5 font-extrabold">Programa Formativo</th>
+                  <th class="py-4 px-5 font-extrabold">Semáforo de Riesgo</th>
+                  <th class="py-4 px-5 font-extrabold">Promedio</th>
+                  <th class="py-4 px-5 font-extrabold text-right">Asistencia</th>
+                  <th class="py-4 px-5 font-extrabold text-center rounded-r-xl">Acciones Rápidas</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100" id="studentTableBody">
@@ -387,21 +446,23 @@
 
       <!-- VISTA C: CENTRO DE ALERTAS Y REGLAS (ADMINISTRADOR) -->
       <div id="viewAlerts" class="space-y-6 hidden">
-        <div class="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-xs space-y-6">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-3">
+        <div class="bg-white p-7 sm:p-9 rounded-3xl border border-slate-200/90 shadow-xs hover-elevate space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-5 gap-4">
             <div>
-              <h3 class="text-xl font-bold text-slate-900 font-['Rubik',sans-serif] flex items-center space-x-2">
-                <span>Reglas y Disparadores de Alerta</span>
-                <span class="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">Exclusivo Admin</span>
-              </h3>
-              <p class="text-xs text-slate-500 mt-0.5">Parametrización en tiempo real de umbrales deterministas para la Fundación A+</p>
+              <div class="flex items-center space-x-3">
+                <h3 class="text-2xl sm:text-3xl font-black text-slate-900 font-['Rubik',sans-serif]">
+                  Reglas y Disparadores de Alerta
+                </h3>
+                <span class="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">Exclusivo Admin</span>
+              </div>
+              <p class="text-sm sm:text-base text-slate-500 mt-1">Parametrización en tiempo real de umbrales deterministas para la Fundación A+</p>
             </div>
             <div class="flex items-center space-x-3">
-              <span class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full hidden sm:inline-flex items-center space-x-1.5">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Motor Activo</span>
+              <span class="text-xs sm:text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-2xl hidden sm:inline-flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Motor Determinista Activo</span>
               </span>
-              <button id="createNewRuleBtn" class="px-4 py-2 bg-gradient-amas text-white text-xs font-bold rounded-xl shadow-amas hover:opacity-95 transition cursor-pointer flex items-center space-x-1.5">
+              <button id="createNewRuleBtn" class="px-5 py-2.5 bg-gradient-amas text-white text-sm font-bold rounded-2xl shadow-amas hover:opacity-95 transition cursor-pointer flex items-center space-x-2">
                 <i data-lucide="plus-circle" class="w-4 h-4"></i>
                 <span>Nueva Regla</span>
               </button>
@@ -409,7 +470,7 @@
           </div>
 
           <!-- Contenedor dinámico de Reglas del Sistema -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-5" id="rulesListContainer">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="rulesListContainer">
             <!-- Dynamically populated from /api/rules -->
           </div>
         </div>
@@ -417,21 +478,21 @@
 
       <!-- VISTA D: BITÁCORA DE INTERVENCIONES DOCENTES -->
       <div id="viewInterventions" class="space-y-6 hidden">
-        <div class="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-xs space-y-6">
-          <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div class="bg-white p-7 sm:p-9 rounded-3xl border border-slate-200/90 shadow-xs hover-elevate space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-5 gap-3">
             <div>
-              <h3 class="text-xl font-bold text-slate-900 font-['Rubik',sans-serif]">
+              <h3 class="text-2xl sm:text-3xl font-black text-slate-900 font-['Rubik',sans-serif]">
                 Bitácora de Intervenciones y Compromisos
               </h3>
-              <p class="text-xs text-slate-500 mt-0.5">Historial institucional de acuerdos pedagógicos y acompañamiento continuo</p>
+              <p class="text-sm sm:text-base text-slate-500 mt-1">Historial institucional de acuerdos pedagógicos y acompañamiento continuo</p>
             </div>
-            <button id="quickNewActionBtn" class="px-4 py-2 bg-gradient-amas text-white text-xs font-bold rounded-xl shadow-amas hover:opacity-95 transition cursor-pointer flex items-center space-x-1.5">
+            <button id="quickNewActionBtn" class="px-5 py-2.5 bg-gradient-amas text-white text-sm font-bold rounded-2xl shadow-amas hover:opacity-95 transition cursor-pointer flex items-center space-x-2">
               <i data-lucide="plus" class="w-4 h-4"></i>
               <span>Nueva Acción</span>
             </button>
           </div>
 
-          <div class="space-y-3" id="interventionsListContainer">
+          <div class="space-y-4" id="interventionsListContainer">
             <!-- Dynamically populated intervention cards -->
           </div>
         </div>
@@ -443,57 +504,57 @@
   <!-- ======================================================== -->
   <!-- 3. MODAL / EXPEDIENTE 360° DEL ESTUDIANTE               -->
   <!-- ======================================================== -->
-  <div id="studentDetailModal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-200 border border-slate-100 overflow-hidden relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+  <div id="studentDetailModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-4xl w-full p-7 sm:p-9 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-200 border border-slate-100 overflow-hidden relative max-h-[92vh] overflow-y-auto custom-scrollbar">
       
       <!-- Top Brand Line -->
-      <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-amas"></div>
+      <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-amas"></div>
 
       <!-- Modal Header: Student Info -->
       <div class="flex items-center justify-between border-b border-slate-100 pb-5 pt-2">
         <div class="flex items-center space-x-4">
-          <img src="" alt="Avatar" class="w-16 h-16 rounded-2xl object-cover ring-2 ring-orange-200 shadow-sm" id="detailAvatar">
+          <img src="" alt="Avatar" class="w-18 h-18 rounded-3xl object-cover ring-2 ring-orange-200 shadow-sm" id="detailAvatar">
           <div>
             <div class="flex items-center space-x-3">
-              <h4 class="text-2xl font-bold text-slate-900 font-['Rubik',sans-serif]" id="detailName">Juan Pérez</h4>
+              <h4 class="text-2xl sm:text-3xl font-black text-slate-900 font-['Rubik',sans-serif]" id="detailName">Juan Pérez</h4>
               <div id="detailRiskBadgeContainer"></div>
             </div>
-            <p class="text-sm text-slate-500 font-medium mt-0.5" id="detailProgram">Estudiante de Programación — TrAIning de 100 a 1000+</p>
+            <p class="text-base text-slate-500 font-medium mt-0.5" id="detailProgram">Estudiante de Programación — TrAIning de 100 a 1000+</p>
           </div>
         </div>
-        <button id="closeDetailModalBtn" class="text-slate-400 hover:text-slate-600 transition p-2 rounded-xl hover:bg-slate-100 cursor-pointer">
-          <i data-lucide="x" class="w-6 h-6"></i>
+        <button id="closeDetailModalBtn" class="text-slate-400 hover:text-slate-700 transition p-2.5 rounded-2xl hover:bg-slate-100 cursor-pointer">
+          <i data-lucide="x" class="w-7 h-7"></i>
         </button>
       </div>
 
-      <!-- 4 Scorecards del Estudiante -->
+      <!-- 4 Scorecards del Estudiante con Fuentes Grandes -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
-          <p class="text-xs text-slate-500 font-bold uppercase tracking-wider">Promedio General</p>
-          <div class="flex items-center space-x-2 mt-1.5">
-            <i data-lucide="award" class="w-4 h-4 text-[#fd7f60]"></i>
-            <span class="text-xl font-black text-slate-900 font-['Rubik',sans-serif]" id="detailGpa">2.7 / 5.0</span>
+        <div class="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-200/90 shadow-xs">
+          <p class="text-xs sm:text-sm text-slate-500 font-bold uppercase tracking-wider">Promedio General</p>
+          <div class="flex items-center space-x-2.5 mt-2">
+            <i data-lucide="award" class="w-5 h-5 text-[#fd7f60]"></i>
+            <span class="text-2xl sm:text-3xl font-black text-slate-900 font-['Rubik',sans-serif]" id="detailGpa">2.7 / 5.0</span>
           </div>
         </div>
-        <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
-          <p class="text-xs text-slate-500 font-bold uppercase tracking-wider">Asistencia Global</p>
-          <div class="flex items-center space-x-2 mt-1.5">
-            <i data-lucide="check-circle" class="w-4 h-4 text-emerald-500"></i>
-            <span class="text-xl font-black text-slate-900 font-['Rubik',sans-serif]" id="detailAttendance">71%</span>
+        <div class="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-200/90 shadow-xs">
+          <p class="text-xs sm:text-sm text-slate-500 font-bold uppercase tracking-wider">Asistencia Global</p>
+          <div class="flex items-center space-x-2.5 mt-2">
+            <i data-lucide="check-circle" class="w-5 h-5 text-emerald-500"></i>
+            <span class="text-2xl sm:text-3xl font-black text-slate-900 font-['Rubik',sans-serif]" id="detailAttendance">71%</span>
           </div>
         </div>
-        <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
-          <p class="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Inasistencias</p>
-          <div class="flex items-center space-x-2 mt-1.5">
-            <i data-lucide="user-x" class="w-4 h-4 text-[#fb5373]"></i>
-            <span class="text-xl font-black text-slate-900 font-['Rubik',sans-serif]" id="detailAbsences">8</span>
+        <div class="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-200/90 shadow-xs">
+          <p class="text-xs sm:text-sm text-slate-500 font-bold uppercase tracking-wider">Total Inasistencias</p>
+          <div class="flex items-center space-x-2.5 mt-2">
+            <i data-lucide="user-x" class="w-5 h-5 text-[#fb5373]"></i>
+            <span class="text-2xl sm:text-3xl font-black text-slate-900 font-['Rubik',sans-serif]" id="detailAbsences">8</span>
           </div>
         </div>
-        <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
-          <p class="text-xs text-slate-500 font-bold uppercase tracking-wider">Faltas Consecutivas</p>
-          <div class="flex items-center space-x-2 mt-1.5">
-            <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500"></i>
-            <span class="text-xl font-black text-slate-900 font-['Rubik',sans-serif]" id="detailConsecutive">3</span>
+        <div class="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-200/90 shadow-xs">
+          <p class="text-xs sm:text-sm text-slate-500 font-bold uppercase tracking-wider">Faltas Consecutivas</p>
+          <div class="flex items-center space-x-2.5 mt-2">
+            <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i>
+            <span class="text-2xl sm:text-3xl font-black text-slate-900 font-['Rubik',sans-serif]" id="detailConsecutive">3</span>
           </div>
         </div>
       </div>
@@ -502,33 +563,33 @@
       <div class="grid grid-cols-1 md:grid-cols-12 gap-5">
         <!-- Lista de Alertas Activas (7 cols) -->
         <div class="col-span-12 md:col-span-7 space-y-3">
-          <h5 class="text-sm font-bold text-slate-900 font-['Rubik',sans-serif]">Alertas activas del estudiante</h5>
-          <div class="space-y-2.5 text-sm" id="detailActiveAlertsList">
+          <h5 class="text-base sm:text-lg font-bold text-slate-900 font-['Rubik',sans-serif]">Alertas Activas del Expediente</h5>
+          <div class="space-y-3 text-base" id="detailActiveAlertsList">
             <!-- Injected dynamically -->
           </div>
         </div>
 
         <!-- Recomendación Pedagógica Asistiva (5 cols) -->
-        <div class="col-span-12 md:col-span-5 bg-gradient-to-br from-orange-50/80 via-amber-50/50 to-rose-50/80 border border-orange-200/80 rounded-2xl p-5 flex flex-col justify-between shadow-xs">
+        <div class="col-span-12 md:col-span-5 bg-gradient-to-br from-orange-50 via-amber-50/60 to-rose-50 border border-orange-200 rounded-3xl p-6 flex flex-col justify-between shadow-xs">
           <div>
-            <div class="flex items-center space-x-2 text-[#fb5373] text-sm font-bold mb-2">
-              <i data-lucide="sparkles" class="w-4 h-4 text-[#fd7f60]"></i>
+            <div class="flex items-center space-x-2 text-[#fb5373] text-base font-bold mb-2">
+              <i data-lucide="sparkles" class="w-5 h-5 text-[#fd7f60]"></i>
               <span>Recomendación Institucional A+</span>
             </div>
-            <p class="text-xs sm:text-sm text-slate-700 leading-relaxed font-normal" id="detailRecommendation">
+            <p class="text-sm sm:text-base text-slate-700 leading-relaxed font-normal" id="detailRecommendation">
               Realizar seguimiento pedagógico y contactar al estudiante para activar tutoría individual y acuerdos de nivelación.
             </p>
           </div>
           <!-- Botón de Registro de Intervención (Solo para Docentes y Administradores) -->
-          <button id="openActionModalBtn" class="mt-4 w-full py-3 bg-gradient-amas hover:opacity-95 text-white rounded-xl text-sm font-bold flex items-center justify-center space-x-2 shadow-amas transition cursor-pointer">
-            <i data-lucide="edit-3" class="w-4 h-4"></i>
+          <button id="openActionModalBtn" class="mt-5 w-full py-3.5 bg-gradient-amas hover:opacity-95 text-white rounded-2xl text-base font-bold flex items-center justify-center space-x-2 shadow-amas transition cursor-pointer">
+            <i data-lucide="edit-3" class="w-5 h-5"></i>
             <span>Registrar intervención pedagógica</span>
           </button>
 
           <!-- Aviso Informativo para el Estudiante (Aislamiento de Rol) -->
-          <div id="studentActionDisabledNotice" class="hidden mt-4 p-3.5 bg-white/90 border border-orange-200/80 rounded-2xl text-xs text-slate-600 space-y-1.5 shadow-xs">
+          <div id="studentActionDisabledNotice" class="hidden mt-4 p-4 bg-white/95 border border-orange-200 rounded-2xl text-sm text-slate-600 space-y-1.5 shadow-xs">
             <div class="flex items-center space-x-2 font-bold text-slate-900">
-              <i data-lucide="shield-check" class="w-4 h-4 text-emerald-600"></i>
+              <i data-lucide="shield-check" class="w-5 h-5 text-emerald-600"></i>
               <span>Acompañamiento Guiado por Docentes</span>
             </div>
             <p class="leading-relaxed">
@@ -539,9 +600,9 @@
       </div>
 
       <!-- Gráfico de Asistencia y Calificaciones del Estudiante -->
-      <div class="pt-4 border-t border-slate-100">
-        <h5 class="text-sm font-bold text-slate-900 mb-3 font-['Rubik',sans-serif]">Historial del Estudiante</h5>
-        <div class="h-44 w-full bg-slate-50/60 p-4 rounded-2xl border border-slate-100">
+      <div class="pt-5 border-t border-slate-100">
+        <h5 class="text-base sm:text-lg font-bold text-slate-900 mb-3 font-['Rubik',sans-serif]">Historial Semestral del Estudiante</h5>
+        <div class="h-52 w-full bg-slate-50/60 p-4 rounded-2xl border border-slate-100">
           <canvas id="attendanceLineChart"></canvas>
         </div>
       </div>
@@ -552,99 +613,99 @@
   <!-- ======================================================== -->
   <!-- 4. MODAL: REGISTRAR ACCIÓN DE SEGUIMIENTO               -->
   <!-- ======================================================== -->
-  <div id="actionModal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200 border border-slate-100 overflow-hidden relative">
-      <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-amas"></div>
+  <div id="actionModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-xl w-full p-7 sm:p-8 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 border border-slate-100 overflow-hidden relative max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-amas"></div>
 
-      <div class="flex items-center justify-between border-b border-slate-100 pb-3.5 pt-1">
-        <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#fd7f60]">
-            <i data-lucide="clipboard-list" class="w-5 h-5"></i>
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4 pt-1">
+        <div class="flex items-center space-x-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#fd7f60]">
+            <i data-lucide="clipboard-list" class="w-6 h-6"></i>
           </div>
           <div>
-            <h4 class="font-bold text-slate-900 text-base font-['Rubik',sans-serif]">Registrar Acción de Seguimiento</h4>
-            <p class="text-xs text-slate-500 font-medium" id="modalStudentSub">Estudiante: Juan Pérez</p>
+            <h4 class="font-bold text-slate-900 text-lg sm:text-xl font-['Rubik',sans-serif]">Registrar Acción de Seguimiento</h4>
+            <p class="text-sm text-slate-500 font-medium" id="modalStudentSub">Estudiante: Juan Pérez</p>
           </div>
         </div>
-        <button id="closeModalBtn" class="text-slate-400 hover:text-slate-600 transition p-1.5 rounded-lg cursor-pointer">
-          <i data-lucide="x" class="w-5 h-5"></i>
+        <button id="closeModalBtn" class="text-slate-400 hover:text-slate-700 transition p-2 rounded-xl cursor-pointer">
+          <i data-lucide="x" class="w-6 h-6"></i>
         </button>
       </div>
 
-      <form id="actionForm" class="space-y-4 text-sm">
+      <form id="actionForm" class="space-y-5 text-base">
         <!-- Selector del estudiante al que va dirigida la acción -->
         <div>
-          <label class="block font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+          <label class="block font-bold text-slate-700 mb-2 flex items-center justify-between text-base">
             <span>Estudiante al que va dirigida la intervención</span>
-            <span class="text-xs font-semibold text-[#fb5373]">Selección obligatoria</span>
+            <span class="text-xs font-bold text-[#fb5373] bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">Obligatorio</span>
           </label>
           <div class="relative">
-            <select id="modalStudentSelect" class="w-full p-3 pl-10 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#fd7f60] text-sm text-slate-800 font-medium cursor-pointer">
+            <select id="modalStudentSelect" class="w-full p-3.5 pl-11 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-[#fd7f60] text-base text-slate-800 font-medium cursor-pointer">
               <!-- Dynamically populated -->
             </select>
-            <i data-lucide="user-check" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400"></i>
+            <i data-lucide="user-check" class="w-5 h-5 absolute left-3.5 top-4 text-slate-400"></i>
           </div>
         </div>
 
         <!-- Docente responsable del seguimiento -->
         <div id="modalTeacherFieldContainer">
-          <label class="block font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+          <label class="block font-bold text-slate-700 mb-2 flex items-center justify-between text-base">
             <span>Docente / Profesional Responsable</span>
             <span class="text-xs text-slate-400 font-normal">A cargo del acompañamiento</span>
           </label>
           <div class="relative">
-            <input type="text" id="modalTeacherName" class="w-full p-3 pl-10 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#fd7f60] text-sm text-slate-800 font-medium" value="Laura Gómez" placeholder="Nombre del docente a cargo...">
-            <i data-lucide="graduation-cap" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400"></i>
+            <input type="text" id="modalTeacherName" class="w-full p-3.5 pl-11 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-[#fd7f60] text-base text-slate-800 font-medium" value="Laura Gómez" placeholder="Nombre del docente a cargo...">
+            <i data-lucide="graduation-cap" class="w-5 h-5 absolute left-3.5 top-4 text-slate-400"></i>
           </div>
         </div>
 
         <div>
-          <label class="block font-bold text-slate-700 mb-1.5">Tipo de Intervención Pedagógica</label>
-          <select id="modalInterventionType" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#fd7f60] text-sm text-slate-800 font-medium">
-            <option value="Llamada telefónica con el estudiante">Llamada telefónica con el estudiante</option>
-            <option value="Tutoría académica personalizada (Virtual / Presencial)">Tutoría académica personalizada (Virtual / Presencial)</option>
-            <option value="Reunión con acudiente / comité de apoyo">Reunión con acudiente / comité de apoyo</option>
-            <option value="Acuerdo de entrega de actividades pendientes">Acuerdo de entrega de actividades pendientes</option>
-            <option value="Remisión a apoyo psicosocial / bienestar Fundación A+">Remisión a apoyo psicosocial / bienestar Fundación A+</option>
+          <label class="block font-bold text-slate-700 mb-2 text-base">Tipo de Intervención Pedagógica</label>
+          <select id="modalInterventionType" class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-[#fd7f60] text-base text-slate-800 font-medium">
+            <option value="Llamada telefónica con el estudiante">📞 Llamada telefónica con el estudiante</option>
+            <option value="Tutoría académica personalizada (Virtual / Presencial)">💻 Tutoría académica personalizada (Virtual / Presencial)</option>
+            <option value="Reunión con acudiente / comité de apoyo">👥 Reunión con acudiente / comité de apoyo</option>
+            <option value="Acuerdo de entrega de actividades pendientes">📝 Acuerdo de entrega de actividades pendientes</option>
+            <option value="Remisión a apoyo psicosocial / bienestar Fundación A+">🤝 Remisión a apoyo psicosocial / bienestar Fundación A+</option>
           </select>
         </div>
 
         <div>
-          <label class="block font-bold text-slate-700 mb-1.5">Nuevo Estado de la Alerta</label>
-          <div class="grid grid-cols-3 gap-2.5">
-            <label class="flex items-center space-x-2 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-orange-50/50 transition">
+          <label class="block font-bold text-slate-700 mb-2 text-base">Nuevo Estado de la Alerta</label>
+          <div class="grid grid-cols-3 gap-3">
+            <label class="flex items-center space-x-2.5 p-3.5 border border-slate-200 rounded-2xl cursor-pointer hover:bg-orange-50/50 transition">
               <input type="radio" name="alertaEstado" value="En proceso" checked class="text-[#fd7f60] focus:ring-0">
-              <span class="font-bold text-slate-700 text-sm">En proceso</span>
+              <span class="font-bold text-slate-700 text-sm sm:text-base">En proceso</span>
             </label>
-            <label class="flex items-center space-x-2 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-emerald-50/50 transition">
+            <label class="flex items-center space-x-2.5 p-3.5 border border-slate-200 rounded-2xl cursor-pointer hover:bg-emerald-50/50 transition">
               <input type="radio" name="alertaEstado" value="Resuelta" class="text-emerald-600 focus:ring-0">
-              <span class="font-bold text-slate-700 text-sm">Resuelta</span>
+              <span class="font-bold text-slate-700 text-sm sm:text-base">Resuelta</span>
             </label>
-            <label class="flex items-center space-x-2 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition">
+            <label class="flex items-center space-x-2.5 p-3.5 border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition">
               <input type="radio" name="alertaEstado" value="Descartada" class="text-slate-600 focus:ring-0">
-              <span class="font-bold text-slate-700 text-sm">Descartada</span>
+              <span class="font-bold text-slate-700 text-sm sm:text-base">Descartada</span>
             </label>
           </div>
         </div>
 
         <div>
-          <label class="block font-bold text-slate-700 mb-1.5">Fecha del Próximo Seguimiento</label>
-          <input type="date" id="modalNextDate" value="2025-05-02" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 font-medium focus:ring-2 focus:ring-[#fd7f60]">
+          <label class="block font-bold text-slate-700 mb-2 text-base">Fecha del Próximo Seguimiento</label>
+          <input type="date" id="modalNextDate" value="2025-05-02" class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base text-slate-800 font-medium focus:ring-2 focus:ring-[#fd7f60]">
         </div>
 
         <div>
-          <label class="block font-bold text-slate-700 mb-1.5">Observaciones y Compromisos Pactados</label>
+          <label class="block font-bold text-slate-700 mb-2 text-base">Observaciones y Compromisos Pactados</label>
           <textarea id="modalObservations" rows="3" required placeholder="Detalle los compromisos pactados con el estudiante..." 
-                    class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-[#fd7f60]"></textarea>
+                    class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:ring-2 focus:ring-[#fd7f60]"></textarea>
         </div>
 
-        <div class="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
-          <button type="button" id="cancelModalBtn" class="px-5 py-2.5 border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50 text-sm transition cursor-pointer">
+        <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-100">
+          <button type="button" id="cancelModalBtn" class="px-6 py-3 border border-slate-200 rounded-2xl text-slate-600 font-bold hover:bg-slate-50 text-base transition cursor-pointer">
             Cancelar
           </button>
-          <button type="submit" id="saveActionBtn" class="px-5 py-2.5 bg-gradient-amas hover:opacity-95 text-white rounded-xl font-bold shadow-amas text-sm transition flex items-center space-x-2 cursor-pointer">
+          <button type="submit" id="saveActionBtn" class="px-6 py-3 bg-gradient-amas hover:opacity-95 text-white rounded-2xl font-bold shadow-amas text-base transition flex items-center space-x-2 cursor-pointer">
             <span>Guardar Intervención</span>
-            <i data-lucide="check" class="w-4 h-4"></i>
+            <i data-lucide="check" class="w-5 h-5"></i>
           </button>
         </div>
       </form>
@@ -654,36 +715,36 @@
   <!-- ======================================================== -->
   <!-- 4.1 MODAL: EDITAR / CREAR REGLA DE ALERTA (ADMIN)       -->
   <!-- ======================================================== -->
-  <div id="ruleModal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200 border border-slate-100 overflow-hidden relative">
-      <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-amas"></div>
+  <div id="ruleModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-xl w-full p-7 sm:p-8 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 border border-slate-100 overflow-hidden relative max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-amas"></div>
 
-      <div class="flex items-center justify-between border-b border-slate-100 pb-3.5 pt-1">
-        <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#fd7f60]">
-            <i data-lucide="sliders" class="w-5 h-5"></i>
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4 pt-1">
+        <div class="flex items-center space-x-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#fd7f60]">
+            <i data-lucide="sliders" class="w-6 h-6"></i>
           </div>
           <div>
-            <h4 class="font-bold text-slate-900 text-base font-['Rubik',sans-serif]" id="ruleModalTitle">Editar Regla de Alerta</h4>
-            <p class="text-xs text-slate-500 font-medium">Ajuste de parámetros y umbrales deterministas</p>
+            <h4 class="font-bold text-slate-900 text-lg sm:text-xl font-['Rubik',sans-serif]" id="ruleModalTitle">Editar Regla de Alerta</h4>
+            <p class="text-sm text-slate-500 font-medium">Ajuste de parámetros y umbrales deterministas</p>
           </div>
         </div>
-        <button id="closeRuleModalBtn" class="text-slate-400 hover:text-slate-600 transition p-1.5 rounded-lg cursor-pointer">
-          <i data-lucide="x" class="w-5 h-5"></i>
+        <button id="closeRuleModalBtn" class="text-slate-400 hover:text-slate-700 transition p-2 rounded-xl cursor-pointer">
+          <i data-lucide="x" class="w-6 h-6"></i>
         </button>
       </div>
 
-      <form id="ruleForm" class="space-y-4 text-sm">
+      <form id="ruleForm" class="space-y-4 text-base">
         <input type="hidden" id="ruleIdInput" value="">
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block font-bold text-slate-700 mb-1">Código de Regla</label>
-            <input type="text" id="ruleCodeInput" required placeholder="Ej. REG-REND-BAJO" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:ring-2 focus:ring-[#fd7f60]">
+            <label class="block font-bold text-slate-700 mb-1.5 text-sm sm:text-base">Código de Regla</label>
+            <input type="text" id="ruleCodeInput" required placeholder="Ej. REG-REND-BAJO" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-sm focus:ring-2 focus:ring-[#fd7f60]">
           </div>
           <div>
-            <label class="block font-bold text-slate-700 mb-1">Nivel de Severidad</label>
-            <select id="ruleSeverityInput" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#fd7f60]">
+            <label class="block font-bold text-slate-700 mb-1.5 text-sm sm:text-base">Nivel de Severidad</label>
+            <select id="ruleSeverityInput" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm sm:text-base font-semibold focus:ring-2 focus:ring-[#fd7f60]">
               <option value="Información">Información</option>
               <option value="Recordatorio">Recordatorio</option>
               <option value="Advertencia">Advertencia</option>
@@ -694,16 +755,16 @@
         </div>
 
         <div>
-          <label class="block font-bold text-slate-700 mb-1">Nombre de la Regla</label>
-          <input type="text" id="ruleNameInput" required placeholder="Ej. Alerta de Rendimiento Académico Deficiente" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#fd7f60]">
+          <label class="block font-bold text-slate-700 mb-1.5 text-sm sm:text-base">Nombre de la Regla</label>
+          <input type="text" id="ruleNameInput" required placeholder="Ej. Alerta de Rendimiento Académico Deficiente" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-base font-medium focus:ring-2 focus:ring-[#fd7f60]">
         </div>
 
-        <div class="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2.5">
-          <span class="block text-xs font-bold text-slate-800 uppercase tracking-wider">Criterio y Condición Numérica</span>
-          <div class="grid grid-cols-3 gap-2">
+        <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+          <span class="block text-xs font-extrabold text-slate-800 uppercase tracking-wider">Criterio y Condición Numérica</span>
+          <div class="grid grid-cols-3 gap-3">
             <div>
-              <label class="block text-[11px] font-semibold text-slate-500 mb-1">Métrica</label>
-              <select id="ruleMetricInput" class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-medium">
+              <label class="block text-xs font-semibold text-slate-500 mb-1">Métrica</label>
+              <select id="ruleMetricInput" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium">
                 <option value="promedio">Promedio GPA (0-5.0)</option>
                 <option value="asistencia">Asistencia %</option>
                 <option value="faltas_consecutivas">Faltas Consecutivas</option>
@@ -712,8 +773,8 @@
               </select>
             </div>
             <div>
-              <label class="block text-[11px] font-semibold text-slate-500 mb-1">Operador</label>
-              <select id="ruleOperatorInput" class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold">
+              <label class="block text-xs font-semibold text-slate-500 mb-1">Operador</label>
+              <select id="ruleOperatorInput" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-mono font-bold">
                 <option value="<">&lt; (Menor que)</option>
                 <option value="<=">&le; (Menor o igual)</option>
                 <option value=">">&gt; (Mayor que)</option>
@@ -722,30 +783,30 @@
               </select>
             </div>
             <div>
-              <label class="block text-[11px] font-semibold text-slate-500 mb-1">Valor Umbral</label>
-              <input type="number" step="0.1" id="ruleThresholdInput" required placeholder="Ej. 3.0" class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#fd7f60]">
+              <label class="block text-xs font-semibold text-slate-500 mb-1">Valor Umbral</label>
+              <input type="number" step="0.1" id="ruleThresholdInput" required placeholder="Ej. 3.0" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-bold focus:ring-2 focus:ring-[#fd7f60]">
             </div>
           </div>
         </div>
 
         <div>
-          <label class="block font-bold text-slate-700 mb-1">Descripción y Acción Preventiva</label>
-          <textarea id="ruleDescriptionInput" rows="2" placeholder="Acción pedagógica automática al dispararse la alerta..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#fd7f60]"></textarea>
+          <label class="block font-bold text-slate-700 mb-1.5 text-sm sm:text-base">Descripción y Acción Preventiva</label>
+          <textarea id="ruleDescriptionInput" rows="2" placeholder="Acción pedagógica automática al dispararse la alerta..." class="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm sm:text-base focus:ring-2 focus:ring-[#fd7f60]"></textarea>
         </div>
 
         <div>
-          <label class="flex items-center space-x-2.5 cursor-pointer">
-            <input type="checkbox" id="ruleIsActiveInput" checked class="w-4 h-4 text-[#fd7f60] rounded focus:ring-0">
-            <span class="text-xs font-bold text-slate-700">Regla Activa en el Motor de Alertas</span>
+          <label class="flex items-center space-x-3 cursor-pointer p-2 rounded-xl hover:bg-slate-50 transition">
+            <input type="checkbox" id="ruleIsActiveInput" checked class="w-5 h-5 text-[#fd7f60] rounded focus:ring-0">
+            <span class="text-sm sm:text-base font-bold text-slate-800">Regla Activa en el Motor de Alertas</span>
           </label>
         </div>
 
-        <div class="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
-          <button type="button" id="cancelRuleModalBtn" class="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50 text-xs transition cursor-pointer">
+        <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-100">
+          <button type="button" id="cancelRuleModalBtn" class="px-5 py-2.5 border border-slate-200 rounded-2xl text-slate-600 font-bold hover:bg-slate-50 text-sm sm:text-base transition cursor-pointer">
             Cancelar
           </button>
-          <button type="submit" id="saveRuleBtn" class="px-5 py-2 bg-gradient-amas hover:opacity-95 text-white rounded-xl font-bold shadow-amas text-xs transition flex items-center space-x-1.5 cursor-pointer">
-            <i data-lucide="save" class="w-3.5 h-3.5"></i>
+          <button type="submit" id="saveRuleBtn" class="px-6 py-2.5 bg-gradient-amas hover:opacity-95 text-white rounded-2xl font-bold shadow-amas text-sm sm:text-base transition flex items-center space-x-2 cursor-pointer">
+            <i data-lucide="save" class="w-4 h-4"></i>
             <span>Guardar Regla</span>
           </button>
         </div>
@@ -756,38 +817,38 @@
   <!-- ======================================================== -->
   <!-- 5. MODAL: CONFIRMACIÓN DE ENVÍO DE CORREO Y NOTIFICACIÓN -->
   <!-- ======================================================== -->
-  <div id="interventionSuccessModal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 border border-slate-100 overflow-hidden relative">
-      <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-amas"></div>
+  <div id="interventionSuccessModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-7 sm:p-8 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-200 border border-slate-100 overflow-hidden relative">
+      <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-amas"></div>
 
-      <div class="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 mx-auto flex items-center justify-center text-emerald-600 shadow-xs">
-        <i data-lucide="check-check" class="w-8 h-8"></i>
+      <div class="w-18 h-18 rounded-3xl bg-emerald-50 border border-emerald-200 mx-auto flex items-center justify-center text-emerald-600 shadow-sm">
+        <i data-lucide="check-check" class="w-9 h-9"></i>
       </div>
 
-      <div class="text-center space-y-1">
-        <h4 class="font-bold text-slate-900 text-xl font-['Rubik',sans-serif]">¡Intervención Registrada!</h4>
-        <p class="text-xs sm:text-sm text-slate-600">Acompañamiento guardado y sincronizado exitosamente.</p>
+      <div class="text-center space-y-1.5">
+        <h4 class="font-bold text-slate-900 text-2xl font-['Rubik',sans-serif]">¡Intervención Registrada!</h4>
+        <p class="text-sm sm:text-base text-slate-600">Acompañamiento guardado y sincronizado exitosamente.</p>
       </div>
 
-      <div class="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200/80 text-xs sm:text-sm">
-        <div class="flex items-start space-x-3">
-          <i data-lucide="bell" class="w-4 h-4 text-[#fb5373] mt-0.5 flex-shrink-0"></i>
+      <div class="space-y-3.5 bg-slate-50 p-5 rounded-2xl border border-slate-200 text-sm sm:text-base">
+        <div class="flex items-start space-x-3.5">
+          <i data-lucide="bell" class="w-5 h-5 text-[#fb5373] mt-0.5 flex-shrink-0"></i>
           <div>
             <strong class="text-slate-800 font-bold block">Campana de Notificaciones:</strong>
             <span class="text-slate-600">Alerta y acuerdo sincronizados en el panel del estudiante.</span>
           </div>
         </div>
 
-        <div class="flex items-start space-x-3">
-          <i data-lucide="mail-check" class="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0"></i>
+        <div class="flex items-start space-x-3.5">
+          <i data-lucide="mail-check" class="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0"></i>
           <div>
             <strong class="text-slate-800 font-bold block">Correo Institucional:</strong>
             <span class="text-slate-600" id="successModalEmailTarget">Copia despachada a: estudiante@fundacion.org</span>
           </div>
         </div>
 
-        <div class="flex items-start space-x-3">
-          <i data-lucide="calendar" class="w-4 h-4 text-[#fd7f60] mt-0.5 flex-shrink-0"></i>
+        <div class="flex items-start space-x-3.5">
+          <i data-lucide="calendar" class="w-5 h-5 text-[#fd7f60] mt-0.5 flex-shrink-0"></i>
           <div>
             <strong class="text-slate-800 font-bold block">Próximo Seguimiento:</strong>
             <span class="text-slate-600" id="successModalNextDate">2025-05-02</span>
@@ -795,7 +856,7 @@
         </div>
       </div>
 
-      <button id="closeSuccessModalBtn" class="w-full py-3 bg-gradient-amas hover:opacity-95 text-white rounded-xl font-bold text-sm shadow-amas transition cursor-pointer">
+      <button id="closeSuccessModalBtn" class="w-full py-3.5 bg-gradient-amas hover:opacity-95 text-white rounded-2xl font-bold text-base shadow-amas transition cursor-pointer">
         Aceptar y Continuar
       </button>
     </div>
@@ -804,58 +865,61 @@
   <!-- ======================================================== -->
   <!-- 6. MODAL: DETALLE DE NOTIFICACIÓN PARA EL ESTUDIANTE     -->
   <!-- ======================================================== -->
-  <div id="notificationDetailModal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200 border border-slate-100 overflow-hidden relative">
-      <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-amas"></div>
+  <div id="notificationDetailModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-7 sm:p-8 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 border border-slate-100 overflow-hidden relative">
+      <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-amas"></div>
 
-      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-        <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#fd7f60]">
-            <i data-lucide="bell" class="w-5 h-5"></i>
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div class="flex items-center space-x-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#fd7f60]">
+            <i data-lucide="bell" class="w-6 h-6"></i>
           </div>
           <div>
-            <h4 class="font-bold text-slate-900 text-base font-['Rubik',sans-serif]" id="notifDetailTitle">Detalle de Notificación</h4>
-            <p class="text-xs text-slate-500 font-medium" id="notifDetailAuthor">Docente Responsable</p>
+            <h4 class="font-bold text-slate-900 text-lg sm:text-xl font-['Rubik',sans-serif]" id="notifDetailTitle">Detalle de Notificación</h4>
+            <p class="text-sm text-slate-500 font-medium" id="notifDetailAuthor">Docente Responsable</p>
           </div>
         </div>
-        <button id="closeNotifDetailBtn" class="text-slate-400 hover:text-slate-600 transition p-1.5 rounded-lg cursor-pointer">
-          <i data-lucide="x" class="w-5 h-5"></i>
+        <button id="closeNotifDetailBtn" class="text-slate-400 hover:text-slate-700 transition p-2 rounded-xl cursor-pointer">
+          <i data-lucide="x" class="w-6 h-6"></i>
         </button>
       </div>
 
-      <div class="space-y-3 text-xs sm:text-sm">
-        <div class="p-3.5 bg-orange-50/70 border border-orange-200/80 rounded-2xl">
+      <div class="space-y-4 text-sm sm:text-base">
+        <div class="p-4 bg-orange-50/80 border border-orange-200 rounded-2xl">
           <span class="text-xs font-bold text-[#fb5373] uppercase tracking-wide block mb-1">Tipo de Intervención:</span>
-          <span class="font-bold text-slate-900 text-sm" id="notifDetailType">Tutoría académica</span>
+          <span class="font-bold text-slate-900 text-base" id="notifDetailType">Tutoría académica</span>
         </div>
 
         <div>
           <span class="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1">Acuerdos y Observaciones:</span>
-          <p class="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-slate-700 leading-relaxed font-normal" id="notifDetailMessage">
+          <p class="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-700 leading-relaxed font-normal" id="notifDetailMessage">
             Mensaje detallado...
           </p>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 pt-2">
-          <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-xl">
+        <div class="grid grid-cols-2 gap-4 pt-1">
+          <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
             <span class="text-xs text-slate-500 font-bold uppercase block">Próxima Fecha:</span>
-            <span class="text-sm font-bold text-[#fb5373]" id="notifDetailDate">2025-05-02</span>
+            <span class="text-base font-bold text-[#fb5373]" id="notifDetailDate">2025-05-02</span>
           </div>
-          <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-xl">
+          <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
             <span class="text-xs text-slate-500 font-bold uppercase block">Correo Notificado:</span>
-            <span class="text-xs font-bold text-emerald-600 flex items-center space-x-1 mt-0.5">
-              <i data-lucide="check" class="w-3.5 h-3.5"></i>
+            <span class="text-xs sm:text-sm font-bold text-emerald-700 flex items-center space-x-1 mt-1">
+              <i data-lucide="check" class="w-4 h-4 text-emerald-600"></i>
               <span>Entregado a tu buzón</span>
             </span>
           </div>
         </div>
       </div>
 
-      <button id="okNotifDetailBtn" class="w-full py-2.5 bg-gradient-amas hover:opacity-95 text-white rounded-xl font-bold text-sm shadow-amas transition cursor-pointer">
+      <button id="okNotifDetailBtn" class="w-full py-3.5 bg-gradient-amas hover:opacity-95 text-white rounded-2xl font-bold text-base shadow-amas transition cursor-pointer">
         Cerrar
       </button>
     </div>
   </div>
+
+  <!-- Contenedor Flotante para Notificaciones Toast Interactivas en Vivo -->
+  <div id="toastContainer"></div>
 
   <script type="module" src="./src/main.ts"></script>
 </body>
