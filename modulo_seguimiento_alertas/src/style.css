@@ -11,8 +11,8 @@
   }
 
   html {
-    /* Escala ergonómica enriquecida para máxima legibilidad y presencia visual */
-    font-size: 17.5px;
+    /* Escala ampliada para alta visibilidad y presencia en pantalla completa */
+    font-size: 20px;
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
   }
