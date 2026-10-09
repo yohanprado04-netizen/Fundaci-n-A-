@@ -14,6 +14,7 @@ class FundacionPulseApp {
   private studentsList: Student[] = [];
   private allRecentAlerts: any[] = [];
   private rulesList: any[] = [];
+  private activeTeachers: any[] = [];
   public activeTab: string = 'dashboard';
 
   private donutChartInstance: Chart | null = null;
@@ -265,6 +266,7 @@ class FundacionPulseApp {
   // ----------------------------------------------------
   private async loadAllData(): Promise<void> {
     const user = apiService.getCurrentUser();
+    await this.loadActiveTeachers();
     await this.renderKPIs();
     await this.fetchAndRenderRecentAlerts();
     this.initDonutChart();
@@ -1305,6 +1307,110 @@ class FundacionPulseApp {
   }
 
   // ----------------------------------------------------
+  // GESTIÓN Y VERIFICACIÓN EN VIVO DE DOCENTES ACTIVOS
+  // ----------------------------------------------------
+  private async loadActiveTeachers(): Promise<void> {
+    this.activeTeachers = await apiService.getTeachers();
+    this.populateTeacherControls();
+  }
+
+  private populateTeacherControls(): void {
+    const datalist = document.getElementById('teachersDatalist');
+    const chipsContainer = document.getElementById('teacherQuickChipsContainer');
+
+    if (datalist && this.activeTeachers.length > 0) {
+      datalist.innerHTML = this.activeTeachers.map(t => `<option value="${t.name}">${t.program || 'Docente A+'}</option>`).join('');
+    }
+
+    if (chipsContainer && this.activeTeachers.length > 0) {
+      chipsContainer.innerHTML = this.activeTeachers.map(t => `
+        <button type="button" class="teacher-chip px-3 py-1.5 bg-slate-100 hover:bg-orange-100/90 hover:text-[#fb5373] hover:border-orange-200 text-slate-700 text-xs sm:text-sm font-bold rounded-xl border border-slate-200 transition cursor-pointer shadow-xs flex items-center space-x-1.5" data-name="${t.name}">
+          <i data-lucide="user-check" class="w-3.5 h-3.5 text-[#fd7f60]"></i>
+          <span>${t.name}</span>
+        </button>
+      `).join('');
+
+      chipsContainer.querySelectorAll('.teacher-chip').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          const name = btn.getAttribute('data-name');
+          if (name) {
+            const input = document.getElementById('modalTeacherName') as HTMLInputElement;
+            if (input) {
+              input.value = name;
+              this.validateTeacherInput(name);
+            }
+          }
+        });
+      });
+      this.refreshIcons();
+    }
+  }
+
+  public validateTeacherInput(name: string): boolean {
+    const feedback = document.getElementById('teacherValidationFeedback');
+    const iconContainer = document.getElementById('teacherValidationIcon');
+    const input = document.getElementById('modalTeacherName') as HTMLInputElement;
+    const trimmed = (name || '').trim().toLowerCase();
+
+    if (!trimmed) {
+      if (feedback) {
+        feedback.className = 'text-xs sm:text-sm font-semibold p-3 rounded-2xl border bg-rose-50 border-rose-200 text-rose-800 flex items-center space-x-2';
+        feedback.innerHTML = `
+          <i data-lucide="alert-circle" class="w-4 h-4 text-[#fb5373] flex-shrink-0"></i>
+          <span>El campo es obligatorio. Ingresa el nombre de un docente activo de la Fundación A+.</span>
+        `;
+      }
+      if (iconContainer) {
+        iconContainer.innerHTML = `<i data-lucide="alert-circle" class="w-5 h-5 text-[#fb5373]"></i>`;
+      }
+      if (input) {
+        input.classList.remove('border-emerald-500', 'bg-emerald-50/20');
+        input.classList.add('border-rose-400', 'bg-rose-50/20');
+      }
+      this.refreshIcons();
+      return false;
+    }
+
+    const match = this.activeTeachers.find(t => t.name.toLowerCase() === trimmed);
+    if (match) {
+      if (feedback) {
+        feedback.className = 'text-xs sm:text-sm font-semibold p-3 rounded-2xl border bg-emerald-50 border-emerald-200 text-emerald-900 flex items-center space-x-2 shadow-xs';
+        feedback.innerHTML = `
+          <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 flex-shrink-0"></i>
+          <span>Docente activo verificado en plataforma: <strong>${match.name}</strong> (${match.program || 'Fundación A+'})</span>
+        `;
+      }
+      if (iconContainer) {
+        iconContainer.innerHTML = `<i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-600"></i>`;
+      }
+      if (input) {
+        input.classList.remove('border-rose-400', 'bg-rose-50/20');
+        input.classList.add('border-emerald-500', 'bg-emerald-50/20');
+      }
+      this.refreshIcons();
+      return true;
+    } else {
+      if (feedback) {
+        feedback.className = 'text-xs sm:text-sm font-semibold p-3 rounded-2xl border bg-rose-50 border-rose-200 text-rose-900 flex items-center space-x-2 shadow-xs';
+        feedback.innerHTML = `
+          <i data-lucide="alert-triangle" class="w-4 h-4 text-[#fb5373] flex-shrink-0"></i>
+          <span>❌ El nombre <strong>"${name.trim()}"</strong> NO corresponde a un docente activo registrado en la plataforma.</span>
+        `;
+      }
+      if (iconContainer) {
+        iconContainer.innerHTML = `<i data-lucide="alert-triangle" class="w-5 h-5 text-[#fb5373]"></i>`;
+      }
+      if (input) {
+        input.classList.remove('border-emerald-500', 'bg-emerald-50/20');
+        input.classList.add('border-rose-400', 'bg-rose-50/20');
+      }
+      this.refreshIcons();
+      return false;
+    }
+  }
+
+  // ----------------------------------------------------
   // DIÁLOGO DE REGISTRO DE INTERVENCIÓN (EXPUESTO)
   // ----------------------------------------------------
   public openActionDialog(targetStudentId?: string): void {
@@ -1348,9 +1454,17 @@ class FundacionPulseApp {
       sub.innerText = `Estudiante: ${student.name} (${student.program})`;
     }
 
+    // Inicializar y verificar el campo del docente responsable
     const teacherInput = document.getElementById('modalTeacherName') as HTMLInputElement;
-    if (teacherInput && currentUser) {
-      teacherInput.value = currentUser.name || 'Laura Gómez';
+    if (teacherInput) {
+      if (currentUser && currentUser.role === 'docente') {
+        teacherInput.value = currentUser.name;
+      } else {
+        // Si es administrador u otro rol, asignar un docente activo oficial (ej. Laura Gómez)
+        const defaultTeacher = this.activeTeachers[0]?.name || 'Laura Gómez';
+        teacherInput.value = defaultTeacher;
+      }
+      this.validateTeacherInput(teacherInput.value);
     }
 
     if (actionModal) actionModal.classList.remove('hidden');
@@ -1470,6 +1584,14 @@ class FundacionPulseApp {
     if (closeModalBtn) closeModalBtn.addEventListener('click', closeAction);
     if (cancelModalBtn) cancelModalBtn.addEventListener('click', closeAction);
 
+    // Validación en tiempo real del docente mientras el usuario escribe
+    const teacherInput = document.getElementById('modalTeacherName') as HTMLInputElement;
+    if (teacherInput) {
+      teacherInput.addEventListener('input', () => {
+        this.validateTeacherInput(teacherInput.value);
+      });
+    }
+
     if (actionForm) {
       actionForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -1479,12 +1601,25 @@ class FundacionPulseApp {
           return;
         }
 
+        const teacherNameInput = (document.getElementById('modalTeacherName') as HTMLInputElement)?.value || '';
+
+        // VERIFICACIÓN ESTRICTA EN EL FRONTEND ANTES DE ENVIAR
+        const isTeacherValid = this.validateTeacherInput(teacherNameInput);
+        if (!isTeacherValid) {
+          this.showToast(
+            'Docente No Verificado',
+            'El nombre ingresado no corresponde a un docente activo registrado en la plataforma Fundación A+.',
+            'error'
+          );
+          if (teacherInput) teacherInput.focus();
+          return;
+        }
+
         const selectedStudentId = (document.getElementById('modalStudentSelect') as HTMLSelectElement)?.value || this.currentStudentId;
         const student = this.studentsList.find(s => (s._id || s.id) === selectedStudentId) || this.studentsList[0];
         if (!student) return;
 
-        const teacherNameInput = (document.getElementById('modalTeacherName') as HTMLInputElement)?.value;
-        const effectiveTeacher = teacherNameInput || currentUser?.name || 'Laura Gómez';
+        const effectiveTeacher = teacherNameInput.trim();
 
         const intervention = (document.getElementById('modalInterventionType') as HTMLSelectElement).value;
         const nextDate = (document.getElementById('modalNextDate') as HTMLInputElement).value;

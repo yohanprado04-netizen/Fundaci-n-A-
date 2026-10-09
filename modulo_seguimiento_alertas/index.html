@@ -647,15 +647,47 @@
           </div>
         </div>
 
-        <!-- Docente responsable del seguimiento -->
-        <div id="modalTeacherFieldContainer">
-          <label class="block font-bold text-slate-700 mb-2 flex items-center justify-between text-base">
-            <span>Docente / Profesional Responsable</span>
-            <span class="text-xs text-slate-400 font-normal">A cargo del acompañamiento</span>
-          </label>
+        <!-- Docente responsable del seguimiento con verificación interactiva en vivo -->
+        <div id="modalTeacherFieldContainer" class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block font-bold text-slate-700 text-base flex items-center space-x-2" for="modalTeacherName">
+              <span>Docente / Profesional Responsable</span>
+            </label>
+            <span id="teacherRequiredBadge" class="text-xs font-bold text-[#fb5373] bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
+              Verificación Obligatoria
+            </span>
+          </div>
+
           <div class="relative">
-            <input type="text" id="modalTeacherName" class="w-full p-3.5 pl-11 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-[#fd7f60] text-base text-slate-800 font-medium" value="Laura Gómez" placeholder="Nombre del docente a cargo...">
+            <input type="text" id="modalTeacherName" list="teachersDatalist" 
+                   class="w-full p-3.5 pl-11 pr-12 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-[#fd7f60] text-base text-slate-800 font-medium transition shadow-xs" 
+                   value="Laura Gómez" placeholder="Escribe o selecciona un docente activo..." autocomplete="off">
             <i data-lucide="graduation-cap" class="w-5 h-5 absolute left-3.5 top-4 text-slate-400"></i>
+            <div id="teacherValidationIcon" class="absolute right-3.5 top-3.5 flex items-center justify-center">
+              <!-- Check o alerta interactiva -->
+            </div>
+          </div>
+
+          <!-- Datalist para autocompletado nativo -->
+          <datalist id="teachersDatalist">
+            <option value="Laura Gómez">Docente Titular de Programación</option>
+            <option value="Carlos Mendoza">Docente de Ciberseguridad y Redes</option>
+            <option value="Andrés Felipe Castro">Docente de Analítica de Datos e IA</option>
+            <option value="Diana Patricia Morales">Docente de Habilidades Socioemocionales y Empleabilidad</option>
+            <option value="Javier Restrepo">Tutor de Proyectos y Desarrollo Web</option>
+          </datalist>
+
+          <!-- Mensaje visual de verificación en tiempo real -->
+          <div id="teacherValidationFeedback" class="text-xs sm:text-sm font-semibold p-3 rounded-2xl border flex items-center space-x-2 transition-all">
+            <!-- Dinámico por JS -->
+          </div>
+
+          <!-- Chips interactivos de docentes activos para selección con 1 clic -->
+          <div class="pt-0.5">
+            <span class="text-xs text-slate-400 font-extrabold uppercase tracking-wider block mb-1.5">Docentes activos en plataforma (clic para seleccionar):</span>
+            <div class="flex flex-wrap items-center gap-1.5" id="teacherQuickChipsContainer">
+              <!-- Inyectado dinámicamente -->
+            </div>
           </div>
         </div>
 

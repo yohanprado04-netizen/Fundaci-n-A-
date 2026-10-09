@@ -170,6 +170,103 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 });
 
 // ----------------------------------------------------
+// 1.1 TEACHERS (DOCENTES ACTIVOS DE LA PLATAFORMA)
+// ----------------------------------------------------
+app.get('/api/teachers', authenticateToken, async (req, res) => {
+  try {
+    // Si no existen docentes en la base de datos, sembrar los docentes oficiales de la Fundación A+
+    const count = await User.countDocuments({ role: 'docente' });
+    if (count === 0) {
+      await User.create([
+        {
+          name: 'Laura Gómez',
+          email: 'laura@fundacion.org',
+          password: 'Password123!',
+          role: 'docente',
+          program: 'Docente Titular de Programación',
+          avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=faces'
+        },
+        {
+          name: 'Carlos Mendoza',
+          email: 'carlos.mendoza@fundacion.org',
+          password: 'Password123!',
+          role: 'docente',
+          program: 'Docente de Ciberseguridad y Redes',
+          avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=faces'
+        },
+        {
+          name: 'Andrés Felipe Castro',
+          email: 'andres.castro@fundacion.org',
+          password: 'Password123!',
+          role: 'docente',
+          program: 'Docente de Analítica de Datos e IA',
+          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces'
+        },
+        {
+          name: 'Diana Patricia Morales',
+          email: 'diana.morales@fundacion.org',
+          password: 'Password123!',
+          role: 'docente',
+          program: 'Docente de Habilidades Socioemocionales y Empleabilidad',
+          avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=100&h=100&fit=crop&crop=faces'
+        },
+        {
+          name: 'Javier Restrepo',
+          email: 'javier.restrepo@fundacion.org',
+          password: 'Password123!',
+          role: 'docente',
+          program: 'Tutor de Proyectos y Desarrollo Web',
+          avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop&crop=faces'
+        }
+      ]);
+    }
+
+    const teachers = await User.find({ role: 'docente' }).select('name email role program avatar').sort({ name: 1 });
+    res.json(teachers);
+  } catch (error) {
+    console.error('Error al obtener lista de docentes:', error);
+    res.status(500).json({ message: 'Error al consultar lista de docentes' });
+  }
+});
+
+app.get('/api/teachers/verify', authenticateToken, async (req, res) => {
+  try {
+    const { name } = req.query;
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({ isValid: false, message: 'Debe ingresar un nombre de docente' });
+    }
+
+    const trimmed = name.trim();
+    // Búsqueda insensible a mayúsculas/minúsculas
+    const teacher = await User.findOne({
+      name: { $regex: new RegExp(`^${trimmed}$`, 'i') },
+      role: 'docente'
+    }).select('name email role program avatar');
+
+    if (teacher) {
+      return res.json({
+        isValid: true,
+        teacher: {
+          id: teacher._id,
+          name: teacher.name,
+          email: teacher.email,
+          program: teacher.program,
+          avatar: teacher.avatar
+        },
+        message: `Docente activo verificado: ${teacher.name} (${teacher.program})`
+      });
+    }
+
+    return res.json({
+      isValid: false,
+      message: `El nombre '${trimmed}' no corresponde a un docente activo registrado en la plataforma Fundación A+.`
+    });
+  } catch (error) {
+    res.status(500).json({ isValid: false, message: 'Error al verificar docente' });
+  }
+});
+
+// ----------------------------------------------------
 // 2. KPIS & METRICS ROUTES (CON AISLAMIENTO POR ROL)
 // ----------------------------------------------------
 app.get('/api/kpi/summary', authenticateToken, async (req, res) => {
@@ -418,6 +515,25 @@ app.post('/api/actions/register', authenticateToken, async (req, res) => {
 
     const { studentId, studentName, teacherName, interventionType, newStatus, nextFollowupDate, observations } = req.body;
 
+    if (!teacherName || !teacherName.trim()) {
+      return res.status(400).json({ 
+        message: 'Debe ingresar el nombre del docente responsable de la intervención.' 
+      });
+    }
+
+    // VERIFICACIÓN ESTRICTA: El nombre ingresado debe pertenecer a un docente activo registrado
+    const trimmedTeacherName = teacherName.trim();
+    const activeTeacher = await User.findOne({
+      name: { $regex: new RegExp(`^${trimmedTeacherName}$`, 'i') },
+      role: 'docente'
+    });
+
+    if (!activeTeacher) {
+      return res.status(400).json({
+        message: `El docente '${trimmedTeacherName}' no corresponde a un docente activo registrado en la plataforma Fundación A+. Por favor selecciona o ingresa un docente válido.`
+      });
+    }
+
     // Buscar información del estudiante para vincular su correo oficial
     let student = null;
     if (studentId) {
@@ -429,7 +545,7 @@ app.post('/api/actions/register', authenticateToken, async (req, res) => {
 
     const targetEmail = (student?.email || req.body.studentEmail || 'juan.perez@fundacion.org').toLowerCase();
     const targetStudentName = student?.name || studentName || 'Estudiante';
-    const effectiveTeacher = teacherName || req.user.name || 'Docente A+';
+    const effectiveTeacher = activeTeacher.name;
 
     // 1. Crear el registro inmutable en FollowUp
     const followUp = await FollowUp.create({

@@ -314,6 +314,74 @@ class ApiService {
     if (!res.ok) throw new Error(data.message || 'Error al eliminar regla');
     return data;
   }
+
+  // ----------------------------------------------------
+  // GESTIÓN Y VERIFICACIÓN DE DOCENTES ACTIVOS
+  // ----------------------------------------------------
+  public async getTeachers(): Promise<ActiveTeacher[]> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/teachers`, {
+        headers: this.getAuthHeaders()
+      });
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+      return PREDEFINED_TEACHERS;
+    } catch {
+      return PREDEFINED_TEACHERS;
+    }
+  }
+
+  public async verifyTeacher(name: string): Promise<{ isValid: boolean; teacher?: ActiveTeacher; message: string }> {
+    const trimmed = (name || '').trim().toLowerCase();
+    if (!trimmed) {
+      return { isValid: false, message: 'Ingresa el nombre del docente responsable' };
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/teachers/verify?name=${encodeURIComponent(name.trim())}`, {
+        headers: this.getAuthHeaders()
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // Fallback local
+    }
+
+    const match = PREDEFINED_TEACHERS.find(t => t.name.toLowerCase() === trimmed);
+    if (match) {
+      return {
+        isValid: true,
+        teacher: match,
+        message: `Docente activo verificado: ${match.name} (${match.program})`
+      };
+    }
+
+    return {
+      isValid: false,
+      message: `El nombre '${name}' no corresponde a un docente activo registrado en la plataforma Fundación A+.`
+    };
+  }
 }
 
+export interface ActiveTeacher {
+  id?: string;
+  _id?: string;
+  name: string;
+  email: string;
+  role: string;
+  program: string;
+  avatar?: string;
+}
+
+export const PREDEFINED_TEACHERS: ActiveTeacher[] = [
+  { id: 'doc-001', name: 'Laura Gómez', email: 'laura@fundacion.org', role: 'docente', program: 'Docente Titular de Programación' },
+  { id: 'doc-002', name: 'Carlos Mendoza', email: 'carlos.mendoza@fundacion.org', role: 'docente', program: 'Docente de Ciberseguridad y Redes' },
+  { id: 'doc-003', name: 'Andrés Felipe Castro', email: 'andres.castro@fundacion.org', role: 'docente', program: 'Docente de Analítica de Datos e IA' },
+  { id: 'doc-004', name: 'Diana Patricia Morales', email: 'diana.morales@fundacion.org', role: 'docente', program: 'Docente de Habilidades Socioemocionales y Empleabilidad' },
+  { id: 'doc-005', name: 'Javier Restrepo', email: 'javier.restrepo@fundacion.org', role: 'docente', program: 'Tutor de Proyectos y Desarrollo Web' }
+];
+
 export const apiService = new ApiService();
+
