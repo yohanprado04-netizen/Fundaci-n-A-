@@ -58,6 +58,13 @@
       .replace(/'/g, '&#039;');
   }
 
+  function esRolSoloLecturaOSinPermiso() {
+    const u = (typeof currentAdminUser !== 'undefined' && currentAdminUser) ? currentAdminUser : ((typeof getSesionUsuario === 'function') ? getSesionUsuario() : null);
+    if (!u) return false;
+    const rol = (u.rol || '').toLowerCase();
+    return rol === 'aliado' || rol === 'donante' || rol === 'inversor' || rol === 'inversionista';
+  }
+
   /**
    * Notificación Toast flotante segura
    */
@@ -397,11 +404,12 @@
             <button type="button" onclick="window.verDetalleEstudianteSemaforo('${escapeHtml(s.id)}')" title="Ver Historial y Diagnóstico" class="p-1.5 rounded-lg border border-gray-200 text-slate-600 hover:text-morado hover:border-morado/40 hover:bg-morado/5 transition cursor-pointer">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
             </button>
+            ${!esRolSoloLecturaOSinPermiso() ? `
             <button type="button" onclick="window.abrirModalAccionSeguimiento('${escapeHtml(s.id)}')" title="Registrar Acción Tutorial" class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-morado text-white hover:bg-morado-dark transition shadow-xs cursor-pointer">
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
               <span>Acción</span>
               ${numAcciones > 0 ? `<span class="ml-0.5 px-1 py-0.2 rounded-full bg-white/20 text-[10px] font-bold">${numAcciones}</span>` : ''}
-            </button>
+            </button>` : ''}
           </div>
         </td>
       </tr>
@@ -591,9 +599,10 @@
                 <p class="text-[11px] text-slate-500">${escapeHtml(s.cohorte)} • <span class="text-rose-600 font-semibold">${escapeHtml(s.motivo)}</span></p>
               </div>
             </div>
+            ${!esRolSoloLecturaOSinPermiso() ? `
             <button type="button" onclick="window.abrirModalAccionSeguimiento('${escapeHtml(s.id)}')" class="text-[11px] font-bold text-rose-700 bg-white border border-rose-200 hover:bg-rose-100 px-2 py-1 rounded-md shrink-0 transition cursor-pointer">
               Atender
-            </button>
+            </button>` : ''}
           </div>
         `).join('')
       : `<p class="text-xs text-slate-400 py-4 text-center italic">No hay alertas críticas en esta selección.</p>`;
@@ -1128,6 +1137,10 @@
    * Abre el Modal para registrar acción tutorial
    */
   async function abrirModalAccionSeguimiento(estudianteId) {
+    if (esRolSoloLecturaOSinPermiso()) {
+      notificar('No tienes permisos para registrar acciones tutoriales', 'err');
+      return;
+    }
     asegurarModalesSemaforo();
     const modal = document.getElementById('modal-accion-seguimiento');
     if (!modal) return;
@@ -1381,6 +1394,10 @@
    */
   async function guardarAccionSeguimiento(e) {
     if (e && e.preventDefault) e.preventDefault();
+    if (esRolSoloLecturaOSinPermiso()) {
+      notificar('No tienes permisos para registrar o editar acciones', 'err');
+      return;
+    }
     const btn = document.getElementById('btn-guardar-seguimiento');
     if (btn) btn.disabled = true;
 

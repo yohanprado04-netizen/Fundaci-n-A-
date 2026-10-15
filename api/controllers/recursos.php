@@ -91,7 +91,7 @@ function manejarHistorialPrestamos(PDO $pdo): void {
     }
 
     if ($metodo === 'POST') {
-        exigirSesion(['Superadmin', 'Coordinador']);
+        exigirSesion(['Superadmin', 'Administrador', 'Coordinador']);
         $body = leerBodyJson();
         if (isset($body['data']) && is_array($body['data'])) {
             $items = $body['data'];
@@ -170,7 +170,10 @@ function manejarHistorialPrestamos(PDO $pdo): void {
     }
 
     if ($metodo === 'PUT') {
-        exigirSesion(['Superadmin', 'Coordinador']);
+        $sesion = exigirSesion();
+        $miRol = $sesion['rol'] ?? '';
+        $miNombre = $sesion['nombre'] ?? 'Administración';
+        $miEmail = $sesion['email'] ?? '';
         $body = leerBodyJson();
         $id = $body['id'] ?? $_GET['id'] ?? null;
         if (!$id) {
@@ -184,15 +187,26 @@ function manejarHistorialPrestamos(PDO $pdo): void {
             responderError('Préstamo no encontrado.', 404);
         }
 
-        $fechaDev = !empty($body['fecha_devolucion']) ? date('Y-m-d H:i:s', strtotime($body['fecha_devolucion'])) : date('Y-m-d H:i:s');
-        $estado = $body['estado'] ?? 'Devuelto';
-        $recibidoPor = $body['recibido_por'] ?? $miNombre;
+        // Si es estudiante o docente, verificar que sea el custodio del préstamo
+        $esAdmin = in_array($miRol, ['Superadmin', 'Administrador', 'Coordinador']);
+        if (!$esAdmin) {
+            $matchNom = strtolower(trim($prestamo['usuario_nombre'] ?? '')) === strtolower(trim($miNombre));
+            $matchEmail = !empty($miEmail) && strtolower(trim($prestamo['usuario_email'] ?? '')) === strtolower(trim($miEmail));
+            if (!$matchNom && !$matchEmail) {
+                responderError('No tienes permisos para modificar este préstamo.', 403);
+            }
+        }
+
+        $fechaDev = !empty($body['fecha_devolucion']) ? date('Y-m-d H:i:s', strtotime($body['fecha_devolucion'])) : $prestamo['fecha_devolucion'];
+        $estado = $esAdmin ? ($body['estado'] ?? $prestamo['estado']) : $prestamo['estado'];
+        $recibidoPor = $esAdmin ? ($body['recibido_por'] ?? $prestamo['recibido_por']) : $prestamo['recibido_por'];
         $obsDev = $body['observaciones_devolucion'] ?? $prestamo['observaciones_devolucion'];
+        $obsEntrega = $body['observaciones_entrega'] ?? $prestamo['observaciones_entrega'];
 
         $stmtUpd = $pdo->prepare("UPDATE historial_prestamos SET 
-            fecha_devolucion = ?, estado = ?, recibido_por = ?, observaciones_devolucion = ?
+            fecha_devolucion = ?, estado = ?, recibido_por = ?, observaciones_devolucion = ?, observaciones_entrega = ?
             WHERE id = ?");
-        $stmtUpd->execute([$fechaDev, $estado, $recibidoPor, $obsDev, $id]);
+        $stmtUpd->execute([$fechaDev, $estado, $recibidoPor, $obsDev, $obsEntrega, $id]);
 
         responderJson(['ok' => true, 'mensaje' => 'Préstamo actualizado exitosamente']);
         return;

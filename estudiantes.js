@@ -335,8 +335,8 @@
 
     if (panel === 'solicitar_equipo') {
       let triesSol = 0;
-      while (triesSol < 15 && !(typeof window !== 'undefined' && typeof window.renderSolicitarEquipoForm === 'function') && typeof renderSolicitarEquipoForm !== 'function') {
-        await new Promise(r => setTimeout(r, 60));
+      while (triesSol < 30 && !(typeof window !== 'undefined' && typeof window.renderSolicitarEquipoForm === 'function') && typeof renderSolicitarEquipoForm !== 'function') {
+        await new Promise(r => setTimeout(r, 80));
         triesSol++;
       }
       try {
@@ -348,9 +348,23 @@
           await renderSolicitarEquipoForm('mount-s-solicitar_equipo');
           initTablesEnPanel('panel-s-' + panel);
           return;
+        } else if (mount) {
+          mount.innerHTML = `<div class="bg-white rounded-2xl border border-amber-200 shadow-soft p-10 text-center flex flex-col items-center justify-center gap-3">
+            <p class="text-sm font-bold text-ink">No se pudo inicializar el módulo de equipos</p>
+            <button onclick="showPanelEstudiante('solicitar_equipo')" class="px-4 py-2 rounded-xl bg-morado text-white text-xs font-bold hover:bg-morado/90 transition cursor-pointer">Reintentar</button>
+          </div>`;
+          return;
         }
       } catch (e) {
         console.error('[showPanelEstudiante] Error al cargar solicitar_equipo:', e);
+        if (mount) {
+          mount.innerHTML = `<div class="bg-white rounded-2xl border border-coral/20 shadow-soft p-10 text-center flex flex-col items-center justify-center gap-3">
+            <p class="text-sm font-bold text-ink">Error al cargar solicitar equipo</p>
+            <p class="text-xs text-slate2">${escapeHtml(e.message || 'Error de conexión')}</p>
+            <button onclick="showPanelEstudiante('solicitar_equipo')" class="px-4 py-2 rounded-xl bg-morado text-white text-xs font-bold hover:bg-morado/90 transition cursor-pointer">Reintentar</button>
+          </div>`;
+          return;
+        }
       }
     }
 

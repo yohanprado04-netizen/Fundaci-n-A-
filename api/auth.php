@@ -27,6 +27,13 @@ require_once __DIR__ . '/middleware.php';
 $accion = $_GET['action'] ?? '';
 $uri = $_SERVER['REQUEST_URI'] ?? '';
 if ($accion === 'logout' || stripos($uri, '/logout') !== false) {
+    try {
+        $pdo = obtenerConexion();
+        $sesion = obtenerSesionOpcional();
+        if ($sesion) {
+            registrarEventoSeguridad($pdo, 'Autenticación: Cierre de Sesión', $sesion['email'] ?? 'Usuario', $sesion['rol'] ?? 'Usuario', 'Cierre voluntario de sesión desde IP ' . obtenerIpCliente(), null, 'INFO');
+        }
+    } catch (Exception $e) {}
     eliminarCookieAuth();
     responderJson(['ok' => true, 'mensaje' => 'Sesión cerrada correctamente.']);
 }
@@ -94,12 +101,14 @@ if ($superadmin) {
             'v' => (int)($superadmin['token_version'] ?? 1),
         ]);
         establecerCookieAuth($token);
-        registrarAuditoriaLogin($pdo, 'Exitoso', $email, 'Superadmin');
+        registrarAuditoriaLogin($pdo, 'Exitoso', $email, 'Superadmin', $ipCliente);
+        registrarEventoSeguridad($pdo, 'Autenticación: Login Exitoso', $email, 'Superadmin', "Inicio de sesión Superadmin exitoso desde IP $ipCliente", $ipCliente, 'INFO');
         responderJson(['token' => $token, 'usuario' => ['email' => $superadmin['email'], 'nombre' => 'Superadmin', 'rol' => 'Superadmin']]);
     }
     registrarIntentoFallido($pdo, $claveIp);
     registrarIntentoFallido($pdo, $claveEmail);
-    registrarAuditoriaLogin($pdo, 'Fallido', $email, 'Superadmin');
+    registrarAuditoriaLogin($pdo, 'Fallido', $email, 'Superadmin', $ipCliente);
+    registrarEventoSeguridad($pdo, 'Autenticación: Contraseña Errónea', $email, 'Superadmin', "Intento fallido de login Superadmin desde IP $ipCliente", $ipCliente, 'WARN');
     responderError('Credenciales incorrectas.', 401);
 }
 
@@ -117,28 +126,36 @@ $usuario = $stmt->fetch();
 if (!$usuario) {
     registrarIntentoFallido($pdo, $claveIp);
     registrarIntentoFallido($pdo, $claveEmail);
+    registrarAuditoriaLogin($pdo, 'Fallido', $email, 'Desconocido', $ipCliente);
+    registrarEventoSeguridad($pdo, 'Autenticación: Cuenta No Encontrada', $email, 'Desconocido', "Intento de inicio de sesión con correo no registrado desde IP $ipCliente", $ipCliente, 'WARN');
     responderError('Credenciales incorrectas.', 401);
 }
 
 if ($usuario['estado_registro'] === 'Pendiente') {
+    registrarAuditoriaLogin($pdo, 'Rechazado (Pendiente)', $email, $usuario['rol'] ?? 'Estudiante', $ipCliente);
+    registrarEventoSeguridad($pdo, 'Autenticación: Registro Pendiente', $email, $usuario['rol'] ?? 'Estudiante', "Intento de acceso a cuenta pendiente de aprobación desde IP $ipCliente", $ipCliente, 'WARN');
     responderError('Tu registro está pendiente de aprobación por el Superadmin. Te avisaremos cuando puedas ingresar.', 403);
 }
 
 $estado = strtolower(trim((string)($usuario['estado'] ?? '')));
 if ($estado !== 'activo') {
+    registrarAuditoriaLogin($pdo, 'Rechazado (Inactivo)', $email, $usuario['rol'] ?? 'Usuario', $ipCliente);
+    registrarEventoSeguridad($pdo, 'Autenticación: Cuenta Inactiva', $email, $usuario['rol'] ?? 'Usuario', "Intento de acceso a cuenta inactiva/bloqueada desde IP $ipCliente", $ipCliente, 'SECURITY_ALERT');
     responderError('Tu cuenta está inactiva. Contacta al Superadmin.', 403);
 }
 
 if (!passwordValidaConMigracion($pdo, $password, $usuario['password'], 'usuarios', 'id', $usuario['id'])) {
     registrarIntentoFallido($pdo, $claveIp);
     registrarIntentoFallido($pdo, $claveEmail);
-    registrarAuditoriaLogin($pdo, 'Fallido', $email, $usuario['rol']);
+    registrarAuditoriaLogin($pdo, 'Fallido', $email, $usuario['rol'] ?? 'Usuario', $ipCliente);
+    registrarEventoSeguridad($pdo, 'Autenticación: Contraseña Errónea', $email, $usuario['rol'] ?? 'Usuario', "Intento fallido con contraseña incorrecta para {$usuario['rol']} desde IP $ipCliente", $ipCliente, 'WARN');
     responderError('Credenciales incorrectas.', 401);
 }
 
 limpiarRateLimit($pdo, $claveIp);
 limpiarRateLimit($pdo, $claveEmail);
-registrarAuditoriaLogin($pdo, 'Exitoso', $email, $usuario['rol']);
+registrarAuditoriaLogin($pdo, 'Exitoso', $email, $usuario['rol'] ?? 'Usuario', $ipCliente);
+registrarEventoSeguridad($pdo, 'Autenticación: Login Exitoso', $email, $usuario['rol'] ?? 'Usuario', "Inicio de sesión exitoso ({$usuario['rol']}) desde IP $ipCliente", $ipCliente, 'INFO');
 
 $stmtPerfiles = $pdo->prepare('SELECT perfil_id FROM usuario_perfiles WHERE usuario_id = ?');
 $stmtPerfiles->execute([$usuario['id']]);
@@ -181,29 +198,3 @@ responderJson([
         'perfiles' => $perfilesUsuario,
     ],
 ]);
-
-/**
- * Registra el intento en auditoria_login con encadenamiento criptografico (HMAC-SHA256)
- * para detectar e impedir la alteracion o eliminacion fraudulenta de trazas de auditoria.
- */
-function registrarAuditoriaLogin(PDO $pdo, string $resultado, string $email, string $rol): void {
-    $id = bin2hex(random_bytes(16));
-    $fecha = date('Y-m-d');
-    $hora = date('H:i:s');
-
-    $ultimoHash = 'GENESIS';
-    try {
-        $stmtH = $pdo->query('SELECT hash_integridad FROM auditoria_login WHERE hash_integridad IS NOT NULL ORDER BY fecha DESC, hora DESC LIMIT 1');
-        $filaH = $stmtH ? $stmtH->fetch(PDO::FETCH_ASSOC) : null;
-        if ($filaH && !empty($filaH['hash_integridad'])) {
-            $ultimoHash = $filaH['hash_integridad'];
-        }
-    } catch (Exception $e) {}
-
-    $hashIntegridad = hash_hmac('sha256', "$id|$fecha|$hora|$resultado|$email|$rol|$ultimoHash", JWT_SECRET);
-
-    $stmt = $pdo->prepare(
-        'INSERT INTO auditoria_login (id, fecha, hora, resultado, email, rol, hash_integridad) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    );
-    $stmt->execute([$id, $fecha, $hora, $resultado, $email, $rol, $hashIntegridad]);
-}

@@ -31,40 +31,42 @@ $rutasPublicas = ['public_info', 'registro', 'qr_asistencia', 'formulario_public
 if (!in_array($entidad, $rutasPublicas, true)) {
     // Matriz de permisos RBAC para mutaciones (POST, PUT, DELETE)
     $rolesMutacionPorEntidad = [
-        'usuarios'                   => ['Superadmin'],
+        'usuarios'                   => ['Superadmin', 'Coordinador'],
         'superadmin_credentials'     => ['Superadmin'],
         'configuracion'              => ['Superadmin'],
         'perfiles'                   => ['Superadmin'],
-        'modulos'                    => ['Superadmin', 'Coordinador'],
-        'cursos'                     => ['Superadmin', 'Coordinador'],
-        'pensum'                     => ['Superadmin', 'Coordinador'],
-        'chat_voz_conocimiento'      => ['Superadmin', 'Coordinador'],
-        'memorandos'                 => ['Superadmin', 'Coordinador'],
+        'modulos'                    => ['Superadmin', 'Administrador', 'Coordinador'],
+        'cursos'                     => ['Superadmin', 'Administrador', 'Coordinador'],
+        'pensum'                     => ['Superadmin', 'Administrador', 'Coordinador'],
+        'chat_voz_conocimiento'      => ['Superadmin', 'Administrador', 'Coordinador'],
+        'memorandos'                 => ['Superadmin', 'Administrador', 'Coordinador'],
         'formularios'                => ['Superadmin', 'Administrador', 'Coordinador'],
-        'enviar_correo'              => ['Superadmin', 'Coordinador', 'Docente', 'Estudiante'],
-        'horarios'                   => ['Superadmin', 'Coordinador', 'Docente'],
-        'notas_modulos'              => ['Superadmin', 'Coordinador', 'Docente'],
-        'asistencia'                 => ['Superadmin', 'Coordinador', 'Docente'],
-        'sesiones_asistencia'        => ['Superadmin', 'Coordinador', 'Docente'],
-        'qr_tokens'                  => ['Superadmin', 'Coordinador', 'Docente'],
-        'informes_docente'           => ['Superadmin', 'Coordinador', 'Docente'],
-        'agenda_docente'             => ['Superadmin', 'Coordinador', 'Docente'],
-        'agenda_estudiante'          => ['Superadmin', 'Coordinador', 'Docente', 'Estudiante'],
-        'trainee_archivos'           => ['Superadmin', 'Coordinador', 'Docente', 'Estudiante'],
-        'pqr'                        => ['Superadmin', 'Coordinador', 'Docente', 'Estudiante'],
-        'comunicados'                => ['Superadmin', 'Coordinador', 'Docente'],
-        'notificaciones'             => ['Superadmin', 'Coordinador', 'Docente', 'Estudiante'],
-        'pagos_docentes'             => ['Superadmin', 'Coordinador'],
-        'pagos_estudiantes'          => ['Superadmin', 'Coordinador'],
-        'justificaciones_asistencia' => ['Superadmin', 'Coordinador', 'Docente', 'Estudiante'],
-        'proyectos_fundacion'        => ['Superadmin', 'Coordinador'],
-        'proyectos_estudiantes'      => ['Superadmin', 'Coordinador', 'Docente', 'Estudiante'],
-        'historial_prestamos'        => ['Superadmin', 'Coordinador'],
-        'seguimiento_alertas'        => ['Superadmin', 'Coordinador', 'Docente'],
+        'enviar_correo'              => ['Superadmin', 'Administrador', 'Coordinador', 'Docente', 'Estudiante'],
+        'horarios'                   => ['Superadmin', 'Administrador', 'Coordinador', 'Docente'],
+        'notas_modulos'              => ['Superadmin', 'Administrador', 'Coordinador', 'Docente'],
+        'asistencia'                 => ['Superadmin', 'Administrador', 'Coordinador', 'Docente'],
+        'sesiones_asistencia'        => ['Superadmin', 'Administrador', 'Coordinador', 'Docente'],
+        'qr_tokens'                  => ['Superadmin', 'Administrador', 'Coordinador', 'Docente'],
+        'informes_docente'           => ['Superadmin', 'Administrador', 'Coordinador', 'Docente'],
+        'agenda_docente'             => ['Superadmin', 'Administrador', 'Coordinador', 'Docente'],
+        'agenda_estudiante'          => ['Superadmin', 'Administrador', 'Coordinador', 'Docente', 'Estudiante'],
+        'trainee_archivos'           => ['Superadmin', 'Administrador', 'Coordinador', 'Docente', 'Estudiante'],
+        'pqr'                        => ['Superadmin', 'Administrador', 'Coordinador', 'Docente', 'Estudiante'],
+        'comunicados'                => ['Superadmin', 'Administrador', 'Coordinador', 'Docente'],
+        'notificaciones'             => ['Superadmin', 'Administrador', 'Coordinador', 'Docente', 'Estudiante'],
+        'pagos_docentes'             => ['Superadmin', 'Administrador', 'Coordinador'],
+        'pagos_estudiantes'          => ['Superadmin', 'Administrador', 'Coordinador'],
+        'justificaciones_asistencia' => ['Superadmin', 'Administrador', 'Coordinador', 'Docente', 'Estudiante'],
+        'proyectos_fundacion'        => ['Superadmin', 'Administrador', 'Coordinador'],
+        'proyectos_estudiantes'      => ['Superadmin', 'Administrador', 'Coordinador', 'Docente', 'Estudiante'],
+        'historial_prestamos'        => ['Superadmin', 'Administrador', 'Coordinador'],
+        'seguimiento_alertas'        => ['Superadmin', 'Administrador', 'Coordinador', 'Docente'],
     ];
 
     if ($metodoHttp !== 'GET') {
-        if (isset($rolesMutacionPorEntidad[$entidad])) {
+        if ($entidad === 'historial_prestamos' && $metodoHttp === 'PUT') {
+            $sesion = exigirSesion(['Superadmin', 'Administrador', 'Coordinador', 'Docente', 'Estudiante']);
+        } elseif (isset($rolesMutacionPorEntidad[$entidad])) {
             $sesion = exigirSesion($rolesMutacionPorEntidad[$entidad]);
         } else {
             $sesion = exigirSesion();
@@ -142,6 +144,7 @@ if (!isset($rutasEntidades[$entidad])) {
 // ── Conexión a Base de Datos y Despacho al Controlador ────────────────────────
 try {
     $pdo = obtenerConexion();
+    asegurarIndicesRendimiento($pdo);
 } catch (PDOException $e) {
     responderError('No se pudo conectar a la base de datos. Verifica que MySQL esté corriendo y los datos en config.php.', 500);
 }

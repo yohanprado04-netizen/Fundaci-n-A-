@@ -151,22 +151,23 @@
       const currentDocente = getDocente();
       const currentEstudiante = getEstudiante();
       if (currentEstudiante) {
-        return ['¿Cuáles son mis notas?', '¿Cómo va mi asistencia?', '¿Tengo memorandos sin leer?', '¿Cuál es mi cohorte?'];
+        return ['¿Cuáles son mis notificaciones?', '¿Cuáles son mis notas?', '¿Cómo va mi asistencia?', '¿Tengo memorandos sin leer?'];
       }
       if (currentDocente) {
-        return ['¿Qué cohortes tengo a cargo?', '¿Cómo va la asistencia de mis clases?', '¿Tengo PQR pendientes?', '¿Cuál es mi pensum?'];
+        return ['¿Cuáles son mis notificaciones?', '¿Qué cohortes tengo a cargo?', '¿Cómo va la asistencia de mis clases?', '¿Tengo PQR pendientes?'];
       }
       if (currentAdminRole === 'aliado') {
         const esDonante = currentAdminUser && currentAdminUser.rol === 'Donante';
         return esDonante
-          ? ['¿Cuáles son los proyectos con mayor retorno SROI?', '¿Qué iniciativas A+ están activas?', '¿Cómo van las cohortes del programa?', '¿Cuántos estudiantes están matriculados?']
-          : ['¿Qué iniciativas A+ están activas?', '¿Cómo van las cohortes?', '¿Cuáles son los proyectos estudiantiles?', '¿Cuál es el impacto social promedio?'];
+          ? ['¿Cuáles son mis notificaciones?', '¿Cuáles son los proyectos con mayor retorno SROI?', '¿Qué iniciativas A+ están activas?', '¿Cómo van las cohortes del programa?']
+          : ['¿Cuáles son mis notificaciones?', '¿Qué iniciativas A+ están activas?', '¿Cómo van las cohortes?', '¿Cuáles son los proyectos estudiantiles?'];
       }
       if (currentAdminRole === 'superadmin' || currentAdminRole === 'administracion') {
-        return ['¿Cuántos usuarios hay registrados?', '¿Cuántas cohortes están activas?', '¿Hay PQR sin resolver?'];
+        return ['¿Cuáles son mis notificaciones?', '¿Cuántos usuarios hay registrados?', '¿Cuántas cohortes están activas?', '¿Hay PQR sin resolver?'];
       }
-      return ['¿Cómo ser voluntario?', '¿Cuáles son sus redes sociales?', '¿Qué es el TrAIning de 100 a 1000+?', '¿Dónde están ubicados?'];
+      return ['¿Cuáles son los comunicados oficiales?', '¿Cómo ser voluntario?', '¿Cuáles son sus redes sociales?', '¿Qué es el TrAIning de 100 a 1000+?'];
     }
+
 
     function renderChips() {
       if (!chipsWrap) return;
@@ -326,6 +327,63 @@
       return new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
     }
 
+    function reproducirTextoVoz(texto, btnElement) {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        return;
+      }
+      // Si ya está reproduciendo, detener
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        if (btnElement && btnElement.classList.contains('is-speaking')) {
+          btnElement.classList.remove('is-speaking');
+          btnElement.title = 'Leer en voz alta';
+          return;
+        }
+      }
+
+      // Limpiar texto para una locución fluida (quitar markdown y urls)
+      let textoLimpio = String(texto || '')
+        .replace(/https?:\/\/[^\s]+/g, 'enlace')
+        .replace(/[*_#`~[\]]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!textoLimpio) return;
+
+      const utterance = new SpeechSynthesisUtterance(textoLimpio);
+      utterance.lang = 'es-CO';
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+
+      // Buscar voz preferida en español
+      try {
+        const voces = window.speechSynthesis.getVoices();
+        const vozEsp = voces.find(v => v.lang && (v.lang.startsWith('es-') || v.lang === 'es'));
+        if (vozEsp) utterance.voice = vozEsp;
+      } catch (_) {}
+
+      if (btnElement) {
+        btnElement.classList.add('is-speaking');
+        btnElement.title = 'Detener lectura de voz';
+      }
+
+      utterance.onend = () => {
+        if (btnElement) {
+          btnElement.classList.remove('is-speaking');
+          btnElement.title = 'Leer en voz alta';
+        }
+      };
+
+      utterance.onerror = () => {
+        if (btnElement) {
+          btnElement.classList.remove('is-speaking');
+          btnElement.title = 'Leer en voz alta';
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+
     function addMessage(role, content) {
       const row = document.createElement('div');
       row.className = 'aplus-msg-row ' + role;
@@ -341,16 +399,39 @@
         bubble.textContent = content;
       }
       row.appendChild(bubble);
+
+      let meta = null;
+      let speakBtn = null;
       if (role !== 'error') {
-        const time = document.createElement('div');
+        meta = document.createElement('div');
+        meta.className = 'aplus-msg-meta';
+
+        const time = document.createElement('span');
         time.className = 'aplus-msg-time';
         time.textContent = horaCorta();
-        row.appendChild(time);
+        meta.appendChild(time);
+
+        if (role === 'assistant' && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          speakBtn = document.createElement('button');
+          speakBtn.type = 'button';
+          speakBtn.className = 'aplus-msg-speak-btn';
+          speakBtn.title = 'Leer en voz alta';
+          speakBtn.setAttribute('aria-label', 'Leer en voz alta');
+          speakBtn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg><span>Voz</span>';
+          speakBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            reproducirTextoVoz(bubble.innerText || bubble.textContent, speakBtn);
+          });
+          meta.appendChild(speakBtn);
+        }
+
+        row.appendChild(meta);
       }
       body.appendChild(row);
       scrollToBottom();
-      return { row, bubble };
+      return { row, bubble, meta, speakBtn };
     }
+
 
     function showTyping() {
       const row = document.createElement('div');

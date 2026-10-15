@@ -202,14 +202,14 @@ def construir_bloque_conocimiento(hay_sesion: bool) -> str:
     if not entradas:
         return ""
 
-    visibilidades_permitidas = {"Pública"}
+    visibilidades_permitidas = {"pública", "publica"}
     if hay_sesion:
-        visibilidades_permitidas.add("Solo usuarios con sesión")
+        visibilidades_permitidas.update({"solo usuarios con sesión", "solo usuarios con sesion", "sesion", "sesión"})
 
     permitidas = [
         e for e in entradas
-        if e.get("estado", "Activa") == "Activa"
-        and e.get("visibilidad", "Pública") in visibilidades_permitidas
+        if str(e.get("estado", "Activa")).strip().lower() == "activa"
+        and (str(e.get("visibilidad", "Pública")).strip().lower() in visibilidades_permitidas or not e.get("visibilidad"))
     ]
     if not permitidas:
         return ""
@@ -368,10 +368,11 @@ def construir_system_prompt(hay_sesion: bool) -> str:
         base += (
             "\nESTA PERSONA YA INICIÓ SESIÓN en la plataforma interna de la Fundación A+:\n"
             "- Reconoce y adáptate a su rol según el CONTEXTO DEL USUARIO ACTUAL (Superadmin, Administrador/Coordinador, Docente, Estudiante, Aliado o Donante/Inversionista).\n"
-            "- Si es SUPERADMIN o ADMINISTRADOR: responde a sus consultas sobre estadísticas, total de usuarios registrados, cohortes y gestión de la plataforma usando los datos reales provistos en el CONTEXTO DEL USUARIO. Si preguntó por un estudiante o docente específico por nombre y el CONTEXTO EN VIVO trae un bloque \"PERFIL DE...\", úsalo para darle un resumen real (incluyendo si está vigente/activo o inactivo) y agrega tu propia valoración honesta basada en esos datos — nunca inventes cifras que no estén ahí.\n"
-            "- Si es ESTUDIANTE: el CONTEXTO DEL USUARIO puede traer, cuando aplique: notas por docente/materia, asistencia (%), PQR propias, próximos eventos de su agenda, memorandos/anuncios (leídos o no) y pensum de su módulo. Responde CUALQUIERA de esos temas usando esos datos reales — nunca inventes una materia, nota, evento o memorando que no esté ahí; si el contexto no trae el dato puntual que preguntó, dile con honestidad que todavía no tiene esa información registrada.\n"
-            "- Si es DOCENTE: el CONTEXTO DEL USUARIO puede traer, cuando aplique: sus materias/cohortes/horas, estudiantes a cargo, las notas que él mismo puso, asistencia de sus clases, semáforo de riesgo de SUS estudiantes, sus PQR propias, próximos eventos de su agenda, su pensum a cargo y cuántos informes ha generado. Responde CUALQUIERA de esos temas con esos datos reales — son siempre datos de SUS propias cohortes/estudiantes, nunca de otros docentes; si el contexto no trae el dato puntual que preguntó, dilo con honestidad.\n"
-            "- Si es ALIADO o DONANTE / INVERSIONISTA: responde con tono institucional de colaboración, transparencia y alianza estratégica. Usa los datos reales de impacto y estadísticas provistos en su contexto (número real de estudiantes, docentes, cohortes, proyectos de estudiantes de las cohortes que tiene permitidas, o iniciativas de la fundación si las hubiere). Si te preguntan por cifras de impacto o usuarios, entrega con honestidad las cifras reales del contexto y jamás inventes cifras no registradas.\n"
+            "- NOTIFICACIONES Y COMUNICADOS PARA CUALQUIER USUARIO: Cuando el usuario consulte por sus notificaciones, comunicados o novedades, o pida leerlas, responde con la lista completa y clara de las notificaciones públicas y privadas que figuren en su contexto. Menciona el título, la categoría o tipo (Pública o Privada), y un resumen del mensaje de forma clara, agradable y natural para que pueda ser escuchada por voz o leída.\n"
+            "- Si es SUPERADMIN o ADMINISTRADOR: responde a sus consultas sobre estadísticas, total de usuarios registrados, cohortes, notificaciones/comunicados institucionales y gestión de la plataforma usando los datos reales provistos en el CONTEXTO DEL USUARIO. Si preguntó por un estudiante o docente específico por nombre y el CONTEXTO EN VIVO trae un bloque \"PERFIL DE...\", úsalo para darle un resumen real (incluyendo si está vigente/activo o inactivo) y agrega tu propia valoración honesta basada en esos datos — nunca inventes cifras que no estén ahí.\n"
+            "- Si es ESTUDIANTE: el CONTEXTO DEL USUARIO puede traer, cuando aplique: notas por docente/materia, asistencia (%), notificaciones/comunicados (públicos de la fundación y privados para él/su cohorte), PQR propias, próximos eventos de su agenda, memorandos/anuncios (leídos o no) y pensum de su módulo. Responde CUALQUIERA de esos temas usando esos datos reales — nunca inventes una materia, nota, evento o memorando que no esté ahí; si el contexto no trae el dato puntual que preguntó, dile con honestidad que todavía no tiene esa información registrada.\n"
+            "- Si es DOCENTE: el CONTEXTO DEL USUARIO puede traer, cuando aplique: sus materias/cohortes/horas, estudiantes a cargo, notificaciones/comunicados (públicos y privados para su perfil), las notas que él mismo puso, asistencia de sus clases, semáforo de riesgo de SUS estudiantes, sus PQR propias, próximos eventos de su agenda, su pensum a cargo y cuántos informes ha generado. Responde CUALQUIERA de esos temas con esos datos reales — son siempre datos de SUS propias cohortes/estudiantes, nunca de otros docentes; si el contexto no trae el dato puntual que preguntó, dilo con honestidad.\n"
+            "- Si es ALIADO o DONANTE / INVERSIONISTA: responde con tono institucional de colaboración, transparencia y alianza estratégica. Usa los datos reales de impacto, notificaciones y estadísticas provistos en su contexto (número real de estudiantes, docentes, cohortes, proyectos de estudiantes de las cohortes que tiene permitidas, o iniciativas de la fundación si las hubiere). Si te preguntan por cifras de impacto o usuarios, entrega con honestidad las cifras reales del contexto y jamás inventes cifras no registradas.\n"
         )
 
     base += construir_bloque_conocimiento(hay_sesion)
@@ -936,9 +937,11 @@ def health():
             knowledge_entries = len(db.obtener_base_conocimiento())
             base_datos_conectada = True
         except Exception as e:
-            error_conexion = str(e)
+            # Registrar el detalle internamente en el servidor sin exponerlo a clientes externos (CWE-209)
+            print(f"[HEALTHCHECK_DB_ERROR] {e}")
+            base_datos_conectada = False
 
-    resultado = {
+    return {
         "status": "ok",
         "openrouter_configurado": bool(OPENROUTER_API_KEY),
         "groq_configurado": bool(GROQ_API_KEY),
@@ -952,6 +955,3 @@ def health():
         "base_datos_conectada": base_datos_conectada,
         "knowledge_entries": knowledge_entries,
     }
-    if error_conexion:
-        resultado["base_datos_error"] = error_conexion
-    return resultado

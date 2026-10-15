@@ -343,6 +343,92 @@ def contexto_postulacion(cur) -> str:
     return base
 
 
+def _obtener_notificaciones_usuario(cur, email: str = "", nombre: str = "", rol: str = "", cohorte: Optional[str] = None) -> list:
+    """Obtiene las notificaciones y comunicados (públicos y privados) relevantes para un usuario según su rol, email, cohorte o perfil.
+    Para visitantes o usuarios sin sesión, obtiene solo los comunicados públicos institucionales."""
+    try:
+        cur.execute("SELECT id, tipo, destinatarios, titulo, mensaje, categoria, prioridad, fecha FROM comunicados ORDER BY fecha DESC")
+        todos = cur.fetchall()
+    except Exception:
+        return []
+
+    email_norm = (email or "").strip().lower()
+    nombre_norm = (nombre or "").strip().lower()
+    rol_norm = (rol or "").strip().lower()
+    cohorte_norm = (cohorte or "").strip().lower()
+
+    filtrados = []
+    for c in todos:
+        tipo = str(c.get("tipo", "Publica")).strip().lower()
+        es_publica = "publi" in tipo
+
+        if not rol_norm or not email_norm:
+            # Visitante o sin rol verificado: solo públicas
+            if es_publica:
+                filtrados.append(c)
+            continue
+
+        if es_publica:
+            filtrados.append(c)
+            continue
+
+        # Comunicación privada: verificar destinatarios
+        dest_raw = c.get("destinatarios")
+        dest_lista = []
+        if isinstance(dest_raw, list):
+            dest_lista = dest_raw
+        elif isinstance(dest_raw, str):
+            try:
+                parsed = _json.loads(dest_raw)
+                dest_lista = parsed if isinstance(parsed, list) else [dest_raw]
+            except Exception:
+                dest_lista = [dest_raw]
+
+        dest_norm = [str(d).strip().lower() for d in dest_lista if d]
+        aplica = False
+
+        if "todos" in dest_norm:
+            aplica = True
+        elif rol_norm == "superadmin":
+            aplica = True
+        elif rol_norm == "estudiante":
+            if "todos los estudiantes" in dest_norm:
+                aplica = True
+            elif email_norm and any(email_norm in d for d in dest_norm):
+                aplica = True
+            elif nombre_norm and any(nombre_norm in d or d in nombre_norm for d in dest_norm):
+                aplica = True
+            elif cohorte_norm and any(cohorte_norm in d for d in dest_norm):
+                aplica = True
+        elif rol_norm == "docente":
+            if "todos los docentes" in dest_norm or "docentes" in dest_norm:
+                aplica = True
+            elif email_norm and any(email_norm in d for d in dest_norm):
+                aplica = True
+            elif nombre_norm and any(nombre_norm in d or d in nombre_norm for d in dest_norm):
+                aplica = True
+            elif cohorte_norm and any(cohorte_norm in d for d in dest_norm):
+                aplica = True
+        elif rol_norm in ("coordinador", "administrador"):
+            if "administracion" in dest_norm or "administración" in dest_norm or "coordinación" in dest_norm or "coordinacion" in dest_norm:
+                aplica = True
+            elif email_norm and any(email_norm in d for d in dest_norm):
+                aplica = True
+            elif nombre_norm and any(nombre_norm in d for d in dest_norm):
+                aplica = True
+        elif rol_norm in ("aliado", "donante"):
+            if "aliados" in dest_norm or "donantes" in dest_norm:
+                aplica = True
+            elif email_norm and any(email_norm in d for d in dest_norm):
+                aplica = True
+
+        if aplica:
+            filtrados.append(c)
+
+    return filtrados
+
+
+
 # CÁLCULO DE NOTAS — replica calcularNotaFinal() de app.js: si algún
 # criterio no tiene valor cargado para ese estudiante, la nota se
 # considera "pendiente" (no se cuenta como 0, se EXCLUYE del promedio).
@@ -544,10 +630,18 @@ def contexto_publico_persona_mencionada(texto_ultimo_mensaje: str = "", historia
     IA le responda con un mensaje cálido — nunca datos privados."""
     with get_connection() as conn, conn.cursor() as cur:
         partes = [contexto_postulacion(cur)]
+        # Comunicados públicos institucionales disponibles para cualquier visitante
+        notifs_pub = _obtener_notificaciones_usuario(cur)
+        if notifs_pub:
+            partes.append(f"COMUNICADOS PÚBLICOS INSTITUCIONALES DISPONIBLES ({len(notifs_pub)} en total):")
+            for np in notifs_pub[:6]:
+                partes.append(f"- [Pública] {np.get('titulo')}: {np.get('mensaje')} (Categoría: {np.get('categoria', 'Institucional')}, Fecha: {np.get('fecha')})")
+
         persona = detectar_persona_mencionada(cur, texto_ultimo_mensaje, historial=historial)
         if persona:
             partes.append(_bloque_perfil_persona_publico(persona))
         return "\n".join(p for p in partes if p)
+
 
 
 # CONTEXTO POR ROL — cada función asume que el email/rol YA fueron
@@ -631,6 +725,14 @@ def contexto_estudiante(email: str, nombre: str, cohorte: Optional[str] = None) 
             partes.append(f"Tiene {len(memos)} memorando(s)/anuncio(s) dirigidos a él, {len(no_leidos)} sin leer." + (
                 " Sin leer: " + "; ".join(f"\"{m['titulo']}\"" for m in no_leidos[:3]) + "." if no_leidos else ""
             ))
+
+        # Comunicados y notificaciones institucionales (públicos y privados para el estudiante)
+        notifs_est = _obtener_notificaciones_usuario(cur, email=email, nombre=nombre, rol="Estudiante", cohorte=cohorte)
+        if notifs_est:
+            partes.append(f"NOTIFICACIONES Y COMUNICADOS DISPONIBLES ({len(notifs_est)} en total, tanto privados dirigidos a él o su cohorte como públicos de la fundación):")
+            for ne in notifs_est[:8]:
+                partes.append(f"- [{ne.get('tipo', 'Publica')}] {ne.get('titulo')}: {ne.get('mensaje')} (Categoría: {ne.get('categoria', 'General')}, Fecha: {ne.get('fecha')})")
+
 
         if cohorte:
             cur.execute("SELECT modulo FROM modulos WHERE nombre = %s", (cohorte,))
@@ -776,6 +878,14 @@ def contexto_docente(email: str, nombre: str, texto_ultimo_mensaje: str = "", hi
             no_leidos = sum(1 for m in memos if not m["leido"])
             partes.append(f"Tiene {len(memos)} memorando(s) reciente(s), {no_leidos} sin leer.")
 
+        # Comunicados y notificaciones institucionales (públicos y privados para el docente)
+        notifs_doc = _obtener_notificaciones_usuario(cur, email=email, nombre=nombre, rol="Docente")
+        if notifs_doc:
+            partes.append(f"NOTIFICACIONES Y COMUNICADOS DISPONIBLES ({len(notifs_doc)} en total, públicos y privados para su perfil):")
+            for nd in notifs_doc[:8]:
+                partes.append(f"- [{nd.get('tipo', 'Publica')}] {nd.get('titulo')}: {nd.get('mensaje')} (Categoría: {nd.get('categoria', 'General')}, Fecha: {nd.get('fecha')})")
+
+
         if texto_ultimo_mensaje or historial:
             estudiante_mencionado = detectar_persona_mencionada(cur, texto_ultimo_mensaje, roles=("Estudiante",), historial=historial)
             if estudiante_mencionado:
@@ -834,6 +944,7 @@ _PANEL_A_ETIQUETA = {
     "admin.horario": "HORARIO (franjas de clase por cohorte)",
     "admin.pqr": "PQR (peticiones, quejas y reclamos)",
     "admin.memorandos": "MEMORANDOS/ANUNCIOS",
+    "admin.notificaciones": "CENTRO DE NOTIFICACIONES Y COMUNICADOS",
     "admin.semaforo": "SEMÁFORO DE RIESGO",
     "admin.encuestas": "ENCUESTAS",
     "admin.cursos": "CURSOS",
@@ -1233,6 +1344,18 @@ def _bloque_modulo(cur, codigo: str, cohorte_mencionada: Optional[str] = None) -
                 f'"{m["titulo"]}" para {m["destinatario"]} ({m["estado"]}, {m["fecha"]})' for m in recientes
             ) + "."
         return resumen
+    if codigo == "admin.notificaciones":
+        notifs = _obtener_notificaciones_usuario(cur, rol="Superadmin")
+        total = len(notifs)
+        pub = sum(1 for n in notifs if "publi" in str(n.get("tipo", "")).lower())
+        priv = total - pub
+        resumen = f"{etiqueta}: {total} comunicado(s)/notificación(es) registrados ({pub} públicos y {priv} privados)."
+        if total:
+            resumen += " Más recientes: " + "; ".join(
+                f'[{n.get("tipo", "Publica")}] "{n.get("titulo")}" ({n.get("categoria", "General")}, {n.get("fecha")})' for n in notifs[:8]
+            ) + "."
+        return resumen
+
     if codigo == "admin.semaforo":
         semaforo = calcular_semaforo(cur)
         en_riesgo = [s for s in semaforo if s["riesgo"] == "Rojo"]
@@ -1488,6 +1611,16 @@ def contexto_aliado_donante(email: str, nombre: str, rol: str, cohortes_permitid
     else:
         resumen_proy_fund = "\nActualmente la cartera de iniciativas de la Fundación A+ se encuentra en consolidación y no hay iniciativas de prueba cargadas."
 
+    # Comunicados y notificaciones institucionales relevantes
+    notifs_aliado = _obtener_notificaciones_usuario(cur, email=email, nombre=nombre, rol=rol)
+    resumen_notifs = ""
+    if notifs_aliado:
+        resumen_notifs = "\nNotificaciones y comunicados institucionales:\n" + "\n".join(
+            f"- [{n.get('tipo', 'Publica')}] {n.get('titulo')}: {n.get('mensaje')} ({n.get('fecha')})"
+            for n in notifs_aliado[:6]
+        )
+
+
     return (
         f"El usuario actual ha iniciado sesión como {rol.upper()} en la plataforma de la Fundación A+ "
         f"(Nombre: {nombre}, Correo: {email}).\n"
@@ -1497,6 +1630,7 @@ def contexto_aliado_donante(email: str, nombre: str, rol: str, cohortes_permitid
         f"- Cohortes registradas en el programa TrAIning: {total_cohortes} ({', '.join(todas_cohortes) if todas_cohortes else 'Ninguna'}).\n"
         f"{resumen_proy_est}\n"
         f"{resumen_proy_fund}\n"
+        f"{resumen_notifs}\n"
         "INSTRUCCIONES CRÍTICAS PARA ESTE ROL:\n"
         "1. El único programa formativo tecnológico activo es el 'TrAIning de 100 a 1000+'. NUNCA inventes programas como 'Cimentación Académica', 'Desarrollo Territorial Sostenible' ni 'Desarrollo Territorial Endógeno'.\n"
         "2. NUNCA digas que hay más de 1000 usuarios en la plataforma. La cifra real de usuarios registrados es la indicada arriba.\n"

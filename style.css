@@ -387,13 +387,32 @@ button, a, input, select, textarea, [role="button"], label {
     --role-badge-text: #0284c7;
   }
 
+  /* Restricción absoluta para roles Aliado y Donante: solo lectura, sin botones de acción ni mutación */
   body.role-aliado .btn-crear-accion,
   body.role-aliado [data-action="create"],
-  body.role-aliado [data-action="delete"] {
+  body.role-aliado [data-action="delete"],
+  body.role-aliado [data-action="edit"],
+  body.role-aliado .btn-accion-mutacion,
+  body.role-aliado button[onclick*="crear"],
+  body.role-aliado button[onclick*="Crear"],
+  body.role-aliado button[onclick*="guardar"],
+  body.role-aliado button[onclick*="Guardar"],
+  body.role-aliado button[onclick*="eliminar"],
+  body.role-aliado button[onclick*="Eliminar"],
+  body.role-aliado button[onclick*="editar"],
+  body.role-aliado button[onclick*="Editar"],
+  body.role-aliado button[onclick*="accionCheckout"],
+  body.role-aliado button[onclick*="accionCheckin"],
+  body.role-aliado button[onclick*="recibirEquipoHistorial"],
+  body.role-aliado button[onclick*="responderSolicitud"],
+  body.role-aliado button[onclick*="abrirModalAsignarEquipo"],
+  body.role-aliado button[onclick*="abrirModalNuevoRecurso"],
+  body.role-aliado button[onclick*="abrirModalCrear"],
+  body.role-aliado button[onclick*="abrirModalEditar"] {
     display: none !important;
   }
 
-  /* Restricción absoluta para el rol Aliado en la barra lateral */
+  /* Restricción de navegación en la barra lateral para Aliados y Donantes */
   body.role-aliado .sidebar-role-admin .panel-tab {
     display: none !important;
   }
@@ -403,12 +422,11 @@ button, a, input, select, textarea, [role="button"], label {
   body.role-aliado .sidebar-role-admin .panel-tab[data-panel="semaforo"],
   body.role-aliado .sidebar-role-admin .panel-tab[data-panel="calificaciones"],
   body.role-aliado .sidebar-role-admin .panel-tab[data-panel="proyectosFundacion"],
-  body.role-aliado .sidebar-role-admin .panel-tab[data-panel="proyectosEstudiantes"],
-  body.role-aliado .sidebar-role-admin .panel-tab[data-panel="asistenteChat"] {
+  body.role-aliado .sidebar-role-admin .panel-tab[data-panel="proyectosEstudiantes"] {
     display: flex !important;
   }
 
-  /* Ocultar secciones no autorizadas para Aliados */
+  /* Ocultar secciones no autorizadas para Aliados y Donantes */
   body.role-aliado [data-section="superadmin"],
   body.role-aliado [data-super-only-group="true"],
   body.role-aliado [data-admin-hide-group="true"],
@@ -416,7 +434,15 @@ button, a, input, select, textarea, [role="button"], label {
   body.role-aliado [data-section="pqr"],
   body.role-aliado [data-section="formularios"],
   body.role-aliado [data-section="reportes"],
-  body.role-aliado [data-section="sistema"] {
+  body.role-aliado [data-section="sistema"],
+  body.role-aliado [data-section="recursos"],
+  body.role-aliado [data-panel="historial_prestamos"],
+  body.role-aliado button[data-panel="historial_prestamos"],
+  body.role-aliado .sidebar-role-admin [data-panel="historial_prestamos"],
+  body.role-donante [data-section="recursos"],
+  body.role-donante [data-panel="historial_prestamos"],
+  body.role-donante button[data-panel="historial_prestamos"],
+  body.role-donante .sidebar-role-admin [data-panel="historial_prestamos"] {
     display: none !important;
   }
 
@@ -1246,18 +1272,18 @@ button, a, input, select, textarea, [role="button"], label {
 /* Botón "Limpiar conversación" en el header */
 .aplus-chat-clear {
   flex-shrink: 0;
-  width: 30px; height: 30px;
+  width: 32px; height: 32px;
   border-radius: 9px;
-  border: none;
-  background: rgba(255,255,255,0.1);
-  color: rgba(255,255,255,0.75);
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.12);
+  color: #ffffff;
   display: grid; place-items: center;
   cursor: pointer;
-  transition: background .15s ease, color .15s ease;
+  transition: background .15s ease, color .15s ease, transform .15s ease;
   position: relative; z-index: 1;
 }
-.aplus-chat-clear:hover { background: rgba(255,255,255,0.18); color: #fff; }
-.aplus-chat-clear svg { width: 15px; height: 15px; }
+.aplus-chat-clear:hover { background: rgba(255,255,255,0.25); color: #fff; transform: scale(1.05); }
+.aplus-chat-clear svg { width: 16px; height: 16px; stroke: #ffffff !important; stroke-width: 2.2; display: block; }
 
 /* Botón "Cerrar chat" en el header */
 .aplus-chat-close {
@@ -1374,13 +1400,52 @@ button, a, input, select, textarea, [role="button"], label {
 }
 @keyframes aplus-caret-blink { 50% { opacity: 0; } }
 
-.aplus-msg-time {
-  font-size: 0.62rem;
-  color: var(--a-gray);
+.aplus-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   margin-top: 0.2rem;
   padding: 0 0.2rem;
 }
+.aplus-msg-time {
+  font-size: 0.62rem;
+  color: var(--a-gray);
+}
 .aplus-msg-row.user .aplus-msg-time { text-align: right; }
+.aplus-msg-row.user .aplus-msg-meta { justify-content: flex-end; }
+
+.aplus-msg-speak-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  padding: 2px 5px;
+  border-radius: 6px;
+  color: var(--a-gray);
+  cursor: pointer;
+  font-size: 0.65rem;
+  line-height: 1;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.aplus-msg-speak-btn:hover {
+  color: var(--a-purple);
+  background: rgba(139, 92, 246, 0.08);
+}
+.aplus-msg-speak-btn.is-speaking {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+  animation: aplus-pulse 1.2s infinite;
+}
+.aplus-msg-speak-btn svg {
+  width: 12px;
+  height: 12px;
+}
+@keyframes aplus-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
 
 .aplus-typing { display: flex; align-items: center; gap: 5px; padding: 0.6rem 0.9rem; }
 .aplus-typing .node {

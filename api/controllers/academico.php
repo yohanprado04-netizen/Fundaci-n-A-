@@ -25,8 +25,28 @@ function manejarModulos(PDO $pdo): void {
         }, $filas));
         return;
     }
-    if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador']);
+    if ($metodo === 'DELETE') {
+        $sesion = exigirSesion(['Superadmin', 'Coordinador']);
+        $rawId = trim((string)($_GET['id'] ?? (leerBodyJson()['id'] ?? '')));
+        $id = validarIdentificador($rawId);
+        if (!$id) {
+            responderError('Falta el ID de la cohorte/módulo a eliminar.', 400);
+        }
+        $stmtDel = $pdo->prepare("DELETE FROM modulos WHERE id = ?");
+        $stmtDel->execute([$id]);
+        registrarEventoSeguridad($pdo, 'Académico: Eliminación de Módulo', $sesion['email'] ?? 'Coordinador', $sesion['rol'] ?? 'Coordinador', "Módulo/Cohorte eliminada (ID: $id)", null, 'WARN');
+        responderJson(['ok' => true, 'mensaje' => 'Cohorte eliminada correctamente.']);
+        return;
+    }
+
+    if ($metodo === 'POST' || $metodo === 'PUT') {
+        exigirSesion(['Superadmin', 'Coordinador']);
+        $body = leerBodyJson();
+        if (!is_array($body)) responderError('Se esperaba un objeto o array en el body.', 400);
+
+        $registros = isset($body[0]) ? $body : [$body];
+        $debePodar = isset($_GET['prune']) && $_GET['prune'] === '1';
+
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -50,12 +70,14 @@ function manejarModulos(PDO $pdo): void {
                     (int)($r['cupos'] ?? 25), $r['estado'] ?? 'Planeada',
                 ]);
             }
-            if (!empty($ids)) {
-                $inQuery = implode(',', array_fill(0, count($ids), '?'));
-                $stmtPrune = $pdo->prepare("DELETE FROM modulos WHERE id NOT IN ($inQuery)");
-                $stmtPrune->execute(array_values($ids));
-            } else {
-                $pdo->exec("DELETE FROM modulos");
+            if ($debePodar) {
+                if (!empty($ids)) {
+                    $inQuery = implode(',', array_fill(0, count($ids), '?'));
+                    $stmtPrune = $pdo->prepare("DELETE FROM modulos WHERE id NOT IN ($inQuery)");
+                    $stmtPrune->execute(array_values($ids));
+                } else {
+                    $pdo->exec("DELETE FROM modulos");
+                }
             }
             $pdo->commit();
             responderJson(['ok' => true, 'total' => count($registros)]);
@@ -466,8 +488,28 @@ function manejarCursos(PDO $pdo): void {
         }, $filas));
         return;
     }
-    if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador']);
+    if ($metodo === 'DELETE') {
+        $sesion = exigirSesion(['Superadmin', 'Coordinador']);
+        $rawId = trim((string)($_GET['id'] ?? (leerBodyJson()['id'] ?? '')));
+        $id = validarIdentificador($rawId);
+        if (!$id) {
+            responderError('Falta el ID del curso a eliminar.', 400);
+        }
+        $stmtDel = $pdo->prepare("DELETE FROM cursos WHERE id = ?");
+        $stmtDel->execute([$id]);
+        registrarEventoSeguridad($pdo, 'Académico: Eliminación de Curso', $sesion['email'] ?? 'Coordinador', $sesion['rol'] ?? 'Coordinador', "Curso eliminado (ID: $id)", null, 'WARN');
+        responderJson(['ok' => true, 'mensaje' => 'Curso eliminado correctamente.']);
+        return;
+    }
+
+    if ($metodo === 'POST' || $metodo === 'PUT') {
+        exigirSesion(['Superadmin', 'Coordinador']);
+        $body = leerBodyJson();
+        if (!is_array($body)) responderError('Se esperaba un objeto o array de cursos.', 400);
+
+        $registros = isset($body[0]) ? $body : [$body];
+        $debePodar = isset($_GET['prune']) && $_GET['prune'] === '1';
+
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -486,12 +528,14 @@ function manejarCursos(PDO $pdo): void {
                     $id, $r['nombre'] ?? '', $r['descripcion'] ?? null, $r['estado'] ?? 'Activo',
                 ]);
             }
-            if (!empty($ids)) {
-                $inQuery = implode(',', array_fill(0, count($ids), '?'));
-                $stmtPrune = $pdo->prepare("DELETE FROM cursos WHERE id NOT IN ($inQuery)");
-                $stmtPrune->execute(array_values($ids));
-            } else {
-                $pdo->exec("DELETE FROM cursos");
+            if ($debePodar) {
+                if (!empty($ids)) {
+                    $inQuery = implode(',', array_fill(0, count($ids), '?'));
+                    $stmtPrune = $pdo->prepare("DELETE FROM cursos WHERE id NOT IN ($inQuery)");
+                    $stmtPrune->execute(array_values($ids));
+                } else {
+                    $pdo->exec("DELETE FROM cursos");
+                }
             }
             $pdo->commit();
             responderJson(['ok' => true, 'total' => count($registros)]);
@@ -540,8 +584,28 @@ function manejarPensum(PDO $pdo): void {
         }, $filas));
         return;
     }
-    if ($metodo === 'POST') {
-        $registros = prepararReemplazoGenerico(['Superadmin', 'Coordinador']);
+    if ($metodo === 'DELETE') {
+        $sesion = exigirSesion(['Superadmin', 'Coordinador']);
+        $rawId = trim((string)($_GET['id'] ?? (leerBodyJson()['id'] ?? '')));
+        $id = validarIdentificador($rawId);
+        if (!$id) {
+            responderError('Falta el ID del registro de pensum a eliminar.', 400);
+        }
+        $stmtDel = $pdo->prepare("DELETE FROM pensum WHERE id = ?");
+        $stmtDel->execute([$id]);
+        registrarEventoSeguridad($pdo, 'Académico: Eliminación de Pensum', $sesion['email'] ?? 'Coordinador', $sesion['rol'] ?? 'Coordinador', "Asignatura de pensum eliminada (ID: $id)", null, 'WARN');
+        responderJson(['ok' => true, 'mensaje' => 'Registro de pensum eliminado correctamente.']);
+        return;
+    }
+
+    if ($metodo === 'POST' || $metodo === 'PUT') {
+        exigirSesion(['Superadmin', 'Coordinador']);
+        $body = leerBodyJson();
+        if (!is_array($body)) responderError('Se esperaba un objeto o array de pensum.', 400);
+
+        $registros = isset($body[0]) ? $body : [$body];
+        $debePodar = isset($_GET['prune']) && $_GET['prune'] === '1';
+
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
@@ -570,12 +634,14 @@ function manejarPensum(PDO $pdo): void {
                     $r['archivoNombre'] ?? null, $r['archivoTipo'] ?? null, $datosAInsertar,
                 ]);
             }
-            if (!empty($ids)) {
-                $inQuery = implode(',', array_fill(0, count($ids), '?'));
-                $stmtPrune = $pdo->prepare("DELETE FROM pensum WHERE id NOT IN ($inQuery)");
-                $stmtPrune->execute(array_values($ids));
-            } else {
-                $pdo->exec("DELETE FROM pensum");
+            if ($debePodar) {
+                if (!empty($ids)) {
+                    $inQuery = implode(',', array_fill(0, count($ids), '?'));
+                    $stmtPrune = $pdo->prepare("DELETE FROM pensum WHERE id NOT IN ($inQuery)");
+                    $stmtPrune->execute(array_values($ids));
+                } else {
+                    $pdo->exec("DELETE FROM pensum");
+                }
             }
             $pdo->commit();
             responderJson(['ok' => true, 'total' => count($registros)]);

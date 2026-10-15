@@ -938,7 +938,18 @@
         }
       }
       toast('Comprobante y pago guardados correctamente', 'ok');
-      cerrarFormPagoEstudiante();
+      const chkMantener = document.getElementById('pago_estudiante_mantener_abierto');
+      if (chkMantener && chkMantener.checked) {
+        document.getElementById('pago_estudiante_id').value = '';
+        document.getElementById('pago_estudiante_usuario_id').value = '';
+        document.getElementById('pago_estudiante_referencia').value = '';
+        document.getElementById('pago_estudiante_monto').value = '';
+        quitarComprobantePagoEstudiante();
+        document.getElementById('pago_estudiante_usuario_id').focus();
+        toast('Listo para registrar el siguiente estudiante sin salir.', 'ok');
+      } else {
+        cerrarFormPagoEstudiante();
+      }
       if (document.getElementById('panel-pagos') && !document.getElementById('panel-pagos').classList.contains('hidden')) {
         await renderPanelPagos();
       }
@@ -1366,6 +1377,433 @@
     }).join('');
   }
 
+  
+  // =========================================================================
+  // REGISTRO DE PAGOS POR COHORTE - TARJETAS DE ESTUDIANTES UNO A UNO
+  // =========================================================================
+
+  const tarjetasSoportesMap = {}; // Map of estId -> { nombre, tipo, url }
+
+  async function abrirRegistroPagosEstudiantesCohorte(cohorteDefault = '') {
+    if (!puedeGestionarPagosDocentes()) {
+      toast('Acceso no autorizado.', 'err');
+      return;
+    }
+
+    const modal = document.getElementById('modalRegistroPagosEstudiantesCohorte');
+    if (!modal) return;
+
+    const usuarios = await Store.list('usuarios');
+    const estudiantes = usuarios.filter(u => u.rol === 'Estudiante' || u.rol === 'estudiante');
+
+    const cohortesMap = {};
+    estudiantes.forEach(e => {
+      const c = e.cohorte || e.cohorteAnterior;
+      if (c) {
+        cohortesMap[c] = (cohortesMap[c] || 0) + 1;
+      }
+    });
+
+    const select = document.getElementById('rpec_select_cohorte');
+    const listaCohortes = Object.keys(cohortesMap).sort();
+    if (!listaCohortes.length) {
+      select.innerHTML = '<option value="">-- No hay cohortes registradas con estudiantes --</option>';
+    } else {
+      select.innerHTML = '<option value="">-- Selecciona una Cohorte --</option>' +
+        listaCohortes.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)} (${cohortesMap[c]} estudiantes)</option>`).join('');
+    }
+
+    const hoy = new Date().toISOString().split('T')[0];
+    const mesActual = hoy.substring(0, 7);
+    const defMes = document.getElementById('rpec_default_mes');
+    if (defMes) defMes.value = mesActual;
+    const defMonto = document.getElementById('rpec_default_monto');
+    if (defMonto && !defMonto.value) defMonto.value = '1300000';
+    const busq = document.getElementById('rpec_busqueda_estudiante');
+    if (busq) busq.value = '';
+
+    const cohorteASeleccionar = cohorteDefault || (listaCohortes.length ? listaCohortes[0] : '');
+    if (cohorteASeleccionar && listaCohortes.includes(cohorteASeleccionar)) {
+      select.value = cohorteASeleccionar;
+    }
+
+    modal.classList.remove('hidden');
+
+    if (select.value) {
+      await renderTarjetasEstudiantesCohorte(select.value);
+    } else {
+      const cont = document.getElementById('rpec_contenedor_cartas');
+      if (cont) {
+        cont.innerHTML = `
+          <div class="text-center py-16 text-slate-400">
+            <svg class="w-12 h-12 mx-auto mb-3 opacity-60 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            <p class="font-bold text-slate-600 text-sm">Selecciona una cohorte arriba para cargar las cartas de los estudiantes</p>
+            <p class="text-xs text-slate-400 mt-1">Podrás registrar los pagos uno a uno sin necesidad de cerrar la ventana</p>
+          </div>
+        `;
+      }
+    }
+  }
+
+  function cerrarRegistroPagosEstudiantesCohorte() {
+    const modal = document.getElementById('modalRegistroPagosEstudiantesCohorte');
+    if (modal) modal.classList.add('hidden');
+    if (document.getElementById('panel-pagos') && !document.getElementById('panel-pagos').classList.contains('hidden')) {
+      renderPanelPagos();
+    }
+  }
+
+  async function onCambioCohorteTarjetas(cohorte) {
+    const busq = document.getElementById('rpec_busqueda_estudiante');
+    if (busq) busq.value = '';
+    await renderTarjetasEstudiantesCohorte(cohorte);
+  }
+
+  async function onCambioMesTarjetas() {
+    const sel = document.getElementById('rpec_select_cohorte');
+    if (sel && sel.value) {
+      await renderTarjetasEstudiantesCohorte(sel.value);
+    }
+  }
+
+  function aplicarValoresPorDefectoACartas() {
+    const montoDef = (document.getElementById('rpec_default_monto')?.value || '').trim();
+    const mesDef = document.getElementById('rpec_default_mes')?.value || '';
+    if (!montoDef && !mesDef) {
+      toast('Ingresa un monto o mes en la barra superior para autocompletar.', 'err');
+      return;
+    }
+    const cards = document.querySelectorAll('.card-estudiante-pago');
+    let modificados = 0;
+    cards.forEach(card => {
+      const inputMonto = card.querySelector('.input-tarjeta-monto');
+      const inputMes = card.querySelector('.input-tarjeta-mes');
+      if (inputMonto && (!inputMonto.value || inputMonto.value === '0') && montoDef) {
+        inputMonto.value = montoDef;
+        modificados++;
+      }
+      if (inputMes && !inputMes.value && mesDef) {
+        inputMes.value = mesDef;
+      }
+    });
+    toast(`Se autocompletaron los valores en las tarjetas pendientes (${modificados} actualizadas).`, 'ok');
+  }
+
+  function filtrarTarjetasEstudiantes(query) {
+    const q = (query || '').toLowerCase().trim();
+    const cards = document.querySelectorAll('.card-estudiante-pago');
+    cards.forEach(card => {
+      const texto = (card.getAttribute('data-search') || '').toLowerCase();
+      if (!q || texto.includes(q)) {
+        card.classList.remove('hidden');
+      } else {
+        card.classList.add('hidden');
+      }
+    });
+  }
+
+  function onSeleccionarSoporteTarjeta(estId, input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      toast('El comprobante no debe superar los 8 MB', 'err');
+      input.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      tarjetasSoportesMap[estId] = {
+        nombre: file.name,
+        tipo: file.type,
+        url: e.target.result
+      };
+      const badge = document.getElementById(`soporte_badge_${estId}`);
+      if (badge) {
+        badge.innerHTML = `<svg class="w-3 h-3 inline-block mr-1 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>${escapeHtml(file.name.slice(0, 15))}...`;
+        badge.classList.remove('hidden');
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function renderTarjetasEstudiantesCohorte(cohorte) {
+    const cont = document.getElementById('rpec_contenedor_cartas');
+    if (!cont) return;
+
+    if (!cohorte) {
+      cont.innerHTML = `
+        <div class="text-center py-16 text-slate-400">
+          <p class="font-bold text-slate-600 text-sm">Selecciona una cohorte arriba para cargar las cartas</p>
+        </div>
+      `;
+      document.getElementById('rpec_badge_contador').textContent = '0 / 0 registrados';
+      return;
+    }
+
+    cont.innerHTML = `
+      <div class="text-center py-16 text-purple-700">
+        <svg class="w-8 h-8 mx-auto animate-spin mb-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+        <p class="text-xs font-bold">Cargando cartas de estudiantes para ${escapeHtml(cohorte)}...</p>
+      </div>
+    `;
+
+    const [usuarios, pagos] = await Promise.all([
+      Store.list('usuarios'),
+      Store.list('pagos_estudiantes')
+    ]);
+
+    const estudiantes = usuarios.filter(u =>
+      (u.rol === 'Estudiante' || u.rol === 'estudiante') &&
+      (u.cohorte === cohorte || u.cohorteAnterior === cohorte)
+    );
+
+    if (!estudiantes.length) {
+      cont.innerHTML = `
+        <div class="text-center py-16 text-slate-400">
+          <p class="font-bold text-slate-600 text-sm">No se encontraron estudiantes registrados en "${escapeHtml(cohorte)}"</p>
+        </div>
+      `;
+      document.getElementById('rpec_badge_contador').textContent = '0 / 0 registrados';
+      return;
+    }
+
+    const mesSeleccionado = document.getElementById('rpec_default_mes')?.value || new Date().toISOString().substring(0, 7);
+    const montoDefault = document.getElementById('rpec_default_monto')?.value || '1300000';
+    const hoy = new Date().toISOString().split('T')[0];
+
+    let pagadosCount = 0;
+    const cardsHtml = estudiantes.map(est => {
+      const pagoExistente = pagos.find(p => p.estudiante_id === est.id && p.mes === mesSeleccionado);
+      if (pagoExistente) pagadosCount++;
+
+      const isPagado = !!pagoExistente;
+      const montoVal = isPagado ? pagoExistente.monto : montoDefault;
+      const fechaVal = isPagado ? (pagoExistente.fecha_pago || hoy) : hoy;
+      const medioVal = isPagado ? (pagoExistente.medio_pago || 'Bancolombia') : 'Bancolombia';
+      const conceptoVal = isPagado ? (pagoExistente.concepto || 'Mensualidad') : 'Mensualidad';
+      const refVal = isPagado ? (pagoExistente.numero_referencia || '') : '';
+      const tieneComprobante = isPagado && (pagoExistente.comprobante_url || pagoExistente.comprobanteUrl);
+
+      const searchStr = `${est.nombre || ''} ${est.cedula || est.documento || ''} ${est.email || ''}`;
+
+      return `
+        <div class="card-estudiante-pago bg-white rounded-2xl border ${isPagado ? 'border-emerald-300 ring-2 ring-emerald-50 shadow-sm' : 'border-gray-200 hover:border-purple-300 shadow-2xs'} p-4 flex flex-col justify-between transition-all duration-200"
+             id="card_est_${est.id}"
+             data-est-id="${est.id}"
+             data-search="${escapeHtml(searchStr)}">
+
+          <div>
+            <!-- Header de la Carta -->
+            <div class="flex items-start justify-between gap-2.5 pb-3 border-b border-gray-100">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-10 h-10 rounded-xl ${isPagado ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-100 text-purple-800'} flex items-center justify-center font-black text-sm shrink-0">
+                  ${escapeHtml((est.nombre || 'E').slice(0, 2).toUpperCase())}
+                </div>
+                <div class="min-w-0">
+                  <h4 class="font-extrabold text-xs text-ink truncate" title="${escapeHtml(est.nombre || 'Estudiante')}">
+                    ${escapeHtml(est.nombre || 'Estudiante')}
+                  </h4>
+                  <p class="text-[11px] text-slate-500 truncate">
+                    ${escapeHtml(est.documento || est.cedula || est.email || 'ID: ' + est.id)}
+                  </p>
+                </div>
+              </div>
+              <div class="shrink-0 text-right">
+                <span id="badge_status_${est.id}" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${isPagado ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-900 border border-amber-300'}">
+                  ${isPagado 
+                    ? '<svg class="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span>PAGADO</span>' 
+                    : '<svg class="w-3 h-3 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>PENDIENTE</span>'}
+                </span>
+                ${tieneComprobante ? `
+                  <button type="button" onclick="abrirVisorComprobanteDocente('${pagoExistente.id}', 'estudiante')" class="block text-[10px] text-purple-700 hover:underline font-bold mt-1">
+                    Ver comprobante
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+
+            <!-- Formulario Inline de la Carta -->
+            <div class="mt-3 space-y-2.5 text-xs">
+              <input type="hidden" id="pago_id_${est.id}" value="${isPagado ? pagoExistente.id : ''}" />
+
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block font-bold text-slate-600 text-[11px] mb-0.5">Monto ($ COP)</label>
+                  <input type="text" inputmode="numeric" id="monto_${est.id}" class="input-tarjeta-monto w-full rounded-xl border border-gray-300 p-2 text-xs font-bold text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none"
+                         oninput="this.value=this.value.replace(/[^0-9]/g,'')" value="${escapeHtml(montoVal)}" placeholder="1300000" />
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-600 text-[11px] mb-0.5">Mes Cubierto</label>
+                  <input type="month" id="mes_${est.id}" class="input-tarjeta-mes w-full rounded-xl border border-gray-300 p-2 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none"
+                         value="${escapeHtml(mesSeleccionado)}" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block font-bold text-slate-600 text-[11px] mb-0.5">Fecha de Pago</label>
+                  <input type="date" id="fecha_${est.id}" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none"
+                         value="${escapeHtml(fechaVal)}" />
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-600 text-[11px] mb-0.5">Medio de Pago</label>
+                  <select id="medio_${est.id}" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none font-medium">
+                    <option value="Bancolombia" ${medioVal === 'Bancolombia' ? 'selected' : ''}>Bancolombia</option>
+                    <option value="Nequi" ${medioVal === 'Nequi' ? 'selected' : ''}>Nequi</option>
+                    <option value="Daviplata" ${medioVal === 'Daviplata' ? 'selected' : ''}>Daviplata</option>
+                    <option value="Transferencia Bancaria" ${medioVal === 'Transferencia Bancaria' ? 'selected' : ''}>Transferencia</option>
+                    <option value="Efectivo" ${medioVal === 'Efectivo' ? 'selected' : ''}>Efectivo</option>
+                    <option value="PSE" ${medioVal === 'PSE' ? 'selected' : ''}>PSE</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block font-bold text-slate-600 text-[11px] mb-0.5">Concepto</label>
+                  <select id="concepto_${est.id}" class="w-full rounded-xl border border-gray-300 p-2 text-xs text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none">
+                    <option value="Mensualidad" ${conceptoVal === 'Mensualidad' ? 'selected' : ''}>Mensualidad</option>
+                    <option value="Matrícula" ${conceptoVal === 'Matrícula' ? 'selected' : ''}>Matrícula</option>
+                    <option value="Certificación" ${conceptoVal === 'Certificación' ? 'selected' : ''}>Certificación</option>
+                    <option value="Cuota" ${conceptoVal === 'Cuota' ? 'selected' : ''}>Cuota</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-600 text-[11px] mb-0.5">N° Referencia</label>
+                  <input type="text" id="ref_${est.id}" class="w-full rounded-xl border border-gray-300 p-2 text-xs font-mono text-ink focus:ring-2 focus:ring-purple-400 focus:outline-none"
+                         value="${escapeHtml(refVal)}" placeholder="REF-12345" />
+                </div>
+              </div>
+
+              <!-- Adjuntar Captura / Comprobante -->
+              <div class="pt-1">
+                <div class="flex items-center justify-between gap-2">
+                  <label class="relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-dashed border-purple-300 bg-purple-50/50 hover:bg-purple-100/60 text-purple-800 text-[11px] font-bold cursor-pointer transition">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                    <span>Adjuntar captura</span>
+                    <input type="file" accept="image/*,application/pdf" onchange="onSeleccionarSoporteTarjeta('${est.id}', this)" class="sr-only" />
+                  </label>
+                  <span id="soporte_badge_${est.id}" class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 hidden"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Botón de Guardado Inline -->
+          <div class="mt-4 pt-3 border-t border-gray-100">
+            <button type="button"
+                    id="btn_guardar_${est.id}"
+                    onclick="guardarPagoInlineTarjeta('${est.id}', '${escapeHtml(est.nombre || 'Estudiante')}', '${escapeHtml(cohorte)}')"
+                    class="w-full py-2.5 px-3 rounded-xl font-bold text-xs text-white ${isPagado ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-purple-700 hover:bg-purple-800'} shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              <span>${isPagado ? 'Actualizar Pago' : 'Guardar Pago'}</span>
+            </button>
+          </div>
+
+        </div>
+      `;
+    }).join('');
+
+    cont.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        ${cardsHtml}
+      </div>
+    `;
+
+    document.getElementById('rpec_badge_contador').textContent = `${pagadosCount} / ${estudiantes.length} pagados`;
+    const footerInfo = document.getElementById('rpec_footer_info');
+    if (footerInfo) {
+      footerInfo.textContent = `Cohorte: ${cohorte} | Total de alumnos: ${estudiantes.length} (${pagadosCount} con pago registrado este mes)`;
+    }
+  }
+
+  async function guardarPagoInlineTarjeta(estId, estNombre, cohorte) {
+    const card = document.getElementById(`card_est_${estId}`);
+    const btn = document.getElementById(`btn_guardar_${estId}`);
+    if (!card || !btn) return;
+
+    const montoRaw = (document.getElementById(`monto_${estId}`)?.value || '').trim();
+    if (!montoRaw || !/^\d+$/.test(montoRaw) || parseFloat(montoRaw) <= 0) {
+      toast(`Por favor ingresa un monto válido para ${estNombre}`, 'err');
+      return;
+    }
+    const monto = parseFloat(montoRaw);
+    const mes = document.getElementById(`mes_${estId}`)?.value || '';
+    if (!mes) {
+      toast(`Selecciona el mes para ${estNombre}`, 'err');
+      return;
+    }
+    const fecha = document.getElementById(`fecha_${estId}`)?.value || '';
+    if (!fecha) {
+      toast(`Selecciona la fecha para ${estNombre}`, 'err');
+      return;
+    }
+    const medio = document.getElementById(`medio_${estId}`)?.value || 'Bancolombia';
+    const concepto = document.getElementById(`concepto_${estId}`)?.value || 'Mensualidad';
+    const ref = (document.getElementById(`ref_${estId}`)?.value || '').trim();
+    const pagoIdExistente = document.getElementById(`pago_id_${estId}`)?.value || null;
+
+    const soporte = tarjetasSoportesMap[estId] || null;
+
+    const originalBtnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<svg class="w-3.5 h-3.5 animate-spin inline mr-1" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg> Guardando...`;
+
+    const payload = {
+      id: pagoIdExistente || ('pe_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7) + '_' + estId),
+      estudiante_id: estId,
+      estudiante_nombre: estNombre,
+      cohorte: cohorte,
+      concepto: concepto,
+      mes: mes,
+      monto: monto,
+      fecha_pago: fecha,
+      medio_pago: medio,
+      numero_referencia: ref,
+      observaciones: '',
+      estado: 'Aprobado',
+      comprobante_nombre: soporte ? soporte.nombre : null,
+      comprobante_tipo: soporte ? soporte.tipo : null,
+      comprobante_url: soporte ? soporte.url : null
+    };
+
+    try {
+      await apiFetch('pagos_estudiantes', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      Store.invalidate('pagos_estudiantes');
+
+      document.getElementById(`pago_id_${estId}`).value = payload.id;
+
+      card.classList.remove('border-gray-200');
+      card.classList.add('border-emerald-300', 'ring-2', 'ring-emerald-50');
+      const badge = document.getElementById(`badge_status_${estId}`);
+      if (badge) {
+        badge.className = 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300';
+        badge.innerHTML = '<svg class="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span>PAGADO</span>';
+      }
+
+      btn.className = 'w-full py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer';
+      btn.innerHTML = `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span>Guardado ($ ${monto.toLocaleString('es-CO')})</span>`;
+
+      toast(`¡Pago de ${estNombre} registrado exitosamente!`, 'ok');
+
+      const cards = document.querySelectorAll('.card-estudiante-pago');
+      let pagados = 0;
+      cards.forEach(c => {
+        if (c.querySelector('[id^="badge_status_"]')?.textContent.includes('PAGADO')) pagados++;
+      });
+      document.getElementById('rpec_badge_contador').textContent = `${pagados} / ${cards.length} pagados`;
+
+      // Ventana se mantiene abierta para seguir con el siguiente alumno
+    } catch (err) {
+      toast(`Error al guardar pago de ${estNombre}: ${err.message}`, 'err');
+      btn.disabled = false;
+      btn.innerHTML = originalBtnHtml;
+    }
+  }
+
   async function renderPanelPagos() {
     const mount = document.getElementById('mount-pagos');
     if (!mount) return;
@@ -1528,13 +1966,9 @@
             </div>
 
             <div class="flex items-center gap-2 flex-wrap shrink-0">
-              <button type="button" onclick="abrirModalPagosPorCohorte()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:opacity-95 shadow-sm transition cursor-pointer">
+              <button type="button" onclick="abrirRegistroPagosEstudiantesCohorte()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:opacity-95 shadow-sm transition cursor-pointer" title="Registrar pagos viendo las cartas de todos los estudiantes uno a uno sin salir">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                <span>+ Registrar por Cohorte</span>
-              </button>
-              <button type="button" onclick="abrirFormPagoEstudiante()" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold text-purple-800 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition cursor-pointer">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-                <span>+ Pago Individual</span>
+                <span>+ Registrar por Cohorte (Tarjetas)</span>
               </button>
             </div>
           </div>
@@ -1660,5 +2094,14 @@
   window.cerrarModalPagosPorCohorte = cerrarModalPagosPorCohorte;
   window.onCambioCohorteGenerarPagos = onCambioCohorteGenerarPagos;
   window.generarPagosParaCohorte = generarPagosParaCohorte;
+  window.abrirRegistroPagosEstudiantesCohorte = abrirRegistroPagosEstudiantesCohorte;
+  window.cerrarRegistroPagosEstudiantesCohorte = cerrarRegistroPagosEstudiantesCohorte;
+  window.onCambioCohorteTarjetas = onCambioCohorteTarjetas;
+  window.onCambioMesTarjetas = onCambioMesTarjetas;
+  window.aplicarValoresPorDefectoACartas = aplicarValoresPorDefectoACartas;
+  window.filtrarTarjetasEstudiantes = filtrarTarjetasEstudiantes;
+  window.onSeleccionarSoporteTarjeta = onSeleccionarSoporteTarjeta;
+  window.renderTarjetasEstudiantesCohorte = renderTarjetasEstudiantesCohorte;
+  window.guardarPagoInlineTarjeta = guardarPagoInlineTarjeta;
 
 })();

@@ -240,7 +240,43 @@ Para activar el asistente virtual inteligente:
 
 ---
 
-## 8. Seguridad y Buenas Practicas
+## 8. Despliegue y Simulación Completa con Docker (Recomendado)
+
+El sistema cuenta con orquestación completa en contenedores mediante **Docker Compose**, lo que permite simular la plataforma completa (Frontend, API REST PHP, MariaDB y Chat IA en Python) con un único comando, sin requerir instalar PHP, MySQL o Python en la máquina anfitriona.
+
+### Arquitectura de Contenedores
+
+| Servicio | Contenedor | Puerto Host | Descripción |
+|---|---|---|---|
+| **web** | `fundacion-web` | `8080` (HTTP) | Apache + PHP 8.2 con `pdo_mysql`, compresión GZIP y `.htaccess` activo. |
+| **chat** | `fundacion-chat` | `8001` (HTTP/SSE) | Microservicio FastAPI con streaming para el Asistente IA conversacional. |
+| **db** | `fundacion-db` | `3306` (TCP) | MariaDB 10.11 con inicialización automática del esquema y semillas (`schema.sql`). |
+
+### Pasos para Ejecutar
+
+1. **Asegurarse de tener Docker Desktop iniciado.**
+
+2. **Iniciar todos los servicios:**
+   - En Windows (doble clic o terminal):
+     ```cmd
+     docker_iniciar.bat
+     ```
+   - O mediante el comando estándar:
+     ```bash
+     docker compose up --build -d
+     ```
+
+3. **Acceder a la aplicación:**
+   - **Plataforma Web y Portales:** [http://localhost:8080/](http://localhost:8080/)
+   - **Endpoint REST API:** [http://localhost:8080/api/public_info](http://localhost:8080/api/public_info)
+   - **Healthcheck Microservicio Chat IA:** [http://localhost:8001/health](http://localhost:8001/health)
+
+4. **Detener la simulación:**
+   - En Windows: `docker_detener.bat` o `docker compose down`.
+
+---
+
+## 9. Seguridad y Buenas Practicas
 
 - **Control de Cache en Navegador:** Se utiliza versionamiento sincronizado en los parametros de consulta de todos los recursos estaticos para garantizar que los clientes reciban de inmediato los cambios desplegados sin colisiones de memoria cache.
 - **Proteccion Contra Vulnerabilidades Web:** Se aplican tecnicas de saneamiento de entradas con consultas preparadas (Prepared Statements con PDO), previniendo inyeccion SQL.
@@ -248,6 +284,6 @@ Para activar el asistente virtual inteligente:
 
 ---
 
-## 9. Licencia y Derechos
+## 10. Licencia y Derechos
 
 Desarrollado para la **Fundacion A+** (Quibdo, Choco, Colombia). Todos los derechos reservados.

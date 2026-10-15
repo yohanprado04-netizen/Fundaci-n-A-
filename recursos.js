@@ -34,6 +34,12 @@ async function notificarRecursoPorCorreo(tipo, params = {}) {
     cfg = (typeof Store !== 'undefined' && Store.get) ? (await Store.get('configuracion') || {}) : {};
   } catch (e) {}
 
+  // Si las notificaciones de correo están desactivadas institucionalmente, NO enviar ni generar alertas
+  if (cfg.notificacionesEmail === false || cfg.notificacionesEmail === 0 || cfg.notificaciones_email === 0 || cfg.notificaciones_email === false) {
+    console.log('[notificarRecursoPorCorreo] Notificaciones de correo desactivadas institucionalmente. Omitiendo envío.');
+    return;
+  }
+
   const emailFundacion = cfg.correo || 'info@fundacionamas.org.co';
   const nombreFundacion = cfg.nombre || 'Fundación A+';
 
@@ -156,6 +162,75 @@ async function notificarRecursoPorCorreo(tipo, params = {}) {
         ${pieInstitucionalAntispam}
       </div>
     `;
+  } else if (tipo === 'advertencia_retraso_estudiante') {
+    destinatarioEmail = params.email || 'yohanprado04@gmail.com';
+    destinatarioNombre = params.solicitante || 'Estudiante';
+    asunto = `[URGENTE] ${nombreFundacion} | ADVERTENCIA: Plazo de entrega de equipo vencido - ${params.recursoNombre || 'Equipo'}`;
+    mensajeTexto = `Hola ${params.solicitante || ''},\n\n` +
+      `Te informamos que ha vencido el tiempo límite pactado para la entrega del equipo tecnológico a tu cargo:\n\n` +
+      `Equipo: ${params.recursoNombre || ''} (${params.recursoCodigo || ''})\n` +
+      `Serial: ${params.serial || '-'}\n` +
+      `Fecha límite acordada: ${params.fechaLimite ? new Date(params.fechaLimite).toLocaleString() : 'Vencida'}\n` +
+      `Retraso acumulado: ${params.tiempoRetraso || 'Excedido'}\n\n` +
+      `ADVERTENCIA URGENTE: Por favor acércate de inmediato a la sede institucional para realizar la devolución formal en bodega. Si el retraso supera las 24 horas, tu expediente registrará la etiqueta institucional de "Entregó Tarde (+24h)".\n\n` +
+      `Fundación A+ - info@fundacionamas.org.co`;
+
+    mensajeHtml = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
+        <div style="background: #E11D48; padding: 24px; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 20px; font-weight: 800;">${escapeHtml(nombreFundacion)}</h2>
+          <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px;">Alerta de Devolución Vencida</p>
+        </div>
+        <div style="padding: 24px; color: #1e293b;">
+          <h3 style="margin-top: 0; font-size: 16px; color: #BE123C;">Plazo Límite de Devolución Excedido</h3>
+          <p style="font-size: 13px; color: #64748b; line-height: 1.5;">Hola <strong>${escapeHtml(params.solicitante || '')}</strong>, el sistema ha registrado que la fecha convenida para la devolución del equipo ha expirado.</p>
+          <div style="background: #FFF1F2; border: 1px solid #FECDD3; border-radius: 12px; padding: 16px; margin: 16px 0; font-size: 13px;">
+            <p style="margin: 0 0 8px 0;"><strong>Equipo Asignado:</strong> ${escapeHtml(params.recursoNombre || '')} <span style="font-family: monospace; font-weight: bold; color: #9F1239;">(${escapeHtml(params.recursoCodigo || '-')})</span></p>
+            ${params.serial ? `<p style="margin: 0 0 8px 0;"><strong>Serial:</strong> <span style="font-family: monospace;">${escapeHtml(params.serial)}</span></p>` : ''}
+            <p style="margin: 0 0 8px 0;"><strong>Fecha Límite Acordada:</strong> <strong style="color: #BE123C;">${params.fechaLimite ? new Date(params.fechaLimite).toLocaleString() : 'Vencida'}</strong></p>
+            <p style="margin: 0; font-weight: bold; color: #9F1239;">Retraso acumulado: ${escapeHtml(params.tiempoRetraso || 'Excedido')}</p>
+          </div>
+          <div style="font-size: 12px; color: #881337; background: #FFE4E6; padding: 12px; border-radius: 8px; border: 1px solid #FDA4AF;">
+            <strong>¡Atención!</strong> Debes reintegrar el activo de forma inmediata en la sede. En caso de demorarse más de 24 horas, en el historial del Superadmin quedará registrada la etiqueta de <strong>Entregó Tarde (+24h)</strong>.
+          </div>
+        </div>
+        ${pieInstitucionalAntispam}
+      </div>
+    `;
+  } else if (tipo === 'advertencia_retraso_fundacion') {
+    destinatarioEmail = emailFundacion;
+    destinatarioNombre = 'Coordinación ' + nombreFundacion;
+    asunto = `[ALERTA] ${nombreFundacion} | ALERTA ADMINISTRATIVA: Préstamo Vencido - ${params.solicitante || 'Custodio'}`;
+    mensajeTexto = `Se notifica que el siguiente activo tecnológico ha excedido su fecha límite de devolución:\n\n` +
+      `Custodio: ${params.solicitante || 'No registrado'} (${params.rol || 'Estudiante'})\n` +
+      `Correo: ${params.email || 'No registrado'}\n` +
+      `Equipo: ${params.recursoNombre || ''} (${params.recursoCodigo || ''})\n` +
+      `Fecha límite: ${params.fechaLimite ? new Date(params.fechaLimite).toLocaleString() : 'Vencida'}\n` +
+      `Retraso acumulado: ${params.tiempoRetraso || 'Excedido'}\n\n` +
+      `El sistema envió una advertencia al custodio. En caso de exceder 24 horas de retraso se registrará con la etiqueta de entrega tardía en el historial del Superadmin.\n\n` +
+      `Fundación A+ - info@fundacionamas.org.co`;
+
+    mensajeHtml = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
+        <div style="background: #991B1B; padding: 24px; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 20px; font-weight: 800;">${escapeHtml(nombreFundacion)}</h2>
+          <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px;">Control de Inventarios y Préstamos</p>
+        </div>
+        <div style="padding: 24px; color: #1e293b;">
+          <h3 style="margin-top: 0; font-size: 16px; color: #991B1B;">Préstamo de Equipo con Plazo Vencido</h3>
+          <p style="font-size: 13px; color: #64748b; line-height: 1.5;">El siguiente activo tecnológico se encuentra fuera del plazo convenido:</p>
+          <div style="background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 12px; padding: 16px; margin: 16px 0; font-size: 13px;">
+            <p style="margin: 0 0 8px 0;"><strong>Custodio:</strong> ${escapeHtml(params.solicitante || '')} <span style="color:#B91C1C;">(${escapeHtml(params.rol || 'Estudiante')})</span></p>
+            <p style="margin: 0 0 8px 0;"><strong>Correo:</strong> ${escapeHtml(params.email || 'No registrado')}</p>
+            <p style="margin: 0 0 8px 0;"><strong>Equipo:</strong> ${escapeHtml(params.recursoNombre || '')} (${escapeHtml(params.recursoCodigo || '-')})</p>
+            <p style="margin: 0 0 8px 0;"><strong>Fecha Límite Acordada:</strong> <strong style="color: #B91C1C;">${params.fechaLimite ? new Date(params.fechaLimite).toLocaleString() : 'Vencida'}</strong></p>
+            <p style="margin: 0; font-weight: bold; color: #991B1B;">Retraso acumulado: ${escapeHtml(params.tiempoRetraso || 'Excedido')}</p>
+          </div>
+          <p style="font-size: 12px; color: #64748b;">El estudiante fue notificado formalmente con advertencia de que al superar 24 horas registrará la etiqueta de entrega tardía.</p>
+        </div>
+        ${pieInstitucionalAntispam}
+      </div>
+    `;
   }
 
   if (!destinatarioEmail || !destinatarioEmail.includes('@')) {
@@ -234,23 +309,70 @@ window.notificarRecursoPorCorreo = notificarRecursoPorCorreo;
 
 // --- UTILIDAD: IDENTIFICAR USUARIO ACTUAL EN SESIÓN ---
 function getUsuarioSesionActual() {
-  const doc = (typeof window.getCurrentDocente === 'function') ? window.getCurrentDocente() : (typeof currentDocente !== 'undefined' ? currentDocente : null);
-  if (doc && doc.nombre) {
-    return { nombre: doc.nombre, email: doc.email || '', rol: 'Docente', id: doc.id };
-  }
-  const est = (typeof window.getCurrentEstudiante === 'function') ? window.getCurrentEstudiante() : (typeof currentEstudiante !== 'undefined' ? currentEstudiante : null);
-  if (est && est.nombre) {
-    return { nombre: est.nombre, email: est.email || '', rol: 'Estudiante', id: est.id };
-  }
-  const admUser = (typeof window.getCurrentAdminUser === 'function') ? window.getCurrentAdminUser() : (typeof currentAdminUser !== 'undefined' ? currentAdminUser : null);
-  if (admUser && admUser.nombre) {
-    return { nombre: admUser.nombre, email: admUser.email || '', rol: admUser.rol || 'Administrador', id: admUser.id };
-  }
-  const admRole = (typeof window.getCurrentAdminRole === 'function') ? window.getCurrentAdminRole() : (typeof currentAdminRole !== 'undefined' ? currentAdminRole : null);
-  if (admRole === 'superadmin') {
+  const dashView = document.getElementById('dashboardView');
+  const teacherView = document.getElementById('teacherView');
+  const studentView = document.getElementById('studentView');
+
+  const esAdminActivo = dashView && !dashView.classList.contains('hidden');
+  const esDocenteActivo = teacherView && !teacherView.classList.contains('hidden');
+  const esEstudianteActivo = studentView && !studentView.classList.contains('hidden');
+
+  if (esAdminActivo) {
+    const admRole = (typeof window.getCurrentAdminRole === 'function') ? window.getCurrentAdminRole() : (typeof window.currentAdminRole !== 'undefined' ? window.currentAdminRole : (typeof currentAdminRole !== 'undefined' ? currentAdminRole : null));
+    const admUser = (typeof window.getCurrentAdminUser === 'function') ? window.getCurrentAdminUser() : (typeof window.currentAdminUser !== 'undefined' ? window.currentAdminUser : (typeof currentAdminUser !== 'undefined' ? currentAdminUser : null));
+    if (admRole === 'superadmin') {
+      return { nombre: 'Superadmin', email: 'admin@aplus.org', rol: 'Superadmin', id: 'admin-super' };
+    }
+    if (admUser && (admUser.nombre || admUser.email)) {
+      return { nombre: admUser.nombre || admUser.email, email: admUser.email || '', rol: admUser.rol || 'Administrador', id: admUser.id };
+    }
     return { nombre: 'Superadmin', email: 'admin@aplus.org', rol: 'Superadmin', id: 'admin-super' };
   }
-  return { nombre: 'Usuario Plataforma', email: '', rol: 'Docente', id: null };
+
+  if (esDocenteActivo) {
+    let doc = (typeof window.getCurrentDocente === 'function') ? window.getCurrentDocente() : (typeof window.currentDocente !== 'undefined' ? window.currentDocente : (typeof currentDocente !== 'undefined' ? currentDocente : null));
+    if ((!doc || !doc.nombre) && typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('fundacion_current_docente');
+        if (raw) doc = JSON.parse(raw);
+      } catch (_) {}
+    }
+    if (doc && (doc.nombre || doc.email)) {
+      return { nombre: doc.nombre || 'Docente', email: doc.email || '', rol: 'Docente', id: doc.id };
+    }
+  }
+
+  if (esEstudianteActivo) {
+    let est = (typeof window.getCurrentEstudiante === 'function') ? window.getCurrentEstudiante() : (typeof window.currentEstudiante !== 'undefined' ? window.currentEstudiante : (typeof currentEstudiante !== 'undefined' ? currentEstudiante : null));
+    if ((!est || !est.nombre) && typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('fundacion_current_estudiante');
+        if (raw) est = JSON.parse(raw);
+      } catch (_) {}
+    }
+    if (est && (est.nombre || est.email)) {
+      return { nombre: est.nombre || 'Estudiante', email: est.email || '', rol: 'Estudiante', id: est.id };
+    }
+  }
+
+  // Fallback si ninguna vista está explícitamente sin 'hidden'
+  const admUser = (typeof window.getCurrentAdminUser === 'function') ? window.getCurrentAdminUser() : (typeof window.currentAdminUser !== 'undefined' ? window.currentAdminUser : (typeof currentAdminUser !== 'undefined' ? currentAdminUser : null));
+  const admRole = (typeof window.getCurrentAdminRole === 'function') ? window.getCurrentAdminRole() : (typeof window.currentAdminRole !== 'undefined' ? window.currentAdminRole : (typeof currentAdminRole !== 'undefined' ? currentAdminRole : null));
+  if (admRole === 'superadmin' || (admUser && (admUser.rol === 'Superadmin' || admUser.rol === 'Administrador' || admUser.rol === 'Coordinador'))) {
+    return { nombre: (admUser && admUser.nombre) ? admUser.nombre : 'Superadmin', email: (admUser && admUser.email) ? admUser.email : 'admin@aplus.org', rol: (admUser && admUser.rol) ? admUser.rol : 'Superadmin', id: admUser?.id || 'admin-super' };
+  }
+
+  let doc = (typeof window.getCurrentDocente === 'function') ? window.getCurrentDocente() : (typeof window.currentDocente !== 'undefined' ? window.currentDocente : (typeof currentDocente !== 'undefined' ? currentDocente : null));
+  if (doc && (doc.nombre || doc.email)) {
+    return { nombre: doc.nombre || 'Docente', email: doc.email || '', rol: 'Docente', id: doc.id };
+  }
+
+  let est = (typeof window.getCurrentEstudiante === 'function') ? window.getCurrentEstudiante() : (typeof window.currentEstudiante !== 'undefined' ? window.currentEstudiante : (typeof currentEstudiante !== 'undefined' ? currentEstudiante : null));
+  if (est && (est.nombre || est.email)) {
+    return { nombre: est.nombre || 'Estudiante', email: est.email || '', rol: 'Estudiante', id: est.id };
+  }
+
+  return { nombre: 'Estudiante', email: '', rol: 'Estudiante', id: null };
 }
 window.getUsuarioSesionActual = getUsuarioSesionActual;
 
@@ -281,12 +403,162 @@ function calcularRetraso(fechaLimiteStr) {
 }
 window.calcularRetraso = calcularRetraso;
 
+function esUsuarioSoloLectura() {
+  try {
+    const sesion = (typeof getUsuarioSesionActual === 'function') ? getUsuarioSesionActual() : null;
+    const rolSesion = (sesion?.rol || '').toLowerCase();
+    const admRole = (typeof window !== 'undefined' && window.currentAdminRole) ? String(window.currentAdminRole).toLowerCase() : '';
+    if (rolSesion === 'aliado' || rolSesion === 'donante' || rolSesion === 'inversor' || rolSesion === 'inversionista') return true;
+    if (admRole === 'aliado' || admRole === 'donante' || admRole === 'inversor') return true;
+    if (typeof document !== 'undefined' && (document.body.classList.contains('role-aliado') || document.body.classList.contains('role-donante'))) return true;
+  } catch (e) {}
+  return false;
+}
+window.esUsuarioSoloLectura = esUsuarioSoloLectura;
+
+function calcularEstadoRetrasoPrestamo(p) {
+  if (!p) return { retrasado: false, retraso24h: false, horasRetraso: 0, textoRetraso: '' };
+  
+  // Si está devuelto o no tiene fecha límite
+  if (!p.fecha_limite) {
+    return { retrasado: false, retraso24h: false, horasRetraso: 0, textoRetraso: '' };
+  }
+
+  const limite = new Date(p.fecha_limite);
+  if (isNaN(limite.getTime())) {
+    return { retrasado: false, retraso24h: false, horasRetraso: 0, textoRetraso: '' };
+  }
+
+  // Si ya fue devuelto, la fecha de referencia es la de devolución; si sigue activo/retrasado, es 'ahora'
+  const fechaFin = p.fecha_devolucion ? new Date(p.fecha_devolucion) : new Date();
+  if (isNaN(fechaFin.getTime())) {
+    return { retrasado: false, retraso24h: false, horasRetraso: 0, textoRetraso: '' };
+  }
+
+  const diffMs = fechaFin.getTime() - limite.getTime();
+  if (diffMs <= 0) {
+    return { retrasado: false, retraso24h: false, horasRetraso: 0, textoRetraso: '' };
+  }
+
+  const diffHoras = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDias = Math.floor(diffHoras / 24);
+  const horasRestantes = diffHoras % 24;
+  let texto = '';
+  if (diffDias > 0) {
+    texto = `${diffDias} d${horasRestantes > 0 ? ` ${horasRestantes}h` : ''}`;
+  } else {
+    texto = `${diffHoras} hora${diffHoras !== 1 ? 's' : ''}`;
+  }
+
+  return {
+    retrasado: true,
+    retraso24h: diffHoras >= 24,
+    horasRetraso: diffHoras,
+    textoRetraso: texto
+  };
+}
+window.calcularEstadoRetrasoPrestamo = calcularEstadoRetrasoPrestamo;
+
+let _verificandoRetrasosEnProceso = false;
+async function verificarEquiposVencidosYNotificar() {
+  if (_verificandoRetrasosEnProceso) return;
+  const userActual = getUsuarioSesionActual();
+  const rolAct = (userActual?.rol || '').toLowerCase();
+  const esAdmin = ['superadmin', 'administrador', 'coordinador'].includes(rolAct);
+  if (!esAdmin) return;
+  _verificandoRetrasosEnProceso = true;
+
+  try {
+    let prestamos = [];
+    try {
+      prestamos = await Store.list('historial_prestamos', { forceRefresh: true }) || [];
+    } catch (e) {
+      prestamos = [];
+    }
+
+    if (!Array.isArray(prestamos) || prestamos.length === 0) return;
+
+    let prestamosModificados = false;
+    const ahora = new Date();
+
+    for (const p of prestamos) {
+      // Solo evaluar préstamos no devueltos
+      const esDevuelto = p.estado === 'Devuelto' || p.estado === 'Devuelto con retraso';
+      if (esDevuelto) continue;
+
+      if (!p.fecha_limite) continue;
+      const fLimite = new Date(p.fecha_limite);
+      if (isNaN(fLimite.getTime())) continue;
+
+      if (fLimite < ahora) {
+        // Marcar como Retrasado en memoria
+        if (p.estado !== 'Retrasado') {
+          p.estado = 'Retrasado';
+          prestamosModificados = true;
+        }
+
+        const infoRetraso = calcularEstadoRetrasoPrestamo(p);
+
+        // Si la alerta aún no fue enviada, despachar notificación a estudiante y a fundación
+        if (!p.alerta_retraso_enviada) {
+          p.alerta_retraso_enviada = true;
+          p.fecha_alerta_retraso = ahora.toISOString();
+          prestamosModificados = true;
+
+          console.log(`[Alerta Retraso] Disparando advertencia de vencimiento para préstamo ${p.id} (${p.usuario_nombre})`);
+
+          if (typeof notificarRecursoPorCorreo === 'function') {
+            const paramsNotif = {
+              solicitante: p.usuario_nombre,
+              email: p.usuario_email || 'yohanprado04@gmail.com',
+              rol: p.usuario_rol || 'Estudiante',
+              recursoNombre: p.recurso_nombre,
+              recursoCodigo: p.recurso_codigo,
+              serial: p.recurso_serial,
+              fechaLimite: p.fecha_limite,
+              tiempoRetraso: infoRetraso.textoRetraso || 'Excedido'
+            };
+
+            // Notificar al estudiante que solicitó el equipo
+            notificarRecursoPorCorreo('advertencia_retraso_estudiante', paramsNotif)
+              .catch(e => console.warn('[verificarEquiposVencidosYNotificar] Error enviando correo a estudiante:', e));
+
+            // Notificar a la fundación
+            notificarRecursoPorCorreo('advertencia_retraso_fundacion', paramsNotif)
+              .catch(e => console.warn('[verificarEquiposVencidosYNotificar] Error enviando correo a fundación:', e));
+          }
+        }
+      }
+    }
+
+    if (prestamosModificados) {
+      try {
+        await Store.save('historial_prestamos', prestamos);
+      } catch (eSave) {
+        console.warn('[verificarEquiposVencidosYNotificar] Error guardando estado de préstamos:', eSave);
+      }
+    }
+  } catch (err) {
+    console.warn('[verificarEquiposVencidosYNotificar] Error general:', err);
+  } finally {
+    _verificandoRetrasosEnProceso = false;
+  }
+}
+window.verificarEquiposVencidosYNotificar = verificarEquiposVencidosYNotificar;
+
 // --- SEMILLAS INICIALES (MOCK OFFLINE SEED DATA) ---
 let _datosInicialesAsegurados = false;
 let _asegurarDatosPromise = null;
 
 async function asegurarDatosInicialesRecursos() {
   if (_datosInicialesAsegurados) return;
+  const userActual = getUsuarioSesionActual();
+  const rolAct = (userActual?.rol || '').toLowerCase();
+  const esAdmin = ['superadmin', 'administrador', 'coordinador'].includes(rolAct);
+  if (!esAdmin) {
+    _datosInicialesAsegurados = true;
+    return;
+  }
   if (_asegurarDatosPromise) return _asegurarDatosPromise;
 
   _asegurarDatosPromise = (async () => {
@@ -420,6 +692,14 @@ async function asegurarDatosInicialesRecursos() {
           }
         ];
         await Store.save('solicitudes_recursos', demoSol);
+      }
+      // Chequeo proactivo de préstamos vencidos y advertencias
+      try {
+        if (typeof verificarEquiposVencidosYNotificar === 'function') {
+          await verificarEquiposVencidosYNotificar();
+        }
+      } catch (eVerif) {
+        console.warn('[asegurarDatosInicialesRecursos] Advertencia verificando vencidos:', eVerif);
       }
     } catch (e) {
       console.warn('[asegurarDatosInicialesRecursos] Error:', e);
@@ -830,6 +1110,10 @@ function renderTablaRecursos(recursos) {
 
 // --- CREAR O EDITAR RECURSO ---
 window.abrirModalRecurso = async function(id = null) {
+  if (esUsuarioSoloLectura()) {
+    toast('Los aliados y donantes tienen permisos exclusivos de solo lectura.', 'warning');
+    return;
+  }
   let r = { codigo: '', nombre: '', categoria: 'Laptops', marca: '', modelo: '', serial: '', estado: 'Disponible', observaciones: '' };
   if (id) {
     const recursos = await Store.list('recursos_inventario') || [];
@@ -952,58 +1236,6 @@ window.filtrarPersonasCheckout = function(term) {
   }
 };
 
-window.accionCheckout = async function(id) {
-  const usuarios = await Store.list('usuarios') || [];
-  const optionsUsuarios = usuarios.map(u => `<option value="${escapeHtml(u.nombre)}">${escapeHtml(u.nombre)} (${escapeHtml(u.rol || 'Estudiante')}) - ${escapeHtml(u.email || '')}</option>`).join('');
-
-  const html = `
-    <div class="p-1 space-y-4">
-      <div>
-        <label class="block text-xs font-bold text-ink mb-1">Destinatario / Responsable del Equipo:</label>
-        <div class="relative mb-2">
-          <input type="text" id="co_buscar_persona" oninput="filtrarPersonasCheckout(this.value)" placeholder="Buscar por nombre, correo o rol..." class="w-full border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs focus:border-morado focus:ring-1 focus:ring-morado outline-none bg-slate-50" />
-          <svg class="w-4 h-4 text-slate2 absolute left-2.5 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-        </div>
-        <select id="co_persona" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-morado outline-none" onchange="document.getElementById('co_persona_manual_wrap').classList.toggle('hidden', this.value !== '__tercero__')">
-          <option value="">-- Seleccionar usuario de la plataforma --</option>
-          <option value="__tercero__">+ Tercero / Persona externa (Escribir nombre abajo)</option>
-          ${optionsUsuarios}
-        </select>
-        
-        <div id="co_persona_manual_wrap" class="hidden mt-2">
-          <label class="block text-[11px] font-bold text-morado mb-1">Nombre completo del Tercero / Externo:</label>
-          <input type="text" id="co_persona_manual" class="w-full border border-morado/40 bg-morado/5 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none" placeholder="Ej: Juan Martínez (Invitado / Tallerista externo)" />
-        </div>
-      </div>
-
-      <div>
-        <label class="block text-xs font-bold text-ink mb-1">Modalidad de Asignación:</label>
-        <div class="grid grid-cols-2 gap-3 mt-1.5">
-          <label class="flex items-center gap-2.5 p-3 rounded-xl border border-gray-200 cursor-pointer hover:border-morado transition has-[:checked]:border-morado has-[:checked]:bg-morado/5">
-            <input type="radio" name="co_tipo" value="Temporal" checked onchange="document.getElementById('co_fecha_div').classList.remove('hidden')" class="text-morado focus:ring-morado">
-            <div>
-              <p class="text-xs font-bold text-ink">Préstamo Temporal</p>
-              <p class="text-[10px] text-slate2">Con fecha y hora límite de retorno</p>
-            </div>
-          </label>
-          <label class="flex items-center gap-2.5 p-3 rounded-xl border border-gray-200 cursor-pointer hover:border-morado transition has-[:checked]:border-morado has-[:checked]:bg-morado/5">
-            <input type="radio" name="co_tipo" value="Permanente" onchange="document.getElementById('co_fecha_div').classList.add('hidden')" class="text-morado focus:ring-morado">
-            <div>
-              <p class="text-xs font-bold text-ink">Asignación Permanente</p>
-              <p class="text-[10px] text-slate2">Asignación fija de planta</p>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <div id="co_fecha_div">
-        <label class="block text-xs font-bold text-ink mb-1">Fecha y Hora Límite de Devolución:</label>
-        <input type="datetime-local" id="co_fecha_limite" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-morado outline-none" />
-        <p class="text-[10px] text-slate2 mt-1">El sistema alertará automáticamente tanto al administrador como al usuario si se excede este plazo.</p>
-      </div>
-    </div>
-  `;
-
 // --- TRAZABILIDAD Y REGISTRO EN HISTORIAL DE PRESTAMOS ---
 async function registrarPrestamoEnHistorial({ recurso, persona, tipo = 'Temporal', fechaLimite = null, motivo = '', observaciones = '', entregadoPor = null }) {
   try {
@@ -1068,10 +1300,10 @@ async function cerrarPrestamoEnHistorial({ recursoId, anteriorCustodio, observac
 
     const cTrim = (anteriorCustodio || '').trim().toLowerCase();
     const prestamoActivo = prestamos.find(p => 
-      p.recurso_id === recursoId && 
+      String(p.recurso_id) === String(recursoId) && 
       (p.estado === 'Activo' || p.estado === 'Retrasado') &&
       (!cTrim || (p.usuario_nombre || '').trim().toLowerCase() === cTrim || (p.usuario_email || '').trim().toLowerCase() === cTrim)
-    ) || prestamos.find(p => p.recurso_id === recursoId && (p.estado === 'Activo' || p.estado === 'Retrasado'));
+    ) || prestamos.find(p => String(p.recurso_id) === String(recursoId) && (p.estado === 'Activo' || p.estado === 'Retrasado'));
 
     const ahora = new Date();
     let nuevoEstado = 'Devuelto';
@@ -1104,64 +1336,147 @@ async function cerrarPrestamoEnHistorial({ recursoId, anteriorCustodio, observac
 }
 window.cerrarPrestamoEnHistorial = cerrarPrestamoEnHistorial;
 
+window.accionCheckout = async function(id) {
+  if (esUsuarioSoloLectura()) {
+    toast('Los aliados y donantes tienen permisos exclusivos de solo lectura.', 'warning');
+    return;
+  }
+  const usuarios = await Store.list('usuarios') || [];
+  const optionsUsuarios = usuarios.map(u => `<option value="${escapeHtml(u.nombre)}">${escapeHtml(u.nombre)} (${escapeHtml(u.rol || 'Estudiante')}) - ${escapeHtml(u.email || '')}</option>`).join('');
+
+  const html = `
+    <div class="p-1 space-y-4">
+      <div>
+        <label class="block text-xs font-bold text-ink mb-1">Destinatario / Responsable del Equipo:</label>
+        <div class="relative mb-2">
+          <input type="text" id="co_buscar_persona" oninput="filtrarPersonasCheckout(this.value)" placeholder="Buscar por nombre, correo o rol..." class="w-full border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs focus:border-morado focus:ring-1 focus:ring-morado outline-none bg-slate-50" />
+          <svg class="w-4 h-4 text-slate2 absolute left-2.5 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
+        <select id="co_persona" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-morado outline-none" onchange="document.getElementById('co_persona_manual_wrap').classList.toggle('hidden', this.value !== '__tercero__')">
+          <option value="">-- Seleccionar usuario de la plataforma --</option>
+          <option value="__tercero__">+ Tercero / Persona externa (Escribir nombre abajo)</option>
+          ${optionsUsuarios}
+        </select>
+        
+        <div id="co_persona_manual_wrap" class="hidden mt-2">
+          <label class="block text-[11px] font-bold text-morado mb-1">Nombre completo del Tercero / Externo:</label>
+          <input type="text" id="co_persona_manual" class="w-full border border-morado/40 bg-morado/5 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none" placeholder="Ej: Juan Martínez (Invitado / Tallerista externo)" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-ink mb-1">Modalidad de Asignación:</label>
+        <div class="grid grid-cols-2 gap-3 mt-1.5">
+          <label class="flex items-center gap-2.5 p-3 rounded-xl border border-gray-200 cursor-pointer hover:border-morado transition has-[:checked]:border-morado has-[:checked]:bg-morado/5">
+            <input type="radio" name="co_tipo" value="Temporal" checked onchange="document.getElementById('co_fecha_div').classList.remove('hidden')" class="text-morado focus:ring-morado">
+            <div>
+              <p class="text-xs font-bold text-ink">Préstamo Temporal</p>
+              <p class="text-[10px] text-slate2">Con fecha y hora límite de retorno</p>
+            </div>
+          </label>
+          <label class="flex items-center gap-2.5 p-3 rounded-xl border border-gray-200 cursor-pointer hover:border-morado transition has-[:checked]:border-morado has-[:checked]:bg-morado/5">
+            <input type="radio" name="co_tipo" value="Permanente" onchange="document.getElementById('co_fecha_div').classList.add('hidden')" class="text-morado focus:ring-morado">
+            <div>
+              <p class="text-xs font-bold text-ink">Asignación Permanente</p>
+              <p class="text-[10px] text-slate2">Asignación fija de planta</p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div id="co_fecha_div">
+        <label class="block text-xs font-bold text-ink mb-1">Fecha y Hora Límite de Devolución:</label>
+        <input type="datetime-local" id="co_fecha_limite" min="${new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0, 16)}" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-morado outline-none" />
+        <p class="text-[10px] text-slate2 mt-1">El sistema alertará automáticamente tanto al administrador como al usuario si se excede este plazo.</p>
+      </div>
+    </div>
+  `;
+
   mostrarModalPersonalizado('Entregar Equipo (Checkout)', html, async () => {
-    const selPersona = document.getElementById('co_persona').value;
-    const manPersona = document.getElementById('co_persona_manual')?.value.trim();
-    const persona = (selPersona === '__tercero__' ? manPersona : selPersona) || manPersona;
+    try {
+      const selPersona = document.getElementById('co_persona').value;
+      const manPersona = document.getElementById('co_persona_manual')?.value.trim();
+      const persona = (selPersona === '__tercero__' ? manPersona : selPersona) || manPersona;
 
-    if (!persona) {
-      toast('Debe seleccionar o escribir a quién se le entrega el equipo.', 'error');
-      return false;
-    }
-
-    const tipo = document.querySelector('input[name="co_tipo"]:checked').value;
-    let fechaLimite = null;
-    if (tipo === 'Temporal') {
-      fechaLimite = document.getElementById('co_fecha_limite').value;
-      if (!fechaLimite) {
-        toast('Debe indicar la fecha límite de devolución para un préstamo temporal.', 'error');
+      if (!persona) {
+        toast('Debe seleccionar o escribir a quién se le entrega el equipo.', 'error');
         return false;
       }
-    }
 
-    const recursos = await Store.list('recursos_inventario') || [];
-    const idx = recursos.findIndex(x => x.id === id);
-    if (idx > -1) {
-      const rec = recursos[idx];
-      rec.estado = tipo === 'Permanente' ? 'Asignado' : 'Prestado';
-      rec.responsable = persona;
-      rec.tipo_asignacion = tipo;
-      rec.fecha_limite = fechaLimite;
-      rec.fecha_entrega = new Date().toISOString();
-
-      await Store.save('recursos_inventario', recursos);
-
-      // Guardar en historial permanente
-      await registrarPrestamoEnHistorial({
-        recurso: rec,
-        persona: persona,
-        tipo: tipo,
-        fechaLimite: fechaLimite,
-        motivo: tipo === 'Permanente' ? 'Asignacion fija institucional' : 'Prestamo temporal para actividades formativas'
-      });
-
-      toast(`Equipo entregado a ${persona} (${tipo})`, 'success');
-
-      if (typeof registrarAuditoriaAccion === 'function') {
-        await registrarAuditoriaAccion('Equipo entregado', persona, 'Recursos', `${rec.nombre} (${rec.codigo}) - ${tipo}`);
+      const tipo = document.querySelector('input[name="co_tipo"]:checked').value;
+      let fechaLimite = null;
+      if (tipo === 'Temporal') {
+        fechaLimite = document.getElementById('co_fecha_limite').value;
+        if (!fechaLimite) {
+          toast('Debe indicar la fecha límite de devolución para un préstamo temporal.', 'error');
+          return false;
+        }
+        if (new Date(fechaLimite).getTime() < Date.now() - 60000) {
+          toast('La fecha límite no puede ser anterior al momento actual.', 'error');
+          return false;
+        }
       }
 
-      if (typeof renderRecursos === 'function') renderRecursos();
-      if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
-      if (typeof renderHistorialPrestamosAdmin === 'function') renderHistorialPrestamosAdmin();
-      return true;
+      const recursos = await Store.list('recursos_inventario') || [];
+      const idx = recursos.findIndex(x => String(x.id) === String(id) || String(x.codigo) === String(id));
+      if (idx > -1) {
+        const rec = recursos[idx];
+        rec.estado = tipo === 'Permanente' ? 'Asignado' : 'Prestado';
+        rec.responsable = persona;
+        rec.tipo_asignacion = tipo;
+        rec.fecha_limite = fechaLimite;
+        rec.fecha_entrega = new Date().toISOString();
+
+        await Store.save('recursos_inventario', recursos);
+
+        // Guardar en historial permanente
+        try {
+          await registrarPrestamoEnHistorial({
+            recurso: rec,
+            persona: persona,
+            tipo: tipo,
+            fechaLimite: fechaLimite,
+            motivo: tipo === 'Permanente' ? 'Asignacion fija institucional' : 'Prestamo temporal para actividades formativas'
+          });
+        } catch (eHist) {
+          console.warn('[accionCheckout] Error guardando historial:', eHist);
+        }
+
+        toast(`Equipo entregado a ${persona} (${tipo})`, 'success');
+
+        try {
+          if (typeof registrarAuditoriaAccion === 'function') {
+            await registrarAuditoriaAccion('Equipo entregado', persona, 'Recursos', `${rec.nombre} (${rec.codigo}) - ${tipo}`);
+          }
+        } catch (eAud) {
+          console.warn('[accionCheckout] Error en auditoría:', eAud);
+        }
+
+        if (typeof cerrarModalPersonalizado === 'function') {
+          cerrarModalPersonalizado();
+        }
+
+        if (typeof renderRecursos === 'function') renderRecursos();
+        if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+        if (typeof renderHistorialPrestamosAdmin === 'function') renderHistorialPrestamosAdmin();
+        if (typeof renderSolicitarEquipoForm === 'function') renderSolicitarEquipoForm();
+        return true;
+      }
+      return false;
+    } catch (errCheck) {
+      console.error('[accionCheckout] Error:', errCheck);
+      toast('Error al entregar equipo: ' + errCheck.message, 'error');
+      return false;
     }
-    return false;
   });
 };
 
 // --- RECEPCION DIRECTA DE PRESTAMO (HISTORIAL & TRAZABILIDAD) ---
 async function recibirEquipoHistorial(prestamoId, recursoId) {
+  if (esUsuarioSoloLectura()) {
+    toast('Los aliados y donantes tienen permisos exclusivos de solo lectura.', 'warning');
+    return;
+  }
   try {
     await asegurarDatosInicialesRecursos();
 
@@ -1225,77 +1540,177 @@ async function recibirEquipoHistorial(prestamoId, recursoId) {
           </div>
         `}
 
+        <!-- ENCUESTA Y DIAGNÓSTICO INSTITUCIONAL DE RECEPCIÓN -->
+        <div class="p-4 bg-purple-50/60 border border-purple-100 rounded-2xl space-y-3">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-lg bg-morado text-white flex items-center justify-center">
+              <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+            </span>
+            <p class="font-black text-ink text-xs uppercase tracking-wide">Encuesta de Recepción y Estado del Equipo</p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div>
+              <label class="block text-[11px] font-bold text-slate2 mb-1">1. Condición Física / Estética*</label>
+              <select id="rec_encuesta_fisico" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:border-morado bg-white outline-none">
+                <option value="Excelente (Sin rayones ni golpes)">Excelente (Sin rayones ni golpes)</option>
+                <option value="Bueno (Desgaste normal de uso)">Bueno (Desgaste normal de uso)</option>
+                <option value="Regular (Rayones o marcas notorias)">Regular (Rayones o marcas notorias)</option>
+                <option value="Dañado / Golpeado (Golpes, pantalla o chasis afectado)">Dañado / Golpeado (Golpes, pantalla o chasis afectado)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate2 mb-1">2. Funcionamiento Operativo*</label>
+              <select id="rec_encuesta_operativo" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:border-morado bg-white outline-none">
+                <option value="100% Operativo y funcional">100% Operativo y funcional</option>
+                <option value="Operativo con lentitud o detalles leves">Operativo con lentitud o detalles leves</option>
+                <option value="Presenta fallas técnicas / Requiere formateo">Presenta fallas técnicas / Requiere formateo</option>
+                <option value="No enciende / Inoperativo (Para mantenimiento)">No enciende / Inoperativo (Para mantenimiento)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate2 mb-1">3. Estado de Accesorios y Cargador*</label>
+              <select id="rec_encuesta_accesorios" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:border-morado bg-white outline-none">
+                <option value="Completos y en óptimo estado">Completos y en óptimo estado</option>
+                <option value="Cargador con desgaste leve">Cargador con desgaste leve</option>
+                <option value="Incompleto (Faltó cable o adaptador)">Incompleto (Faltó cable o adaptador)</option>
+                <option value="Sin accesorios devueltos">Sin accesorios devueltos</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate2 mb-1">4. Reincorporación al Inventario*</label>
+              <select id="rec_encuesta_destino" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:border-morado bg-white outline-none">
+                <option value="Disponible (Reincorporar a bodega)">Disponible (Reincorporar a bodega)</option>
+                <option value="En mantenimiento (Enviar a revisión técnica)">En mantenimiento (Enviar a revisión técnica)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         <!-- OBSERVACIONES DE RECEPCION -->
         <div>
-          <label class="block text-xs font-bold text-ink mb-1">Estado físico y observaciones de recepción en bodega:</label>
-          <textarea id="checkin_historial_obs" rows="3" class="w-full border border-gray-200 rounded-xl p-3 text-xs focus:border-morado outline-none" placeholder="Indica el estado del equipo al recibirlo...">Devolución verificada en bodega. Equipo recibido en óptimas condiciones físicas y operativas con accesorios completos.</textarea>
+          <label class="block text-xs font-bold text-ink mb-1">Detalles y Observaciones Técnicas de Recepción:</label>
+          <textarea id="checkin_historial_obs" rows="2" class="w-full border border-gray-200 rounded-xl p-2.5 text-xs focus:border-morado outline-none" placeholder="Indica detalles adicionales del estado del equipo...">Devolución verificada en bodega con checklist de recepción conforme.</textarea>
         </div>
       </div>
     `;
 
-    mostrarModalPersonalizado('Recibir Equipo en Bodega (Checkin)', html, async () => {
-      const obs = document.getElementById('checkin_historial_obs')?.value.trim() || 'Devolución verificada en bodega.';
-      const nuevoEstado = vencido ? 'Devuelto con retraso' : 'Devuelto';
-      const fechaDevIso = ahora.toISOString();
-
-      // 1. Actualizar MySQL vía API
-      const fetchFn = (typeof apiFetch === 'function' ? apiFetch : (window.apiFetch || null));
-      if (fetchFn) {
-        try {
-          await fetchFn('historial_prestamos', {
-            method: 'PUT',
-            body: JSON.stringify({
-              id: p.id,
-              estado: nuevoEstado,
-              fecha_devolucion: fechaDevIso,
-              recibido_por: adminNombre,
-              observaciones_devolucion: obs
-            })
-          });
-        } catch (errApi) {
-          console.warn('[recibirEquipoHistorial] Error llamando API PUT:', errApi.message);
-        }
-      }
-
-      // 2. Limpiar caché de Store
-      if (typeof Store !== 'undefined' && Store.clearCache) {
-        Store.clearCache('historial_prestamos');
-      }
-
-      // 3. Actualizar memoria local para reactividad inmediata
-      p.estado = nuevoEstado;
-      p.fecha_devolucion = fechaDevIso;
-      p.recibido_por = adminNombre;
-      p.observaciones_devolucion = obs;
-
-      // 4. Actualizar inventario (reincorporar recurso a Disponible)
+    mostrarModalPersonalizado('Encuesta y Recepción de Equipo en Bodega', html, async () => {
       try {
-        const recursos = await Store.list('recursos_inventario') || [];
-        const rIdx = recursos.findIndex(r => r.id === p.recurso_id || (p.recurso_codigo && r.codigo === p.recurso_codigo));
-        if (rIdx !== -1) {
-          recursos[rIdx].estado = 'Disponible';
-          recursos[rIdx].responsable = null;
-          recursos[rIdx].tipo_asignacion = null;
-          recursos[rIdx].fecha_entrega = null;
-          recursos[rIdx].fecha_limite = null;
-          await Store.save('recursos_inventario', recursos);
+        const condFisica = document.getElementById('rec_encuesta_fisico')?.value || 'Bueno';
+        const condOperativa = document.getElementById('rec_encuesta_operativo')?.value || 'Operativo';
+        const condAccesorios = document.getElementById('rec_encuesta_accesorios')?.value || 'Completos';
+        const destino = document.getElementById('rec_encuesta_destino')?.value || 'Disponible';
+        const obsTexto = document.getElementById('checkin_historial_obs')?.value.trim() || 'Devolución verificada en bodega.';
+
+        // Compilar resumen estructurado de la encuesta
+        const obsCompuesta = `[Encuesta de Recepción] Físico: ${condFisica} | Operativo: ${condOperativa} | Accesorios: ${condAccesorios} | Obs: ${obsTexto}`;
+        const nuevoEstado = vencido ? 'Devuelto con retraso' : 'Devuelto';
+        const nuevoEstadoInventario = (destino.includes('mantenimiento') || condOperativa.includes('No enciende') || condFisica.includes('Dañado')) ? 'En mantenimiento' : 'Disponible';
+        const fechaDevIso = ahora.toISOString();
+
+        // 1. Actualizar MySQL vía API
+        const fetchFn = (typeof apiFetch === 'function' ? apiFetch : (window.apiFetch || null));
+        if (fetchFn) {
+          try {
+            await fetchFn('historial_prestamos', {
+              method: 'PUT',
+              body: JSON.stringify({
+                id: p.id,
+                estado: nuevoEstado,
+                fecha_devolucion: fechaDevIso,
+                recibido_por: adminNombre,
+                observaciones_devolucion: obsCompuesta
+              })
+            });
+          } catch (errApi) {
+            console.warn('[recibirEquipoHistorial] Error llamando API PUT:', errApi.message);
+          }
         }
-      } catch (errInv) {
-        console.warn('[recibirEquipoHistorial] Error actualizando inventario:', errInv);
+
+        // 2. Limpiar caché de Store
+        if (typeof Store !== 'undefined' && Store.clearCache) {
+          Store.clearCache('historial_prestamos');
+        }
+
+        // 3. Actualizar memoria local para reactividad inmediata
+        p.estado = nuevoEstado;
+        p.fecha_devolucion = fechaDevIso;
+        p.recibido_por = adminNombre;
+        p.observaciones_devolucion = obsCompuesta;
+
+        // 4. Actualizar inventario (reincorporar recurso según encuesta)
+        try {
+          const recursos = await Store.list('recursos_inventario') || [];
+          const rIdx = recursos.findIndex(r => 
+            String(r.id) === String(p.recurso_id) || 
+            (p.recurso_codigo && String(r.codigo).trim().toLowerCase() === String(p.recurso_codigo).trim().toLowerCase()) ||
+            (p.usuario_nombre && r.responsable && String(r.responsable).trim().toLowerCase() === String(p.usuario_nombre).trim().toLowerCase())
+          );
+          if (rIdx !== -1) {
+            recursos[rIdx].estado = nuevoEstadoInventario;
+            recursos[rIdx].responsable = null;
+            recursos[rIdx].tipo_asignacion = null;
+            recursos[rIdx].fecha_entrega = null;
+            recursos[rIdx].fecha_limite = null;
+            if (nuevoEstadoInventario === 'En mantenimiento') {
+              recursos[rIdx].observaciones = `Enviado a mantenimiento tras devolución de ${p.usuario_nombre}: ${obsCompuesta}`;
+            }
+            await Store.save('recursos_inventario', recursos);
+          }
+        } catch (errInv) {
+          console.warn('[recibirEquipoHistorial] Error actualizando inventario:', errInv);
+        }
+
+        // 4.1 Actualizar solicitudes si había alguna activa vinculada
+        try {
+          const solList = await Store.list('solicitudes_recursos') || [];
+          let solMod = false;
+          solList.forEach(s => {
+            const matchUser = p.usuario_nombre && s.solicitante && String(s.solicitante).trim().toLowerCase() === String(p.usuario_nombre).trim().toLowerCase();
+            const matchRec = (p.recurso_id && String(s.recurso_id) === String(p.recurso_id)) || (p.recurso_codigo && String(s.recurso_codigo) === String(p.recurso_codigo));
+            if ((matchUser || matchRec) && s.estado === 'Aprobada') {
+              s.estado = 'Finalizada';
+              s.fecha_devolucion = fechaDevIso;
+              solMod = true;
+            }
+          });
+          if (solMod) {
+            await Store.save('solicitudes_recursos', solList);
+          }
+        } catch (errSol) {
+          console.warn('[recibirEquipoHistorial] Error actualizando solicitudes:', errSol);
+        }
+
+        // 5. Auditoría
+        try {
+          if (typeof registrarAuditoriaAccion === 'function') {
+            await registrarAuditoriaAccion('Equipo devuelto', p.usuario_nombre || 'Custodio', 'Recursos', `${p.recurso_nombre} (${p.recurso_codigo || ''})`);
+          }
+        } catch (eAud) {
+          console.warn('[recibirEquipoHistorial] Advertencia auditoría:', eAud);
+        }
+
+        toast('Equipo recibido y reincorporado a bodega con éxito', 'ok');
+
+        // 6. Cerrar modal y refrescar todas las vistas
+        if (typeof cerrarModalPersonalizado === 'function') {
+          cerrarModalPersonalizado();
+        }
+        renderHistorialPrestamosAdmin();
+        if (typeof renderRecursos === 'function') renderRecursos();
+        if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+        if (typeof renderSolicitudesAdmin === 'function') renderSolicitudesAdmin();
+        if (typeof renderSolicitarEquipoForm === 'function') renderSolicitarEquipoForm();
+        return true;
+      } catch (errCb) {
+        console.error('[recibirEquipoHistorial] Error en callback:', errCb);
+        toast('Error al recibir activo: ' + errCb.message, 'error');
+        return false;
       }
-
-      // 5. Auditoría
-      if (typeof registrarAuditoriaAccion === 'function') {
-        await registrarAuditoriaAccion('Equipo devuelto', p.usuario_nombre || 'Custodio', 'Recursos', `${p.recurso_nombre} (${p.recurso_codigo || ''})`);
-      }
-
-      toast('Equipo recibido y reincorporado a bodega con éxito', 'ok');
-
-      // 6. Refrescar vistas
-      renderHistorialPrestamosAdmin();
-      if (typeof renderRecursos === 'function') renderRecursos();
-      if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
-      return true;
     }, 'Confirmar Recepción');
   } catch (err) {
     console.error('[recibirEquipoHistorial] Error:', err);
@@ -1306,16 +1721,20 @@ window.recibirEquipoHistorial = recibirEquipoHistorial;
 
 // --- CHECKIN: DEVOLVER EQUIPO A DISPONIBLE CON REGISTRO HISTORICO ---
 window.accionCheckin = async function(id) {
+  if (esUsuarioSoloLectura()) {
+    toast('Los aliados y donantes tienen permisos exclusivos de solo lectura.', 'warning');
+    return;
+  }
   // Si id corresponde a un préstamo activo en historial, delegar a recibirEquipoHistorial
   const prestamos = window._ultimaListaHistorialPrestamos || await Store.list('historial_prestamos') || [];
-  const prestamo = prestamos.find(p => (p.id === id || p.recurso_id === id) && (p.estado === 'Activo' || p.estado === 'Retrasado'));
+  const prestamo = prestamos.find(p => (String(p.id) === String(id) || String(p.recurso_id) === String(id)) && (p.estado === 'Activo' || p.estado === 'Retrasado'));
   if (prestamo) {
     return recibirEquipoHistorial(prestamo.id, prestamo.recurso_id);
   }
 
   await asegurarDatosInicialesRecursos();
   const recursos = await Store.list('recursos_inventario') || [];
-  const idx = recursos.findIndex(x => x.id === id || x.codigo === id);
+  const idx = recursos.findIndex(x => String(x.id) === String(id) || String(x.codigo) === String(id));
   if (idx === -1) {
     toast('No se encontró el equipo seleccionado en el inventario.', 'error');
     return;
@@ -1344,48 +1763,407 @@ window.accionCheckin = async function(id) {
           <p class="font-bold">Devolución con retraso de ${retraso.texto}. Se registrará en la auditoría de cumplimiento.</p>
         </div>
       ` : `
-        <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-2">
+        <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-2.5">
           <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
           <p class="font-bold">Devolución a tiempo dentro del plazo convenido.</p>
         </div>
       `}
 
+      <!-- ENCUESTA Y DIAGNÓSTICO INSTITUCIONAL DE RECEPCIÓN -->
+      <div class="p-4 bg-purple-50/60 border border-purple-100 rounded-2xl space-y-3">
+        <div class="flex items-center gap-2">
+          <span class="w-6 h-6 rounded-lg bg-morado text-white flex items-center justify-center">
+            <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+          </span>
+          <p class="font-black text-ink text-xs uppercase tracking-wide">Encuesta de Recepción y Estado del Equipo</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          <div>
+            <label class="block text-[11px] font-bold text-slate2 mb-1">1. Condición Física / Estética*</label>
+            <select id="checkin_encuesta_fisico" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:border-morado bg-white outline-none">
+              <option value="Excelente (Sin rayones ni golpes)">Excelente (Sin rayones ni golpes)</option>
+              <option value="Bueno (Desgaste normal de uso)">Bueno (Desgaste normal de uso)</option>
+              <option value="Regular (Rayones o marcas notorias)">Regular (Rayones o marcas notorias)</option>
+              <option value="Dañado / Golpeado (Golpes, pantalla o chasis afectado)">Dañado / Golpeado (Golpes, pantalla o chasis afectado)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold text-slate2 mb-1">2. Funcionamiento Operativo*</label>
+            <select id="checkin_encuesta_operativo" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:border-morado bg-white outline-none">
+              <option value="100% Operativo y funcional">100% Operativo y funcional</option>
+              <option value="Operativo con lentitud o detalles leves">Operativo con lentitud o detalles leves</option>
+              <option value="Presenta fallas técnicas / Requiere formateo">Presenta fallas técnicas / Requiere formateo</option>
+              <option value="No enciende / Inoperativo (Para mantenimiento)">No enciende / Inoperativo (Para mantenimiento)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold text-slate2 mb-1">3. Estado de Accesorios y Cargador*</label>
+            <select id="checkin_encuesta_accesorios" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:border-morado bg-white outline-none">
+              <option value="Completos y en óptimo estado">Completos y en óptimo estado</option>
+              <option value="Cargador con desgaste leve">Cargador con desgaste leve</option>
+              <option value="Incompleto (Faltó cable o adaptador)">Incompleto (Faltó cable o adaptador)</option>
+              <option value="Sin accesorios devueltos">Sin accesorios devueltos</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold text-slate2 mb-1">4. Reincorporación al Inventario*</label>
+            <select id="checkin_encuesta_destino" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:border-morado bg-white outline-none">
+              <option value="Disponible (Reincorporar a bodega)">Disponible (Reincorporar a bodega)</option>
+              <option value="En mantenimiento (Enviar a revisión técnica)">En mantenimiento (Enviar a revisión técnica)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div>
-        <label class="block text-xs font-bold text-ink mb-1">Estado físico y observaciones de recepción:</label>
-        <textarea id="checkin_obs" rows="3" class="w-full border border-gray-200 rounded-xl p-2.5 text-xs focus:border-morado outline-none" placeholder="Indica el estado del equipo al recibirlo...">Devolución verificada en bodega. Equipo recibido en óptimas condiciones físicas y operativas con accesorios completos.</textarea>
+        <label class="block text-xs font-bold text-ink mb-1">Detalles y Observaciones Técnicas de Recepción:</label>
+        <textarea id="checkin_obs" rows="2" class="w-full border border-gray-200 rounded-xl p-2.5 text-xs focus:border-morado outline-none" placeholder="Indica el estado del equipo al recibirlo...">Devolución verificada en bodega con checklist de recepción conforme.</textarea>
       </div>
     </div>
   `;
 
-  mostrarModalPersonalizado('Recibir Equipo (Checkin)', html, async () => {
-    const obs = document.getElementById('checkin_obs')?.value.trim() || 'Devolución verificada en bodega.';
+  mostrarModalPersonalizado('Encuesta y Recepción de Equipo en Bodega', html, async () => {
+    try {
+      const condFisica = document.getElementById('checkin_encuesta_fisico')?.value || 'Bueno';
+      const condOperativa = document.getElementById('checkin_encuesta_operativo')?.value || 'Operativo';
+      const condAccesorios = document.getElementById('checkin_encuesta_accesorios')?.value || 'Completos';
+      const destino = document.getElementById('checkin_encuesta_destino')?.value || 'Disponible';
+      const obsTexto = document.getElementById('checkin_obs')?.value.trim() || 'Devolución verificada en bodega.';
 
-    rec.estado = 'Disponible';
-    rec.responsable = null;
-    rec.tipo_asignacion = null;
-    rec.fecha_limite = null;
-    rec.fecha_entrega = null;
+      const obsCompuesta = `[Encuesta de Recepción] Físico: ${condFisica} | Operativo: ${condOperativa} | Accesorios: ${condAccesorios} | Obs: ${obsTexto}`;
+      const nuevoEstadoInventario = (destino.includes('mantenimiento') || condOperativa.includes('No enciende') || condFisica.includes('Dañado')) ? 'En mantenimiento' : 'Disponible';
+      const ahoraIso = new Date().toISOString();
 
-    await Store.save('recursos_inventario', recursos);
+      rec.estado = nuevoEstadoInventario;
+      rec.responsable = null;
+      rec.tipo_asignacion = null;
+      rec.fecha_limite = null;
+      rec.fecha_entrega = null;
 
-    // Cerrar prestamo en historial permanente
-    await cerrarPrestamoEnHistorial({
-      recursoId: rec.id,
-      anteriorCustodio: anteriorCustodio,
-      observaciones: obs
-    });
+      await Store.save('recursos_inventario', recursos);
 
-    toast('Equipo recibido y reincorporado a Disponible', 'ok');
+      // Cerrar prestamo en historial permanente
+      try {
+        await cerrarPrestamoEnHistorial({
+          recursoId: rec.id,
+          anteriorCustodio: anteriorCustodio,
+          observaciones: obsCompuesta
+        });
+      } catch (eHist) {
+        console.warn('[accionCheckin] Error cerrando historial:', eHist);
+      }
 
-    if (typeof registrarAuditoriaAccion === 'function') {
-      await registrarAuditoriaAccion('Equipo devuelto', anteriorCustodio || 'Admin', 'Recursos', `${rec.nombre} (${rec.codigo})`);
+      // Actualizar solicitudes si había alguna activa vinculada
+      try {
+        const solList = await Store.list('solicitudes_recursos') || [];
+        let solMod = false;
+        solList.forEach(s => {
+          const matchUser = anteriorCustodio && s.solicitante && String(s.solicitante).trim().toLowerCase() === String(anteriorCustodio).trim().toLowerCase();
+          const matchRec = (rec.id && String(s.recurso_id) === String(rec.id)) || (rec.codigo && String(s.recurso_codigo) === String(rec.codigo));
+          if ((matchUser || matchRec) && s.estado === 'Aprobada') {
+            s.estado = 'Finalizada';
+            s.fecha_devolucion = ahoraIso;
+            solMod = true;
+          }
+        });
+        if (solMod) {
+          await Store.save('solicitudes_recursos', solList);
+        }
+      } catch (errSol) {
+        console.warn('[accionCheckin] Error actualizando solicitudes:', errSol);
+      }
+
+      toast('Equipo recibido y reincorporado a Disponible', 'ok');
+
+      try {
+        if (typeof registrarAuditoriaAccion === 'function') {
+          await registrarAuditoriaAccion('Equipo devuelto', anteriorCustodio || 'Admin', 'Recursos', `${rec.nombre} (${rec.codigo})`);
+        }
+      } catch (eAud) {
+        console.warn('[accionCheckin] Advertencia auditoría:', eAud);
+      }
+
+      if (typeof cerrarModalPersonalizado === 'function') {
+        cerrarModalPersonalizado();
+      }
+      if (typeof renderRecursos === 'function') renderRecursos();
+      if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+      if (typeof renderHistorialPrestamosAdmin === 'function') renderHistorialPrestamosAdmin();
+      if (typeof renderSolicitudesAdmin === 'function') renderSolicitudesAdmin();
+      if (typeof renderSolicitarEquipoForm === 'function') renderSolicitarEquipoForm();
+      return true;
+    } catch (errCheckin) {
+      console.error('[accionCheckin] Error:', errCheckin);
+      toast('Error al recibir equipo: ' + errCheckin.message, 'error');
+      return false;
+    }
+  }, 'Confirmar Recepción');
+};
+
+// --- DEVOLUCIÓN DIRECTA POR PARTE DEL ESTUDIANTE / BENEFICIARIO ---
+window.devolverEquipoEstudiante = async function(recursoId) {
+  try {
+    await asegurarDatosInicialesRecursos();
+    const user = getUsuarioSesionActual();
+    const recursos = await Store.list('recursos_inventario') || [];
+    const idx = recursos.findIndex(r => 
+      (recursoId && (String(r.id) === String(recursoId) || String(r.codigo) === String(recursoId))) ||
+      (r.responsable && user?.nombre && String(r.responsable).trim().toLowerCase() === String(user.nombre).trim().toLowerCase())
+    );
+
+    if (idx === -1) {
+      toast('No se encontró ningún equipo a tu cargo para devolver.', 'info');
+      return;
     }
 
-    if (typeof renderRecursos === 'function') renderRecursos();
-    if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
-    if (typeof renderHistorialPrestamosAdmin === 'function') renderHistorialPrestamosAdmin();
-    return true;
-  }, 'Confirmar Recepción');
+    const rec = recursos[idx];
+    const anteriorCustodio = rec.responsable || user?.nombre || 'Estudiante';
+    const ahoraIso = new Date().toISOString();
+
+    const html = `
+      <div class="space-y-4 text-xs">
+        <div class="p-4 bg-morado/5 border border-morado/15 rounded-2xl space-y-2">
+          <p class="font-extrabold text-ink text-sm">${escapeHtml(rec.nombre)}</p>
+          <div class="grid grid-cols-2 gap-2 text-slate2 text-[11px] pt-1">
+            <p>Código: <strong class="text-morado font-mono">${escapeHtml(rec.codigo || '-')}</strong></p>
+            <p>Serial: <strong>${escapeHtml(rec.serial || '-')}</strong></p>
+            <p>Modalidad: <strong>${escapeHtml(rec.tipo_asignacion || 'Préstamo')}</strong></p>
+            <p>Custodio: <strong>${escapeHtml(anteriorCustodio)}</strong></p>
+          </div>
+        </div>
+
+        <p class="text-slate2 text-xs">Al confirmar la devolución, el equipo será reincorporado inmediatamente a la bodega institucional en estado <strong>Disponible</strong> y tu custodia quedará liberada.</p>
+
+        <div>
+          <label class="block text-xs font-bold text-ink mb-1">Observaciones / Estado físico del equipo:</label>
+          <textarea id="dev_estudiante_obs" rows="3" class="w-full border border-gray-200 rounded-xl p-3 text-xs focus:border-morado outline-none" placeholder="Indica el estado en que devuelves el equipo y sus accesorios...">Equipo entregado a bodega en óptimas condiciones físicas y operativas con su respectivo cargador.</textarea>
+        </div>
+      </div>
+    `;
+
+    mostrarModalPersonalizado('Regresar Computador / Registrar Devolución', html, async () => {
+      try {
+        const obs = document.getElementById('dev_estudiante_obs')?.value.trim() || 'Equipo devuelto por el estudiante.';
+
+        // 1. Liberar equipo en inventario
+        rec.estado = 'Disponible';
+        rec.responsable = null;
+        rec.tipo_asignacion = null;
+        rec.fecha_limite = null;
+        rec.fecha_entrega = null;
+        await Store.save('recursos_inventario', recursos);
+
+        // 2. Cerrar en historial de préstamos
+        try {
+          await cerrarPrestamoEnHistorial({
+            recursoId: rec.id,
+            anteriorCustodio: anteriorCustodio,
+            observaciones: obs,
+            recibidoPor: 'Devolución Plataforma (' + (user?.nombre || 'Estudiante') + ')'
+          });
+        } catch (eHist) {
+          console.warn('[devolverEquipoEstudiante] Error cerrando historial:', eHist);
+        }
+
+        // 3. Finalizar solicitudes activas asociadas
+        try {
+          const solicitudes = await Store.list('solicitudes_recursos') || [];
+          let modSol = false;
+          solicitudes.forEach(s => {
+            const matchUser = anteriorCustodio && s.solicitante && String(s.solicitante).trim().toLowerCase() === String(anteriorCustodio).trim().toLowerCase();
+            const matchRec = (rec.id && String(s.recurso_id) === String(rec.id)) || (rec.codigo && String(s.recurso_codigo) === String(rec.codigo));
+            if ((matchUser || matchRec) && s.estado === 'Aprobada') {
+              s.estado = 'Finalizada';
+              s.fecha_devolucion = ahoraIso;
+              modSol = true;
+            }
+          });
+          if (modSol) {
+            await Store.save('solicitudes_recursos', solicitudes);
+          }
+        } catch (eSol) {
+          console.warn('[devolverEquipoEstudiante] Error actualizando solicitudes:', eSol);
+        }
+
+        // 4. Registrar auditoría
+        try {
+          if (typeof registrarAuditoriaAccion === 'function') {
+            await registrarAuditoriaAccion('Equipo devuelto por estudiante', anteriorCustodio, user?.rol || 'Estudiante', `${rec.nombre} (${rec.codigo || ''})`);
+          }
+        } catch (eAud) {
+          console.warn('[devolverEquipoEstudiante] Error auditoría:', eAud);
+        }
+
+        toast('¡Equipo regresado con éxito! Tu custodia ha sido liberada y el equipo reincorporado a Disponible.', 'ok');
+
+        if (typeof cerrarModalPersonalizado === 'function') {
+          cerrarModalPersonalizado();
+        }
+
+        renderSolicitarEquipoForm();
+        if (typeof renderRecursos === 'function') renderRecursos();
+        if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
+        if (typeof renderHistorialPrestamosAdmin === 'function') renderHistorialPrestamosAdmin();
+        if (typeof renderSolicitudesAdmin === 'function') renderSolicitudesAdmin();
+
+        return true;
+      } catch (errDev) {
+        console.error('[devolverEquipoEstudiante] Error:', errDev);
+        toast('Error al registrar devolución: ' + errDev.message, 'error');
+        return false;
+      }
+    }, 'Confirmar Devolución');
+  } catch (err) {
+    console.error('[devolverEquipoEstudiante] Error general:', err);
+    toast('Error: ' + err.message, 'error');
+  }
+};
+
+// --- REPORTE EXPLÍCITO DEL ESTUDIANTE SI RECIBE EQUIPO EN MALAS CONDICIONES ---
+window.reportarEstadoEquipoEstudiante = async function(recursoId) {
+  try {
+    await asegurarDatosInicialesRecursos();
+    const user = getUsuarioSesionActual();
+    const recursos = await Store.list('recursos_inventario') || [];
+    const idx = recursos.findIndex(r => 
+      (recursoId && (String(r.id) === String(recursoId) || String(r.codigo) === String(recursoId))) ||
+      (r.responsable && user?.nombre && String(r.responsable).trim().toLowerCase() === String(user.nombre).trim().toLowerCase())
+    );
+
+    if (idx === -1) {
+      toast('No se encontró ningún equipo a tu cargo para reportar novedad.', 'warning');
+      return;
+    }
+
+    const rec = recursos[idx];
+    const html = `
+      <div class="space-y-4 text-xs">
+        <div class="p-3.5 bg-amber-500/10 border border-amber-300 rounded-2xl space-y-1.5">
+          <div class="flex items-center justify-between">
+            <p class="font-extrabold text-ink text-sm">${escapeHtml(rec.nombre)}</p>
+            <span class="font-mono text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-lg">${escapeHtml(rec.codigo || '-')}</span>
+          </div>
+          <p class="text-slate2">Serial: <strong class="text-ink">${escapeHtml(rec.serial || 'No especificado')}</strong></p>
+          <p class="text-slate2">Custodio actual: <strong class="text-ink">${escapeHtml(rec.responsable || user?.nombre || 'Estudiante')}</strong></p>
+        </div>
+
+        <p class="text-slate2 text-xs leading-relaxed">
+          Si el equipo que recibiste presenta fallas físicas, rayones, golpes, problemas de batería o lentitud, repórtalo explícitamente aquí. 
+          Tu declaración quedará registrada formalmente en el <strong>historial institucional de préstamos</strong> para protegerte y dejar constancia ante la administración.
+        </p>
+
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-ink mb-1">1. Falla o Condición Observada en el Equipo:*</label>
+            <select id="rep_est_condicion" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs focus:border-morado bg-white outline-none">
+              <option value="Malas condiciones físicas (Golpes, pantalla rayada, carcasa fracturada)">Malas condiciones físicas (Golpes, pantalla rayada, carcasa fracturada)</option>
+              <option value="Pantalla defectuosa (Líneas, manchas o parpadeo)">Pantalla defectuosa (Líneas, manchas o parpadeo)</option>
+              <option value="Teclado o touchpad con fallas o teclas duras">Teclado o touchpad con fallas o teclas duras</option>
+              <option value="Falla de encendido, lentitud crítica o sobrecalentamiento">Falla de encendido, lentitud crítica o sobrecalentamiento</option>
+              <option value="Cargador o cables defectuosos / en mal estado">Cargador o cables defectuosos / en mal estado</option>
+              <option value="Batería no retiene carga / Se apaga al desconectar">Batería no retiene carga / Se apaga al desconectar</option>
+              <option value="Faltan accesorios o piezas">Faltan accesorios o piezas</option>
+              <option value="Otro daño o novedad técnica">Otro daño o novedad técnica</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-ink mb-1">2. ¿En qué momento se presentó la novedad?:*</label>
+            <select id="rep_est_origen" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs focus:border-morado bg-white outline-none">
+              <option value="El equipo ya venía en este estado al momento de la entrega (Vino defectuoso de bodega)">El equipo ya venía en este estado al momento de la entrega (Vino defectuoso de bodega)</option>
+              <option value="Ocurrió o fue detectado durante el uso académico">Ocurrió o fue detectado durante el uso académico</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-ink mb-1">3. Descripción Detallada de la Falla o Daño:*</label>
+            <textarea id="rep_est_detalle" rows="3" required class="w-full border border-gray-200 rounded-xl p-3 text-xs focus:border-morado outline-none" placeholder="Describe claramente qué daños o fallas tiene el equipo..."></textarea>
+          </div>
+        </div>
+      </div>
+    `;
+
+    mostrarModalPersonalizado('Declarar Estado / Novedad del Equipo', html, async () => {
+      try {
+        const condicion = document.getElementById('rep_est_condicion')?.value || 'Malas condiciones físicas';
+        const origen = document.getElementById('rep_est_origen')?.value || 'Entrega inicial';
+        const detalle = document.getElementById('rep_est_detalle')?.value.trim();
+
+        if (!detalle) {
+          toast('Por favor describe en detalle la falla o condición del equipo.', 'error');
+          return false;
+        }
+
+        const ahora = new Date();
+        const notaReporte = `[Reporte del Estudiante - ${ahora.toLocaleDateString()} ${ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}] Condición: ${condicion} | Origen: ${origen} | Detalle: ${detalle}`;
+
+        // 1. Guardar en historial_prestamos (local y API)
+        let prestamos = [];
+        try {
+          prestamos = await Store.list('historial_prestamos', { forceRefresh: true }) || [];
+        } catch (e) { prestamos = []; }
+
+        const cTrim = (user?.nombre || rec.responsable || '').trim().toLowerCase();
+        const prestamoActivo = prestamos.find(p => 
+          (String(p.recurso_id) === String(rec.id) || String(p.recurso_codigo) === String(rec.codigo)) && 
+          (p.estado === 'Activo' || p.estado === 'Retrasado') &&
+          (!cTrim || (p.usuario_nombre || '').trim().toLowerCase() === cTrim || (p.usuario_email || '').trim().toLowerCase() === cTrim)
+        ) || prestamos.find(p => (String(p.recurso_id) === String(rec.id) || String(p.recurso_codigo) === String(rec.codigo)) && (p.estado === 'Activo' || p.estado === 'Retrasado'));
+
+        if (prestamoActivo) {
+          prestamoActivo.reporte_estudiante = notaReporte;
+          prestamoActivo.observaciones_entrega = (prestamoActivo.observaciones_entrega ? prestamoActivo.observaciones_entrega + ' · ' : '') + notaReporte;
+          await Store.save('historial_prestamos', prestamos);
+
+          const fetchFn = (typeof apiFetch === 'function' ? apiFetch : (window.apiFetch || null));
+          if (fetchFn) {
+            await fetchFn('historial_prestamos', {
+              method: 'PUT',
+              body: JSON.stringify({
+                id: prestamoActivo.id,
+                observaciones_entrega: prestamoActivo.observaciones_entrega,
+                reporte_estudiante: notaReporte
+              })
+            }).catch(e => console.warn('[reportarEstadoEquipoEstudiante] Error API:', e));
+          }
+        }
+
+        // 2. Anotar en el inventario para alerta en bodega
+        rec.observaciones = (rec.observaciones ? rec.observaciones + ' · ' : '') + `Reporte de ${user?.nombre || 'Estudiante'}: ${condicion} (${detalle})`;
+        await Store.save('recursos_inventario', recursos);
+
+        // 3. Registrar auditoría institucional
+        try {
+          if (typeof registrarAuditoriaAccion === 'function') {
+            await registrarAuditoriaAccion('Reporte de estado de equipo', user?.nombre || 'Estudiante', user?.rol || 'Estudiante', `${rec.nombre} (${rec.codigo || ''}) - ${condicion}`);
+          }
+        } catch (eAud) {
+          console.warn('[reportarEstadoEquipoEstudiante] Advertencia auditoría:', eAud);
+        }
+
+        toast('¡Reporte guardado con éxito! Tu declaración quedó registrada en el historial del Superadmin.', 'ok');
+
+        if (typeof cerrarModalPersonalizado === 'function') {
+          cerrarModalPersonalizado();
+        }
+
+        renderSolicitarEquipoForm();
+        if (typeof renderHistorialPrestamosAdmin === 'function') renderHistorialPrestamosAdmin();
+        return true;
+      } catch (errRep) {
+        console.error('[reportarEstadoEquipoEstudiante] Error:', errRep);
+        toast('Error al registrar reporte: ' + errRep.message, 'error');
+        return false;
+      }
+    }, 'Guardar Reporte en Historial');
+  } catch (err) {
+    console.error('[reportarEstadoEquipoEstudiante] Error:', err);
+    toast('Error: ' + err.message, 'error');
+  }
 };
 
 // =========================================================================
@@ -1795,6 +2573,10 @@ window.limpiarBusquedaSinEquipo = function() {
 };
 
 window.asignarEquipoDesdeModal = async function(nombreUsuario) {
+  if (esUsuarioSoloLectura()) {
+    toast('Los aliados y donantes tienen permisos exclusivos de solo lectura.', 'warning');
+    return;
+  }
   const recursos = await Store.list('recursos_inventario') || [];
   const disponibles = recursos.filter(r => r.estado === 'Disponible');
   
@@ -1841,7 +2623,7 @@ window.asignarEquipoDesdeModal = async function(nombreUsuario) {
 
       <div id="ae_fecha_div">
         <label class="block text-xs font-bold text-ink mb-1">Fecha y Hora Límite de Retorno:</label>
-        <input type="datetime-local" id="ae_fecha_limite" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none" />
+        <input type="datetime-local" id="ae_fecha_limite" min="${new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0, 16)}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-morado outline-none" />
       </div>
     </div>
   `;
@@ -1856,6 +2638,10 @@ window.asignarEquipoDesdeModal = async function(nombreUsuario) {
       fechaLimite = document.getElementById('ae_fecha_limite').value;
       if (!fechaLimite) {
         toast('Debe indicar la fecha límite de devolución.', 'error');
+        return false;
+      }
+      if (new Date(fechaLimite).getTime() < Date.now() - 60000) {
+        toast('La fecha límite no puede ser anterior a la actual.', 'error');
         return false;
       }
     }
@@ -1945,20 +2731,63 @@ async function renderSolicitarEquipoForm(targetMountId = null) {
       return matchNom || matchEmail;
     });
 
-    // Buscar equipo que tenga asignado esta persona
-    const equipoActual = recursos.find(r => 
-      (r.estado === 'Asignado' || r.estado === 'Prestado') && 
-      r.responsable && r.responsable.toLowerCase().trim() === (user.nombre || '').toLowerCase().trim()
-    );
+    // Un estudiante solo tiene un equipo activo si existe un préstamo en estado Activo o Retrasado en el historial oficial
+    const prestamoActivoEstudiante = miHistorial.find(p => p.estado === 'Activo' || p.estado === 'Retrasado');
+
+    let equipoActual = null;
+    if (prestamoActivoEstudiante) {
+      equipoActual = recursos.find(r => 
+        (String(r.id) === String(prestamoActivoEstudiante.recurso_id) || 
+         (prestamoActivoEstudiante.recurso_codigo && String(r.codigo).trim().toLowerCase() === String(prestamoActivoEstudiante.recurso_codigo).trim().toLowerCase())) &&
+        (r.estado === 'Asignado' || r.estado === 'Prestado')
+      ) || {
+        id: prestamoActivoEstudiante.recurso_id,
+        nombre: prestamoActivoEstudiante.recurso_nombre,
+        codigo: prestamoActivoEstudiante.recurso_codigo,
+        categoria: prestamoActivoEstudiante.recurso_categoria,
+        serial: prestamoActivoEstudiante.recurso_serial,
+        tipo_asignacion: prestamoActivoEstudiante.tipo_asignacion,
+        fecha_limite: prestamoActivoEstudiante.fecha_limite,
+        fecha_entrega: prestamoActivoEstudiante.fecha_prestamo,
+        responsable: prestamoActivoEstudiante.usuario_nombre,
+        estado: 'Prestado'
+      };
+    } else {
+      // Si no hay préstamo activo en historial, sincronizar y liberar inventario local para evitar equipos fantasmas
+      let modRec = false;
+      const uTrim = (user?.nombre || '').toLowerCase().trim();
+      if (uTrim) {
+        recursos.forEach(r => {
+          if (r.responsable && r.responsable.toLowerCase().trim() === uTrim) {
+            r.estado = 'Disponible';
+            r.responsable = null;
+            r.tipo_asignacion = null;
+            r.fecha_limite = null;
+            r.fecha_entrega = null;
+            modRec = true;
+          }
+        });
+      }
+      if (modRec) {
+        try { await Store.save('recursos_inventario', recursos); } catch (e) {}
+      }
+    }
 
     const misSolicitudes = solicitudes.filter(s => 
-      s.solicitante && s.solicitante.toLowerCase().trim() === (user.nombre || '').toLowerCase().trim()
+      s.solicitante && s.solicitante.toLowerCase().trim() === (user?.nombre || '').toLowerCase().trim()
     );
+
+    // Calcular fecha mínima permitida para agendamiento (ahora local, impidiendo fechas pasadas)
+    const ahoraLocal = new Date();
+    const minFechaIso = new Date(ahoraLocal.getTime() - ahoraLocal.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
   let equipoActualHtml = '';
   if (equipoActual) {
     const vencido = isOverdue(equipoActual);
     const ret = calcularRetraso(equipoActual.fecha_limite);
+
+    const reporteExistente = prestamoActivoEstudiante?.reporte_estudiante || 
+      (prestamoActivoEstudiante?.observaciones_entrega && prestamoActivoEstudiante.observaciones_entrega.includes('[Reporte del Estudiante') ? prestamoActivoEstudiante.observaciones_entrega : null);
 
     equipoActualHtml = `
       <div class="bg-white p-6 border ${vencido ? 'border-coral/50 ring-2 ring-coral/20' : 'border-gray-100'} rounded-3xl shadow-sm space-y-4">
@@ -1983,6 +2812,17 @@ async function renderSolicitarEquipoForm(targetMountId = null) {
           </div>
         ` : ''}
 
+        ${reporteExistente ? `
+          <div class="p-4 rounded-2xl bg-amber-50 border border-amber-200/90 flex items-start gap-3">
+            <svg class="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            <div class="space-y-1">
+              <p class="text-xs font-black text-amber-900 uppercase tracking-wide">Reporte de Novedad / Fallas Registrado por Ti</p>
+              <p class="text-xs text-amber-800 leading-relaxed font-medium">${escapeHtml(reporteExistente)}</p>
+              <p class="text-[10px] text-amber-700/80 font-semibold">Este reporte quedó guardado formalmente en el historial del Superadmin para tu constancia y respaldo.</p>
+            </div>
+          </div>
+        ` : ''}
+
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
           <div class="bg-gray-50 p-3.5 rounded-2xl">
             <p class="text-[10px] uppercase font-bold text-slate2">Equipo</p>
@@ -2001,6 +2841,17 @@ async function renderSolicitarEquipoForm(targetMountId = null) {
               ${equipoActual.fecha_limite ? `Vence: ${new Date(equipoActual.fecha_limite).toLocaleDateString()}` : 'Sin fecha límite'}
             </p>
           </div>
+        </div>
+
+        <div class="pt-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
+          <button type="button" onclick="reportarEstadoEquipoEstudiante('${equipoActual.id}')" class="px-4 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100/80 text-amber-900 border border-amber-300 text-xs font-bold transition shadow-2xs flex items-center gap-2 cursor-pointer">
+            <svg class="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            ${reporteExistente ? 'Actualizar Reporte de Novedad / Fallas' : 'Reportar Mal Estado / Fallas del Equipo'}
+          </button>
+          <button type="button" onclick="devolverEquipoEstudiante('${equipoActual.id}')" class="px-4 py-2.5 rounded-xl bg-morado text-white hover:bg-morado/90 text-xs font-bold transition shadow-sm flex items-center gap-2 cursor-pointer">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 15v-1a4 4 0 00-4-4H4m0 0l3-3m-3 3l3 3m5 4v1a3 3 0 003 3h4a3 3 0 003-3V7a3 3 0 00-3-3h-4a3 3 0 00-3 3v1"/></svg>
+            Regresar Computador / Registrar Devolución
+          </button>
         </div>
       </div>
     `;
@@ -2057,13 +2908,31 @@ async function renderSolicitarEquipoForm(targetMountId = null) {
 
           <div id="req_fecha_div">
             <label class="block text-xs font-bold text-ink mb-1">¿Hasta cuándo lo necesitas? (Fecha Límite)*</label>
-            <input type="datetime-local" id="req_fecha" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:border-morado outline-none" />
-            <p class="text-[10px] text-slate2 mt-1">Indica la fecha y hora en que te comprometes a devolver el equipo a la institución.</p>
+            <input type="datetime-local" id="req_fecha" min="${minFechaIso}" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:border-morado outline-none" />
+            <p class="text-[10px] text-slate2 mt-1">Indica la fecha y hora en que te comprometes a devolver el equipo a la institución (fechas presentes o venideras).</p>
           </div>
 
           <div>
             <label class="block text-xs font-bold text-ink mb-1">Motivo / Justificación Académica*</label>
             <textarea id="req_motivo" rows="3" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:border-morado outline-none" placeholder="Explica detalladamente para qué clase, módulo o proyecto requieres el equipo..."></textarea>
+          </div>
+
+          <!-- TÉRMINOS Y CONDICIONES OBLIGATORIOS -->
+          <div class="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+            <div class="flex items-center gap-2 text-ink">
+              <svg class="w-4 h-4 text-morado shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              <h4 class="text-xs font-black uppercase tracking-wider text-ink">Términos y Condiciones de Custodia y Devolución</h4>
+            </div>
+            <div class="space-y-1.5 text-[11px] text-slate2 leading-relaxed bg-white p-3 rounded-xl border border-gray-100">
+              <p>• <strong>Uso Académico:</strong> El activo se entrega exclusivamente para fines pedagógicos y proyectos formativos de la Fundación A+. Se prohíbe el préstamo o cesión a terceros.</p>
+              <p>• <strong>Cuidado y Conservación:</strong> El custodio responde por el buen estado físico y funcional del equipo, cargador y accesorios entregados.</p>
+              <p>• <strong>Devolución Obligatoria:</strong> Te comprometes a devolver el equipo a tiempo en la sede institucional en la fecha pactada o al finalizar la actividad.</p>
+              <p>• <strong>Responsabilidad:</strong> Cualquier daño por negligencia, alteración no autorizada o extravío conllevará las sanciones y reposiciones estipuladas en el reglamento institucional.</p>
+            </div>
+            <label class="flex items-start gap-2.5 pt-1 cursor-pointer">
+              <input type="checkbox" id="req_acepta_terminos" required class="w-4 h-4 rounded text-morado focus:ring-morado border-gray-300 cursor-pointer mt-0.5 shrink-0" />
+              <span class="text-xs font-bold text-ink">He leído, comprendo y acepto formalmente los Términos y Condiciones de uso, custodia y devolución puntual del equipo.*</span>
+            </label>
           </div>
 
           <button type="submit" class="w-full btn-glow-primary rounded-2xl bg-morado text-white font-bold text-sm py-3.5 shadow-md hover:bg-morado/90 transition flex items-center justify-center gap-2">
@@ -2198,24 +3067,37 @@ async function renderSolicitarEquipoForm(targetMountId = null) {
 window.renderSolicitarEquipoForm = renderSolicitarEquipoForm;
 
 window.enviarSolicitudEquipo = async function() {
-  const categoria = document.getElementById('req_categoria').value;
-  const tipo = document.getElementById('req_tipo').value;
-  const motivo = document.getElementById('req_motivo').value.trim();
-  const fecha = document.getElementById('req_fecha').value;
+  const categoria = document.getElementById('req_categoria')?.value || 'Laptops';
+  const tipo = document.getElementById('req_tipo')?.value || 'Temporal';
+  const motivo = document.getElementById('req_motivo')?.value.trim() || '';
+  const fecha = document.getElementById('req_fecha')?.value || null;
+  const aceptaTerminos = document.getElementById('req_acepta_terminos')?.checked;
   const user = getUsuarioSesionActual();
 
+  if (!aceptaTerminos) {
+    toast('Debes leer y aceptar los Términos y Condiciones antes de enviar tu solicitud.', 'error');
+    return;
+  }
   if (!motivo) {
     toast('Debes escribir un motivo o justificación.', 'error');
     return;
   }
-  if (tipo === 'Temporal' && !fecha) {
-    toast('Indica la fecha hasta cuándo necesitas el equipo.', 'error');
-    return;
+  if (tipo === 'Temporal') {
+    if (!fecha) {
+      toast('Indica la fecha hasta cuándo necesitas el equipo.', 'error');
+      return;
+    }
+    const fechaSeleccionada = new Date(fecha);
+    const ahora = new Date();
+    if (fechaSeleccionada.getTime() < ahora.getTime() - 60000) {
+      toast('No puedes agendar una fecha u hora anterior al momento actual. Por favor selecciona una fecha presente o venidera.', 'error');
+      return;
+    }
   }
 
   const solicitudes = await Store.list('solicitudes_recursos') || [];
   solicitudes.push({
-    id: uid('sol'),
+    id: typeof uid === 'function' ? uid('sol') : ('sol_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
     solicitante: user.nombre,
     email: user.email,
     rol_solicitante: user.rol,
@@ -2224,6 +3106,9 @@ window.enviarSolicitudEquipo = async function() {
     fecha_limite: tipo === 'Temporal' ? fecha : null,
     motivo,
     estado: 'Pendiente',
+    terminos_aceptados: true,
+    fecha_aceptacion_terminos: new Date().toISOString(),
+    terminos_version: 'v1.0',
     fecha_creacion: new Date().toISOString()
   });
 
@@ -2243,11 +3128,16 @@ window.enviarSolicitudEquipo = async function() {
     }).catch(e => console.warn('[enviarSolicitudEquipo] Error notificando nueva solicitud:', e));
   }
 
-  if (typeof registrarAuditoriaAccion === 'function') {
-    await registrarAuditoriaAccion('Solicitud de equipo enviada', user.nombre, user.rol, `Categoría: ${categoria} - ${tipo}`);
+  try {
+    if (typeof registrarAuditoriaAccion === 'function') {
+      await registrarAuditoriaAccion('Solicitud de equipo enviada', user.nombre, user.rol, `Categoría: ${categoria} - ${tipo}`);
+    }
+  } catch (eAud) {
+    console.warn('[enviarSolicitudEquipo] Error auditoría:', eAud);
   }
 
   renderSolicitarEquipoForm();
+  if (typeof renderSolicitudesAdmin === 'function') renderSolicitudesAdmin();
 };
 
 // =========================================================================
@@ -2302,17 +3192,32 @@ async function renderSolicitudesAdmin() {
           <p class="text-xs text-slate2 bg-gray-50 p-3 rounded-xl border border-gray-100 italic">
             "${escapeHtml(s.motivo)}"
           </p>
+
+          <div class="flex items-center gap-2 pt-0.5">
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <svg class="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+              Términos Aceptados
+            </span>
+            ${s.fecha_aceptacion_terminos ? `<span class="text-[10px] text-slate2">Aceptó: ${new Date(s.fecha_aceptacion_terminos).toLocaleDateString()}</span>` : ''}
+          </div>
         </div>
 
-        <div class="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
-          <button onclick="responderSolicitud('${s.id}', 'Rechazada')" class="flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold border border-red-200 text-red-600 hover:bg-red-50 transition">
-            Rechazar
-          </button>
-          <button onclick="responderSolicitud('${s.id}', 'Aprobada')" class="flex-1 md:flex-none px-5 py-2.5 rounded-xl text-xs font-bold bg-morado text-white shadow-md hover:bg-morado/90 transition flex items-center justify-center gap-1.5">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-            Aprobar y Entregar
-          </button>
-        </div>
+        ${!esUsuarioSoloLectura() ? `
+          <div class="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
+            <button onclick="responderSolicitud('${s.id}', 'Rechazada')" class="flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold border border-red-200 text-red-600 hover:bg-red-50 transition">
+              Rechazar
+            </button>
+            <button onclick="responderSolicitud('${s.id}', 'Aprobada')" class="flex-1 md:flex-none px-5 py-2.5 rounded-xl text-xs font-bold bg-morado text-white shadow-md hover:bg-morado/90 transition flex items-center justify-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              Aprobar y Entregar
+            </button>
+          </div>
+        ` : `
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gray-100 text-slate2 border border-gray-200">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            Solo lectura
+          </span>
+        `}
       </div>
     `).join('');
 
@@ -2348,6 +3253,10 @@ async function renderSolicitudesAdmin() {
 window.renderSolicitudesAdmin = renderSolicitudesAdmin;
 
 window.responderSolicitud = async function(idSolicitud, respuesta) {
+  if (esUsuarioSoloLectura()) {
+    toast('Los aliados y donantes tienen permisos exclusivos de solo lectura.', 'warning');
+    return;
+  }
   const solicitudes = await Store.list('solicitudes_recursos') || [];
   const idx = solicitudes.findIndex(x => x.id === idSolicitud);
   if (idx === -1) return;
@@ -2371,11 +3280,16 @@ window.responderSolicitud = async function(idSolicitud, respuesta) {
       }).catch(e => console.warn('[responderSolicitud] Error notificando rechazo:', e));
     }
 
-    if (typeof registrarAuditoriaAccion === 'function') {
-      await registrarAuditoriaAccion('Solicitud de equipo rechazada', sol.solicitante, 'Recursos', `Categoría: ${sol.categoria}`);
+    try {
+      if (typeof registrarAuditoriaAccion === 'function') {
+        await registrarAuditoriaAccion('Solicitud de equipo rechazada', sol.solicitante, 'Recursos', `Categoría: ${sol.categoria}`);
+      }
+    } catch (eAud) {
+      console.warn('[responderSolicitud] Advertencia auditoría:', eAud);
     }
 
     renderSolicitudesAdmin();
+    if (typeof renderSolicitarEquipoForm === 'function') renderSolicitarEquipoForm();
     return;
   }
 
@@ -2391,12 +3305,22 @@ window.responderSolicitud = async function(idSolicitud, respuesta) {
   const options = disponibles.map(r => `<option value="${r.id}">[${escapeHtml(r.categoria)}] ${escapeHtml(r.codigo || '-')} — ${escapeHtml(r.nombre)} (${escapeHtml(r.marca || '')})</option>`).join('');
 
   const html = `
-    <div class="p-1 space-y-4">
-      <div class="bg-morado/5 p-4 rounded-2xl border border-morado/10 space-y-1">
-        <p class="text-xs text-morado font-extrabold">Solicitante: <span class="text-ink font-bold">${sol.solicitante} (${sol.rol_solicitante})</span></p>
-        <p class="text-xs text-morado font-extrabold">Categoría: <span class="text-ink font-bold">${sol.categoria}</span> (${sol.tipo_asignacion})</p>
+    <div class="p-1 space-y-4 text-xs">
+      <div class="bg-morado/5 p-4 rounded-2xl border border-morado/15 space-y-2">
+        <div class="flex items-center justify-between">
+          <p class="text-xs text-morado font-extrabold">Solicitante: <span class="text-ink font-bold">${escapeHtml(sol.solicitante)} (${escapeHtml(sol.rol_solicitante)})</span></p>
+          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <svg class="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+            Términos Aceptados
+          </span>
+        </div>
+        <p class="text-xs text-morado font-extrabold">Categoría: <span class="text-ink font-bold">${escapeHtml(sol.categoria)}</span> (${escapeHtml(sol.tipo_asignacion)})</p>
         ${sol.fecha_limite ? `<p class="text-xs text-morado font-extrabold">Retorno previsto: <span class="text-ink font-bold">${new Date(sol.fecha_limite).toLocaleString()}</span></p>` : ''}
-        <p class="text-xs text-slate2 italic mt-1">"${escapeHtml(sol.motivo || '')}"</p>
+        <p class="text-xs text-slate2 italic mt-1 bg-white p-2.5 rounded-xl border border-gray-100">"${escapeHtml(sol.motivo || '')}"</p>
+        <p class="text-[10px] text-emerald-700 font-medium pt-1 border-t border-morado/10 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          <span>Acta digital: El beneficiario aceptó formalmente los términos de cuidado, uso académico y devolución puntual (${sol.fecha_aceptacion_terminos ? new Date(sol.fecha_aceptacion_terminos).toLocaleString() : 'Aceptado digitalmente'}).</span>
+        </p>
       </div>
       
       <div>
@@ -2404,64 +3328,99 @@ window.responderSolicitud = async function(idSolicitud, respuesta) {
         <select id="sel_aprobar_equipo" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-morado outline-none">
           ${options}
         </select>
+        <p class="text-[10px] text-slate2 mt-1">El equipo cambiará su estado inmediatamente a ${sol.tipo_asignacion === 'Permanente' ? 'Asignado' : 'Prestado'} y quedará a cargo del estudiante.</p>
       </div>
     </div>
   `;
 
   mostrarModalPersonalizado('Aprobar y Entregar Equipo', html, async () => {
-    const idRecurso = document.getElementById('sel_aprobar_equipo').value;
+    const idRecurso = document.getElementById('sel_aprobar_equipo')?.value;
     if (!idRecurso) return false;
 
-    const rIdx = recursos.findIndex(x => x.id === idRecurso);
-    if (rIdx > -1) {
-      const rec = recursos[rIdx];
+    try {
+      const recList = await Store.list('recursos_inventario') || recursos;
+      const rIdx = recList.findIndex(x => String(x.id) === String(idRecurso) || String(x.codigo) === String(idRecurso));
+      if (rIdx === -1) {
+        toast('No se encontró el equipo seleccionado en inventario.', 'error');
+        return false;
+      }
+
+      const rec = recList[rIdx];
       rec.estado = sol.tipo_asignacion === 'Permanente' ? 'Asignado' : 'Prestado';
       rec.responsable = sol.solicitante;
       rec.tipo_asignacion = sol.tipo_asignacion;
       rec.fecha_limite = sol.fecha_limite;
       rec.fecha_entrega = new Date().toISOString();
-      await Store.save('recursos_inventario', recursos);
+      await Store.save('recursos_inventario', recList);
       
-      sol.estado = 'Aprobada';
-      sol.recurso_id = idRecurso;
-      await Store.save('solicitudes_recursos', solicitudes);
+      const solList = await Store.list('solicitudes_recursos') || solicitudes;
+      const sIdx = solList.findIndex(x => String(x.id) === String(sol.id));
+      if (sIdx > -1) {
+        solList[sIdx].estado = 'Aprobada';
+        solList[sIdx].recurso_id = rec.id;
+        solList[sIdx].recurso_codigo = rec.codigo;
+        solList[sIdx].fecha_aprobacion = new Date().toISOString();
+        await Store.save('solicitudes_recursos', solList);
+      }
 
-      // Registrar en historial permanente
-      await registrarPrestamoEnHistorial({
-        recurso: rec,
-        persona: sol.solicitante,
-        tipo: sol.tipo_asignacion,
-        fechaLimite: sol.fecha_limite,
-        motivo: sol.motivo || 'Solicitud de equipo aprobada por Coordinacion'
-      });
+      // Registrar en historial permanente (blindado en try/catch)
+      try {
+        await registrarPrestamoEnHistorial({
+          recurso: rec,
+          persona: sol.solicitante,
+          tipo: sol.tipo_asignacion,
+          fechaLimite: sol.fecha_limite,
+          motivo: sol.motivo || 'Solicitud de equipo aprobada por Coordinación'
+        });
+      } catch (eHist) {
+        console.warn('[responderSolicitud] Advertencia registrando historial:', eHist);
+      }
 
       toast(`Solicitud aprobada y equipo ${rec.codigo} entregado a ${sol.solicitante}`, 'success');
 
-      // Notificación por correo al estudiante/docente (EmailJS principal + SMTP backend)
+      // Notificación por correo al estudiante/docente
       if (typeof notificarRecursoPorCorreo === 'function') {
-        notificarRecursoPorCorreo('aprobada', {
-          solicitante: sol.solicitante,
-          email: sol.email || '',
-          rol: sol.rol_solicitante,
-          categoria: sol.categoria,
-          recursoNombre: rec.nombre,
-          recursoCodigo: rec.codigo,
-          serial: rec.serial,
-          fechaLimite: sol.fecha_limite
-        }).catch(e => console.warn('[responderSolicitud] Error notificando aprobación:', e));
+        try {
+          notificarRecursoPorCorreo('aprobada', {
+            solicitante: sol.solicitante,
+            email: sol.email || '',
+            rol: sol.rol_solicitante,
+            categoria: sol.categoria,
+            recursoNombre: rec.nombre,
+            recursoCodigo: rec.codigo,
+            serial: rec.serial,
+            fechaLimite: sol.fecha_limite
+          }).catch(e => console.warn('[responderSolicitud] Error notificando aprobación:', e));
+        } catch (eMail) {
+          console.warn('[responderSolicitud] Advertencia correo:', eMail);
+        }
       }
 
-      if (typeof registrarAuditoriaAccion === 'function') {
-        await registrarAuditoriaAccion('Solicitud aprobada y entregada', sol.solicitante, 'Recursos', `${rec.nombre} (${rec.codigo})`);
+      // Auditoría blindada en try/catch
+      try {
+        if (typeof registrarAuditoriaAccion === 'function') {
+          await registrarAuditoriaAccion('Solicitud aprobada y entregada', sol.solicitante, 'Recursos', `${rec.nombre} (${rec.codigo})`);
+        }
+      } catch (eAud) {
+        console.warn('[responderSolicitud] Advertencia auditoría:', eAud);
       }
 
+      // Cerrar modal explícitamente y refrescar todas las vistas
+      if (typeof cerrarModalPersonalizado === 'function') {
+        cerrarModalPersonalizado();
+      }
       renderSolicitudesAdmin();
       if (typeof renderRecursos === 'function') renderRecursos();
       if (typeof renderAsignacionesRecursos === 'function') renderAsignacionesRecursos();
       if (typeof renderHistorialPrestamosAdmin === 'function') renderHistorialPrestamosAdmin();
+      if (typeof renderSolicitarEquipoForm === 'function') renderSolicitarEquipoForm();
+
       return true;
+    } catch (errAprob) {
+      console.error('[responderSolicitud] Error al aprobar solicitud:', errAprob);
+      toast('Error al aprobar solicitud: ' + errAprob.message, 'error');
+      return false;
     }
-    return false;
   });
 };
 
@@ -2474,6 +3433,9 @@ async function renderHistorialPrestamosAdmin() {
 
   try {
     await asegurarDatosInicialesRecursos();
+    if (typeof verificarEquiposVencidosYNotificar === 'function') {
+      await verificarEquiposVencidosYNotificar();
+    }
 
   let prestamos = [];
   try {
@@ -2490,6 +3452,14 @@ async function renderHistorialPrestamosAdmin() {
     }
   });
 
+  // Estadísticas y estados enriquecidos con trazabilidad de retraso >24h
+  let retrasados24hCount = 0;
+  prestamos.forEach(p => {
+    const infoRet = calcularEstadoRetrasoPrestamo(p);
+    p._infoRetraso = infoRet;
+    if (infoRet.retraso24h) retrasados24hCount++;
+  });
+
   window._ultimaListaHistorialPrestamos = prestamos;
 
   // Métricas estadísticas
@@ -2503,7 +3473,11 @@ async function renderHistorialPrestamosAdmin() {
   const busqueda = (window.historialPrestamosBusqueda || '').toLowerCase().trim();
 
   const filtrados = prestamos.filter(p => {
-    if (fEstado !== 'todos' && p.estado !== fEstado) return false;
+    if (fEstado === 'retraso_24h') {
+      if (!p._infoRetraso?.retraso24h) return false;
+    } else if (fEstado !== 'todos' && p.estado !== fEstado) {
+      return false;
+    }
     if (fTipo !== 'todos' && p.tipo_asignacion !== fTipo) return false;
     if (busqueda) {
       const matchUsuario = (p.usuario_nombre || '').toLowerCase().includes(busqueda);
@@ -2534,12 +3508,31 @@ async function renderHistorialPrestamosAdmin() {
     } catch (e) { return ''; }
   };
 
+  const esSoloLectura = esUsuarioSoloLectura();
+
   const rows = filtrados.length > 0 ? filtrados.map(p => {
-    const estadoBadge = 
-      p.estado === 'Activo' ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>Activo</span>' :
-      p.estado === 'Retrasado' ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200/80 shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Retrasado</span>' :
-      p.estado === 'Devuelto con retraso' ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80 shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Devuelto ext.</span>' :
-      '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Devuelto</span>';
+    const infoRet = p._infoRetraso || calcularEstadoRetrasoPrestamo(p);
+
+    let estadoBadge = '';
+    if (p.estado === 'Activo') {
+      estadoBadge = '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>Activo</span>';
+    } else if (p.estado === 'Retrasado') {
+      if (infoRet.retraso24h) {
+        estadoBadge = '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs animate-pulse"><span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>Retraso crítico (+24h)</span>';
+      } else {
+        estadoBadge = '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200/80 shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Retrasado</span>';
+      }
+    } else if (p.estado === 'Devuelto con retraso') {
+      if (infoRet.retraso24h) {
+        estadoBadge = '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-red-50 text-red-700 border border-red-200 shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Devuelto tarde (+24h)</span>';
+      } else {
+        estadoBadge = '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80 shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Devuelto ext.</span>';
+      }
+    } else {
+      estadoBadge = '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Devuelto</span>';
+    }
+
+    const tieneReporteEst = p.reporte_estudiante || (p.observaciones_entrega && p.observaciones_entrega.includes('[Reporte del Estudiante'));
 
     return `
       <tr class="hover:bg-slate-50/70 border-b border-gray-100/80 last:border-0 transition-colors">
@@ -2554,14 +3547,31 @@ async function renderHistorialPrestamosAdmin() {
                 <span class="font-mono text-[10px] font-bold text-morado bg-morado/10 px-1.5 py-0.5 rounded">${escapeHtml(p.recurso_codigo || '-')}</span>
                 <span class="text-[10px] text-slate-400 font-medium">${escapeHtml(p.recurso_categoria || 'General')}</span>
               </div>
+              ${tieneReporteEst ? `
+                <div class="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-300 text-amber-900 text-[10px] font-bold" title="${escapeHtml(p.reporte_estudiante || p.observaciones_entrega)}">
+                  <svg class="w-3 h-3 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <span>Reporte estudiante: Mal estado</span>
+                </div>
+              ` : ''}
             </div>
           </div>
         </td>
         <td class="py-3.5 px-4 align-middle">
           <div class="min-w-0">
-            <p class="font-bold text-ink text-xs sm:text-sm truncate" title="${escapeHtml(p.usuario_nombre)}">${escapeHtml(p.usuario_nombre)}</p>
+            <div class="flex items-center flex-wrap gap-1.5">
+              <p class="font-bold text-ink text-xs sm:text-sm truncate" title="${escapeHtml(p.usuario_nombre)}">${escapeHtml(p.usuario_nombre)}</p>
+              ${infoRet.retraso24h ? `
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-2xs" title="Excedió el tiempo límite por más de 24 horas (${infoRet.textoRetraso})">
+                  <svg class="w-3 h-3 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <span>Entregó Tarde (+24h)</span>
+                </span>
+              ` : ''}
+            </div>
             <p class="text-[11px] text-slate-400 truncate" title="${escapeHtml(p.usuario_email || '')}">${escapeHtml(p.usuario_email || 'Sin correo')}</p>
-            <span class="inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-slate-500">${escapeHtml(p.usuario_rol || 'Estudiante')}${p.cohorte ? ' · ' + escapeHtml(p.cohorte) : ''}</span>
+            <div class="flex items-center gap-1 mt-0.5">
+              <span class="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-slate-500">${escapeHtml(p.usuario_rol || 'Estudiante')}${p.cohorte ? ' · ' + escapeHtml(p.cohorte) : ''}</span>
+              ${infoRet.retrasado && !infoRet.retraso24h ? `<span class="text-[10px] text-coral font-bold">(Demora: ${infoRet.textoRetraso})</span>` : ''}
+            </div>
           </div>
         </td>
         <td class="py-3.5 px-4 align-middle whitespace-nowrap">
@@ -2581,6 +3591,12 @@ async function renderHistorialPrestamosAdmin() {
           ${p.fecha_devolucion ? `
             <p class="text-xs font-semibold text-emerald-700">${fmtFecha(p.fecha_devolucion)}</p>
             <p class="text-[10px] text-slate-400 mt-0.5">${fmtHora(p.fecha_devolucion)}</p>
+            ${p.observaciones_devolucion && p.observaciones_devolucion.includes('[Encuesta de Recepción]') ? `
+              <span class="inline-flex items-center gap-1 text-[10px] text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 font-bold mt-0.5" title="${escapeHtml(p.observaciones_devolucion)}">
+                <svg class="w-3 h-3 text-purple-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                <span>Con encuesta</span>
+              </span>
+            ` : ''}
           ` : `
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-medium text-slate-500 bg-slate-100 border border-slate-200/60">
               Pendiente
@@ -2595,7 +3611,7 @@ async function renderHistorialPrestamosAdmin() {
             <button onclick="verComprobantePrestamo('${p.id}')" title="Ver Comprobante Digital" class="w-8 h-8 rounded-xl bg-gray-100 hover:bg-morado hover:text-white text-slate-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             </button>
-            ${(p.estado === 'Activo' || p.estado === 'Retrasado') ? `
+            ${(!esSoloLectura && (p.estado === 'Activo' || p.estado === 'Retrasado')) ? `
               <button onclick="recibirEquipoHistorial('${p.id}', '${p.recurso_id}')" title="Recibir Equipo en Bodega (Checkin)" class="h-8 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow-emerald-600/20">
                 <svg class="w-3.5 h-3.5 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                 <span>Recibir</span>
@@ -2646,7 +3662,7 @@ async function renderHistorialPrestamosAdmin() {
         <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs ${retrasados > 0 ? 'border-coral/40 bg-coral/5' : ''}">
           <p class="text-[10px] uppercase font-bold ${retrasados > 0 ? 'text-coral' : 'text-slate2'}">Con Retraso</p>
           <p class="text-2xl font-black ${retrasados > 0 ? 'text-coral' : 'text-ink'} mt-1">${retrasados}</p>
-          <p class="text-[10px] text-slate2 mt-0.5">Fecha límite vencida</p>
+          <p class="text-[10px] ${retrasados24hCount > 0 ? 'text-rose-600 font-bold' : 'text-slate2'} mt-0.5">${retrasados24hCount > 0 ? `${retrasados24hCount} exceden +24h` : 'Fecha límite vencida'}</p>
         </div>
         <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs">
           <p class="text-[10px] uppercase font-bold text-emerald-600">Devueltos</p>
@@ -2669,6 +3685,7 @@ async function renderHistorialPrestamosAdmin() {
           <div class="flex flex-wrap items-center gap-2">
             <select onchange="window.historialPrestamosFiltroEstado=this.value; renderHistorialPrestamosAdmin();" class="h-10 text-xs border border-gray-200 rounded-xl px-3 py-2 bg-white text-ink font-semibold outline-none focus:border-morado cursor-pointer shadow-2xs">
               <option value="todos" ${fEstado === 'todos' ? 'selected' : ''}>Todos los Estados</option>
+              <option value="retraso_24h" ${fEstado === 'retraso_24h' ? 'selected' : ''}>Entregó Tarde (+24h)</option>
               <option value="Activo" ${fEstado === 'Activo' ? 'selected' : ''}>Activos</option>
               <option value="Retrasado" ${fEstado === 'Retrasado' ? 'selected' : ''}>Retrasados</option>
               <option value="Devuelto" ${fEstado === 'Devuelto' ? 'selected' : ''}>Devueltos</option>
@@ -2768,6 +3785,7 @@ window.exportarHistorialPrestamosCSV = async function() {
     'Recibido Por',
     'Motivo',
     'Observaciones Entrega',
+    'Reporte Falla Estudiante',
     'Observaciones Devolucion'
   ];
 
@@ -2796,6 +3814,7 @@ window.exportarHistorialPrestamosCSV = async function() {
     escapeCSV(p.recibido_por || 'N/A'),
     escapeCSV(p.motivo),
     escapeCSV(p.observaciones_entrega),
+    escapeCSV(p.reporte_estudiante || ''),
     escapeCSV(p.observaciones_devolucion)
   ].join(';'));
 
@@ -2928,6 +3947,17 @@ window.verComprobantePrestamo = async function(idPrestamo) {
           </div>
         </div>
       </div>
+
+      ${p.reporte_estudiante ? `
+        <!-- NOVEDAD / FALLAS DECLARADAS POR EL ESTUDIANTE -->
+        <div class="p-3.5 bg-amber-50 rounded-2xl border border-amber-200/90 space-y-1">
+          <p class="text-xs font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            Declaración de Novedad / Mal Estado Realizada por el Custodio
+          </p>
+          <p class="text-xs text-amber-800 leading-relaxed font-medium">${escapeHtml(p.reporte_estudiante)}</p>
+        </div>
+      ` : ''}
 
       <!-- SECCION 4: OBSERVACIONES -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">

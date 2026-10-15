@@ -1106,19 +1106,19 @@ if (window.top !== window.self) {
 
     if (isAliado) {
       // Paneles permitidos:
-      // Aliado: observatorio de cohortes, notas y semáforo (sin proyectos/portafolios, sin asistente virtual)
-      // Donante: observatorio de cohortes, notas, semáforo y proyectos (sin asistente virtual)
-      // Ni Aliado ni Donante tienen acceso al módulo de asistente virtual ("máquina virtual" / chatbot)
+      // Aliado: observatorio de cohortes y notas (sin proyectos/portafolios, sin asistente virtual, sin semáforo)
+      // Donante: observatorio de cohortes, notas y proyectos (sin asistente virtual, sin historial de préstamos, sin semáforo)
+      // Ni Aliado ni Donante tienen acceso a semáforo, historial de préstamos ni al asistente virtual
       const tabsAliadosPermitidos = isDonante
-        ? ['resumen', 'modulos', 'semaforo', 'calificaciones', 'proyectosFundacion', 'proyectosEstudiantes']
-        : ['resumen', 'modulos', 'semaforo', 'calificaciones'];
+        ? ['resumen', 'modulos', 'calificaciones', 'proyectosFundacion', 'proyectosEstudiantes']
+        : ['resumen', 'modulos', 'calificaciones'];
       document.querySelectorAll('.panel-tab').forEach(tab => {
         const p = tab.getAttribute('data-panel');
         const permitido = tabsAliadosPermitidos.includes(p);
         tab.classList.toggle('hidden', !permitido);
         tab.style.setProperty('display', permitido ? 'flex' : 'none', 'important');
       });
-      document.querySelectorAll('[data-super-only-group="true"], [data-section="superadmin"], [data-section="pagos"], [data-section="comunicacion"], [data-section="pqr"], [data-section="formularios"], [data-section="reportes"], [data-section="sistema"]').forEach(group => {
+      document.querySelectorAll('[data-super-only-group="true"], [data-section="superadmin"], [data-section="pagos"], [data-section="comunicacion"], [data-section="pqr"], [data-section="formularios"], [data-section="reportes"], [data-section="sistema"], [data-section="recursos"]').forEach(group => {
         group.classList.add('hidden');
         group.style.setProperty('display', 'none', 'important');
       });
@@ -1850,8 +1850,8 @@ if (window.top !== window.self) {
     if (currentAdminRole === 'aliado') {
       const isDonante = (currentAdminUser && (currentAdminUser.rol === 'Donante' || currentAdminUser.rol === 'Inversor' || currentAdminUser.rol === 'Inversionista'));
       const tabsAliadosPermitidos = isDonante
-        ? ['resumen', 'modulos', 'semaforo', 'calificaciones', 'proyectosFundacion', 'proyectosEstudiantes']
-        : ['resumen', 'modulos', 'semaforo', 'calificaciones'];
+        ? ['resumen', 'modulos', 'calificaciones', 'proyectosFundacion', 'proyectosEstudiantes']
+        : ['resumen', 'modulos', 'calificaciones'];
       if (!tabsAliadosPermitidos.includes(panel)) {
         if (panel !== 'resumen') showPanel('resumen');
         return;
@@ -4098,8 +4098,8 @@ if (window.top !== window.self) {
     closeConfirm();
 
     try {
-      if (entity === 'chat_voz_conocimiento') {
-        await apiFetch(`chat_voz_conocimiento?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+      if (typeof ENTIDADES_MYSQL !== 'undefined' && ENTIDADES_MYSQL.has(entity)) {
+        await apiFetch(`${entity}?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
       }
     } catch (e) {}
 
@@ -5018,11 +5018,11 @@ if (window.top !== window.self) {
     const iconAsist = '<svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
 
     const cardsHtml = [
-      statCardBrand({ label: 'Estudiantes beneficiarios', value: totalEstudiantes, sub: cohortes.length + ' cohorte' + (cohortes.length === 1 ? '' : 's') + ' vinculada' + (cohortes.length === 1 ? '' : 's'), color: '#0284c7', icon: iconUsuarios, clickPanel: 'semaforo' }),
+      statCardBrand({ label: 'Estudiantes beneficiarios', value: totalEstudiantes, sub: cohortes.length + ' cohorte' + (cohortes.length === 1 ? '' : 's') + ' vinculada' + (cohortes.length === 1 ? '' : 's'), color: '#0284c7', icon: iconUsuarios, clickPanel: 'modulos' }),
       statCardBrand({ label: 'Promedio general', value: promedio, sub: 'Sobre 10.0 en cohortes vinculadas', color: '#F5A623', icon: iconPromedio, clickPanel: 'calificaciones' }),
-      statCardBrand({ label: 'Asistencia promedio', value: asistenciaPromedio, sub: 'Cumplimiento a clases', color: '#1FC8C0', icon: iconAsist, clickPanel: 'semaforo' }),
-      statCardBrand({ label: 'Desempeño óptimo', value: enVerde + ' (' + pctVerde + '%)', sub: 'Estudiantes en semáforo verde', color: '#10B981', icon: iconVerde, clickPanel: 'semaforo' }),
-      statCardBrand({ label: 'Acompañamiento prioritario', value: (enAmarillo + enRojo) + ' (' + pctAlerta + '%)', sub: enRojo + ' en riesgo + ' + enAmarillo + ' en alerta', color: '#F0455C', icon: iconRiesgo, clickPanel: 'semaforo' }),
+      statCardBrand({ label: 'Asistencia promedio', value: asistenciaPromedio, sub: 'Cumplimiento a clases', color: '#1FC8C0', icon: iconAsist, clickPanel: 'modulos' }),
+      statCardBrand({ label: 'Desempeño óptimo', value: enVerde + ' (' + pctVerde + '%)', sub: 'Estudiantes con alto rendimiento', color: '#10B981', icon: iconVerde, clickPanel: 'calificaciones' }),
+      statCardBrand({ label: 'Acompañamiento prioritario', value: (enAmarillo + enRojo) + ' (' + pctAlerta + '%)', sub: enRojo + ' en riesgo + ' + enAmarillo + ' en alerta', color: '#F0455C', icon: iconRiesgo, clickPanel: 'calificaciones' }),
       statCardBrand({ label: 'Cohortes en seguimiento', value: cohortes.length, sub: totalEstudiantes + ' / ' + cuposTotales + ' cupos totales', color: '#8B5CF6', icon: iconCohortes, clickPanel: 'modulos' }),
     ].join('');
 
@@ -5076,7 +5076,6 @@ if (window.top !== window.self) {
           </div>
         </div>
         <div class="flex items-center gap-2 self-end sm:self-center shrink-0">
-          <button onclick="showPanel('semaforo')" class="px-3.5 py-2 rounded-xl bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 text-xs font-bold transition shadow-sm">Ver Semáforo</button>
           <button onclick="showPanel('calificaciones')" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 text-white hover:opacity-95 text-xs font-bold transition shadow-md shadow-sky-500/20">Calificaciones</button>
         </div>
       </div>
@@ -7926,11 +7925,59 @@ Fundación A+`;
     .hoja { border:1px solid #14181F; margin:0; max-width:none; }
     .barra-accion { display:none; }
   }
-</style></head>
+</style>
+<script>
+  function gestionarAdjunto(accion) {
+    const raw = document.getElementById('adjuntoData')?.value;
+    const nombre = document.getElementById('adjuntoNombre')?.value || 'adjunto';
+    if (!raw || raw === '1' || raw === 'DATA_PLACEHOLDER') {
+      alert('El archivo adjunto no está disponible o es un marcador de prueba.');
+      return;
+    }
+    try {
+      if (accion === 'descargar') {
+        const a = document.createElement('a');
+        a.href = raw;
+        a.download = nombre;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        if (raw.startsWith('data:')) {
+          const parts = raw.split(',');
+          const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/octet-stream';
+          const byteStr = atob(parts[1]);
+          const ab = new ArrayBuffer(byteStr.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
+          const blob = new Blob([ab], { type: mime });
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, '_blank');
+        } else {
+          window.open(raw, '_blank');
+        }
+      }
+    } catch (e) {
+      const a = document.createElement('a');
+      a.href = raw;
+      a.download = nombre;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  }
+</script>
+</head>
 <body>
+  <input type="hidden" id="adjuntoData" value="${escapeHtml(m.archivoDatos || '')}" />
+  <input type="hidden" id="adjuntoNombre" value="${escapeHtml(m.archivoNombre || 'documento_adjunto')}" />
   <div class="barra-accion">
-    ${m.archivoDatos ? `<button class="adjunto" onclick="window.open('${m.archivoDatos}','_blank')"><svg style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:6px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>Ver archivo adjunto</button>` : ''}
-    <button onclick="window.print()">Descargar / Imprimir</button>
+    ${m.archivoDatos ? `
+      <button class="adjunto" type="button" onclick="gestionarAdjunto('ver')"><svg style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:6px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>Ver archivo</button>
+      <button class="adjunto" type="button" onclick="gestionarAdjunto('descargar')"><svg style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:6px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>Descargar archivo</button>
+    ` : ''}
+    <button onclick="window.print()">Descargar / Imprimir Carta</button>
   </div>
   <div class="hoja">
     <div class="encabezado">
@@ -7955,7 +8002,11 @@ Fundación A+`;
     <div class="cuerpo">
       <p>Estimado/a ${escapeHtml(nombrePila)},</p>
       <p>Por medio del presente memorando, la Fundación A+ le informa que el documento oficial correspondiente a este comunicado se encuentra adjunto.</p>
-      ${m.archivoDatos ? `<p style="text-align:center;margin:22px 0"><button class="adjunto" onclick="window.open('${m.archivoDatos}','_blank')" style="border:none;border-radius:9999px;padding:12px 28px;font-size:14px;font-weight:700;cursor:pointer;background:#F5A623;color:#fff;font-family:'Inter',Arial,sans-serif"><svg style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>Abrir ${escapeHtml(m.archivoNombre || 'documento adjunto')}</button></p>` : '<p><em>Este memorando no tiene un archivo adjunto.</em></p>'}
+      ${m.archivoDatos ? `
+        <div style="text-align:center;margin:24px 0;display:flex;justify-content:center;gap:12px;flex-wrap:wrap">
+          <button class="adjunto" type="button" onclick="gestionarAdjunto('ver')" style="border:none;border-radius:9999px;padding:12px 24px;font-size:13px;font-weight:700;cursor:pointer;background:#8B5CF6;color:#fff;font-family:'Inter',Arial,sans-serif"><svg style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>Abrir ${escapeHtml(m.archivoNombre || 'documento adjunto')}</button>
+          <button class="adjunto" type="button" onclick="gestionarAdjunto('descargar')" style="border:none;border-radius:9999px;padding:12px 24px;font-size:13px;font-weight:700;cursor:pointer;background:#F5A623;color:#fff;font-family:'Inter',Arial,sans-serif"><svg style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>Descargar ${escapeHtml(m.archivoNombre || 'archivo')}</button>
+        </div>` : '<p><em>Este memorando no tiene un archivo adjunto.</em></p>'}
       <div class="firma">
         <p>Cordialmente,</p>
         <p><strong>Equipo Directivo</strong><br/>Fundación A+</p>
@@ -7969,12 +8020,18 @@ Fundación A+`;
   // IMPORTANTE: window.open() se llama de forma SÍNCRONA, antes de
   // cualquier await — así el navegador la asocia al click original del
   // usuario y no la bloquea como popup. El contenido (que sí depende de
-  // una consulta async a 'usuarios') se escribe después, cuando esté listo.
+  // una consulta async a 'usuarios' y 'Store.getArchivo') se escribe después, cuando esté listo.
   async function abrirMemorandoCarta(id) {
     const win = window.open('', '_blank');
     if (!win) { toast('Habilita las ventanas emergentes para ver el memorando', 'err'); return; }
-    const m = (await Store.list('memorandos')).find(x => x.id === id);
+    let m = (await Store.list('memorandos')).find(x => x.id === id);
     if (!m) { win.close(); toast('No se encontró el memorando', 'err'); return; }
+    try {
+      const arch = await Store.getArchivo('memorandos', id);
+      if (arch && arch.archivoDatos && arch.archivoDatos !== '1') {
+        m = { ...m, archivoDatos: arch.archivoDatos, archivoNombre: arch.archivoNombre || m.archivoNombre, archivoTipo: arch.archivoTipo || m.archivoTipo };
+      }
+    } catch(e) {}
     const html = await construirCartaMemorandoHTML(m);
     win.document.write(html);
     win.document.close();
@@ -9131,23 +9188,30 @@ Fundación A+`;
       : logins.filter(l => l.resultado === auditoriaLoginFiltro);
 
     const filasLogin = loginsFiltrados.map(l => `
-      <tr data-search="${escapeHtml((l.fecha + ' ' + l.hora + ' ' + (l.rol || '') + ' ' + l.email + ' ' + l.resultado).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+      <tr data-search="${escapeHtml((l.fecha + ' ' + l.hora + ' ' + (l.rol || '') + ' ' + l.email + ' ' + (l.ip || '') + ' ' + l.resultado).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(l.fecha)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(l.hora)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(l.rol || 'Superadmin')}</td>
         <td class="py-2.5 px-4 text-sm text-ink font-semibold">${escapeHtml(l.email)}</td>
+        <td class="py-2.5 px-4 text-xs font-mono text-slate2 whitespace-nowrap">${escapeHtml(l.ip || '—')}</td>
         <td class="py-2.5 px-4">${statusPill(l.resultado, { 'Exitoso': { bg: '#1FC8C01A', text: '#0f8f89' }, 'Fallido': { bg: '#F0455C1A', text: '#F0455C' } })}</td>
       </tr>`).join('');
 
-    const filasAcciones = acciones.map(a => `
-      <tr data-search="${escapeHtml((a.fecha + ' ' + a.hora + ' ' + (a.rol || '') + ' ' + a.actor + ' ' + a.tipo + ' ' + (a.detalle || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
+    const filasAcciones = acciones.map(a => {
+      const sev = a.severidad || 'INFO';
+      const sevColor = sev === 'SECURITY_ALERT' ? 'bg-rose-100 text-rose-700 border-rose-200' : (sev === 'WARN' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-blue-50 text-blue-600 border-blue-200');
+      return `
+      <tr data-search="${escapeHtml((a.fecha + ' ' + a.hora + ' ' + (a.rol || '') + ' ' + a.actor + ' ' + a.tipo + ' ' + (a.ip || '') + ' ' + (a.detalle || '')).toLowerCase())}" class="border-b border-gray-50 last:border-0">
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${fmtDate(a.fecha)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(a.hora)}</td>
+        <td class="py-2.5 px-4"><span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${sevColor}">${escapeHtml(sev)}</span></td>
         <td class="py-2.5 px-4 text-sm text-slate2 whitespace-nowrap">${escapeHtml(a.rol || '—')}</td>
         <td class="py-2.5 px-4 text-sm text-ink font-semibold">${escapeHtml(a.actor)}</td>
         <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(a.tipo)}</td>
+        <td class="py-2.5 px-4 text-xs font-mono text-slate2 whitespace-nowrap">${escapeHtml(a.ip || '—')}</td>
         <td class="py-2.5 px-4 text-sm text-slate2">${escapeHtml(a.detalle || '—')}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     const filasCambios = cambios.map(c => `
       <tr data-search="${escapeHtml((c.fecha + ' ' + c.hora + ' ' + c.autor + ' ' + c.cohorte + ' ' + c.mes + ' ' + c.franja + ' ' + c.campo + ' ' + c.valorAnterior + ' ' + c.valorNuevo).toLowerCase())}" class="border-b border-gray-50 last:border-0">
@@ -9193,9 +9257,9 @@ Fundación A+`;
         <div class="table-responsive-container">
           <table id="table-auditoria-login" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">Resultado</th>
+              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Correo</th><th class="py-2.5 px-4">IP</th><th class="py-2.5 px-4">Resultado</th>
             </tr></thead>
-            <tbody>${filasLogin || emptyRow(5)}</tbody>
+            <tbody>${filasLogin || emptyRow(6)}</tbody>
           </table>
         </div>
       </div>
@@ -9217,9 +9281,9 @@ Fundación A+`;
         <div class="table-responsive-container">
           <table id="table-auditoria-acciones" class="w-full admin-table">
             <thead><tr class="text-left text-xs font-bold uppercase tracking-wide text-slate2 border-b border-gray-100">
-              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Quién</th><th class="py-2.5 px-4">Acción</th><th class="py-2.5 px-4">Detalle</th>
+              <th class="py-2.5 px-4">Fecha</th><th class="py-2.5 px-4">Hora</th><th class="py-2.5 px-4">Nivel</th><th class="py-2.5 px-4">Rol</th><th class="py-2.5 px-4">Quién</th><th class="py-2.5 px-4">Acción</th><th class="py-2.5 px-4">IP</th><th class="py-2.5 px-4">Detalle</th>
             </tr></thead>
-            <tbody>${filasAcciones || emptyRow(6)}</tbody>
+            <tbody>${filasAcciones || emptyRow(8)}</tbody>
           </table>
         </div>
       </div>
