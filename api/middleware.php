@@ -100,6 +100,11 @@ function generarToken(array $payload): string {
 
 /**
  * Verifica un token: firma válida, emisor legítimo y no expirado.
+ * Implementa blindaje estricto contra ataques de degradación algorítmica (RFC 8725):
+ * - Verificación previa de firma con clave simétrica fija a tiempo constante (hash_equals).
+ * - Restricción absoluta a 'alg' === 'HS256' (bloqueo total de alg:none, RS256, ES256, HS512).
+ * - Validación de tipo de credencial ('typ' === 'JWT') y rechazo de cabeceras críticas ('crit').
+ * - Exigencia de reclamo numérico de expiración ('exp') para rechazar tokens sin caducidad.
  * Devuelve el payload decodificado si es válido, o null si fue alterado o expiró.
  */
 function verificarToken(?string $token): ?array {
@@ -108,18 +113,24 @@ function verificarToken(?string $token): ?array {
     if (count($partes) !== 3) return null;
     [$headerCodificado, $payloadCodificado, $firmaRecibida] = $partes;
 
+    // 1. Verificación previa de firma con clave simétrica fija a tiempo constante contra timing attacks
     $firmaEsperada = base64UrlEncode(hash_hmac('sha256', "$headerCodificado.$payloadCodificado", JWT_SECRET, true));
-    if (!hash_equals($firmaEsperada, $firmaRecibida)) return null; // Comparación a tiempo constante contra timing attacks
+    if (!hash_equals($firmaEsperada, $firmaRecibida)) return null;
 
+    // 2. Decodificación y validación estricta de cabecera JOSE
     $header = json_decode(base64UrlDecode($headerCodificado), true);
-    if (!$header || ($header['alg'] ?? '') !== 'HS256') return null; // Bloqueo de degradación algorítmica (alg: none / confused deputy)
+    if (!is_array($header) || ($header['alg'] ?? '') !== 'HS256') return null; // Bloqueo de degradación algorítmica
+    if (isset($header['typ']) && strtoupper(trim((string)$header['typ'])) !== 'JWT') return null;
+    if (isset($header['crit'])) return null; // Rechazo de extensiones críticas no soportadas
 
+    // 3. Decodificación y validación de payload
     $payload = json_decode(base64UrlDecode($payloadCodificado), true);
-    if (!$payload) return null;
+    if (!is_array($payload)) return null;
 
+    // 4. Verificación de vigencia temporal estricta (exp y nbf)
     $ahora = time();
-    if (isset($payload['exp']) && $payload['exp'] < $ahora) return null;
-    if (isset($payload['nbf']) && $payload['nbf'] > $ahora) return null;
+    if (!isset($payload['exp']) || !is_numeric($payload['exp']) || (int)$payload['exp'] < $ahora) return null;
+    if (isset($payload['nbf']) && is_numeric($payload['nbf']) && (int)$payload['nbf'] > $ahora) return null;
 
     return $payload;
 }
