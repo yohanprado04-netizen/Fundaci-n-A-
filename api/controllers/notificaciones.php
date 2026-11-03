@@ -12,23 +12,32 @@ function manejarNotificaciones(PDO $pdo): void {
     $miEmail = trim($sesion['email'] ?? '');
     $miCohorte = trim($sesion['cohorte'] ?? '');
 
-    // Asegurar tabla comunicados
-    $pdo->exec("CREATE TABLE IF NOT EXISTS comunicados (
-        id VARCHAR(64) PRIMARY KEY,
-        tipo VARCHAR(32) NOT NULL DEFAULT 'Publica',
-        destinatarios TEXT NULL,
-        titulo VARCHAR(255) NOT NULL,
-        mensaje TEXT NOT NULL,
-        categoria VARCHAR(64) NOT NULL DEFAULT 'Institucional',
-        prioridad VARCHAR(32) NOT NULL DEFAULT 'Media',
-        autor VARCHAR(128) NOT NULL DEFAULT 'Superadmin',
-        autor_rol VARCHAR(64) NOT NULL DEFAULT 'Superadmin',
-        fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        atendida TINYINT(1) NOT NULL DEFAULT 0,
-        INDEX idx_tipo (tipo),
-        INDEX idx_categoria (categoria),
-        INDEX idx_fecha (fecha)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+    // Asegurar tabla comunicados (con verificacion DML no bloqueante)
+    static $notifComAsegurado = false;
+    if (!$notifComAsegurado) {
+        try {
+            $pdo->query("SELECT 1 FROM comunicados LIMIT 1");
+            $notifComAsegurado = true;
+        } catch (Throwable $e) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS comunicados (
+                id VARCHAR(64) PRIMARY KEY,
+                tipo VARCHAR(32) NOT NULL DEFAULT 'Publica',
+                destinatarios TEXT NULL,
+                titulo VARCHAR(255) NOT NULL,
+                mensaje TEXT NOT NULL,
+                categoria VARCHAR(64) NOT NULL DEFAULT 'Institucional',
+                prioridad VARCHAR(32) NOT NULL DEFAULT 'Media',
+                autor VARCHAR(128) NOT NULL DEFAULT 'Superadmin',
+                autor_rol VARCHAR(64) NOT NULL DEFAULT 'Superadmin',
+                fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                atendida TINYINT(1) NOT NULL DEFAULT 0,
+                INDEX idx_tipo (tipo),
+                INDEX idx_categoria (categoria),
+                INDEX idx_fecha (fecha)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+            $notifComAsegurado = true;
+        }
+    }
 
     // ── 1. GET: Consultar notificaciones con filtrado por rol y búsqueda ─────
     if ($metodo === 'GET') {

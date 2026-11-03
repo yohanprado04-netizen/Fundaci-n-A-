@@ -177,6 +177,12 @@ if (!function_exists('asegurarEsquemaPagosDocentes')) {
         static $asegurado = false;
         if ($asegurado) return;
         try {
+            $pdo->query("SELECT 1 FROM pagos_docentes LIMIT 1");
+            $pdo->query("SELECT 1 FROM pagos_estudiantes LIMIT 1");
+            $asegurado = true;
+            return;
+        } catch (Throwable $e) {}
+        try {
             $cols = $pdo->query("SHOW COLUMNS FROM usuarios")->fetchAll(PDO::FETCH_COLUMN);
             $alter = [];
             if (!in_array('documento', $cols, true)) {

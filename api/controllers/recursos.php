@@ -7,6 +7,11 @@ function asegurarEsquemaHistorialPrestamos(PDO $pdo): void {
     static $asegurado = false;
     if ($asegurado) return;
     try {
+        $pdo->query("SELECT 1 FROM historial_prestamos LIMIT 1");
+        $asegurado = true;
+        return;
+    } catch (Throwable $e) {}
+    try {
         $pdo->exec("CREATE TABLE IF NOT EXISTS historial_prestamos (
             id VARCHAR(64) PRIMARY KEY,
             recurso_id VARCHAR(64) NOT NULL,

@@ -7,6 +7,11 @@ function asegurarColumnaPostulacionSlug(PDO $pdo): void {
     static $asegurado = false;
     if ($asegurado) return;
     try {
+        $pdo->query("SELECT postulacion_slug FROM configuracion LIMIT 1");
+        $asegurado = true;
+        return;
+    } catch (Throwable $e) {}
+    try {
         $cols = $pdo->query("SHOW COLUMNS FROM configuracion")->fetchAll(PDO::FETCH_COLUMN);
         if (!in_array('postulacion_slug', $cols, true)) {
             $pdo->exec("ALTER TABLE configuracion ADD COLUMN postulacion_slug VARCHAR(120) DEFAULT 'postulaciones' AFTER postulacion_url");
@@ -300,6 +305,12 @@ if (!function_exists('asegurarEsquemaPagosDocentes')) {
 function asegurarEsquemaPagosDocentes(PDO $pdo): void {
     static $asegurado = false;
     if ($asegurado) return;
+    try {
+        $pdo->query("SELECT 1 FROM pagos_docentes LIMIT 1");
+        $pdo->query("SELECT 1 FROM pagos_estudiantes LIMIT 1");
+        $asegurado = true;
+        return;
+    } catch (Throwable $e) {}
     try {
         $cols = $pdo->query("SHOW COLUMNS FROM usuarios")->fetchAll(PDO::FETCH_COLUMN);
         $alter = [];

@@ -19,6 +19,16 @@ const FORM_ARCHIVO_MIMES = [
 
 function asegurarTablasFormularios(PDO $pdo): void
 {
+    static $asegurado = false;
+    if ($asegurado) return;
+    try {
+        $pdo->query("SELECT roles_permitidos, cohortes_permitidas FROM formularios LIMIT 1");
+        $pdo->query("SELECT 1 FROM formulario_preguntas LIMIT 1");
+        $pdo->query("SELECT 1 FROM formulario_respuestas LIMIT 1");
+        $pdo->query("SELECT 1 FROM formulario_respuesta_valores LIMIT 1");
+        $asegurado = true;
+        return;
+    } catch (Throwable $e) {}
     $pdo->exec("CREATE TABLE IF NOT EXISTS formularios (
         id VARCHAR(40) PRIMARY KEY,
         titulo MEDIUMTEXT NOT NULL,

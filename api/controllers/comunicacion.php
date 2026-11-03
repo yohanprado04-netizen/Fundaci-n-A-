@@ -337,7 +337,13 @@ function manejarMemorandosLeidos(PDO $pdo): void {
 function manejarComunicados(PDO $pdo): void {
     $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
-    $pdo->exec("CREATE TABLE IF NOT EXISTS comunicados (
+    static $comAsegurado = false;
+    if (!$comAsegurado) {
+        try {
+            $pdo->query("SELECT 1 FROM comunicados LIMIT 1");
+            $comAsegurado = true;
+        } catch (Throwable $e) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS comunicados (
         id VARCHAR(64) PRIMARY KEY,
         tipo VARCHAR(32) NOT NULL DEFAULT 'Publica',
         destinatarios TEXT NULL,
@@ -353,6 +359,9 @@ function manejarComunicados(PDO $pdo): void {
         INDEX idx_categoria (categoria),
         INDEX idx_fecha (fecha)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+            $comAsegurado = true;
+        }
+    }
 
     if ($metodo === 'GET') {
         $limitCom = isset($_GET['limit']) && is_numeric($_GET['limit']) ? min((int)$_GET['limit'], 1000) : 500;
