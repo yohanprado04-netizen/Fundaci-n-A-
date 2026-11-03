@@ -422,6 +422,25 @@
 
     async function solicitarTtsElevenLabs(texto, voiceId) {
       try {
+        // 1. Intentar primero a traves del backend (/chat/tts) para no exponer credenciales
+        const apiUrl = getChatApiUrl();
+        if (apiUrl) {
+          try {
+            const backendTtsUrl = apiUrl.replace(/\/chat\/?$/, '') + '/chat/tts';
+            const respBack = await fetch(backendTtsUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: texto, voice_id: voiceId })
+            });
+            if (respBack.ok) {
+              return await respBack.blob();
+            }
+          } catch (e) {
+            // Continua a respaldo directo si el backend no responde
+          }
+        }
+
+        // 2. Respaldo directo contra ElevenLabs API
         const resp = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
           method: 'POST',
           headers: {
