@@ -321,11 +321,12 @@
       return new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
     }
 
-    // ── Motor TTS ElevenLabs con Locución Ultra-Realista y Respaldo Inteligente ──
+    // ── Motor TTS ElevenLabs con Locución Masculina Ultra-Realista ──
     const ELEVENLABS_CONFIG = {
       apiKey: 'sk_ab23e53896bea32ebe020f9422db614ca9637f4fd4defc37',
-      primaryVoiceId: 'htFfPSZGJwjBv1CL0aMD', // Voz personalizada de la Fundación (Antonio)
-      fallbackVoiceId: 'hpp4J3VqNfWAUOO0d1Us', // Voz premade multilingüe compatible con plan estándar (Bella)
+      primaryVoiceId: 'htFfPSZGJwjBv1CL0aMD', // Voz masculina principal (Antonio - Conversacional Latino)
+      fallbackVoiceId: 'cjVigY5qzO86Huf0OWal', // Voz masculina premade de respaldo (Eric - Suave y Confiable)
+      secondaryFallbackVoiceId: 'nPczCjzI2devNBz1zQrb', // Segunda voz masculina de respaldo (Brian - Resonante y Cálida)
       modelId: 'eleven_multilingual_v2'
     };
 
@@ -388,9 +389,12 @@
       try {
         let audioBlob = await solicitarTtsElevenLabs(textoLimpio, ELEVENLABS_CONFIG.primaryVoiceId);
 
-        // Si la voz de biblioteca requiere suscripción de pago (HTTP 402), usar voz premade de respaldo
+        // Si la voz de biblioteca requiere suscripción de pago (HTTP 402), usar voz masculina premade de respaldo
         if (!audioBlob) {
           audioBlob = await solicitarTtsElevenLabs(textoLimpio, ELEVENLABS_CONFIG.fallbackVoiceId);
+        }
+        if (!audioBlob) {
+          audioBlob = await solicitarTtsElevenLabs(textoLimpio, ELEVENLABS_CONFIG.secondaryFallbackVoiceId);
         }
 
         if (audioBlob) {
@@ -483,12 +487,23 @@
       const utterance = new SpeechSynthesisUtterance(textoLimpio);
       utterance.lang = 'es-CO';
       utterance.rate = 1.0;
-      utterance.pitch = 1.0;
+      utterance.pitch = 0.92; // Tono masculino natural
 
       try {
         const voces = window.speechSynthesis.getVoices();
-        const vozEsp = voces.find(v => v.lang && (v.lang.startsWith('es-') || v.lang === 'es'));
-        if (vozEsp) utterance.voice = vozEsp;
+        const vocesEsp = voces.filter(v => v.lang && (v.lang.startsWith('es-') || v.lang === 'es'));
+        // Priorizar expresamente voces masculinas del sistema operativo
+        const vozHombre = vocesEsp.find(v => {
+          const n = (v.name || '').toLowerCase();
+          return n.includes('male') || n.includes('hombre') || n.includes('jorge') || n.includes('raul') ||
+                 n.includes('alvaro') || n.includes('diego') || n.includes('carlos') || n.includes('pablo') ||
+                 n.includes('david') || n.includes('antonio') || n.includes('miguel');
+        });
+        if (vozHombre) {
+          utterance.voice = vozHombre;
+        } else if (vocesEsp.length) {
+          utterance.voice = vocesEsp[0];
+        }
       } catch (_) {}
 
       if (btnElement) {
