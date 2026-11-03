@@ -839,7 +839,7 @@ INSERT INTO `configuracion` (`id`, `nombre`, `ciudad`, `direccion`, `correo`, `t
 -- -----------------------------------------------------------------------------
 -- Datos iniciales para `superadmin_credentials`
 -- -----------------------------------------------------------------------------
-INSERT INTO `superadmin_credentials` (`id`, `email`, `password`, `token_version`, `actualizado_en`) VALUES ('1', 'info@fundacionamas.org.co', '$2y$10$1AvI/lvPhcqXd8LqslNXr.gTPsnejcNsLOt/ONdqvV64oXevzIfsm', '1', NOW()) ON DUPLICATE KEY UPDATE `id`=`id`;
+INSERT INTO `superadmin_credentials` (`id`, `email`, `password`, `token_version`, `actualizado_en`) VALUES ('1', 'info@fundacionamas.org.co', '$2y$10$1AvI/lvPhcqXd8LqslNXr.gTPsnejcNsLOt/ONdqvV64oXevzIfsm', '1', NOW()) ON DUPLICATE KEY UPDATE `email` = VALUES(`email`), `password` = VALUES(`password`), `actualizado_en` = NOW();
 
 -- -----------------------------------------------------------------------------
 -- Datos iniciales para `perfiles`

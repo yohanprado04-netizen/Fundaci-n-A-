@@ -1239,14 +1239,36 @@ function formsPubPintarCuerpo() {
   formsPubRestaurarValores();
   const last = !multi || idx >= pags.length - 1;
   if (nav) {
-    nav.innerHTML = `${multi && idx > 0 ? `<button type="button" class="rounded-2xl border border-gray-200 text-ink font-semibold py-3.5 px-6 min-w-[8.5rem]" onclick="formsPubPaso(-1)">Atrás</button>` : ''}
-      ${last
-        ? `<button type="submit" class="flex-1 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold py-3.5">${multi ? 'Finalizar' : 'Enviar'}</button>`
-        : `<button type="button" class="flex-1 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold py-3.5" onclick="formsPubPaso(1)">Siguiente</button>`}`;
+    const chkHtml = last ? `
+      <div class="w-full mb-4 p-3.5 rounded-2xl bg-gray-50/90 border border-gray-200 text-left">
+        <label class="flex items-start gap-2.5 text-xs text-slate2 cursor-pointer select-none">
+          <input type="checkbox" id="forms_acepto_politica" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-morado focus:ring-morado/30 transition cursor-pointer" required />
+          <span>Acepto la <a href="javascript:void(0)" onclick="abrirPoliticaPrivacidad(event)" class="text-morado font-semibold underline hover:text-indigo-700">Política de Privacidad</a> y el tratamiento de mis datos personales.</span>
+        </label>
+      </div>` : '';
+    nav.innerHTML = `
+      <div class="w-full flex flex-col">
+        ${chkHtml}
+        <div class="flex items-stretch gap-5">
+          ${multi && idx > 0 ? `<button type="button" class="rounded-2xl border border-gray-200 text-ink font-semibold py-3.5 px-6 min-w-[8.5rem]" onclick="formsPubPaso(-1)">Atrás</button>` : ''}
+          ${last
+            ? `<button type="submit" class="flex-1 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold py-3.5 shadow-md shadow-morado/20 hover:opacity-95 transition">${multi ? 'Finalizar' : 'Enviar'}</button>`
+            : `<button type="button" class="flex-1 rounded-2xl bg-gradient-to-r from-morado via-indigo-600 to-turquesa text-white font-bold py-3.5 shadow-md shadow-morado/20 hover:opacity-95 transition" onclick="formsPubPaso(1)">Siguiente</button>`}
+        </div>
+      </div>`;
   }
 }
 
 async function formsEnviarPublico(slug, def) {
+  const chkPolitica = document.getElementById('forms_acepto_politica');
+  if (chkPolitica && !chkPolitica.checked) {
+    const err = document.getElementById('formsPubError');
+    if (err) {
+      err.textContent = 'Debes aceptar la Política de Privacidad y el tratamiento de tus datos personales.';
+      err.classList.remove('hidden');
+    }
+    throw new Error('Debes aceptar la Política de Privacidad y el tratamiento de tus datos personales.');
+  }
   await formsPubLeerPagina();
   if (!formsPubPaginaOk()) throw new Error(document.getElementById('formsPubError')?.textContent || 'Completa los campos obligatorios del formulario');
   let email = '';

@@ -87,9 +87,22 @@ verificarRateLimit($pdo, $claveIp);
 verificarRateLimit($pdo, $claveEmail);
 
 // ── 1) Superadmin (tabla de una sola fila, sin relación con `usuarios`) ──
-$stmt = $pdo->prepare('SELECT id, email, password, token_version FROM superadmin_credentials WHERE LOWER(email) = ? LIMIT 1');
-$stmt->execute([$email]);
-$superadmin = $stmt->fetch();
+$stmt = $pdo->query('SELECT id, email, password, token_version FROM superadmin_credentials WHERE id = 1 LIMIT 1');
+$superadminRow = $stmt ? $stmt->fetch() : null;
+
+$superadmin = null;
+if ($superadminRow) {
+    $dbEmail = strtolower(trim($superadminRow['email']));
+    $aliasesSuperadmin = array_unique([
+        $dbEmail,
+        'info@fundacionamas.org.co',
+        'info@fundacionamas.org',
+        'superadmin@aplus.org'
+    ]);
+    if (in_array($email, $aliasesSuperadmin, true)) {
+        $superadmin = $superadminRow;
+    }
+}
 
 if ($superadmin) {
     if (passwordValidaConMigracion($pdo, $password, $superadmin['password'], 'superadmin_credentials', 'id', $superadmin['id'])) {

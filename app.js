@@ -989,6 +989,10 @@ if (window.top !== window.self) {
           <input id="reg_password" type="text" autocomplete="new-password" placeholder="Crea una contraseña" class="w-full rounded-xl border border-morado/25 bg-morado/5 pl-4 pr-4 py-3 text-sm text-ink placeholder:text-slate2 focus:outline-none focus:ring-2 focus:ring-morado/30 focus:border-morado transition" />
         </div>
         <p class="text-xs text-slate2">Mínimo 6 caracteres, con al menos una letra y un número.</p>
+        <label class="flex items-start gap-2.5 pt-2 text-xs text-slate2 cursor-pointer select-none">
+          <input type="checkbox" id="reg_acepto_politica" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-morado focus:ring-morado/30 transition cursor-pointer" required />
+          <span>Acepto la <a href="javascript:void(0)" onclick="abrirPoliticaPrivacidad(event)" class="text-morado font-semibold underline hover:text-indigo-700">Política de Privacidad</a> y el tratamiento de mis datos personales.</span>
+        </label>
       </div>
       <p id="registroPublicoError" class="hidden text-xs text-coral mt-3"></p>
       <button onclick="withBotonCargando(this, enviarRegistroPublico)" class="w-full mt-5 rounded-full bg-gradient-to-r from-morado to-turquesa text-white font-semibold py-3.5 hover:bg-morado transition">
@@ -1012,6 +1016,12 @@ if (window.top !== window.self) {
 
     if (!nombre || !email || !password) {
       errorEl.textContent = 'Completa nombre, correo y contraseña.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    const chkPolitica = document.getElementById('reg_acepto_politica');
+    if (chkPolitica && !chkPolitica.checked) {
+      errorEl.textContent = 'Debes aceptar la Política de Privacidad y el tratamiento de tus datos personales.';
       errorEl.classList.remove('hidden');
       return;
     }
@@ -9646,6 +9656,124 @@ Fundación A+`;
     }
   }
   window.abrirPostulacion = abrirPostulacion;
+
+  function abrirPoliticaPrivacidad(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    const modal = document.getElementById('modalLegal');
+    const titulo = document.getElementById('modalLegalTitulo');
+    const subtitulo = document.getElementById('modalLegalSubtitulo');
+    const cuerpo = document.getElementById('modalLegalCuerpo');
+    if (!modal || !cuerpo) return;
+
+    titulo.textContent = 'Política de Privacidad y Tratamiento de Datos';
+    subtitulo.textContent = 'Fundación A+ • Conforme a la Ley 1581 de 2012 y normatividad vigente';
+    cuerpo.innerHTML = `
+      <div class="space-y-4 text-xs sm:text-sm text-slate2 leading-relaxed">
+        <div class="p-3.5 bg-morado/5 rounded-2xl border border-morado/15">
+          <p class="font-bold text-morado text-xs uppercase tracking-wider mb-1">Compromiso de Privacidad</p>
+          <p class="text-ink">La <strong>Fundación A+</strong> está comprometida con la protección, confidencialidad y el uso responsable de los datos personales de sus aspirantes, estudiantes, docentes, voluntarios, donantes y colaboradores.</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-ink text-sm sm:text-base mb-1">1. Responsable del Tratamiento de Datos</h4>
+          <p><strong>Fundación A+</strong>, con domicilio principal en Colombia, es la persona jurídica responsable del tratamiento de los datos personales capturados a través de este portal web, sistemas académicos y formularios de postulación.</p>
+          <p class="mt-1">Canal institucional de atención para Habeas Data: <a href="mailto:info@fundacionamas.org.co" class="text-morado underline font-medium">info@fundacionamas.org.co</a>.</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-ink text-sm sm:text-base mb-1">2. Datos Personales Recopilados</h4>
+          <p>Podemos recolectar y almacenar la siguiente información suministrada voluntariamente:</p>
+          <ul class="list-disc pl-5 mt-1 space-y-1">
+            <li><strong>Identificación y contacto:</strong> Nombres, apellidos, número de identificación (CC/TI), correo electrónico y teléfono / WhatsApp.</li>
+            <li><strong>Información académica y formativa:</strong> Perfil de postulación, motivación, trayectoria, respuestas a convocatorias y cohortes asignadas.</li>
+            <li><strong>Seguimiento de programas:</strong> Registro de asistencias, notas, evaluaciones y proyectos en el portal institucional.</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-ink text-sm sm:text-base mb-1">3. Finalidad del Tratamiento</h4>
+          <p>Los datos personales recolectados se utilizarán estrictamente para los siguientes fines:</p>
+          <ul class="list-disc pl-5 mt-1 space-y-1">
+            <li>Gestionar convocatorias, admisiones, selección y adjudicación de becas formativas.</li>
+            <li>Creación y administración de cuentas de usuario en el portal educativo de la Fundación.</li>
+            <li>Envío de comunicaciones oficiales, avisos académicos, horarios y certificaciones.</li>
+            <li>Elaboración de estadísticas agregadas, reportes de impacto social y cumplimiento de requerimientos legales.</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-ink text-sm sm:text-base mb-1">4. No Transferencia y Confidencialidad</h4>
+          <p>La Fundación A+ <strong>no vende, arrienda ni transfiere datos personales a terceros</strong> con fines publicitarios o lucrativos. La información únicamente podrá ser procesada mediante herramientas tecnológicas seguras necesarias para la operación y seguridad del sistema.</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-ink text-sm sm:text-base mb-1">5. Derechos del Titular (Habeas Data)</h4>
+          <p>Como titular de los datos personales, de acuerdo con la Ley 1581 de 2012, usted tiene derecho a:</p>
+          <ul class="list-disc pl-5 mt-1 space-y-1">
+            <li>Conocer, actualizar y rectificar sus datos personales frente a la Fundación A+.</li>
+            <li>Solicitar prueba de la autorización otorgada.</li>
+            <li>Ser informado respecto del uso dado a sus datos.</li>
+            <li>Revocar la autorización y/o solicitar la supresión del dato cuando no medie un deber legal o contractual de conservarlo.</li>
+          </ul>
+        </div>
+      </div>
+    `;
+    modal.classList.remove('hidden');
+  }
+
+  function abrirTerminosCondiciones(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    const modal = document.getElementById('modalLegal');
+    const titulo = document.getElementById('modalLegalTitulo');
+    const subtitulo = document.getElementById('modalLegalSubtitulo');
+    const cuerpo = document.getElementById('modalLegalCuerpo');
+    if (!modal || !cuerpo) return;
+
+    titulo.textContent = 'Términos y Condiciones de Uso';
+    subtitulo.textContent = 'Fundación A+ • Lineamientos y uso del portal';
+    cuerpo.innerHTML = `
+      <div class="space-y-4 text-xs sm:text-sm text-slate2 leading-relaxed">
+        <div class="p-3.5 bg-turquesa/10 rounded-2xl border border-turquesa/20">
+          <p class="font-bold text-ink text-xs uppercase tracking-wider mb-1">Aceptación de Términos</p>
+          <p class="text-ink">El acceso, registro y uso de la plataforma institucional de la <strong>Fundación A+</strong> implica la aceptación plena de los presentes Términos y Condiciones.</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-ink text-sm sm:text-base mb-1">1. Uso de Cuentas y Seguridad</h4>
+          <p>Cada usuario es responsable de la exactitud de los datos suministrados y de custodiar la confidencialidad de su contraseña. No está permitido transferir o compartir cuentas individuales.</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-ink text-sm sm:text-base mb-1">2. Propiedad Intelectual</h4>
+          <p>Todo el contenido presente en la plataforma (marcas, logotipos, módulos académicos, diseños, material educativo y código fuente) es propiedad de la Fundación A+ o cuenta con licencia autorizada. Su uso está reservado exclusivamente para fines formativos institucionales.</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-ink text-sm sm:text-base mb-1">3. Convivencia y Ética Académica</h4>
+          <p>Los integrantes de la comunidad se comprometen a respetar los principios éticos, evitar el plagio y promover un entorno respetuoso e inclusivo en todas las interacciones académicas y canales de comunicación.</p>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-ink text-sm sm:text-base mb-1">4. Actualizaciones de los Términos</h4>
+          <p>La Fundación podrá actualizar periódicamente estos términos para reflejar mejoras tecnológicas o normativas. Las modificaciones se publicarán en esta sección para consulta permanente.</p>
+        </div>
+      </div>
+    `;
+    modal.classList.remove('hidden');
+  }
+
+  function cerrarModalLegal() {
+    const modal = document.getElementById('modalLegal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  window.abrirPoliticaPrivacidad = abrirPoliticaPrivacidad;
+  window.abrirTerminosCondiciones = abrirTerminosCondiciones;
+  window.cerrarModalLegal = cerrarModalLegal;
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') cerrarModalLegal();
+  });
 
   // ============================================================================
   // CENTRO DE GESTIÓN DE NOTIFICACIONES Y COMUNICADOS INSTITUCIONALES
