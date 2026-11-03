@@ -834,7 +834,7 @@ INSERT INTO `configuracion` (`id`, `nombre`, `ciudad`, `direccion`, `correo`, `t
 -- -----------------------------------------------------------------------------
 -- Datos iniciales para `superadmin_credentials`
 -- -----------------------------------------------------------------------------
-INSERT INTO `superadmin_credentials` (`id`, `email`, `password`, `token_version`, `actualizado_en`) VALUES ('1', 'superadmin@aplus.org', '$2y$10$qaM8bwUOoVwwoTBprZ/eke/fsq0P0FtlH.378qLcFD9zcWgVkM8NK', '1', '2026-09-13 21:54:52') ON DUPLICATE KEY UPDATE `id`=`id`;
+INSERT INTO `superadmin_credentials` (`id`, `email`, `password`, `token_version`, `actualizado_en`) VALUES ('1', 'info@fundacionamas.org.co', '$2y$10$1AvI/lvPhcqXd8LqslNXr.gTPsnejcNsLOt/ONdqvV64oXevzIfsm', '1', NOW()) ON DUPLICATE KEY UPDATE `id`=`id`;
 
 -- -----------------------------------------------------------------------------
 -- Datos iniciales para `perfiles`
@@ -865,8 +865,8 @@ INSERT INTO `horarios` (`id`, `cohorte`, `mes`, `incluye_sabado`, `franjas`, `cr
 -- -----------------------------------------------------------------------------
 -- Datos iniciales para `formularios`
 -- -----------------------------------------------------------------------------
-INSERT INTO `formularios` (`id`, `titulo`, `slug`, `descripcion`, `estado`, `abre_en`, `cierra_en`, `limite_por_usuario`, `limite_por_ip`, `roles_permitidos`, `cohortes_permitidas`, `creado_por`, `creado_en`, `actualizado_en`, `archivado_en`) VALUES ('fm_876e74a53d42ea81', 'Postulaciones', 'postulaciones', '', 'publico', NULL, '2026-11-08 00:01:00', '0', '0', NULL, NULL, 'superadmin@aplus.org', '2026-10-02 11:11:53', '2026-10-02 11:20:59', NULL) ON DUPLICATE KEY UPDATE `id`=`id`;
-INSERT INTO `formularios` (`id`, `titulo`, `slug`, `descripcion`, `estado`, `abre_en`, `cierra_en`, `limite_por_usuario`, `limite_por_ip`, `roles_permitidos`, `cohortes_permitidas`, `creado_por`, `creado_en`, `actualizado_en`, `archivado_en`) VALUES ('fm_660531aca41c6306', 'Postulaciones — TrAIning de 100 a 1000+', 'postulaciones-training-de-100-a-1000', 'Formulario oficial de postulación e inscripción a las cohortes del programa TrAIning de la Fundación A+.', 'publico', '2026-10-02 13:31:00', '2026-10-15 13:32:00', '0', '0', '[\"Docente\",\"Estudiante\"]', '[\"todas\"]', 'superadmin@aplus.org', '2026-10-02 13:32:12', '2026-10-03 21:45:16', NULL) ON DUPLICATE KEY UPDATE `id`=`id`;
+INSERT INTO `formularios` (`id`, `titulo`, `slug`, `descripcion`, `estado`, `abre_en`, `cierra_en`, `limite_por_usuario`, `limite_por_ip`, `roles_permitidos`, `cohortes_permitidas`, `creado_por`, `creado_en`, `actualizado_en`, `archivado_en`) VALUES ('fm_876e74a53d42ea81', 'Postulaciones', 'postulaciones', '', 'publico', NULL, '2026-11-08 00:01:00', '0', '0', NULL, NULL, 'info@fundacionamas.org.co', '2026-10-02 11:11:53', '2026-10-02 11:20:59', NULL) ON DUPLICATE KEY UPDATE `id`=`id`;
+INSERT INTO `formularios` (`id`, `titulo`, `slug`, `descripcion`, `estado`, `abre_en`, `cierra_en`, `limite_por_usuario`, `limite_por_ip`, `roles_permitidos`, `cohortes_permitidas`, `creado_por`, `creado_en`, `actualizado_en`, `archivado_en`) VALUES ('fm_660531aca41c6306', 'Postulaciones — TrAIning de 100 a 1000+', 'postulaciones-training-de-100-a-1000', 'Formulario oficial de postulación e inscripción a las cohortes del programa TrAIning de la Fundación A+.', 'publico', '2026-10-02 13:31:00', '2026-10-15 13:32:00', '0', '0', '[\"Docente\",\"Estudiante\"]', '[\"todas\"]', 'info@fundacionamas.org.co', '2026-10-02 13:32:12', '2026-10-03 21:45:16', NULL) ON DUPLICATE KEY UPDATE `id`=`id`;
 
 -- -----------------------------------------------------------------------------
 -- Datos iniciales para `formulario_preguntas`

@@ -2353,7 +2353,7 @@ if (window.top !== window.self) {
   const SEED = {
     // Credenciales del Superadmin: se guardan en el Store (editables desde
     // Configuración), ya no son una constante fija en el código.
-    superadmin_credentials: { email: 'superadmin@aplus.org', password: 'Super2026#' },
+    superadmin_credentials: { email: 'info@fundacionamas.org.co', password: 'FundacionA+2026*Segura!' },
     usuarios: [],
     // Perfiles: conjuntos de permisos con nombre que el Superadmin arma
     // marcando, panel por panel, si el perfil puede Ver / Crear / Editar /

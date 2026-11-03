@@ -829,12 +829,12 @@ CREATE TABLE `usuarios` (
 -- -----------------------------------------------------------------------------
 -- Configuración Institucional Inicial
 -- -----------------------------------------------------------------------------
-INSERT INTO `configuracion` (`id`, `nombre`, `ciudad`, `direccion`, `correo`, `telefono`, `cupo_maximo`, `notas_minima_aprobacion`, `asistencia_minima`, `notificaciones_email`, `notificaciones_ia`, `postulacion_habilitada`, `postulacion_url`, `postulacion_slug`, `actualizado_en`, `email_metodo`, `emailjs_public_key`, `emailjs_service_id`, `emailjs_template_id`, `smtp_host`, `smtp_port`, `smtp_user`, `smtp_pass`, `smtp_from`, `smtp_secure`) VALUES ('1', 'Fundación A+', 'Quibdó', '', 'info@fundacionamas.org.co', '3214974708', '30', '6.0', '80.00', '1', '1', '0', '', '', NOW(), 'smtp', '', '', '', 'smtp.gmail.com', '465', '', '', 'info@fundacionamas.org.co', 'ssl') ON DUPLICATE KEY UPDATE `id`=`id`;
+INSERT INTO `configuracion` (`id`, `nombre`, `ciudad`, `direccion`, `correo`, `telefono`, `cupo_maximo`, `notas_minima_aprobacion`, `asistencia_minima`, `notificaciones_email`, `notificaciones_ia`, `postulacion_habilitada`, `postulacion_url`, `postulacion_slug`, `actualizado_en`, `email_metodo`, `emailjs_public_key`, `emailjs_service_id`, `emailjs_template_id`, `smtp_host`, `smtp_port`, `smtp_user`, `smtp_pass`, `smtp_from`, `smtp_secure`) VALUES ('1', 'Fundación A+', 'Quibdó', '', 'info@fundacionamas.org.co', '3214974708', '30', '6.0', '80.00', '1', '1', '0', '', 'postulaciones', NOW(), 'emailjs', 'eIyshGVkR2fYZQJfO', 'service_20mxfgu', 'template_qvmzl1l', 'smtp.gmail.com', '465', 'info@fundacionamas.org.co', '', 'info@fundacionamas.org.co', 'ssl') ON DUPLICATE KEY UPDATE `id`=`id`;
 
 -- -----------------------------------------------------------------------------
 -- Credenciales Maestras del Superadmin (Única cuenta predeterminada)
 -- -----------------------------------------------------------------------------
-INSERT INTO `superadmin_credentials` (`id`, `email`, `password`, `token_version`, `actualizado_en`) VALUES ('1', 'superadmin@aplus.org', '$2y$10$qaM8bwUOoVwwoTBprZ/eke/fsq0P0FtlH.378qLcFD9zcWgVkM8NK', '1', NOW()) ON DUPLICATE KEY UPDATE `id`=`id`;
+INSERT INTO `superadmin_credentials` (`id`, `email`, `password`, `token_version`, `actualizado_en`) VALUES ('1', 'info@fundacionamas.org.co', '$2y$10$1AvI/lvPhcqXd8LqslNXr.gTPsnejcNsLOt/ONdqvV64oXevzIfsm', '1', NOW()) ON DUPLICATE KEY UPDATE `id`=`id`;
 
 -- -----------------------------------------------------------------------------
 -- Perfiles Base del Sistema (RBAC esencial para el funcionamiento de roles)
