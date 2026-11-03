@@ -1,4 +1,11 @@
 <?php
+// Blindaje de aislamiento: prohibir invocacion directa via HTTP
+if (php_sapi_name() !== 'cli' && basename($_SERVER['SCRIPT_FILENAME'] ?? '') === basename(__FILE__)) {
+    http_response_code(403);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => 'Acceso directo no permitido.'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 /**
  * middleware.php — Autenticación por token para el backend PHP.
  *

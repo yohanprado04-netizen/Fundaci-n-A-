@@ -124,7 +124,7 @@ ServerSignature Off
 # ------------------------------------------------------------------------------
 # 5. Bloqueo de Archivos Sensibles, Privados y Protección contra Ejecución en Cargas
 # ------------------------------------------------------------------------------
-<FilesMatch "^\.|\.env|\.jwt_secret|\.key$|\.secret$|composer\.(json|lock)|package(-lock)?\.json|\.pem$|\.log$|\.sql$|\.bat$|\.ps1$|\.py$">
+<FilesMatch "^\.|\.env|\.jwt_secret|\.key$|\.secret$|composer\.(json|lock)|package(-lock)?\.json|\.pem$|\.log$|\.sql$|\.bat$|\.ps1$|\.py$|^(config|middleware|mailer|formularios)\\.php$">
   Require all denied
   Order allow,deny
   Deny from all
@@ -139,5 +139,5 @@ ServerSignature Off
 
 # Bloquear acceso web directo a carpetas internas de scripts y temporales
 <IfModule mod_rewrite.c>
-  RewriteRule ^(scratch|backend_chat)(/|$) - [F,L]
+  RewriteRule ^(scratch|backend_chat|api/controllers)(/|$) - [F,L]
 </IfModule>

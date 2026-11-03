@@ -2,6 +2,13 @@
 // Mitigacion de vulnerabilidades RCE (PHP2Shell: CVE-2026-109618 / CVE-2026-109619)
 @ini_set('session.upload_progress.enabled', '0');
 @ini_set('display_errors', '0');
+// Blindaje de aislamiento: prohibir invocacion directa via HTTP
+if (php_sapi_name() !== 'cli' && basename($_SERVER['SCRIPT_FILENAME'] ?? '') === basename(__FILE__)) {
+    http_response_code(403);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => 'Acceso directo no permitido.'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 /**
  * config.php — Conexión a MySQL y configuración compartida por todo el
  * backend PHP de la Fundación A+.
