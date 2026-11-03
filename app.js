@@ -1721,11 +1721,16 @@ if (window.top !== window.self) {
   const PANEL_COLOR_DOCENTE = '#008080';
   let panelActivoDocente = null;
   async function showPanelDocente(panel) {
+    // Optimización al clic: Si ya estamos en este panel visible, evitar re-render innecesario
+    if (panelActivoDocente === panel) {
+      const pActivo = document.getElementById('panel-t-' + panel);
+      if (pActivo && !pActivo.classList.contains('hidden')) return;
+    }
     const tab = document.querySelector('.panel-tab-t[data-tpanel="' + panel + '"]');
     if (tab && tab.classList.contains('hidden')) return;
     if (!(await permisoUsuarioSobrePanel(currentDocente, 'docente.' + panel)).ver) return;
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (window.scrollY > 0) window.scrollTo(0, 0);
 
     // Ocultar todos los demás paneles y desactivar tabs docentes de forma sincronizada e instantánea
     document.querySelectorAll('.panel-content-t').forEach(p => {
@@ -1847,6 +1852,11 @@ if (window.top !== window.self) {
       abrirAplusChatDirecto();
       return;
     }
+    // Optimización al clic: Si ya estamos en este panel visible, evitar re-render innecesario
+    if (panelActivoAdmin === panel) {
+      const pActivo = document.getElementById('panel-' + panel);
+      if (pActivo && !pActivo.classList.contains('hidden')) return;
+    }
     if (currentAdminRole === 'aliado') {
       const isDonante = (currentAdminUser && (currentAdminUser.rol === 'Donante' || currentAdminUser.rol === 'Inversor' || currentAdminUser.rol === 'Inversionista'));
       const tabsAliadosPermitidos = isDonante
@@ -1864,7 +1874,7 @@ if (window.top !== window.self) {
       if (!(await permisoUsuarioSobrePanel(currentAdminUser, codigoPermiso)).ver) return;
     }
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (window.scrollY > 0) window.scrollTo(0, 0);
 
     // Ocultar de inmediato TODOS los demás paneles administrativos para evitar solapamientos
     document.querySelectorAll('.panel-content').forEach(p => {
@@ -3143,7 +3153,7 @@ if (window.top !== window.self) {
     }
     const schema = SCHEMAS[entity];
     if (!schema) return;
-    const listaEntidadActual = await Store.list(entity, { forceRefresh: true }); // funciona igual para 'usuarios' (MySQL) y cualquier otra entidad (localStorage, ver Store híbrido en db.js)
+    const listaEntidadActual = await Store.list(entity); // Optimizado: apertura instantánea usando caché en memoria
     const record0 = id ? listaEntidadActual.find(r => r.id === id) : null;
 
     // Solo el Superadmin puede gestionar cuentas de Administrador o Aliado Estratégico.
@@ -9905,10 +9915,8 @@ function cerrarSidebarMovil() {
       sidebar.addEventListener('click', function(e) {
         const tab = e.target.closest('.panel-tab, .panel-tab-t, .panel-tab-s');
         if (tab && sidebar.classList.contains('mob-open')) {
-          setTimeout(function() {
-            cerrarSidebarMovil();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }, 120);
+          cerrarSidebarMovil();
+          if (window.scrollY > 0) window.scrollTo(0, 0);
         }
       });
     });
@@ -9917,6 +9925,40 @@ function cerrarSidebarMovil() {
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') cerrarSidebarMovil();
     });
+
+    // 3. Precarga predictiva en hover / touch para respuesta de clic instantánea (0ms)
+    const mapPrefetch = {
+      usuarios: 'usuarios',
+      docentes: 'usuarios',
+      estudiantes: 'usuarios',
+      talentos: 'usuarios',
+      modulos: 'modulos',
+      horarios: 'horarios',
+      asistencia: 'sesiones_asistencia',
+      calificaciones: 'notas_modulos',
+      semaforo: 'semaforo',
+      pqr: 'pqr',
+      pagos: 'pagos_estudiantes',
+      recursos: 'recursos',
+      proyectosFundacion: 'proyectos_fundacion',
+      proyectosEstudiantes: 'proyectos_estudiantes',
+      comunicados: 'comunicados',
+      notificaciones: 'notificaciones'
+    };
+
+    const dispararPrecarga = (e) => {
+      const target = e.target && e.target.closest ? e.target.closest('.panel-tab, .panel-tab-t, .panel-tab-s') : null;
+      if (!target) return;
+      const panel = target.dataset.panel || target.dataset.tpanel || target.dataset.spanel;
+      if (!panel) return;
+      const entidad = mapPrefetch[panel];
+      if (entidad && typeof Store !== 'undefined' && typeof Store.list === 'function') {
+        Store.list(entidad).catch(() => {});
+      }
+    };
+
+    document.addEventListener('pointerover', dispararPrecarga, { passive: true });
+    document.addEventListener('touchstart', dispararPrecarga, { passive: true });
   }
 
   if (document.readyState === 'loading') {

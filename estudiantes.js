@@ -277,6 +277,11 @@
 
   let panelActivoEstudiante = null;
   async function showPanelEstudiante(panel) {
+    // Optimización al clic: Si ya estamos en este panel visible, evitar re-render innecesario
+    if (panelActivoEstudiante === panel) {
+      const pActivo = document.getElementById('panel-s-' + panel);
+      if (pActivo && !pActivo.classList.contains('hidden')) return;
+    }
     const estActual = getEstudiante();
     const tab = document.querySelector('.panel-tab-s[data-spanel="' + panel + '"]');
     if (panel === 'misProyectos' && tab && tab.classList.contains('hidden')) {
@@ -289,7 +294,7 @@
       if (!perm.ver) return;
     }
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (window.scrollY > 0) window.scrollTo(0, 0);
 
     // Ocultar de inmediato todos los demás paneles de estudiante y desmarcar tabs
     document.querySelectorAll('.panel-content-s').forEach(p => {

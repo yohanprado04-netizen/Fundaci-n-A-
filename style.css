@@ -4309,3 +4309,51 @@ html.dark #studentView .fixed.inset-0 .bg-white {
     background: var(--aplus-skeleton-base);
   }
 }
+
+
+/* =============================================================================
+   9. OPTIMIZACIÓN DE RESPUESTA INSTANTÁNEA AL CLIC (ZERO-LAG INTERACTION)
+   ========================================================================== */
+
+.panel-tab,
+.panel-tab-t,
+.panel-tab-s,
+button,
+a.btn,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Aceleración por hardware para transiciones ultra fluidas */
+.panel-tab,
+.panel-tab-t,
+.panel-tab-s,
+.role-sidebar button {
+  will-change: transform, background-color;
+  transform: translateZ(0);
+  cursor: pointer !important;
+}
+
+/* Feedback táctil y visual inmediato al presionar el ratón o pantalla */
+.panel-tab:active,
+.panel-tab-t:active,
+.panel-tab-s:active,
+button:not(:disabled):active,
+a.btn:active,
+.btn-primary:active,
+.btn-secondary:active,
+[role="button"]:active {
+  transform: scale(0.982) translateZ(0);
+  transition: transform 0.04s ease-out !important;
+}
+
+/* Transición ultra-ágil al soltar el clic */
+.panel-tab,
+.panel-tab-t,
+.panel-tab-s,
+button:not(:disabled) {
+  transition: transform 0.08s ease-out, background-color 0.12s ease-out, color 0.12s ease-out, border-color 0.12s ease-out;
+}
