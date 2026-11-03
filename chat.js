@@ -321,35 +321,170 @@
       return new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
     }
 
-    function reproducirTextoVoz(texto, btnElement) {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-        return;
-      }
-      // Si ya está reproduciendo, detener
-      if (window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
-        if (btnElement && btnElement.classList.contains('is-speaking')) {
-          btnElement.classList.remove('is-speaking');
-          btnElement.title = 'Leer en voz alta';
+    // ── Motor TTS ElevenLabs con Locución Ultra-Realista y Respaldo Inteligente ──
+    const ELEVENLABS_CONFIG = {
+      apiKey: 'sk_ab23e53896bea32ebe020f9422db614ca9637f4fd4defc37',
+      primaryVoiceId: 'htFfPSZGJwjBv1CL0aMD', // Voz personalizada de la Fundación (Antonio)
+      fallbackVoiceId: 'hpp4J3VqNfWAUOO0d1Us', // Voz premade multilingüe compatible con plan estándar (Bella)
+      modelId: 'eleven_multilingual_v2'
+    };
+
+    let audioActualLocucion = null;
+    let botonVozActivo = null;
+    const cacheAudioVoz = new Map();
+
+    async function reproducirTextoVoz(texto, btnElement) {
+      // 1. Si ya hay un audio reproduciéndose, detenerlo de inmediato
+      if (audioActualLocucion && !audioActualLocucion.paused) {
+        audioActualLocucion.pause();
+        audioActualLocucion.currentTime = 0;
+        audioActualLocucion = null;
+        if (botonVozActivo) {
+          botonVozActivo.classList.remove('is-speaking', 'is-loading');
+          botonVozActivo.title = 'Leer en voz alta';
+        }
+        if (botonVozActivo === btnElement) {
+          botonVozActivo = null;
           return;
         }
       }
 
-      // Limpiar texto para una locución fluida (quitar markdown y urls)
+      // Si la síntesis nativa del navegador estaba activa, cancelarla
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        if (botonVozActivo) {
+          botonVozActivo.classList.remove('is-speaking', 'is-loading');
+          botonVozActivo.title = 'Leer en voz alta';
+        }
+        if (botonVozActivo === btnElement) {
+          botonVozActivo = null;
+          return;
+        }
+      }
+
+      // 2. Limpiar texto para una locución fluida (quitar markdown, emojis y urls)
       let textoLimpio = String(texto || '')
         .replace(/https?:\/\/[^\s]+/g, 'enlace')
-        .replace(/[*_#`~[\]]/g, ' ')
+        .replace(/[*_#`~\[\]()]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
       if (!textoLimpio) return;
 
+      botonVozActivo = btnElement;
+      if (btnElement) {
+        btnElement.classList.remove('is-speaking');
+        btnElement.classList.add('is-loading');
+        btnElement.title = 'Generando locución con IA...';
+      }
+
+      // 3. Verificar si el audio ya está en caché para ahorrar cuota y responder en 0ms
+      if (cacheAudioVoz.has(textoLimpio)) {
+        reproducirBlobAudio(cacheAudioVoz.get(textoLimpio), btnElement);
+        return;
+      }
+
+      // 4. Intentar generar locución mediante ElevenLabs
+      try {
+        let audioBlob = await solicitarTtsElevenLabs(textoLimpio, ELEVENLABS_CONFIG.primaryVoiceId);
+
+        // Si la voz de biblioteca requiere suscripción de pago (HTTP 402), usar voz premade de respaldo
+        if (!audioBlob) {
+          audioBlob = await solicitarTtsElevenLabs(textoLimpio, ELEVENLABS_CONFIG.fallbackVoiceId);
+        }
+
+        if (audioBlob) {
+          const audioUrl = URL.createObjectURL(audioBlob);
+          cacheAudioVoz.set(textoLimpio, audioUrl);
+          reproducirBlobAudio(audioUrl, btnElement);
+          return;
+        }
+      } catch (err) {
+        console.warn('[Voz ElevenLabs] No se pudo sintetizar vía API, usando síntesis nativa:', err);
+      }
+
+      // 5. Respaldo transparente con síntesis nativa del navegador si la API no está disponible
+      reproducirVozNativaNavegador(textoLimpio, btnElement);
+    }
+
+    async function solicitarTtsElevenLabs(texto, voiceId) {
+      try {
+        const resp = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
+          method: 'POST',
+          headers: {
+            'xi-api-key': ELEVENLABS_CONFIG.apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'audio/mpeg'
+          },
+          body: JSON.stringify({
+            text: texto,
+            model_id: ELEVENLABS_CONFIG.modelId,
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.8
+            }
+          })
+        });
+
+        if (resp.status === 402) {
+          return null; // Requiere plan de pago para library voice, pasar a premade
+        }
+        if (!resp.ok) {
+          return null;
+        }
+        return await resp.blob();
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function reproducirBlobAudio(url, btnElement) {
+      const audio = new Audio(url);
+      audioActualLocucion = audio;
+
+      if (btnElement) {
+        btnElement.classList.remove('is-loading');
+        btnElement.classList.add('is-speaking');
+        btnElement.title = 'Detener locución';
+      }
+
+      audio.onended = () => {
+        if (btnElement) {
+          btnElement.classList.remove('is-speaking', 'is-loading');
+          btnElement.title = 'Leer en voz alta';
+        }
+        audioActualLocucion = null;
+        botonVozActivo = null;
+      };
+
+      audio.onerror = () => {
+        if (btnElement) {
+          btnElement.classList.remove('is-speaking', 'is-loading');
+          btnElement.title = 'Leer en voz alta';
+        }
+        audioActualLocucion = null;
+        botonVozActivo = null;
+      };
+
+      audio.play().catch(e => {
+        console.warn('[Audio Play Error]', e);
+        if (btnElement) {
+          btnElement.classList.remove('is-speaking', 'is-loading');
+          btnElement.title = 'Leer en voz alta';
+        }
+      });
+    }
+
+    function reproducirVozNativaNavegador(textoLimpio, btnElement) {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        if (btnElement) btnElement.classList.remove('is-loading', 'is-speaking');
+        return;
+      }
       const utterance = new SpeechSynthesisUtterance(textoLimpio);
       utterance.lang = 'es-CO';
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
 
-      // Buscar voz preferida en español
       try {
         const voces = window.speechSynthesis.getVoices();
         const vozEsp = voces.find(v => v.lang && (v.lang.startsWith('es-') || v.lang === 'es'));
@@ -357,22 +492,25 @@
       } catch (_) {}
 
       if (btnElement) {
+        btnElement.classList.remove('is-loading');
         btnElement.classList.add('is-speaking');
         btnElement.title = 'Detener lectura de voz';
       }
 
       utterance.onend = () => {
         if (btnElement) {
-          btnElement.classList.remove('is-speaking');
+          btnElement.classList.remove('is-speaking', 'is-loading');
           btnElement.title = 'Leer en voz alta';
         }
+        botonVozActivo = null;
       };
 
       utterance.onerror = () => {
         if (btnElement) {
-          btnElement.classList.remove('is-speaking');
+          btnElement.classList.remove('is-speaking', 'is-loading');
           btnElement.title = 'Leer en voz alta';
         }
+        botonVozActivo = null;
       };
 
       window.speechSynthesis.speak(utterance);

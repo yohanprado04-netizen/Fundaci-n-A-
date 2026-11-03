@@ -1437,6 +1437,12 @@ button, a, input, select, textarea, [role="button"], label {
   background: rgba(220, 38, 38, 0.08);
   animation: aplus-pulse 1.2s infinite;
 }
+.aplus-msg-speak-btn.is-loading {
+  color: var(--a-purple, #6a1b9a);
+  background: rgba(139, 92, 246, 0.12);
+  animation: aplus-pulse 0.7s infinite;
+  cursor: wait;
+}
 .aplus-msg-speak-btn svg {
   width: 12px;
   height: 12px;
