@@ -111,6 +111,9 @@ function verificarToken(?string $token): ?array {
     $firmaEsperada = base64UrlEncode(hash_hmac('sha256', "$headerCodificado.$payloadCodificado", JWT_SECRET, true));
     if (!hash_equals($firmaEsperada, $firmaRecibida)) return null; // Comparación a tiempo constante contra timing attacks
 
+    $header = json_decode(base64UrlDecode($headerCodificado), true);
+    if (!$header || ($header['alg'] ?? '') !== 'HS256') return null; // Bloqueo de degradación algorítmica (alg: none / confused deputy)
+
     $payload = json_decode(base64UrlDecode($payloadCodificado), true);
     if (!$payload) return null;
 

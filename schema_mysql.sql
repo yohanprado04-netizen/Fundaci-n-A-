@@ -70,6 +70,8 @@ CREATE TABLE `asistencia` (
   KEY `idx_asist_est_estado` (`estudiante`,`estado`),
   KEY `idx_asist_modulo_fecha` (`modulo`,`fecha`),
   KEY `idx_asist_doc_fecha` (`docente`,`fecha`),
+  KEY `idx_asist_sesion_estado` (`sesion_id`,`estado`),
+  KEY `idx_asist_doc_fecha_est` (`docente`,`fecha`,`estado`),
   CONSTRAINT `fk_asistencia_sesion` FOREIGN KEY (`sesion_id`) REFERENCES `sesiones_asistencia` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -679,7 +681,8 @@ CREATE TABLE `qr_tokens` (
   `fecha` date DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `token` (`token`),
-  UNIQUE KEY `uq_qr_tipo_cohorte_docente` (`tipo`,`cohorte`,`docente`)
+  UNIQUE KEY `uq_qr_tipo_cohorte_docente` (`tipo`,`cohorte`,`docente`),
+  KEY `idx_qr_fecha_tipo` (`fecha`,`tipo`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- -----------------------------------------------------------------------------
@@ -691,7 +694,9 @@ CREATE TABLE `rate_limits` (
   `intentos` int(11) NOT NULL DEFAULT 1,
   `bloqueado_hasta` int(11) NOT NULL DEFAULT 0,
   `ultimo_intento` int(11) NOT NULL DEFAULT 0,
-  PRIMARY KEY (`clave`)
+  PRIMARY KEY (`clave`),
+  KEY `idx_rate_bloqueado` (`bloqueado_hasta`),
+  KEY `idx_rate_ultimo` (`ultimo_intento`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- -----------------------------------------------------------------------------
@@ -731,7 +736,7 @@ CREATE TABLE `sesiones_asistencia` (
   PRIMARY KEY (`id`),
   KEY `idx_sesiones_asis_cohorte_fecha` (`cohorte`,`fecha`),
   KEY `idx_sesiones_iniciada_fecha` (`iniciada_por`,`fecha`),
-  KEY `idx_sesiones_cohorte_fecha` (`cohorte`,`fecha`)
+  KEY `idx_ses_cohorte_doc_fecha` (`cohorte`,`iniciada_por`,`fecha`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- -----------------------------------------------------------------------------
@@ -813,7 +818,9 @@ CREATE TABLE `usuarios` (
   KEY `idx_usuarios_rol` (`rol`),
   KEY `idx_usuarios_cohorte` (`cohorte`),
   KEY `idx_usr_rol_cohorte` (`rol`,`cohorte`),
-  KEY `idx_usr_estado_registro` (`estado_registro`)
+  KEY `idx_usr_estado_registro` (`estado_registro`),
+  KEY `idx_usr_cohorte_rol` (`cohorte`,`rol`),
+  KEY `idx_usr_rol_estado` (`rol`,`estado`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- =============================================================================

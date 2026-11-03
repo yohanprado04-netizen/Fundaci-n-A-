@@ -311,6 +311,13 @@ function asegurarIndicesRendimiento(PDO $pdo): void {
     static $asegurado = false;
     if ($asegurado) return;
 
+    // Cache de verificacion de indices para mitigar contencion de bloqueos de metadatos (MDL)
+    $lockFile = sys_get_temp_dir() . '/.aplus_indices_v1.lock';
+    if (@file_exists($lockFile) && (time() - @filemtime($lockFile) < 86400)) {
+        $asegurado = true;
+        return;
+    }
+
     $indicesDeseados = [
         'asistencia' => [
             'idx_asist_sesion_estado' => '(`sesion_id`, `estado`)',
@@ -378,6 +385,7 @@ function asegurarIndicesRendimiento(PDO $pdo): void {
                 }
             }
         }
+        @touch($lockFile);
         $asegurado = true;
     } catch (Exception $e) {}
 }
