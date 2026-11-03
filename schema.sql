@@ -66,10 +66,8 @@ CREATE TABLE `asistencia` (
   KEY `idx_asistencia_fecha` (`fecha`),
   KEY `idx_asistencia_sesion` (`sesion_id`),
   KEY `idx_asist_sesion_ip` (`sesion_id`,`ip_origen`),
-  KEY `idx_asist_sesion_est` (`sesion_id`,`estudiante`),
   KEY `idx_asist_est_estado` (`estudiante`,`estado`),
   KEY `idx_asist_modulo_fecha` (`modulo`,`fecha`),
-  KEY `idx_asist_doc_fecha` (`docente`,`fecha`),
   KEY `idx_asist_sesion_estado` (`sesion_id`,`estado`),
   KEY `idx_asist_doc_fecha_est` (`docente`,`fecha`,`estado`),
   CONSTRAINT `fk_asistencia_sesion` FOREIGN KEY (`sesion_id`) REFERENCES `sesiones_asistencia` (`id`) ON DELETE SET NULL
