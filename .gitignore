@@ -30,3 +30,18 @@ iniciar_chat.bat
 iniciar_servidor.bat
 router.php
 server.js
+
+# Backend del chat (alojado en su propio repositorio fundacion-chat-backend)
+backend_chat/
+
+# Archivos de prueba, scripts locales y multimedios de desarrollo
+actualizar_notas.sql
+actualizar_notas_y_asistencias_realistas.py
+cargar_ecosistema_academico.sql
+datos_prueba_1000.sql
+generar_datos_prueba.py
+generar_ecosistema_academico_completo.py
+*.mp4
+mundo_codigo_php_peligro.mp4
+docs/*.docx
+*.docx

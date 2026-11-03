@@ -27,14 +27,8 @@
    * Comunicación fluida con backend FastAPI / Groq & Gemini y base de conocimiento MySQL.
    */
   const CHAT_CONFIG = {
-    // Backend local de Chat IA (uvicorn corriendo en el puerto 8001).
-    // Usa dinámicamente el host actual (localhost, 127.0.0.1 o IP de red WiFi del celular).
-    baseUrl: (function() {
-      const host = (typeof window !== 'undefined' && window.location && window.location.hostname) ? window.location.hostname : '127.0.0.1';
-      const proto = (typeof window !== 'undefined' && window.location && window.location.protocol && window.location.protocol.startsWith('http')) ? window.location.protocol : 'http:';
-      return `${proto}//${host}:8001`;
-    })(),
-    // Cada cuánto se vuelve a comprobar /health mientras el chat está abierto
+    // Apunta al backend desplegado en Render
+    baseUrl: 'https://fundacion-chat-backend-auoa.onrender.com',
     healthCheckIntervalMs: 30000,
   };
 
@@ -489,7 +483,7 @@
         // general y jamás con datos privados, estadísticas ni guías de gestión administrativa.
         const tokenParaChat = haySesionActivaApp() ? (chatSessionToken || (typeof getAuthToken === 'function' ? getAuthToken() : null)) : null;
 
-        const response = await fetch(CHAT_CONFIG.baseUrl + '/chat/stream', {
+        let response = await fetch(CHAT_CONFIG.baseUrl + '/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -497,6 +491,30 @@
             token: tokenParaChat,
           })
         });
+
+        if (response.status === 404) {
+          // Fallback a /chat estándar si el servidor no tiene /chat/stream
+          const fallbackResp = await fetch(CHAT_CONFIG.baseUrl + '/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: history,
+              token: tokenParaChat,
+            })
+          });
+          if (!fallbackResp.ok) {
+            const err = new Error('Respuesta no válida del servidor (' + fallbackResp.status + ')');
+            err.fromServer = true;
+            throw err;
+          }
+          const data = await fallbackResp.json();
+          hideTyping();
+          const contenido = data.reply || 'Sin respuesta.';
+          addMessage('assistant', formatearMarkdownBasico(linkifyMensajeAsistente(contenido)));
+          history.push({ role: 'assistant', content: contenido });
+          scrollToBottom();
+          return;
+        }
 
         if (!response.ok || !response.body) {
           const err = new Error('Respuesta no válida del servidor (' + response.status + ')');
