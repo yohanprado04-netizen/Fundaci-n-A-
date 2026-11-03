@@ -363,8 +363,17 @@
         }
       }
 
-      // 2. Limpiar texto para una locución fluida (quitar markdown, emojis y urls)
+      // 2. Limpiar y fonetizar texto para locución ultra-natural en español
+      // Garantiza que la IA lea siempre 'Fundación Amás / fundacionamas' y NUNCA 'Fundación A plus' o 'A plas'
       let textoLimpio = String(texto || '')
+        .replace(/fundaci[oó]n\s*a\s*\+/gi, 'Fundación Amás')
+        .replace(/fundaciona\+/gi, 'Fundación Amás')
+        .replace(/\bfundacion\s*a\s*plus\b/gi, 'Fundación Amás')
+        .replace(/\bfundacion\s*a\s*plas\b/gi, 'Fundación Amás')
+        .replace(/\ba\s*\+/gi, 'A Más')
+        .replace(/\ba\s*plus\b/gi, 'A Más')
+        .replace(/\ba\s*plas\b/gi, 'A Más')
+        .replace(/\baplus\b/gi, 'Amás')
         .replace(/https?:\/\/[^\s]+/g, 'enlace')
         .replace(/[*_#`~\[\]()]/g, ' ')
         .replace(/\s+/g, ' ')
